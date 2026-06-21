@@ -46,6 +46,8 @@ from steuerreport_v2.contracts.tax_wallet_fifo import (
     WalletFifoProvenancePriorityGroup,
     WalletFifoProvenancePriorityReport,
     WalletFifoProvenancePrioritySample,
+    WalletFifoYearProvenanceClosureItem,
+    WalletFifoYearProvenanceClosureReport,
     WalletFifoRawProvenanceBreakdownGroup,
     WalletFifoRawProvenanceBreakdownReport,
     WalletFifoProvenanceStatusBreakdown,
@@ -2252,6 +2254,105 @@ class WalletFifoPreviewService:
                 "Gruppiert unresolved_inbound_provenance-Traces nach Jahr, Asset, Pool, Quelle "
                 "und Account und bewertet vorhandene Raw-/Deposit-/TXID-Evidence. Es werden "
                 "keine produktiven Lots, Tax-Lines oder Transferanker geschrieben."
+            ),
+        )
+
+    def provenance_closure_report(self, year: int, *, limit: int = 50) -> WalletFifoYearProvenanceClosureReport:
+        priority_report = self.provenance_priorities(year=year, limit=500)
+        solana_batch = self.solana_provenance_batch_latest(year=year, asset="SOL")
+        cex_sender = self.cex_sender_ownership_latest(year=year, cex="binance", network="SOL")
+        cex_status_by_asset = {
+            decision.asset.upper(): decision.final_tax_status
+            for decision in cex_sender.decisions
+            if decision.asset
+        }
+        items: list[WalletFifoYearProvenanceClosureItem] = []
+        for group in priority_report.groups:
+            category = "unresolved_provenance"
+            closure_status = "review_required"
+            requires_review = True
+            tax_hint = "Herkunft offen; nicht automatisch als steuerneutralen Transfer behandeln."
+            evidence_refs = [group.origin_trace_endpoint]
+            action = group.recommended_action
+            if group.source.startswith("opening-balance"):
+                category = "opening_balance"
+                closure_status = "documented_non_live_opening_balance"
+                requires_review = False
+                tax_hint = "Belegter Anfangsbestand; kein Live-Zufluss und kein Eigenwallet-Transfer."
+                evidence_refs.append(
+                    f"/api/v1/tax-years/{year}/wallet-fifo-opening-balance-evidence"
+                    f"?asset={group.asset}&pool_id={group.pool_id}"
+                )
+                action = "Als Anfangsbestand in der Steuerbeilage ausweisen; nicht als Live-Transfer eskalieren."
+            elif group.source.lower() == "binance" and group.asset.upper() == "SOL":
+                category = "cex_deposit_sender_ownership"
+                cex_status = cex_status_by_asset.get(group.asset.upper())
+                if cex_status == "TAX_NEUTRAL_TRANSFER_PENDING_REVIEW":
+                    closure_status = "tax_neutral_candidate_review_required"
+                    tax_hint = "Potentieller steuerneutraler CEX-Deposit; erst nach Review FIFO fortschreiben."
+                else:
+                    closure_status = "unverified_cex_deposit_sender"
+                    tax_hint = "Deposit-/CEX-Beleg vorhanden, aber Onchain-Sender nicht als eigene Wallet belegt."
+                evidence_refs.append(
+                    f"/api/v1/tax-years/{year}/cex-sender-ownership-latest?cex=binance&network=SOL"
+                )
+                action = "Sender-Ownership belegen oder konservativ offen lassen; nicht automatisch steuerneutral schließen."
+            elif group.source.lower() == "solana_rpc" and group.asset.upper() == "SOL":
+                category = "solana_external_or_unknown_origin"
+                if solana_batch.exists and solana_batch.failed_count == 0 and solana_batch.own_transfer_candidates_count == 0:
+                    closure_status = "external_or_unknown_origin_documented"
+                    tax_hint = "Alchemy/RPC-Batch fand keine eigene Senderwallet; Herkunft bleibt extern/unklar."
+                    action = "Programm-/Service-/Exchange-Kontext belegen; nicht automatisch als Eigenwallet-Transfer behandeln."
+                elif solana_batch.own_transfer_candidates_count > 0:
+                    closure_status = "tax_neutral_candidate_review_required"
+                    tax_hint = "Batch enthält Eigenwallet-Kandidaten; Review vor FIFO-Fortschreibung erforderlich."
+                else:
+                    closure_status = "solana_batch_incomplete"
+                    tax_hint = "Solana-Batch nicht vollständig; TXIDs erneut klassifizieren."
+                evidence_refs.extend(
+                    [
+                        f"/api/v1/tax-years/{year}/wallet-fifo-solana-provenance-batch-latest?asset=SOL",
+                        f"/api/v1/tax-years/{year}/wallet-fifo-solana-raw-bmf-evidence-summary?asset=SOL",
+                        f"/api/v1/tax-years/{year}/wallet-fifo-solana-raw-provenance-senders?asset=SOL",
+                    ]
+                )
+            items.append(
+                WalletFifoYearProvenanceClosureItem(
+                    category=category,
+                    closure_status=closure_status,
+                    asset=group.asset,
+                    pool_id=group.pool_id,
+                    source=group.source,
+                    account=group.account,
+                    events_count=group.events_count,
+                    quantity_total=group.quantity_total,
+                    carried_cost_basis_eur_total=group.carried_cost_basis_eur_total,
+                    evidence_status=group.evidence_status,
+                    requires_review=requires_review,
+                    tax_treatment_hint=tax_hint,
+                    evidence_refs=evidence_refs,
+                    recommended_action=action,
+                )
+            )
+        shown = items[: max(1, min(limit, 500))]
+        return WalletFifoYearProvenanceClosureReport(
+            generated_at=datetime.now(timezone.utc),
+            year=year,
+            unresolved_inbound_provenance_count=priority_report.unresolved_inbound_provenance_count,
+            groups_count=priority_report.groups_count,
+            documented_non_live_count=sum(1 for item in items if item.closure_status == "documented_non_live_opening_balance"),
+            external_or_unknown_count=sum(1 for item in items if item.closure_status == "external_or_unknown_origin_documented"),
+            unverified_cex_count=sum(1 for item in items if item.closure_status == "unverified_cex_deposit_sender"),
+            tax_neutral_candidate_count=sum(1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"),
+            review_required_count=sum(1 for item in items if item.requires_review),
+            items=shown,
+            methodology=(
+                "Read-only Jahresabschluss der offenen Wallet-FIFO-Provenance. "
+                "Kombiniert Provenance-Prioritaeten, Opening-Balance-Evidence, "
+                "Solana-Provenance-Batch und CEX-Sender-Ownership-Artefakte. "
+                "Der Report klassifiziert nur den Nachweisstatus und schreibt keine "
+                "Canonical Events, Lots, Tax-Lines, Preise, Imports, Transferanker "
+                "oder Review-Entscheidungen."
             ),
         )
 

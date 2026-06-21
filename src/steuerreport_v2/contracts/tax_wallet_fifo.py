@@ -521,6 +521,37 @@ class WalletFifoProvenancePriorityReport(BaseModel):
     methodology: str
 
 
+class WalletFifoYearProvenanceClosureItem(BaseModel):
+    category: str
+    closure_status: str
+    asset: str
+    pool_id: str
+    source: str
+    account: str | None = None
+    events_count: int = 0
+    quantity_total: Decimal = Decimal("0")
+    carried_cost_basis_eur_total: Decimal = Decimal("0")
+    evidence_status: str
+    requires_review: bool = True
+    tax_treatment_hint: str
+    evidence_refs: list[str] = Field(default_factory=list)
+    recommended_action: str
+
+
+class WalletFifoYearProvenanceClosureReport(BaseModel):
+    generated_at: datetime
+    year: int
+    unresolved_inbound_provenance_count: int = 0
+    groups_count: int = 0
+    documented_non_live_count: int = 0
+    external_or_unknown_count: int = 0
+    unverified_cex_count: int = 0
+    tax_neutral_candidate_count: int = 0
+    review_required_count: int = 0
+    items: list[WalletFifoYearProvenanceClosureItem] = Field(default_factory=list)
+    methodology: str
+
+
 class WalletFifoProvenanceEvent(BaseModel):
     event_id: str
     event_time: datetime

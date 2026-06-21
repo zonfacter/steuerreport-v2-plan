@@ -195,6 +195,7 @@ from steuerreport_v2.contracts.tax_wallet_fifo import (
     WalletFifoPreviewReport,
     WalletFifoProvenanceEventReport,
     WalletFifoProvenancePriorityReport,
+    WalletFifoYearProvenanceClosureReport,
     WalletFifoRawProvenanceBreakdownReport,
     WalletFifoSolanaProvenanceBatchLatest,
     WalletFifoSolanaProvenanceClassificationReport,
@@ -2347,6 +2348,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         limit: int = 50,
     ) -> ApiResponse[WalletFifoProvenancePriorityReport]:
         return ApiResponse(data=WalletFifoPreviewService(db).provenance_priorities(year=year, limit=limit))
+
+    @app.get("/api/v1/tax-years/{year}/wallet-fifo-provenance-closure")
+    def tax_year_wallet_fifo_provenance_closure(
+        year: int,
+        limit: int = 50,
+    ) -> ApiResponse[WalletFifoYearProvenanceClosureReport]:
+        return ApiResponse(data=WalletFifoPreviewService(db).provenance_closure_report(year=year, limit=limit))
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-provenance-events")
     def tax_year_wallet_fifo_provenance_events(

@@ -724,6 +724,124 @@ def test_wallet_fifo_provenance_priorities_group_unresolved_inbounds(tmp_path):
     assert group.samples[0].deposit_address == "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW"
 
 
+def test_wallet_fifo_provenance_closure_summarizes_unverified_cex_and_opening_balance(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    deposit_batch = store.create_import_batch(
+        ImportBatchCreate(source="binance", filename="Binance-Deposit-History.xlsx", file_hash="closure-deposit")
+    )
+    deposit_raw = store.add_raw_object(
+        deposit_batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "Address": "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW",
+                    "Amount": "1.4",
+                    "Coin": "SOL",
+                    "Network": "SOL",
+                    "Status": "Completed",
+                    "TXID": "closure-sol-tx",
+                    "Time": "24-01-12 07:09:33",
+                }
+            ),
+        ),
+    )
+    opening_batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="opening-balance-scope-test",
+            filename="opening-balance-adjustments.csv",
+            file_hash="closure-opening",
+        )
+    )
+    opening_raw = store.add_raw_object(
+        opening_batch.batch_id,
+        RawObjectCreate(
+            row_number=2,
+            payload_json=json.dumps(
+                {
+                    "time": "2024-02-15T07:28:31",
+                    "asset": "USDT",
+                    "amount": "1988.008263",
+                    "type": "opening transfer",
+                    "account": "wallet",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2024, 1, 12, 7, 9, 33, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="SOL",
+                quantity=Decimal("1.4"),
+                account="binance",
+                tx_id="closure-sol-tx",
+                raw_object_id=deposit_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2024, 1, 12, 7, 10, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="USDT",
+                quantity=Decimal("100"),
+                quote_asset="SOL",
+                quote_quantity=Decimal("1.4"),
+                account="binance",
+            ),
+            CanonicalEventCreate(
+                source="opening-balance-scope-test",
+                event_time=datetime(2024, 2, 15, 7, 28, 31, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="USDT",
+                quantity=Decimal("1988.008263"),
+                account="wallet",
+                raw_object_id=opening_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="manual-csv",
+                event_time=datetime(2024, 12, 1, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="EUR",
+                quantity=Decimal("1000"),
+                quote_asset="USDT",
+                quote_quantity=Decimal("1988.008263"),
+                account="wallet",
+            ),
+        ]
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="SOL",
+            price_eur=Decimal("90"),
+            priced_at=datetime(2024, 1, 12, tzinfo=timezone.utc),
+            source="unit",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.93"),
+            priced_at=datetime(2024, 2, 15, tzinfo=timezone.utc),
+            source="unit",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2024)
+    response = TestClient(create_app(store)).get("/api/v1/tax-years/2024/wallet-fifo-provenance-closure")
+
+    statuses = {item.category: item.closure_status for item in report.items}
+    assert statuses["cex_deposit_sender_ownership"] == "unverified_cex_deposit_sender"
+    assert statuses["opening_balance"] == "documented_non_live_opening_balance"
+    assert report.documented_non_live_count == 1
+    assert report.unverified_cex_count == 1
+    assert report.review_required_count == 1
+    assert response.status_code == 200
+    assert response.json()["data"]["documented_non_live_count"] == 1
+
+
 def test_wallet_fifo_marks_reviewed_cex_exchange_outflow_anchor_as_resolved(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     txid = "cex-reviewed-deposit-tx"
