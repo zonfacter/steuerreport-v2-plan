@@ -25,6 +25,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearAssetFifoLine,
     TaxYearAssetFifoCorrectionReviewReport,
     TaxYearAssetFifoCorrectionReviewRow,
+    TaxYearBmfClosureAppendix,
+    TaxYearBmfClosureAppendixItem,
     TaxYearAssetFifoPlausibilityReport,
     TaxYearAssetFifoPlausibilityRow,
     TaxYearAssetFifoRawEvidence,
@@ -2148,6 +2150,7 @@ class TaxYearService:
         external = self.external_inflow_report(year, limit=0)
         solana_swaps = self.solana_stablecoin_swap_context_review(year, limit=10_000)
         wallet_fifo_service = WalletFifoPreviewService(self.store)
+        bmf_closure = self.bmf_closure_appendix(year)
         cex_outflow = wallet_fifo_service.cex_exchange_outflow_evidence(
             year,
             source_exchange="bitget",
@@ -2265,6 +2268,31 @@ class TaxYearService:
                 ),
             ),
             TaxYearEvidenceItem(
+                evidence_id="bmf-closure-appendix",
+                category="pruefen" if bmf_closure.manual_evidence_required_count else "beleg",
+                label="BMF Abschlussbeilage Herkunft",
+                endpoint=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                file_format="json",
+                record_count=bmf_closure.items_count,
+                amount_eur=sum(
+                    (item.carried_cost_basis_eur_total for item in bmf_closure.items),
+                    Decimal("0"),
+                ),
+                status=(
+                    "blocked"
+                    if bmf_closure.status == "blocked"
+                    else "review"
+                    if bmf_closure.status == "review"
+                    else self._evidence_item_status(bmf_closure.items_count)
+                ),
+                required=bool(bmf_closure.items_count),
+                note=(
+                    "Konservative Jahresbeilage fuer offene Wallet-FIFO-Herkunft: "
+                    "unbekannte Sender werden nicht als steuerneutrale Eigenwallet-"
+                    "Transfers behauptet, sondern mit Belegpfaden offengelegt."
+                ),
+            ),
+            TaxYearEvidenceItem(
                 evidence_id="cex-exchange-outflow-evidence",
                 category="beleg" if cex_outflow.missing_count == 0 else "pruefen",
                 label="CEX-zu-CEX Transferbelege",
@@ -2349,6 +2377,132 @@ class TaxYearService:
             methodology=(
                 "Read-only Belegkarte aus vorhandenen Jahresaggregaten und Exportpfaden. "
                 "Sie erzeugt keine FIFO-Lots, keine Imports und keine Review-Entscheidungen."
+            ),
+        )
+
+    def bmf_closure_appendix(self, year: int, *, limit: int = 500) -> TaxYearBmfClosureAppendix:
+        from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
+
+        closure = WalletFifoPreviewService(self.store).provenance_closure_report(year=year, limit=limit)
+        items: list[TaxYearBmfClosureAppendixItem] = []
+        for item in closure.items:
+            recommended_tax_treatment = (
+                "Nicht automatisch als steuerneutraler Eigenwallet-Transfer behandeln."
+            )
+            filing_disclosure = (
+                "Offene Herkunft im Jahresbeleg ausweisen; FIFO-/Kostenbasis bleibt "
+                "als vorhandene V2-Bewertung dokumentiert, ohne zusaetzliche "
+                "Steuerneutralitaet zu behaupten."
+            )
+            manual_evidence_required = item.requires_review
+            conservative_treatment_available = item.closure_status in {
+                "documented_non_live_opening_balance",
+                "external_or_unknown_origin_documented",
+                "unverified_cex_deposit_sender",
+            }
+            if item.closure_status == "documented_non_live_opening_balance":
+                recommended_tax_treatment = (
+                    "Als belegten Anfangsbestand fuehren; kein Live-Zufluss, "
+                    "keine steuerbare Veraeusserung und keine neue Haltefristbehauptung."
+                )
+                filing_disclosure = (
+                    "Anfangsbestand separat im Belegpaket ausweisen und nicht als "
+                    "Portfolio-Live-Wallet oder neuen Transfer eskalieren."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "external_or_unknown_origin_documented":
+                recommended_tax_treatment = (
+                    "Konservativ als externen oder ungeklarten Zufluss dokumentieren; "
+                    "keine steuerneutrale Eigenwallet-Umbuchung ansetzen."
+                )
+                filing_disclosure = (
+                    "Solana/RPC-Provenance-Batch beilegen. Falls spaeter eigener "
+                    "Sender-/Service-Kontext belegt wird, kann der Fall per Review "
+                    "zu Transfer/FIFO-Fortfuehrung nachgezogen werden."
+                )
+            elif item.closure_status == "unverified_cex_deposit_sender":
+                recommended_tax_treatment = (
+                    "Binance-Deposit nur dann als steuerneutralen Depotwechsel nutzen, "
+                    "wenn Sender-Ownership nachgereicht wird; bis dahin konservativ "
+                    "nicht als Eigenwallet-Transfer behaupten."
+                )
+                filing_disclosure = (
+                    "CEX-Deposit-Beleg und Sender-Ownership-Report beilegen. Die "
+                    "Sender-Wallet ist nicht in der Owned-Wallet-Registry belegt."
+                )
+            elif item.closure_status == "tax_neutral_candidate_review_required":
+                recommended_tax_treatment = (
+                    "Potentiell steuerneutraler Transfer; erst nach fachlicher "
+                    "Review-Entscheidung FIFO-Fortfuehrung als final behandeln."
+                )
+                filing_disclosure = (
+                    "Als Review-Kandidat ausweisen und die Review-Entscheidung mit "
+                    "TXID, Sender, Empfaenger und Menge beilegen."
+                )
+                conservative_treatment_available = False
+            elif item.closure_status == "solana_batch_incomplete":
+                recommended_tax_treatment = (
+                    "Nicht abschliessen; Solana-Provenance-Batch erneut erzeugen "
+                    "oder Rohbelege nachziehen."
+                )
+                filing_disclosure = "Offenen technischen Nachweis als Blocker im Belegpaket fuehren."
+                conservative_treatment_available = False
+
+            items.append(
+                TaxYearBmfClosureAppendixItem(
+                    category=item.category,
+                    closure_status=item.closure_status,
+                    asset=item.asset,
+                    pool_id=item.pool_id,
+                    source=item.source,
+                    account=item.account,
+                    events_count=item.events_count,
+                    quantity_total=item.quantity_total,
+                    carried_cost_basis_eur_total=item.carried_cost_basis_eur_total,
+                    evidence_status=item.evidence_status,
+                    recommended_tax_treatment=recommended_tax_treatment,
+                    filing_disclosure=filing_disclosure,
+                    manual_evidence_required=manual_evidence_required,
+                    conservative_treatment_available=conservative_treatment_available,
+                    evidence_refs=item.evidence_refs,
+                    recommended_action=item.recommended_action,
+                )
+            )
+
+        manual_count = sum(1 for item in items if item.manual_evidence_required)
+        conservative_count = sum(1 for item in items if item.conservative_treatment_available)
+        tax_neutral_candidates = sum(
+            1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"
+        )
+        if not items:
+            status = "ready"
+        elif any(item.closure_status == "solana_batch_incomplete" for item in items):
+            status = "blocked"
+        elif tax_neutral_candidates:
+            status = "review"
+        elif manual_count:
+            status = "review"
+        else:
+            status = "ready"
+        return TaxYearBmfClosureAppendix(
+            year=year,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            status=status,
+            items_count=len(items),
+            conservative_items_count=conservative_count,
+            manual_evidence_required_count=manual_count,
+            tax_neutral_candidates_count=tax_neutral_candidates,
+            can_file_with_conservative_appendix=bool(items)
+            and status != "blocked"
+            and conservative_count == len(items),
+            items=items,
+            methodology=(
+                "Read-only BMF-Abschlussbeilage fuer offene Wallet-FIFO-Herkunft. "
+                "Sie uebersetzt den Provenance-Closure-Status in eine konservative "
+                "steuerliche Belegsprache: keine ungepruefte Steuerneutralitaet, "
+                "keine automatische FIFO-Fortschreibung und keine Datenmutation. "
+                "Unbekannte Sender werden dokumentiert, aber nicht als eigene "
+                "Wallets angenommen."
             ),
         )
 

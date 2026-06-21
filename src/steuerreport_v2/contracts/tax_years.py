@@ -764,6 +764,38 @@ class TaxYearEvidenceReport(BaseModel):
     methodology: str
 
 
+class TaxYearBmfClosureAppendixItem(BaseModel):
+    category: str
+    closure_status: str
+    asset: str
+    pool_id: str
+    source: str
+    account: str | None = None
+    events_count: int = 0
+    quantity_total: Decimal = Decimal("0")
+    carried_cost_basis_eur_total: Decimal = Decimal("0")
+    evidence_status: str
+    recommended_tax_treatment: str
+    filing_disclosure: str
+    manual_evidence_required: bool = True
+    conservative_treatment_available: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+    recommended_action: str
+
+
+class TaxYearBmfClosureAppendix(BaseModel):
+    year: int
+    generated_at: str
+    status: Literal["ready", "review", "blocked"]
+    items_count: int = 0
+    conservative_items_count: int = 0
+    manual_evidence_required_count: int = 0
+    tax_neutral_candidates_count: int = 0
+    can_file_with_conservative_appendix: bool = False
+    items: list[TaxYearBmfClosureAppendixItem] = Field(default_factory=list)
+    methodology: str
+
+
 class TaxExternalInflowMatch(BaseModel):
     inflow_event_id: str
     event_time: str

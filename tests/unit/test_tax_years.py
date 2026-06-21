@@ -4,6 +4,8 @@ from zipfile import ZipFile
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from fastapi.testclient import TestClient
+
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.contracts.events import CanonicalEventCreate
@@ -1026,6 +1028,135 @@ def test_tax_year_evidence_report_maps_year_to_export_artifacts(tmp_path):
     assert items["review-decisions"].record_count == 0
     assert items["review-decisions"].status == "empty"
     assert items["evidence-package"].file_format == "zip"
+
+
+def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    deposit_batch = store.create_import_batch(
+        ImportBatchCreate(source="binance", filename="Binance-Deposit-History.xlsx", file_hash="bmf-appendix-deposit")
+    )
+    deposit_raw = store.add_raw_object(
+        deposit_batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "Address": "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW",
+                    "Amount": "1.4",
+                    "Coin": "SOL",
+                    "Network": "SOL",
+                    "Status": "Completed",
+                    "TXID": "bmf-appendix-sol-tx",
+                    "Time": "24-01-12 07:09:33",
+                }
+            ),
+        ),
+    )
+    opening_batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="opening-balance-scope-test",
+            filename="opening-balance-adjustments.csv",
+            file_hash="bmf-appendix-opening",
+        )
+    )
+    opening_raw = store.add_raw_object(
+        opening_batch.batch_id,
+        RawObjectCreate(
+            row_number=2,
+            payload_json=json.dumps(
+                {
+                    "time": "2024-02-15T07:28:31",
+                    "asset": "USDT",
+                    "amount": "1988.008263",
+                    "type": "opening transfer",
+                    "account": "wallet",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2024, 1, 12, 7, 9, 33, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="SOL",
+                quantity=Decimal("1.4"),
+                account="binance",
+                tx_id="bmf-appendix-sol-tx",
+                raw_object_id=deposit_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2024, 1, 12, 7, 10, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="USDT",
+                quantity=Decimal("100"),
+                quote_asset="SOL",
+                quote_quantity=Decimal("1.4"),
+                account="binance",
+            ),
+            CanonicalEventCreate(
+                source="opening-balance-scope-test",
+                event_time=datetime(2024, 2, 15, 7, 28, 31, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="USDT",
+                quantity=Decimal("1988.008263"),
+                account="wallet",
+                raw_object_id=opening_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="manual-csv",
+                event_time=datetime(2024, 12, 1, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="EUR",
+                quantity=Decimal("1000"),
+                quote_asset="USDT",
+                quote_quantity=Decimal("1988.008263"),
+                account="wallet",
+            ),
+        ]
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="SOL",
+            price_eur=Decimal("90"),
+            priced_at=datetime(2024, 1, 12, tzinfo=timezone.utc),
+            source="unit",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.93"),
+            priced_at=datetime(2024, 2, 15, tzinfo=timezone.utc),
+            source="unit",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    appendix = TaxYearService(store).bmf_closure_appendix(2024)
+    response = TestClient(create_app(store)).get("/api/v1/tax-years/2024/bmf-closure-appendix")
+    items = {item.category: item for item in appendix.items}
+
+    assert appendix.status == "review"
+    assert appendix.items_count == 2
+    assert appendix.manual_evidence_required_count == 1
+    assert appendix.conservative_items_count == 2
+    assert appendix.can_file_with_conservative_appendix is True
+    assert items["cex_deposit_sender_ownership"].closure_status == "unverified_cex_deposit_sender"
+    assert "nicht als Eigenwallet-Transfer" in items["cex_deposit_sender_ownership"].recommended_tax_treatment
+    assert items["opening_balance"].manual_evidence_required is False
+    assert response.status_code == 200
+    assert response.json()["data"]["items_count"] == 2
+
+    package_response = TestClient(create_app(store)).get("/api/v1/export/tax-years/2024/evidence-package.zip")
+    assert package_response.status_code == 200
+    with ZipFile(BytesIO(package_response.content)) as package:
+        names = set(package.namelist())
+        assert "02_Steuerliche_CSVs/tax-year-2024-bmf-closure-appendix.json" in names
+        manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
+    assert "/api/v1/tax-years/2024/bmf-closure-appendix" in manifest["required_refs"]
 
 
 def test_tax_year_evidence_report_counts_year_review_decisions(tmp_path):

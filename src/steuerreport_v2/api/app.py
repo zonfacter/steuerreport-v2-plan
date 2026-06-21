@@ -213,6 +213,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxExternalInflowReport,
     TaxIncomeReport,
     TaxPaymentOverview,
+    TaxYearBmfClosureAppendix,
     TaxYearAssetFifoCorrectionReviewReport,
     TaxYearAssetFifoDrilldown,
     TaxYearAssetFifoPlausibilityReport,
@@ -2642,6 +2643,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def tax_year_evidence(year: int) -> ApiResponse[TaxYearEvidenceReport]:
         return ApiResponse(data=TaxYearService(db).evidence_report(year))
 
+    @app.get("/api/v1/tax-years/{year}/bmf-closure-appendix")
+    def tax_year_bmf_closure_appendix(year: int) -> ApiResponse[TaxYearBmfClosureAppendix]:
+        return ApiResponse(data=TaxYearService(db).bmf_closure_appendix(year))
+
     @app.get("/api/v1/tax-years/{year}/external-inflows")
     def tax_year_external_inflows(year: int, limit: int = 200) -> ApiResponse[TaxExternalInflowReport]:
         return ApiResponse(data=TaxYearService(db).external_inflow_report(year, limit=limit))
@@ -3767,6 +3772,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         wallet_fifo_service = WalletFifoPreviewService(db)
         filing_summary = tax_year_service.filing_summary(year)
         evidence_report = tax_year_service.evidence_report(year)
+        bmf_closure_appendix = tax_year_service.bmf_closure_appendix(year)
         wallet_fifo_delta = wallet_fifo_service.preview(year=year)
         cex_exchange_outflow_evidence = wallet_fifo_service.cex_exchange_outflow_evidence(
             year,
@@ -3841,6 +3847,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 f"02_Steuerliche_CSVs/tax-year-{year}-evidence.json",
                 json.dumps(evidence_report.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/evidence",
+            ),
+            (
+                f"02_Steuerliche_CSVs/tax-year-{year}-bmf-closure-appendix.json",
+                json.dumps(
+                    bmf_closure_appendix.model_dump(mode="json"),
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                f"/api/v1/tax-years/{year}/bmf-closure-appendix",
             ),
             (
                 f"03_Review_Entscheidungen/tax-year-{year}-review-decisions.json",
