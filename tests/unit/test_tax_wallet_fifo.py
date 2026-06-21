@@ -12,6 +12,7 @@ from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
+from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.contracts.review import ReviewDecisionCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax import TaxService
@@ -1879,6 +1880,75 @@ def test_wallet_fifo_raw_provenance_breakdown_groups_raw_only_patterns_and_api(t
     assert response.status_code == 200
     assert response.json()["data"]["raw_transaction_evidence_only_count"] == 2
     assert response.json()["data"]["solana_tiny_raw_credit_count"] == 0
+
+
+def test_wallet_fifo_opening_balance_evidence_reports_csv_row_and_api(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    account = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="opening-balance-scope-test",
+            filename="opening-balance-adjustments.csv",
+            file_hash="opening-balance-evidence",
+        )
+    )
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=7,
+            payload_json=json.dumps(
+                {
+                    "time": "2024-02-15T07:28:31Z",
+                    "asset": "USDT",
+                    "amount": "1988.008263",
+                    "type": "opening transfer",
+                    "account": account,
+                    "note": "Opening balance required before first negative balance",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="opening-balance-scope-test",
+                event_time=datetime(2024, 2, 15, 7, 28, 31, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="USDT",
+                quantity=Decimal("1988.008263"),
+                account=account,
+                raw_object_id=raw.raw_object_id,
+            )
+        ]
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.93177"),
+            priced_at=datetime(2024, 2, 15, tzinfo=timezone.utc),
+            source="unit",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).opening_balance_evidence(2024, asset="USDT")
+    response = TestClient(create_app(store)).get(
+        "/api/v1/tax-years/2024/wallet-fifo-opening-balance-evidence?asset=USDT"
+    )
+
+    assert report.rows_count == 1
+    row = report.rows[0]
+    assert row.asset == "USDT"
+    assert row.account == account
+    assert row.raw_filename == "opening-balance-adjustments.csv"
+    assert row.raw_row_number == 7
+    assert row.raw_payload["amount"] == "1988.008263"
+    assert row.tax_classification == "opening_balance_evidence"
+    assert row.live_balance_effect == "none"
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["rows_count"] == 1
+    assert data["total_quantity_by_asset"]["USDT"] == "1988.008263000000000000"
 
 
 def test_wallet_fifo_provenance_resolves_solana_tiny_raw_credit(tmp_path):

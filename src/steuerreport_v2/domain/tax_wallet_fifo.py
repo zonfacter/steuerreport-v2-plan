@@ -38,6 +38,8 @@ from steuerreport_v2.contracts.tax_wallet_fifo import (
     WalletFifoOriginRawEvidence,
     WalletFifoOriginTrace,
     WalletFifoOriginTraceReport,
+    WalletFifoOpeningBalanceEvidence,
+    WalletFifoOpeningBalanceEvidenceReport,
     WalletFifoProvenanceOutflowSummary,
     WalletFifoProvenanceEvent,
     WalletFifoProvenanceEventReport,
@@ -2571,6 +2573,74 @@ class WalletFifoPreviewService:
                 "raw_transaction_evidence_only oder solana_tiny_raw_credit. Gruppiert "
                 "nach Asset, Pool, Quelle, Raw-Quelle/Datei und Payload-Muster. Es "
                 "werden keine Imports, Lots, Tax-Lines oder Transferanker geschrieben."
+            ),
+        )
+
+    def opening_balance_evidence(
+        self,
+        year: int,
+        *,
+        asset: str | None = None,
+        pool_id: str | None = None,
+        limit: int = 50,
+    ) -> WalletFifoOpeningBalanceEvidenceReport:
+        event_report = self.provenance_events(
+            year,
+            asset=asset,
+            pool_id=pool_id,
+            limit=1000,
+        )
+        candidate_events = [
+            event
+            for event in event_report.events
+            if event.has_raw_evidence and (event.source or "").startswith("opening-balance")
+        ]
+        raw_evidence_by_id = self._raw_evidence_map([event.raw_object_id for event in candidate_events])
+        rows: list[WalletFifoOpeningBalanceEvidence] = []
+        quantity_by_asset: dict[str, Decimal] = defaultdict(Decimal)
+        total_cost_basis = Decimal("0")
+        for event in candidate_events:
+            evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            quantity_by_asset[event.asset.upper()] += event.quantity
+            total_cost_basis += event.carried_cost_basis_eur
+            rows.append(
+                WalletFifoOpeningBalanceEvidence(
+                    event_id=event.event_id,
+                    event_time=event.event_time,
+                    source=event.source,
+                    account=event.account,
+                    asset=event.asset.upper(),
+                    pool_id=event.pool_id,
+                    quantity=event.quantity,
+                    carried_cost_basis_eur=event.carried_cost_basis_eur,
+                    raw_object_id=event.raw_object_id,
+                    raw_source=evidence.source if evidence else None,
+                    raw_filename=evidence.filename if evidence else None,
+                    raw_row_number=evidence.row_number if evidence else None,
+                    raw_payload=evidence.payload if evidence else {},
+                    provenance_status=event.evidence_status,
+                    recommended_action=(
+                        "Anfangsbestand als belegten Startbestand dokumentieren. "
+                        "Nicht als Live-Zufluss oder Eigenwallet-Transfer werten; "
+                        "bei Steuerreport-Beilage Stichtag, Menge, Konto, Kostenbasis und CSV-Rohzeile ausweisen."
+                    ),
+                )
+            )
+        rows.sort(key=lambda row: (row.event_time, row.asset, row.pool_id))
+        return WalletFifoOpeningBalanceEvidenceReport(
+            generated_at=datetime.now(timezone.utc),
+            year=year,
+            asset=asset.upper() if asset else None,
+            pool_id=pool_id,
+            rows_count=len(rows),
+            total_quantity_by_asset=dict(quantity_by_asset),
+            total_cost_basis_eur=total_cost_basis,
+            rows=rows[: max(1, min(limit, 500))],
+            methodology=(
+                "Read-only Opening-Balance-Evidence-Report fuer offene Wallet-FIFO-Provenance. "
+                "Der Report filtert vorhandene Opening-Balance-Rohbelege aus den unresolved "
+                "Inbound-Provenance-Spuren, zeigt Menge, Kostenbasis und CSV-Rohzeile und schreibt "
+                "keine Imports, Lots, Tax-Lines, Transferanker oder Review-Entscheidungen."
             ),
         )
 

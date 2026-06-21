@@ -191,6 +191,7 @@ from steuerreport_v2.contracts.tax_wallet_fifo import (
     WalletFifoCexSenderOwnershipSummaryReport,
     WalletFifoExchangeEvidenceGapReport,
     WalletFifoOriginTraceReport,
+    WalletFifoOpeningBalanceEvidenceReport,
     WalletFifoPreviewReport,
     WalletFifoProvenanceEventReport,
     WalletFifoProvenancePriorityReport,
@@ -2374,6 +2375,22 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     ) -> ApiResponse[WalletFifoRawProvenanceBreakdownReport]:
         return ApiResponse(
             data=WalletFifoPreviewService(db).raw_provenance_breakdown(
+                year=year,
+                asset=asset,
+                pool_id=pool_id,
+                limit=limit,
+            )
+        )
+
+    @app.get("/api/v1/tax-years/{year}/wallet-fifo-opening-balance-evidence")
+    def tax_year_wallet_fifo_opening_balance_evidence(
+        year: int,
+        asset: str | None = None,
+        pool_id: str | None = None,
+        limit: int = 50,
+    ) -> ApiResponse[WalletFifoOpeningBalanceEvidenceReport]:
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).opening_balance_evidence(
                 year=year,
                 asset=asset,
                 pool_id=pool_id,

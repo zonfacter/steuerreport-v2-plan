@@ -586,6 +586,39 @@ class WalletFifoRawProvenanceBreakdownReport(BaseModel):
     methodology: str
 
 
+class WalletFifoOpeningBalanceEvidence(BaseModel):
+    event_id: str
+    event_time: datetime
+    source: str
+    account: str | None = None
+    asset: str
+    pool_id: str
+    quantity: Decimal
+    carried_cost_basis_eur: Decimal = Decimal("0")
+    raw_object_id: str | None = None
+    raw_source: str | None = None
+    raw_filename: str | None = None
+    raw_row_number: int | None = None
+    raw_payload: dict[str, str | int | float | None] = Field(default_factory=dict)
+    provenance_status: str
+    tax_classification: str = "opening_balance_evidence"
+    fifo_effect: str = "initial_lot_documented_pending_origin_evidence"
+    live_balance_effect: str = "none"
+    recommended_action: str
+
+
+class WalletFifoOpeningBalanceEvidenceReport(BaseModel):
+    generated_at: datetime
+    year: int
+    asset: str | None = None
+    pool_id: str | None = None
+    rows_count: int = 0
+    total_quantity_by_asset: dict[str, Decimal] = Field(default_factory=dict)
+    total_cost_basis_eur: Decimal = Decimal("0")
+    rows: list[WalletFifoOpeningBalanceEvidence] = Field(default_factory=list)
+    methodology: str
+
+
 class WalletFifoExchangeEvidenceGap(BaseModel):
     gap_id: str
     year: int
