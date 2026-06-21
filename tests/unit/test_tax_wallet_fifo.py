@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import argparse
+import importlib.util
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 import httpx
@@ -27,6 +30,34 @@ def test_wallet_fifo_loads_alchemy_api_key_from_admin_secret(tmp_path, monkeypat
     store.upsert_admin_setting(AdminSettingWrite(key="secret.alchemy.api_key", value_json='"alchemy-secret"'))
 
     assert WalletFifoPreviewService(store)._alchemy_api_key() == "alchemy-secret"
+
+
+def test_solana_provenance_batch_alchemy_alias_redacts_secret(tmp_path, monkeypatch):
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "run_wallet_fifo_solana_provenance_batch_20260620.py"
+    spec = importlib.util.spec_from_file_location("solana_provenance_batch_script", script_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.upsert_admin_setting(AdminSettingWrite(key="secret.alchemy.api_key", value_json='"alchemy-secret"'))
+    service = WalletFifoPreviewService(store)
+
+    resolved = module._resolve_rpc_url(service, "alchemy")
+    assert resolved == "https://solana-mainnet.g.alchemy.com/v2/alchemy-secret"
+
+    payload = module._build_result(
+        run_id="run-test",
+        args=argparse.Namespace(year=2024, asset="SOL", pool_id="pool", provider="rpc", rpc_url="alchemy"),
+        db_path=tmp_path / "steuerreport_v2.duckdb",
+        rpc_url=resolved,
+        batch_size=1,
+        max_events=1,
+        total_events=0,
+        classifications_by_event={},
+        batches=[],
+    )
+    assert payload["rpc_url"] == "alchemy_admin_secret"
+    assert "alchemy-secret" not in json.dumps(payload)
 
 
 def test_legacy_helium_overview_keeps_fairspot_as_fifo_evidence_not_portfolio(tmp_path):

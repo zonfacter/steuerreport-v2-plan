@@ -43,11 +43,32 @@ def _summary(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _resolve_rpc_url(service: WalletFifoPreviewService, rpc_url: str) -> str:
+    normalized = (rpc_url or "").strip()
+    if normalized.lower() not in {"alchemy", "alchemy_admin_secret"}:
+        return normalized
+    api_key = service._alchemy_api_key()
+    if not api_key:
+        raise SystemExit("alchemy_api_key_missing")
+    return f"https://solana-mainnet.g.alchemy.com/v2/{api_key}"
+
+
+def _artifact_rpc_url(provider: str, configured_rpc_url: str, resolved_rpc_url: str) -> str | None:
+    if provider == "solscan":
+        return None
+    if (configured_rpc_url or "").strip().lower() in {"alchemy", "alchemy_admin_secret"}:
+        return "alchemy_admin_secret"
+    if "alchemy.com/v2/" in resolved_rpc_url:
+        return "alchemy_redacted"
+    return resolved_rpc_url
+
+
 def _build_result(
     *,
     run_id: str,
     args: argparse.Namespace,
     db_path: Path,
+    rpc_url: str,
     batch_size: int,
     max_events: int,
     total_events: int | None,
@@ -63,7 +84,7 @@ def _build_result(
         "asset": args.asset.upper(),
         "pool_id": args.pool_id,
         "provider": args.provider,
-        "rpc_url": args.rpc_url if args.provider != "solscan" else None,
+        "rpc_url": _artifact_rpc_url(args.provider, args.rpc_url, rpc_url),
         "batch_size": batch_size,
         "max_events": max_events,
         "total_events": total_events or 0,
@@ -118,6 +139,7 @@ def main() -> int:
 
     db_path = Path(args.db)
     service = WalletFifoPreviewService(DuckDbStore(args.db))
+    rpc_url = _resolve_rpc_url(service, args.rpc_url)
     batch_size = max(1, min(int(args.batch_size), 25))
     max_events = max(1, int(args.max_events))
     classifications_by_event: dict[str, dict[str, Any]] = {}
@@ -181,6 +203,7 @@ def main() -> int:
                 run_id=run_id,
                 args=args,
                 db_path=db_path,
+                rpc_url=rpc_url,
                 batch_size=batch_size,
                 max_events=max_events,
                 total_events=total_events,
@@ -233,7 +256,7 @@ def main() -> int:
                 classifications.append(
                     service._fetch_solana_provenance_classification(
                         client=client,
-                        rpc_url=args.rpc_url,
+                        rpc_url=rpc_url,
                         event=event,
                     ).model_dump(mode="json")
                 )
@@ -304,7 +327,7 @@ def main() -> int:
                     retry_classifications.append(
                         service._fetch_solana_provenance_classification(
                             client=client,
-                            rpc_url=args.rpc_url,
+                            rpc_url=rpc_url,
                             event=event,
                         ).model_dump(mode="json")
                     )
@@ -352,6 +375,7 @@ def main() -> int:
             run_id=run_id,
             args=args,
             db_path=db_path,
+            rpc_url=rpc_url,
             batch_size=batch_size,
             max_events=max_events,
             total_events=total_events,
@@ -374,6 +398,7 @@ def main() -> int:
         run_id=run_id,
         args=args,
         db_path=db_path,
+        rpc_url=rpc_url,
         batch_size=batch_size,
         max_events=max_events,
         total_events=total_events,
