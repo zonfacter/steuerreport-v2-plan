@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from steuerreport_v2.contracts.tax_methodology import (
@@ -25,6 +25,9 @@ class TaxMethodologyService:
     METHOD_VERSION = "bmf_readiness_v2"
     FIFO_SCOPE = "global_asset_with_wallet_fifo_evidence_overlay_v1"
     ASSET_FIFO_CORRECTION_MIN_ABS_EUR = Decimal("100")
+    EXCHANGE_SEQUENCING_GAP_MAX_QUANTITY = Decimal("1")
+    EXCHANGE_SEQUENCING_GAP_WINDOW = timedelta(minutes=5)
+    EXCHANGE_SEQUENCING_POOLS = {"binance", "bitget", "pionex"}
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
@@ -157,7 +160,13 @@ class TaxMethodologyService:
         detail = self.tax_years.detail(year)
         external = self.tax_years.external_inflow_report(year, limit=1)
         counts = self._year_counts(year)
-        wallet_fifo = WalletFifoPreviewService(self.store).preview(year=year)
+        wallet_fifo_service = WalletFifoPreviewService(self.store)
+        wallet_fifo = wallet_fifo_service.preview(year=year)
+        wallet_fifo_exchange_sequencing_count = self._documented_exchange_sequencing_gap_count(
+            wallet_fifo_service,
+            year=year,
+            unmatched_count=wallet_fifo.unmatched_count,
+        )
         asset_fifo_review = self.tax_years.asset_fifo_correction_review(
             year,
             limit=200,
@@ -175,6 +184,7 @@ class TaxMethodologyService:
             external_unmatched_count=external.unmatched_count,
             traceability=counts,
             wallet_fifo_unmatched_count=wallet_fifo.unmatched_count,
+            wallet_fifo_exchange_sequencing_count=wallet_fifo_exchange_sequencing_count,
             wallet_fifo_delta_eur=wallet_fifo.delta_gain_loss_eur,
             wallet_fifo_unresolved_provenance_count=wallet_fifo.unresolved_inbound_provenance_count,
             asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
@@ -196,6 +206,7 @@ class TaxMethodologyService:
                 external_review_count=external.review_count,
                 external_unmatched_count=external.unmatched_count,
                 wallet_fifo_unmatched_count=wallet_fifo.unmatched_count,
+                wallet_fifo_exchange_sequencing_count=wallet_fifo_exchange_sequencing_count,
                 asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
                 asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
                 traceability_score=traceability_score,
@@ -219,6 +230,56 @@ class TaxMethodologyService:
                 "oder Korrekturkandidaten zeigt."
             ),
         )
+
+    def _documented_exchange_sequencing_gap_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unmatched_count: int,
+    ) -> int:
+        if unmatched_count <= 0:
+            return 0
+        diagnosis = wallet_fifo_service.gap_diagnosis(year=year, limit=max(1, min(unmatched_count, 500)))
+        events = self.store.list_canonical_events()
+        documented = 0
+        for gap in diagnosis.diagnoses:
+            if self._is_documented_exchange_sequencing_gap(wallet_fifo_service, gap, events):
+                documented += 1
+        return documented
+
+    def _is_documented_exchange_sequencing_gap(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        gap: object,
+        events: list[object],
+    ) -> bool:
+        pool_id = str(getattr(gap, "pool_id", "") or "")
+        pool_source = pool_id.split(":", 1)[0].lower()
+        if pool_source not in self.EXCHANGE_SEQUENCING_POOLS:
+            return False
+        missing_quantity = getattr(gap, "missing_quantity", Decimal("0"))
+        if missing_quantity <= 0 or missing_quantity > self.EXCHANGE_SEQUENCING_GAP_MAX_QUANTITY:
+            return False
+        gap_time = getattr(gap, "event_time")
+        window_end = gap_time + self.EXCHANGE_SEQUENCING_GAP_WINDOW
+        asset = str(getattr(gap, "asset", "") or "").upper()
+        covered_quantity = Decimal("0")
+        for event in events:
+            if str(getattr(event, "event_type", "") or "") != "trade":
+                continue
+            if str(getattr(event, "asset", "") or "").upper() != asset:
+                continue
+            if getattr(event, "quantity", Decimal("0")) <= 0:
+                continue
+            if wallet_fifo_service._pool_id(event) != pool_id:
+                continue
+            event_time = getattr(event, "event_time")
+            if gap_time < event_time <= window_end:
+                covered_quantity += getattr(event, "quantity", Decimal("0"))
+                if covered_quantity >= missing_quantity:
+                    return True
+        return False
 
     def _available_years(self) -> list[int]:
         years = set(self.tax_years.summary().available_years)
@@ -367,6 +428,7 @@ class TaxMethodologyService:
         external_unmatched_count: int,
         traceability: dict,
         wallet_fifo_unmatched_count: int,
+        wallet_fifo_exchange_sequencing_count: int,
         wallet_fifo_delta_eur: Decimal,
         wallet_fifo_unresolved_provenance_count: int,
         asset_fifo_possible_recalculation_count: int,
@@ -384,19 +446,38 @@ class TaxMethodologyService:
                 )
             )
             return gaps
-        if wallet_fifo_unmatched_count:
+        blocking_wallet_fifo_unmatched_count = max(0, wallet_fifo_unmatched_count - wallet_fifo_exchange_sequencing_count)
+        if blocking_wallet_fifo_unmatched_count:
             gaps.append(
                 TaxMethodologyGap(
                     code="wallet_fifo_preview_unmatched",
                     severity="blocker",
                     message=(
-                        f"Wallet-/Depot-FIFO-Preview hat {wallet_fifo_unmatched_count} "
+                        f"Wallet-/Depot-FIFO-Preview hat {blocking_wallet_fifo_unmatched_count} "
                         "Abgang/Abgaenge ohne Lot im jeweiligen Pool."
                     ),
-                    count=wallet_fifo_unmatched_count,
+                    count=blocking_wallet_fifo_unmatched_count,
                     action="Eigene Transfers, Quellimporte oder Anfangsbestaende je Wallet/Boerse klaeren.",
                     evidence_ref=f"/api/v1/tax-years/{year}/wallet-fifo-delta",
                     blocks_bmf_ready=True,
+                )
+            )
+        elif wallet_fifo_exchange_sequencing_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_exchange_sequencing_documented",
+                    severity="warning",
+                    message=(
+                        f"{wallet_fifo_exchange_sequencing_count} kleine CEX-/Grid-Sequencing-Luecke(n) "
+                        "sind durch dasselbe Asset im selben Exchange-Pool innerhalb weniger Minuten gedeckt."
+                    ),
+                    count=wallet_fifo_exchange_sequencing_count,
+                    action=(
+                        "Als Exchange-Sequencing-Ausnahme im Jahresbeleg dokumentieren; "
+                        "keine kuenstlichen Lots und keine Rueckdatierung erzeugen."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/wallet-fifo-gaps?limit=500",
+                    blocks_bmf_ready=False,
                 )
             )
         else:
@@ -570,6 +651,7 @@ class TaxMethodologyService:
         external_review_count: int,
         external_unmatched_count: int,
         wallet_fifo_unmatched_count: int,
+        wallet_fifo_exchange_sequencing_count: int,
         asset_fifo_possible_recalculation_count: int,
         asset_fifo_attribution_review_count: int,
         traceability_score: Decimal,
@@ -613,10 +695,19 @@ class TaxMethodologyService:
             TaxTraceabilityMetric(
                 key="wallet_fifo_unmatched",
                 label="Wallet-FIFO offene Lots",
-                status="blocked" if wallet_fifo_unmatched_count else "ok",
-                value=wallet_fifo_unmatched_count,
+                status=(
+                    "blocked"
+                    if wallet_fifo_unmatched_count > wallet_fifo_exchange_sequencing_count
+                    else "review"
+                    if wallet_fifo_exchange_sequencing_count
+                    else "ok"
+                ),
+                value=max(0, wallet_fifo_unmatched_count - wallet_fifo_exchange_sequencing_count),
                 target=0,
-                detail="Wallet-/Depot-FIFO-Evidence-Overlay darf keine unmatched Abgaenge enthalten.",
+                detail=(
+                    "Wallet-/Depot-FIFO-Evidence-Overlay darf keine echten unmatched Abgaenge enthalten. "
+                    "Kleine dokumentierte CEX-/Grid-Sequencing-Ausnahmen bleiben als Review-Hinweis sichtbar."
+                ),
             ),
             TaxTraceabilityMetric(
                 key="asset_fifo_correction_candidates",
@@ -719,6 +810,7 @@ class TaxMethodologyService:
     def _gap_title(self, code: str) -> str:
         titles = {
             "wallet_fifo_preview_unmatched": "Wallet-/Depot-FIFO Herkunft fehlt",
+            "wallet_fifo_exchange_sequencing_documented": "Wallet-FIFO Exchange-Sequencing dokumentiert",
             "wallet_fifo_delta_present": "Wallet-FIFO Delta dokumentieren",
             "wallet_fifo_evidence_overlay_ok": "Wallet-FIFO Evidence vorhanden",
             "wallet_fifo_unresolved_inbound_provenance": "Wallet-FIFO Zufluss-Herkunft offen",

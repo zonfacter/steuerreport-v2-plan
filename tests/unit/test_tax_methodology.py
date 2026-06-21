@@ -69,6 +69,63 @@ def test_tax_methodology_report_blocks_unmatched_disposals(tmp_path):
     assert any(gap.blocks_bmf_ready for gap in report.gaps)
 
 
+def test_tax_methodology_documents_small_exchange_sequencing_gap_without_blocker(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("20"),
+                account="Spot",
+            ),
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2022, 9, 9, 4, 16, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("5"),
+                account="pionex",
+            ),
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2022, 9, 9, 4, 17, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("-1.03"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("6"),
+                account="pionex",
+            ),
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2022, 9, 9, 4, 18, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("0.1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("0.5"),
+                account="pionex",
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = TaxMethodologyService(store).report(2022)
+
+    assert report.status == "review"
+    assert not any(gap.code == "wallet_fifo_preview_unmatched" for gap in report.gaps)
+    sequencing_gap = next(gap for gap in report.gaps if gap.code == "wallet_fifo_exchange_sequencing_documented")
+    assert sequencing_gap.count == 1
+    assert sequencing_gap.blocks_bmf_ready is False
+
+
 def test_tax_methodology_bmf_action_plan_lists_blockers(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     _import_trade_csv(
