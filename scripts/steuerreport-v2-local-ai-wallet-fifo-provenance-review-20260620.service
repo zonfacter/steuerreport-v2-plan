@@ -1,0 +1,19 @@
+[Unit]
+Description=Steuerreport V2 local AI Wallet FIFO provenance review 20260620
+After=network-online.target steuerreport-v2-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/workspace/steuerreport-v2-plan
+Environment=PYTHONPATH=/workspace/steuerreport-v2-plan/src
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=LOCAL_LLM_BASE=http://192.168.2.155:11435/v1
+Environment=LOCAL_LLM_MODEL=qwen3.6-35b-a3b-iq4xs-xt7900
+ExecStart=/usr/bin/python3 /workspace/steuerreport-v2-plan/scripts/run_local_ai_wallet_fifo_provenance_review_20260620.py
+Nice=10
+StandardOutput=append:/workspace/steuerreport-v2-plan/var/local_ai_prework/wallet_fifo_provenance_review_systemd.log
+StandardError=append:/workspace/steuerreport-v2-plan/var/local_ai_prework/wallet_fifo_provenance_review_systemd.log
+
+[Install]
+WantedBy=multi-user.target

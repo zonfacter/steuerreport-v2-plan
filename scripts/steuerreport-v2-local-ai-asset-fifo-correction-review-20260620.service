@@ -1,0 +1,17 @@
+[Unit]
+Description=Steuerreport V2 local AI asset FIFO correction review
+After=network-online.target steuerreport-v2-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/workspace/steuerreport-v2-plan
+Environment=LOCAL_LLM_BASE=http://192.168.2.155:11435/v1
+Environment=LOCAL_LLM_MODEL=qwen3.6-35b-a3b-iq4xs-xt7900
+ExecStart=/usr/bin/python3 /workspace/steuerreport-v2-plan/scripts/run_local_ai_asset_fifo_correction_review_20260620.py
+TimeoutStartSec=7200
+StandardOutput=append:/workspace/steuerreport-v2-plan/var/local_ai_prework/asset_fifo_correction_review_systemd.log
+StandardError=append:/workspace/steuerreport-v2-plan/var/local_ai_prework/asset_fifo_correction_review_systemd.log
+
+[Install]
+WantedBy=multi-user.target

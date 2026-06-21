@@ -1,0 +1,19 @@
+[Unit]
+Description=Steuerreport V2 XT 7900 local AI source/FIFO overnight audit
+After=network-online.target steuerreport-v2-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/workspace/steuerreport-v2-plan
+Environment=PYTHONUNBUFFERED=1
+Environment=STEUERREPORT_V2_API=http://127.0.0.1:8010
+Environment=LOCAL_LLM_BASE=http://192.168.2.155:11435/v1
+Environment=LOCAL_LLM_MODEL=qwen3.6-35b-a3b-iq4xs-xt7900
+ExecStart=/usr/bin/python3 /workspace/steuerreport-v2-plan/scripts/run_local_ai_source_fifo_overnight_xt7900_20260613.py
+TimeoutStartSec=16h
+StandardOutput=append:/workspace/steuerreport-v2-plan/var/local_ai_prework/source_fifo_overnight_xt7900_systemd.log
+StandardError=append:/workspace/steuerreport-v2-plan/var/local_ai_prework/source_fifo_overnight_xt7900_systemd.log
+
+[Install]
+WantedBy=multi-user.target

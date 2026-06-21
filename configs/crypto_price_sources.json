@@ -1,0 +1,256 @@
+{
+  "provider": "coingecko",
+  "assets": [
+    {
+      "symbol": "BTC",
+      "coingecko_id": "bitcoin",
+      "yahoo_ticker": "BTC-USD",
+      "store_keys": ["BTC"],
+      "aliases": ["BTC"]
+    },
+    {
+      "symbol": "ETH",
+      "coingecko_id": "ethereum",
+      "yahoo_ticker": "ETH-USD",
+      "store_keys": ["ETH"],
+      "aliases": ["ETH"]
+    },
+    {
+      "symbol": "USDT",
+      "coingecko_id": "tether",
+      "yahoo_ticker": "USDT-USD",
+      "store_keys": ["USDT", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"],
+      "aliases": ["USDT", "TETHER", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]
+    },
+    {
+      "symbol": "USDC",
+      "coingecko_id": "usd-coin",
+      "yahoo_ticker": "USDC-USD",
+      "store_keys": ["USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+      "aliases": ["USDC", "USD COIN", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]
+    },
+    {
+      "symbol": "BUSD",
+      "coingecko_id": "binance-usd",
+      "yahoo_ticker": "BUSD-USD",
+      "store_keys": ["BUSD"],
+      "aliases": ["BUSD", "BINANCE USD"]
+    },
+    {
+      "symbol": "BNB",
+      "coingecko_id": "binancecoin",
+      "yahoo_ticker": "BNB-USD",
+      "store_keys": ["BNB"],
+      "aliases": ["BNB"]
+    },
+    {
+      "symbol": "DOGE",
+      "coingecko_id": "dogecoin",
+      "yahoo_ticker": "DOGE-USD",
+      "store_keys": ["DOGE"],
+      "aliases": ["DOGE"]
+    },
+    {
+      "symbol": "ADA",
+      "coingecko_id": "cardano",
+      "yahoo_ticker": "ADA-USD",
+      "store_keys": ["ADA"],
+      "aliases": ["ADA"]
+    },
+    {
+      "symbol": "XRP",
+      "coingecko_id": "ripple",
+      "yahoo_ticker": "XRP-USD",
+      "store_keys": ["XRP"],
+      "aliases": ["XRP"]
+    },
+    {
+      "symbol": "TRX",
+      "coingecko_id": "tron",
+      "yahoo_ticker": "TRX-USD",
+      "store_keys": ["TRX"],
+      "aliases": ["TRX", "TRON"]
+    },
+    {
+      "symbol": "XLM",
+      "coingecko_id": "stellar",
+      "yahoo_ticker": "XLM-USD",
+      "store_keys": ["XLM"],
+      "aliases": ["XLM", "STELLAR"]
+    },
+    {
+      "symbol": "AVAX",
+      "coingecko_id": "avalanche-2",
+      "yahoo_ticker": "AVAX-USD",
+      "store_keys": ["AVAX"],
+      "aliases": ["AVAX", "AVALANCHE"]
+    },
+    {
+      "symbol": "LINK",
+      "coingecko_id": "chainlink",
+      "yahoo_ticker": "LINK-USD",
+      "store_keys": ["LINK"],
+      "aliases": ["LINK", "CHAINLINK"]
+    },
+    {
+      "symbol": "PEPE",
+      "coingecko_id": "pepe",
+      "yahoo_ticker": "PEPE-USD",
+      "store_keys": ["PEPE"],
+      "aliases": ["PEPE"]
+    },
+    {
+      "symbol": "BONK",
+      "coingecko_id": "bonk",
+      "yahoo_ticker": "BONK-USD",
+      "store_keys": ["BONK"],
+      "aliases": ["BONK"]
+    },
+    {
+      "symbol": "ETHW",
+      "coingecko_id": "ethereum-pow-iou",
+      "yahoo_ticker": "ETHW-USD",
+      "store_keys": ["ETHW"],
+      "aliases": ["ETHW", "ETHEREUM POW"]
+    },
+    {
+      "symbol": "TRUMP",
+      "coingecko_id": "official-trump",
+      "yahoo_ticker": "TRUMP-USD",
+      "store_keys": ["TRUMP"],
+      "aliases": ["TRUMP", "OFFICIAL TRUMP"]
+    },
+    {
+      "symbol": "SHIB",
+      "coingecko_id": "shiba-inu",
+      "yahoo_ticker": "SHIB-USD",
+      "store_keys": ["SHIB"],
+      "aliases": ["SHIB"]
+    },
+    {
+      "symbol": "EGLD",
+      "coingecko_id": "elrond-erd-2",
+      "yahoo_ticker": "EGLD-USD",
+      "store_keys": ["EGLD"],
+      "aliases": ["EGLD"]
+    },
+    {
+      "symbol": "MXC",
+      "coingecko_id": "mxc",
+      "yahoo_ticker": "MXC-USD",
+      "store_keys": ["MXC"],
+      "aliases": ["MXC"]
+    },
+    {
+      "symbol": "SOL",
+      "coingecko_id": "solana",
+      "yahoo_ticker": "SOL-USD",
+      "store_keys": ["SOL", "So11111111111111111111111111111111111111112"],
+      "aliases": ["SOL", "So11111111111111111111111111111111111111112"]
+    },
+    {
+      "symbol": "JLWSOL",
+      "coingecko_id": "solana",
+      "store_keys": ["JLWSOL", "2UQSYO1FXXQKDTCPXNLOFWY88PXCVNFH2L8FPSE62FVU"],
+      "aliases": ["JLWSOL", "JUPITER LEND WSOL", "2UQSYO1FXXQKDTCPXNLOFWY88PXCVNFH2L8FPSE62FVU"]
+    },
+    {
+      "symbol": "HNT",
+      "coingecko_id": "helium",
+      "yahoo_ticker": "HNT-USD",
+      "store_keys": ["HNT", "HNTYVP6YFM1HG25TN9WGLQM12B8TQMCKNKRDU1OXWUX"],
+      "aliases": ["HNT", "HNTYVP6YFM1HG25TN9WGLQM12B8TQMCKNKRDU1OXWUX"]
+    },
+    {
+      "symbol": "IOT",
+      "coingecko_id": "helium-iot",
+      "coinmarketcap_id": "24686",
+      "store_keys": ["IOT", "IOTEVVZLEYWOTN1QDWNPDDXPWSZN3ZFHEOT3MFL9FNS"],
+      "aliases": ["IOT", "IOTEVVZLEYWOTN1QDWNPDDXPWSZN3ZFHEOT3MFL9FNS"]
+    },
+    {
+      "symbol": "MOBILE",
+      "coingecko_id": "helium-mobile",
+      "store_keys": ["MOBILE", "MB1EU7TZEC71KXDPSMSKOUCSSUUOGLV1DRYS1OP2JH6"],
+      "aliases": ["MOBILE", "MB1EU7TZEC71KXDPSMSKOUCSSUUOGLV1DRYS1OP2JH6"]
+    },
+    {
+      "symbol": "BTTC",
+      "coingecko_id": "bittorrent",
+      "store_keys": ["BTTC", "BTT"],
+      "aliases": ["BTTC", "BTT", "BITTORRENT"]
+    },
+    {
+      "symbol": "NFT",
+      "coingecko_id": "apenft",
+      "store_keys": ["NFT", "APENFT"],
+      "aliases": ["NFT", "APENFT"]
+    },
+    {
+      "symbol": "VTHO",
+      "coingecko_id": "vethor-token",
+      "store_keys": ["VTHO"],
+      "aliases": ["VTHO", "VETHOR"]
+    },
+    {
+      "symbol": "JUP",
+      "coingecko_id": "jupiter-exchange-solana",
+      "store_keys": ["JUP", "JUPYIWRYJFSKUPIHA7HKER8VUTAEFOSYBKEDZNSDVCN"],
+      "aliases": ["JUP", "JUPYIWRYJFSKUPIHA7HKER8VUTAEFOSYBKEDZNSDVCN"]
+    },
+    {
+      "symbol": "POPCAT",
+      "coingecko_id": "popcat",
+      "store_keys": ["POPCAT", "7GCIHGDB8FE6KNJN2MYTKZZCRJQY3T9GHDC8UHYMW2HR"],
+      "aliases": ["POPCAT", "7GCIHGDB8FE6KNJN2MYTKZZCRJQY3T9GHDC8UHYMW2HR"]
+    },
+    {
+      "symbol": "MANEKI",
+      "coingecko_id": "maneki",
+      "store_keys": ["MANEKI", "25hAyBQfoDhfWx9ay6rarbgvWGwDdNqcHsXS3jQ3mTDJ"],
+      "aliases": ["MANEKI", "25hAyBQfoDhfWx9ay6rarbgvWGwDdNqcHsXS3jQ3mTDJ"]
+    },
+    {
+      "symbol": "WBTC",
+      "coingecko_id": "wrapped-bitcoin",
+      "store_keys": ["WBTC", "3NZ9JMVBmGAqocybic2C7LqcJScmgsAz6VQQtdzcqmJh"],
+      "aliases": ["WBTC", "WRAPPED BITCOIN", "3NZ9JMVBmGAqocybic2C7LqcJScmgsAz6VQQtdzcqmJh"]
+    },
+    {
+      "symbol": "CBDC",
+      "coingecko_id": "cbdc",
+      "store_keys": ["CBDC", "2KfzCkfxj1Us8YrQZa5vktSxy3GPzFZvVhWj91n8Fv2j"],
+      "aliases": ["CBDC", "2KfzCkfxj1Us8YrQZa5vktSxy3GPzFZvVhWj91n8Fv2j"]
+    },
+    {
+      "symbol": "ZEUS",
+      "coingecko_id": "zeus-network",
+      "store_keys": ["ZEUS", "ZEUS1AR7AX8DFFJF5QJWJ2FTDDDNTROMNGO8YOQM3GQ"],
+      "aliases": ["ZEUS", "ZEUS1AR7AX8DFFJF5QJWJ2FTDDDNTROMNGO8YOQM3GQ"]
+    },
+    {
+      "symbol": "JUPSOL",
+      "coingecko_id": "jupiter-staked-sol",
+      "store_keys": ["JUPSOL", "JUPSOLAHXQIZZTSFEWMTRRGPNYFM8F6SZDOSWBJX93V"],
+      "aliases": ["JUPSOL", "JUPSOLAHXQIZZTSFEWMTRRGPNYFM8F6SZDOSWBJX93V"]
+    },
+    {
+      "symbol": "SHARK",
+      "coingecko_id": "sharky",
+      "store_keys": ["SHARK", "SHARKSYJJQANYXVFRPNBN9PJGKHWDHATNMYICWPNR1S"],
+      "aliases": ["SHARK", "SHARKSYJJQANYXVFRPNBN9PJGKHWDHATNMYICWPNR1S"]
+    },
+    {
+      "symbol": "UPT",
+      "coingecko_id": "uprock",
+      "store_keys": ["UPT", "UPTX1D24ABWURGWXVNFMX4GNRAJ3QGFZL3QQBGXTWQG"],
+      "aliases": ["UPT", "UPTX1D24ABWURGWXVNFMX4GNRAJ3QGFZL3QQBGXTWQG"]
+    },
+    {
+      "symbol": "CWIF",
+      "coingecko_id": "catwifhat",
+      "store_keys": ["CWIF", "7ATgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"],
+      "aliases": ["CWIF", "CATWIFHAT", "7ATgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"]
+    }
+  ]
+}

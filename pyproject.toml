@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "steuerreport-v2"
+version = "0.1.0"
+description = "Steuerreport V2 mit DuckDB Ledger, FastAPI Backend und React Frontend"
+requires-python = ">=3.11"
+dependencies = [
+  "duckdb>=0.10",
+  "fastapi>=0.110",
+  "httpx>=0.27",
+  "openpyxl>=3.1",
+  "pandas>=2.2",
+  "pydantic>=2.6",
+  "python-multipart>=0.0.9",
+  "xlrd>=2.0",
+  "uvicorn>=0.27"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
