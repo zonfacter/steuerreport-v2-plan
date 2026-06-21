@@ -6,6 +6,8 @@ from decimal import Decimal
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionItem,
     TaxBmfActionPlan,
+    TaxBmfFilingReadinessReport,
+    TaxBmfFilingReadinessYear,
     TaxRewardBmfRecheckReport,
     TaxRewardBmfRecheckYear,
     TaxMethodologyGap,
@@ -125,6 +127,41 @@ class TaxMethodologyService:
             ),
         )
 
+    def bmf_filing_readiness(self, year: int | None = None) -> TaxBmfFilingReadinessReport:
+        generated_at = self._now()
+        available_years = [year] if year is not None else [
+            item_year for item_year in self._available_years() if 2021 <= item_year <= 2025
+        ]
+        payment_rows = {
+            row.year: row
+            for row in self.tax_years.payment_overview(years=available_years).rows
+        }
+        rows = [
+            self._bmf_filing_readiness_year(item_year, payment_row=payment_rows.get(item_year))
+            for item_year in available_years
+        ]
+        return TaxBmfFilingReadinessReport(
+            generated_at=generated_at,
+            years=rows,
+            available_years=available_years,
+            ready_years=[row.year for row in rows if row.filing_status == "bmf_ready"],
+            conservative_appendix_years=[
+                row.year for row in rows if row.filing_status == "conservative_appendix"
+            ],
+            review_years=[row.year for row in rows if row.filing_status == "review_required"],
+            blocked_years=[row.year for row in rows if row.filing_status == "blocked"],
+            empty_years=[row.year for row in rows if row.filing_status == "empty"],
+            ascii_table=self._bmf_filing_readiness_ascii(rows),
+            methodology=(
+                "Read-only Abschlussmatrix fuer die Steuerjahre. Kombiniert "
+                "BMF-Methodology, Filing Summary und die konservative "
+                "BMF-Closure-Appendix-Beilage. 'BMF-ready' bleibt streng; "
+                "'conservative_appendix' bedeutet nur, dass offene Herkunft "
+                "konservativ offengelegt werden kann, ohne eigene Transfers "
+                "ungeprueft steuerneutral zu behaupten."
+            ),
+        )
+
     def reward_bmf_recheck(self) -> TaxRewardBmfRecheckReport:
         generated_at = self._now()
         tax_summary = self.tax_years.summary()
@@ -150,6 +187,115 @@ class TaxMethodologyService:
                 "massgeblich."
             ),
         )
+
+    def _bmf_filing_readiness_year(self, year: int, *, payment_row) -> TaxBmfFilingReadinessYear:
+        report = self.report(year)
+        blocking_codes = [gap.code for gap in report.gaps if gap.blocks_bmf_ready or gap.severity == "blocker"]
+        review_codes = [
+            gap.code
+            for gap in report.gaps
+            if gap.code not in blocking_codes and gap.severity in {"warning", "info"}
+        ]
+        needs_appendix = any(
+            code.startswith("wallet_fifo") or code.startswith("external_inflow")
+            for code in [*blocking_codes, *review_codes]
+        )
+        appendix = self.tax_years.bmf_closure_appendix(year) if needs_appendix else None
+        can_file_with_conservative_appendix = bool(
+            appendix is not None and appendix.can_file_with_conservative_appendix
+        )
+        if report.status == "empty":
+            filing_status = "empty"
+            label = "Keine Aktivitaet"
+            next_action = "Kein Eintrag aus V2-Werten; Jahresbeleg optional archivieren."
+        elif report.bmf_ready:
+            filing_status = "bmf_ready"
+            label = "BMF-ready"
+            next_action = "Filing Summary und Belegpaket fuer die Steuererklaerung verwenden."
+        elif can_file_with_conservative_appendix:
+            filing_status = "conservative_appendix"
+            label = "Konservativ belegbar"
+            next_action = (
+                "BMF-Closure-Appendix beilegen und keine offene Herkunft als "
+                "steuerneutralen Eigenwallet-Transfer behaupten."
+            )
+        elif blocking_codes:
+            filing_status = "blocked"
+            label = "Blockiert"
+            next_action = "Blockierende Gaps zuerst mit Belegen, Review-Entscheidung oder Importkorrektur schliessen."
+        else:
+            filing_status = "review_required"
+            label = "Review noetig"
+            next_action = "Warnungen fachlich pruefen und Belegpaket mit Review-Hinweisen verwenden."
+        return TaxBmfFilingReadinessYear(
+            year=year,
+            filing_status=filing_status,
+            status_label=label,
+            methodology_status=report.status,
+            bmf_ready=report.bmf_ready,
+            can_file_with_conservative_appendix=can_file_with_conservative_appendix,
+            appendix_status=appendix.status if appendix is not None else None,
+            appendix_items_count=appendix.items_count if appendix is not None else 0,
+            appendix_manual_evidence_required_count=(
+                appendix.manual_evidence_required_count if appendix is not None else 0
+            ),
+            taxable_private_disposals_eur=(
+                payment_row.private_disposals_gain_loss_eur if payment_row is not None else Decimal("0")
+            ),
+            rewards_mining_staking_income_eur=(
+                payment_row.rewards_mining_staking_income_eur if payment_row is not None else Decimal("0")
+            ),
+            derivative_pnl_eur=payment_row.derivative_pnl_eur if payment_row is not None else Decimal("0"),
+            blocking_gap_codes=blocking_codes,
+            review_gap_codes=review_codes,
+            next_action=next_action,
+            methodology_endpoint=f"/api/v1/tax-years/{year}/methodology",
+            filing_summary_endpoint=f"/api/v1/tax-years/{year}/filing-summary",
+            bmf_closure_appendix_endpoint=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+            evidence_package_endpoint=f"/api/v1/export/tax-years/{year}/evidence-package.zip",
+            display_line=self._bmf_filing_readiness_line(
+                year=year,
+                label=label,
+                taxable_private_disposals_eur=(
+                    payment_row.private_disposals_gain_loss_eur if payment_row is not None else Decimal("0")
+                ),
+                rewards_mining_staking_income_eur=(
+                    payment_row.rewards_mining_staking_income_eur if payment_row is not None else Decimal("0")
+                ),
+                derivative_pnl_eur=payment_row.derivative_pnl_eur if payment_row is not None else Decimal("0"),
+                blocking_count=len(blocking_codes),
+                appendix_items_count=appendix.items_count if appendix is not None else 0,
+            ),
+        )
+
+    def _bmf_filing_readiness_ascii(self, rows: list[TaxBmfFilingReadinessYear]) -> str:
+        if not rows:
+            return "Jahr | Status | Privat G/V | Rewards | Derivate | Blocker | Appendix"
+        header = "Jahr | Status | Privat G/V | Rewards | Derivate | Blocker | Appendix"
+        separator = "-----|--------|------------|---------|----------|---------|---------"
+        return "\n".join([header, separator, *(row.display_line for row in rows)])
+
+    def _bmf_filing_readiness_line(
+        self,
+        *,
+        year: int,
+        label: str,
+        taxable_private_disposals_eur: Decimal,
+        rewards_mining_staking_income_eur: Decimal,
+        derivative_pnl_eur: Decimal,
+        blocking_count: int,
+        appendix_items_count: int,
+    ) -> str:
+        return (
+            f"{year} | {label} | "
+            f"{self._eur(taxable_private_disposals_eur)} | "
+            f"{self._eur(rewards_mining_staking_income_eur)} | "
+            f"{self._eur(derivative_pnl_eur)} | "
+            f"{blocking_count} | {appendix_items_count}"
+        )
+
+    def _eur(self, value: Decimal) -> str:
+        return f"{value.quantize(Decimal('0.01'))} EUR"
 
     def status(self, year: int) -> TaxYearComplianceStatus:
         return self._status_from_report(self.report(year))

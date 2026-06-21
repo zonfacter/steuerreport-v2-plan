@@ -127,6 +127,42 @@ class TaxBmfActionPlan(BaseModel):
     methodology: str
 
 
+class TaxBmfFilingReadinessYear(BaseModel):
+    year: int
+    filing_status: Literal["bmf_ready", "conservative_appendix", "review_required", "blocked", "empty"]
+    status_label: str
+    methodology_status: TaxMethodologyStatus
+    bmf_ready: bool = False
+    can_file_with_conservative_appendix: bool = False
+    appendix_status: Literal["ready", "review", "blocked"] | None = None
+    appendix_items_count: int = 0
+    appendix_manual_evidence_required_count: int = 0
+    taxable_private_disposals_eur: Decimal = Decimal("0")
+    rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    derivative_pnl_eur: Decimal = Decimal("0")
+    blocking_gap_codes: list[str] = Field(default_factory=list)
+    review_gap_codes: list[str] = Field(default_factory=list)
+    next_action: str
+    methodology_endpoint: str
+    filing_summary_endpoint: str
+    bmf_closure_appendix_endpoint: str
+    evidence_package_endpoint: str
+    display_line: str
+
+
+class TaxBmfFilingReadinessReport(BaseModel):
+    generated_at: str
+    years: list[TaxBmfFilingReadinessYear] = Field(default_factory=list)
+    available_years: list[int] = Field(default_factory=list)
+    ready_years: list[int] = Field(default_factory=list)
+    conservative_appendix_years: list[int] = Field(default_factory=list)
+    review_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    empty_years: list[int] = Field(default_factory=list)
+    ascii_table: str
+    methodology: str
+
+
 class TaxRewardBmfRecheckYear(BaseModel):
     year: int
     status: TaxMethodologyStatus

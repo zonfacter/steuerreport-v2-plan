@@ -144,6 +144,50 @@ def test_tax_methodology_bmf_action_plan_lists_blockers(tmp_path):
     assert any(item.category == "wallet_fifo" for item in plan.items)
 
 
+def test_bmf_filing_readiness_surfaces_conservative_appendix_without_ready_flag(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service._available_years = lambda: [2024]
+    service.report = lambda year: SimpleNamespace(
+        year=year,
+        status="blocked",
+        bmf_ready=False,
+        gaps=[
+            SimpleNamespace(
+                code="wallet_fifo_unresolved_inbound_provenance",
+                severity="blocker",
+                blocks_bmf_ready=True,
+            )
+        ],
+    )
+    service.tax_years.payment_overview = lambda years: SimpleNamespace(
+        rows=[
+            SimpleNamespace(
+                year=2024,
+                private_disposals_gain_loss_eur=Decimal("18490.205"),
+                rewards_mining_staking_income_eur=Decimal("1097.06"),
+                derivative_pnl_eur=Decimal("-71.90"),
+            )
+        ]
+    )
+    service.tax_years.bmf_closure_appendix = lambda year: SimpleNamespace(
+        status="review",
+        items_count=3,
+        manual_evidence_required_count=2,
+        can_file_with_conservative_appendix=True,
+    )
+
+    report = service.bmf_filing_readiness()
+    row = report.years[0]
+
+    assert report.conservative_appendix_years == [2024]
+    assert row.filing_status == "conservative_appendix"
+    assert row.bmf_ready is False
+    assert row.can_file_with_conservative_appendix is True
+    assert row.blocking_gap_codes == ["wallet_fifo_unresolved_inbound_provenance"]
+    assert "2024 | Konservativ belegbar | 18490.20 EUR" in report.ascii_table
+
+
 def test_tax_methodology_blocks_unresolved_wallet_fifo_inbound_provenance(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_canonical_events(
@@ -295,6 +339,7 @@ def test_tax_methodology_api_endpoints(tmp_path):
     summary_year = client.get("/api/v1/tax-methodology/summary?year=2024")
     reward_recheck = client.get("/api/v1/tax-years/reward-bmf-recheck")
     action_plan = client.get("/api/v1/tax-methodology/bmf-action-plan?year=2024")
+    filing_readiness = client.get("/api/v1/tax-methodology/bmf-filing-readiness?year=2024")
     detail = client.get("/api/v1/tax-years/2024/methodology")
     status = client.get("/api/v1/tax-years/2024/compliance-status")
 
@@ -302,11 +347,13 @@ def test_tax_methodology_api_endpoints(tmp_path):
     assert summary_year.status_code == 200
     assert reward_recheck.status_code == 200
     assert action_plan.status_code == 200
+    assert filing_readiness.status_code == 200
     assert detail.status_code == 200
     assert status.status_code == 200
     assert 2024 in summary.json()["data"]["available_years"]
     assert summary_year.json()["data"]["available_years"] == [2024]
     assert 2024 in reward_recheck.json()["data"]["available_years"]
     assert action_plan.json()["data"]["available_years"] == [2024]
+    assert filing_readiness.json()["data"]["available_years"] == [2024]
     assert detail.json()["data"]["policy"]["method_version"] == "bmf_readiness_v2"
     assert status.json()["data"]["methodology_endpoint"] == "/api/v1/tax-years/2024/methodology"
