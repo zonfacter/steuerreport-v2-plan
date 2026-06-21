@@ -838,6 +838,19 @@ type Snapshot = {
     status_breakdown: Array<Record<string, unknown>>;
     methodology: string;
   };
+  taxYearWalletFifoProvenanceClosure?: {
+    generated_at: string;
+    year: number;
+    unresolved_inbound_provenance_count: number;
+    groups_count: number;
+    documented_non_live_count: number;
+    external_or_unknown_count: number;
+    unverified_cex_count: number;
+    tax_neutral_candidate_count: number;
+    review_required_count: number;
+    items: Array<Record<string, unknown>>;
+    methodology: string;
+  };
   taxYearWalletFifoRawProvenanceBreakdown?: {
     generated_at: string;
     year: number;
@@ -1578,6 +1591,7 @@ function App() {
         taxYearCexSenderOwnershipLatest: { key: "taxYearCexSenderOwnershipLatest", label: "CEX Sender Ownership", load: () => getApi<Snapshot["taxYearCexSenderOwnershipLatest"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/cex-sender-ownership-latest?cex=binance&network=SOL&limit=100`) },
         taxYearCexExchangeOutflowEvidence: { key: "taxYearCexExchangeOutflowEvidence", label: "CEX Exchange Outflow Evidence", load: () => getApi<Snapshot["taxYearCexExchangeOutflowEvidence"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/cex-exchange-outflow-evidence?source_exchange=bitget&target_cex=binance&network=SOL&window_hours=72&limit=100`) },
         taxYearCexExchangeOutflowAnchorFeasibility: { key: "taxYearCexExchangeOutflowAnchorFeasibility", label: "CEX FIFO-Anker", load: () => getApi<Snapshot["taxYearCexExchangeOutflowAnchorFeasibility"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/cex-exchange-outflow-anchor-feasibility?source_exchange=bitget&target_cex=binance&network=SOL`) },
+        taxYearWalletFifoProvenanceClosure: { key: "taxYearWalletFifoProvenanceClosure", label: "Wallet-FIFO Jahresampel", load: () => getApi<Snapshot["taxYearWalletFifoProvenanceClosure"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-provenance-closure?limit=20`) },
         taxYearWalletFifoProvenancePriorities: { key: "taxYearWalletFifoProvenancePriorities", label: "Wallet-FIFO Provenance", load: () => getApi<Snapshot["taxYearWalletFifoProvenancePriorities"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-provenance-priorities?limit=25`) },
         taxYearWalletFifoRawProvenanceBreakdown: { key: "taxYearWalletFifoRawProvenanceBreakdown", label: "Raw Provenance Breakdown", load: () => getApi<Snapshot["taxYearWalletFifoRawProvenanceBreakdown"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-raw-provenance-breakdown?limit=50`) },
         taxYearWalletFifoExchangeEvidenceGaps: { key: "taxYearWalletFifoExchangeEvidenceGaps", label: "Exchange Evidence Gaps", load: () => getApi<Snapshot["taxYearWalletFifoExchangeEvidenceGaps"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-exchange-evidence-gaps?limit=50`) },
@@ -1645,6 +1659,7 @@ function App() {
               "taxYearCexSenderOwnershipLatest",
               "taxYearCexExchangeOutflowEvidence",
               "taxYearCexExchangeOutflowAnchorFeasibility",
+              "taxYearWalletFifoProvenanceClosure",
               "taxYearWalletFifoSolanaOrigin",
               "taxLegacyHeliumOverview",
               "taxIncomeGuide",
@@ -3099,6 +3114,7 @@ function Content({
         taxYearCexSenderOwnershipLatest={snapshot.taxYearCexSenderOwnershipLatest}
         taxYearCexExchangeOutflowEvidence={snapshot.taxYearCexExchangeOutflowEvidence}
         taxYearCexExchangeOutflowAnchorFeasibility={snapshot.taxYearCexExchangeOutflowAnchorFeasibility}
+        taxYearWalletFifoProvenanceClosure={snapshot.taxYearWalletFifoProvenanceClosure}
         taxYearWalletFifoProvenancePriorities={snapshot.taxYearWalletFifoProvenancePriorities}
         taxYearWalletFifoRawProvenanceBreakdown={snapshot.taxYearWalletFifoRawProvenanceBreakdown}
         taxYearWalletFifoExchangeEvidenceGaps={snapshot.taxYearWalletFifoExchangeEvidenceGaps}
@@ -7400,6 +7416,7 @@ function TaxPanel({
   taxYearCexSenderOwnershipLatest,
   taxYearCexExchangeOutflowEvidence,
   taxYearCexExchangeOutflowAnchorFeasibility,
+  taxYearWalletFifoProvenanceClosure,
   taxYearWalletFifoProvenancePriorities,
   taxYearWalletFifoRawProvenanceBreakdown,
   taxYearWalletFifoExchangeEvidenceGaps,
@@ -7457,6 +7474,7 @@ function TaxPanel({
   taxYearCexSenderOwnershipLatest: Snapshot["taxYearCexSenderOwnershipLatest"];
   taxYearCexExchangeOutflowEvidence: Snapshot["taxYearCexExchangeOutflowEvidence"];
   taxYearCexExchangeOutflowAnchorFeasibility: Snapshot["taxYearCexExchangeOutflowAnchorFeasibility"];
+  taxYearWalletFifoProvenanceClosure: Snapshot["taxYearWalletFifoProvenanceClosure"];
   taxYearWalletFifoProvenancePriorities: Snapshot["taxYearWalletFifoProvenancePriorities"];
   taxYearWalletFifoRawProvenanceBreakdown: Snapshot["taxYearWalletFifoRawProvenanceBreakdown"];
   taxYearWalletFifoExchangeEvidenceGaps: Snapshot["taxYearWalletFifoExchangeEvidenceGaps"];
@@ -7550,6 +7568,8 @@ function TaxPanel({
   const cexOutflowAnchorTone = Number(taxYearCexExchangeOutflowAnchorFeasibility?.anchor_missing_count ?? 0) > 0 ? "warning" : "ok";
   const legacyHeliumWallets = taxLegacyHeliumOverview?.wallets ?? [];
   const legacyHeliumTransfers = taxLegacyHeliumOverview?.fairspot_transfers ?? [];
+  const walletFifoClosureItems = taxYearWalletFifoProvenanceClosure?.items ?? [];
+  const walletFifoClosureTone = Number(taxYearWalletFifoProvenanceClosure?.review_required_count ?? 0) > 0 ? "warning" : "ok";
   const walletFifoTone = walletFifoOk ? "ok" : walletFifoUnmatched > 0 ? "blocked" : "warning";
   const walletFifoProofLabel = walletFifoOk
     ? "FIFO-Nachverfolgung ohne offene Pool-Luecken"
@@ -8179,6 +8199,50 @@ function TaxPanel({
             </div>
           </div>
         ) : null}
+        {taxYearWalletFifoProvenanceClosure ? (
+          <div className={`panelInlineBlock ${walletFifoClosureTone}`}>
+            <div className="panelToolbar">
+              <strong>Wallet-FIFO Jahresampel</strong>
+              <span className={`statusPill ${walletFifoClosureTone}`}>
+                {Number(taxYearWalletFifoProvenanceClosure.review_required_count ?? 0) > 0 ? "Review offen" : "belegt"}
+              </span>
+            </div>
+            <div className="portfolioSummaryStrip">
+              <Metric title="Offene Herkunft" value={String(taxYearWalletFifoProvenanceClosure.unresolved_inbound_provenance_count ?? 0)} />
+              <Metric title="Gruppen" value={String(taxYearWalletFifoProvenanceClosure.groups_count ?? 0)} />
+              <Metric title="Anfangsbestand" value={String(taxYearWalletFifoProvenanceClosure.documented_non_live_count ?? 0)} />
+              <Metric title="Extern/unklar" value={String(taxYearWalletFifoProvenanceClosure.external_or_unknown_count ?? 0)} />
+              <Metric title="CEX ungeprueft" value={String(taxYearWalletFifoProvenanceClosure.unverified_cex_count ?? 0)} />
+              <Metric title="Review" value={String(taxYearWalletFifoProvenanceClosure.review_required_count ?? 0)} />
+            </div>
+            <TablePanel
+              title="Jahresabschluss offene FIFO-Herkunft"
+              rows={walletFifoClosureItems.map((item) => ({
+                status: item.closure_status ?? "-",
+                kategorie: item.category ?? "-",
+                asset: item.asset ?? "-",
+                quelle: item.source ?? "-",
+                pool: item.pool_id ? shortAccount(String(item.pool_id)) : "-",
+                account: item.account ? shortAccount(String(item.account)) : "-",
+                faelle: item.events_count ?? 0,
+                menge: formatQuantity(item.quantity_total),
+                basis_eur: formatCurrency(item.carried_cost_basis_eur_total),
+                review: item.requires_review ? "ja" : "nein",
+                belege: Array.isArray(item.evidence_refs) ? item.evidence_refs.length : 0,
+                hinweis: item.tax_treatment_hint ?? "-",
+                aktion: item.recommended_action ?? "-"
+              }))}
+              footer={taxYearWalletFifoProvenanceClosure.methodology}
+              compact
+            />
+            <div className="reportActionBand compactActions">
+              <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/wallet-fifo-provenance-closure?limit=100`)}>
+                <FileJson size={16} />
+                Jahresampel JSON
+              </button>
+            </div>
+          </div>
+        ) : null}
         {(taxYearCexDepositTransferEvidence?.deposits ?? []).length > 0 ? (
           <TablePanel
             title="CEX Deposit Transfer Evidence"
@@ -8673,6 +8737,10 @@ function TaxPanel({
           />
         ) : null}
         <div className="reportActionBand compactActions">
+          <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/wallet-fifo-provenance-closure?limit=100`)}>
+            <FileJson size={16} />
+            Jahresampel JSON
+          </button>
           <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/wallet-fifo-provenance-priorities?limit=100`)}>
             <FileJson size={16} />
             Provenance-Prioritaeten JSON
