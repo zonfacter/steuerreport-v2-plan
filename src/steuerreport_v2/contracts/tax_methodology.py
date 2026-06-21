@@ -163,6 +163,15 @@ class TaxBmfFilingReadinessReport(BaseModel):
     methodology: str
 
 
+class TaxBmfFilingReadinessSnapshot(BaseModel):
+    generated_at: str
+    snapshot_exists: bool = False
+    artifact_path: str
+    report: TaxBmfFilingReadinessReport | None = None
+    status: Literal["available", "missing", "invalid"] = "missing"
+    note: str
+
+
 class TaxRewardBmfRecheckYear(BaseModel):
     year: int
     status: TaxMethodologyStatus

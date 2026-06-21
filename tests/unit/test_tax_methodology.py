@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from steuerreport_v2.api.app import create_app
+from steuerreport_v2.contracts.tax_methodology import TaxBmfFilingReadinessReport
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
@@ -186,6 +187,32 @@ def test_bmf_filing_readiness_surfaces_conservative_appendix_without_ready_flag(
     assert row.can_file_with_conservative_appendix is True
     assert row.blocking_gap_codes == ["wallet_fifo_unresolved_inbound_provenance"]
     assert "2024 | Konservativ belegbar | 18490.20 EUR" in report.ascii_table
+
+
+def test_bmf_filing_readiness_snapshot_roundtrip(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service.bmf_filing_readiness = lambda year=None: TaxBmfFilingReadinessReport(
+        generated_at="2026-06-21T00:00:00+00:00",
+        years=[],
+        available_years=[2021, 2022, 2023, 2024, 2025],
+        ready_years=[],
+        conservative_appendix_years=[2024],
+        review_years=[2025],
+        blocked_years=[2021, 2022, 2023],
+        empty_years=[],
+        ascii_table="Jahr | Status",
+        methodology="unit",
+    )
+
+    latest = service.write_bmf_filing_readiness_snapshot(output_dir=tmp_path / "bmf")
+    snapshot = service.bmf_filing_readiness_snapshot(artifact_path=latest)
+
+    assert latest.name == "latest_bmf_filing_readiness_2021_2025.json"
+    assert snapshot.status == "available"
+    assert snapshot.snapshot_exists is True
+    assert snapshot.report is not None
+    assert snapshot.report.conservative_appendix_years == [2024]
 
 
 def test_tax_methodology_blocks_unresolved_wallet_fifo_inbound_provenance(tmp_path):

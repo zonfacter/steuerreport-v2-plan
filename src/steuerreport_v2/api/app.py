@@ -174,6 +174,7 @@ from steuerreport_v2.contracts.tax import (
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionPlan,
     TaxBmfFilingReadinessReport,
+    TaxBmfFilingReadinessSnapshot,
     TaxRewardBmfRecheckReport,
     TaxMethodologyReport,
     TaxMethodologySummary,
@@ -1944,6 +1945,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-methodology/bmf-filing-readiness")
     def tax_methodology_bmf_filing_readiness(year: int | None = None) -> ApiResponse[TaxBmfFilingReadinessReport]:
         return ApiResponse(data=TaxMethodologyService(db).bmf_filing_readiness(year=year))
+
+    @app.get("/api/v1/tax-methodology/bmf-filing-readiness-snapshot")
+    def tax_methodology_bmf_filing_readiness_snapshot() -> ApiResponse[TaxBmfFilingReadinessSnapshot]:
+        return ApiResponse(data=TaxMethodologyService(db).bmf_filing_readiness_snapshot())
 
     @app.get("/api/v1/tax-years/reward-bmf-recheck")
     def tax_years_reward_bmf_recheck() -> ApiResponse[TaxRewardBmfRecheckReport]:

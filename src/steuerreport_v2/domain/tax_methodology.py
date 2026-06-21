@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import json
+from pathlib import Path
 
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionItem,
     TaxBmfActionPlan,
     TaxBmfFilingReadinessReport,
+    TaxBmfFilingReadinessSnapshot,
     TaxBmfFilingReadinessYear,
     TaxRewardBmfRecheckReport,
     TaxRewardBmfRecheckYear,
@@ -30,6 +33,7 @@ class TaxMethodologyService:
     EXCHANGE_SEQUENCING_GAP_MAX_QUANTITY = Decimal("1")
     EXCHANGE_SEQUENCING_GAP_WINDOW = timedelta(minutes=5)
     EXCHANGE_SEQUENCING_POOLS = {"binance", "bitget", "pionex"}
+    DEFAULT_BMF_FILING_READINESS_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_filing_readiness")
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
@@ -161,6 +165,61 @@ class TaxMethodologyService:
                 "ungeprueft steuerneutral zu behaupten."
             ),
         )
+
+    def bmf_filing_readiness_snapshot(
+        self,
+        *,
+        artifact_path: Path | None = None,
+    ) -> TaxBmfFilingReadinessSnapshot:
+        path = artifact_path or self._bmf_filing_readiness_snapshot_path()
+        if not path.exists():
+            return TaxBmfFilingReadinessSnapshot(
+                generated_at=self._now(),
+                snapshot_exists=False,
+                artifact_path=str(path),
+                report=None,
+                status="missing",
+                note=(
+                    "Noch kein BMF-Filing-Readiness-Snapshot vorhanden. "
+                    "Erzeuge ihn mit scripts/run_bmf_filing_readiness_snapshot_20260621.py."
+                ),
+            )
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            report = TaxBmfFilingReadinessReport.model_validate(payload)
+        except Exception as exc:
+            return TaxBmfFilingReadinessSnapshot(
+                generated_at=self._now(),
+                snapshot_exists=True,
+                artifact_path=str(path),
+                report=None,
+                status="invalid",
+                note=f"Snapshot konnte nicht validiert werden: {exc}",
+            )
+        return TaxBmfFilingReadinessSnapshot(
+            generated_at=self._now(),
+            snapshot_exists=True,
+            artifact_path=str(path),
+            report=report,
+            status="available",
+            note="Read-only Snapshot aus var/bmf_filing_readiness; API berechnet dabei keine Methodology neu.",
+        )
+
+    def write_bmf_filing_readiness_snapshot(
+        self,
+        *,
+        output_dir: Path | None = None,
+    ) -> Path:
+        out = output_dir or self.DEFAULT_BMF_FILING_READINESS_DIR
+        out.mkdir(parents=True, exist_ok=True)
+        report = self.bmf_filing_readiness()
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        artifact = out / f"{timestamp}_bmf_filing_readiness_2021_2025.json"
+        latest = out / "latest_bmf_filing_readiness_2021_2025.json"
+        content = json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8")
+        artifact.write_bytes(content)
+        latest.write_bytes(content)
+        return latest
 
     def reward_bmf_recheck(self) -> TaxRewardBmfRecheckReport:
         generated_at = self._now()
@@ -296,6 +355,18 @@ class TaxMethodologyService:
 
     def _eur(self, value: Decimal) -> str:
         return f"{value.quantize(Decimal('0.01'))} EUR"
+
+    def _bmf_filing_readiness_snapshot_path(self) -> Path:
+        candidates = [
+            self.store.path.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            self.store.path.parent.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            Path.cwd() / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            self.DEFAULT_BMF_FILING_READINESS_DIR / "latest_bmf_filing_readiness_2021_2025.json",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[-1]
 
     def status(self, year: int) -> TaxYearComplianceStatus:
         return self._status_from_report(self.report(year))
