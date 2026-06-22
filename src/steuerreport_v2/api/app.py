@@ -224,9 +224,11 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearDetail,
     TaxYearDriverReport,
     TaxYearEvidenceReport,
+    TaxYearCorrectionMap,
     TaxYearFilingMatrix,
     TaxYearFilingSummary,
     TaxYearTurnoverAudit,
+    TaxYearsCorrectionMap,
     TaxYearsTurnoverAuditSummary,
     TaxSolanaProgramIncomeReview,
     TaxSolanaStablecoinFxReview,
@@ -1917,6 +1919,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def tax_years_filing_matrix() -> ApiResponse[TaxYearFilingMatrix]:
         return ApiResponse(data=TaxYearService(db).filing_matrix())
 
+    @app.get("/api/v1/tax-years/correction-map")
+    def tax_years_correction_map() -> ApiResponse[TaxYearsCorrectionMap]:
+        return ApiResponse(data=TaxYearService(db).correction_map())
+
     @app.get("/api/v1/tax-years/turnover-audit-summary")
     def tax_years_turnover_audit_summary(limit: int = 20) -> ApiResponse[TaxYearsTurnoverAuditSummary]:
         return ApiResponse(data=TaxYearService(db).turnover_audit_summary(limit=limit))
@@ -1980,6 +1986,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-years/{year}/filing-summary")
     def tax_year_filing_summary(year: int) -> ApiResponse[TaxYearFilingSummary]:
         return ApiResponse(data=TaxYearService(db).filing_summary(year))
+
+    @app.get("/api/v1/tax-years/{year}/correction-map")
+    def tax_year_correction_map(year: int) -> ApiResponse[TaxYearCorrectionMap]:
+        return ApiResponse(data=TaxYearService(db).year_correction_map(year))
 
     def render_tax_year_filing_checklist_csv(year: int, *, service: TaxYearService | None = None) -> str:
         summary = (service or TaxYearService(db)).filing_summary(year)
@@ -3842,6 +3852,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         tax_year_service = TaxYearService(db)
         wallet_fifo_service = WalletFifoPreviewService(db)
         filing_summary = tax_year_service.filing_summary(year)
+        correction_map = tax_year_service.year_correction_map(year)
         evidence_report = tax_year_service.evidence_report(year)
         bmf_closure_appendix = tax_year_service.bmf_closure_appendix(year)
         wallet_fifo_delta = wallet_fifo_service.preview(year=year)
@@ -3886,6 +3897,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             }
         required_refs = {line.evidence_ref for line in filing_summary.lines if line.evidence_ref}
         required_refs.update(item.endpoint for item in evidence_report.items if item.required)
+        required_refs.add(f"/api/v1/tax-years/{year}/correction-map")
         required_refs.add(f"/api/v1/export/tax-years/{year}/filing-checklist.csv")
         required_refs.add("/api/v1/export/tax-payment-overview.json")
         required_refs.add(f"/api/v1/tax-years/{year}/wallet-fifo-delta")
@@ -3919,6 +3931,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 f"02_Steuerliche_CSVs/tax-year-{year}-filing-checklist.csv",
                 render_tax_year_filing_checklist_csv(year, service=tax_year_service).encode("utf-8"),
                 f"/api/v1/export/tax-years/{year}/filing-checklist.csv",
+            ),
+            (
+                f"02_Steuerliche_CSVs/tax-year-{year}-correction-map.json",
+                json.dumps(correction_map.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
+                f"/api/v1/tax-years/{year}/correction-map",
             ),
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-evidence.json",

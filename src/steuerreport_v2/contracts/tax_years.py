@@ -224,6 +224,43 @@ class TaxYearFilingMatrix(BaseModel):
     methodology: str
 
 
+class TaxYearCorrectionMapLine(BaseModel):
+    order: int
+    topic: str
+    label: str
+    action_category: Literal["eintragen", "korrigieren_pruefen", "beilegen", "archivieren", "pruefen"]
+    amount_eur: Decimal | None = None
+    declaration_target: str
+    evidence_ref: str | None = None
+    correction_note: str
+    risk_level: Literal["info", "review", "blocked"] = "info"
+
+
+class TaxYearCorrectionMap(BaseModel):
+    year: int
+    generated_at: str
+    filing_status: str
+    amendment_review_recommended: bool = False
+    amendment_reason: str
+    taxable_private_disposals_eur: Decimal = Decimal("0")
+    rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    derivative_pnl_eur: Decimal = Decimal("0")
+    tax_free_private_disposals_eur: Decimal = Decimal("0")
+    lines: list[TaxYearCorrectionMapLine] = Field(default_factory=list)
+    ascii_table: str
+    methodology: str
+
+
+class TaxYearsCorrectionMap(BaseModel):
+    generated_at: str
+    years: list[TaxYearCorrectionMap] = Field(default_factory=list)
+    amendment_review_years: list[int] = Field(default_factory=list)
+    archive_only_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    ascii_table: str
+    methodology: str
+
+
 class TaxIncomeAssetBreakdown(BaseModel):
     asset: str
     event_type: str

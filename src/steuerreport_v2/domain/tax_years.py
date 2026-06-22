@@ -19,11 +19,14 @@ from steuerreport_v2.contracts.tax_years import (
     TaxPaymentChecklistItem,
     TaxPaymentOverview,
     TaxPaymentOverviewRow,
+    TaxYearCorrectionMap,
+    TaxYearCorrectionMapLine,
     TaxYearFilingChecklistItem,
     TaxYearFilingMatrix,
     TaxYearFilingMatrixRow,
     TaxYearFilingSummary,
     TaxYearFilingSummaryLine,
+    TaxYearsCorrectionMap,
     TaxYearAssetFifoDrilldown,
     TaxYearAssetFifoEvent,
     TaxYearAssetFifoLine,
@@ -1178,6 +1181,396 @@ class TaxYearService:
                 "und schreibt keine FIFO-Lots, Preise, Imports oder Review-Entscheidungen."
             ),
         )
+
+    def correction_map(self, *, years: list[int] | None = None) -> TaxYearsCorrectionMap:
+        if years is None:
+            snapshot_map = self._correction_map_from_readiness_snapshot()
+            if snapshot_map is not None:
+                return snapshot_map
+        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        maps = [self.year_correction_map(year) for year in selected_years]
+        return TaxYearsCorrectionMap(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            years=maps,
+            amendment_review_years=[item.year for item in maps if item.amendment_review_recommended],
+            archive_only_years=[
+                item.year
+                for item in maps
+                if not item.amendment_review_recommended
+                and not any(line.risk_level == "blocked" for line in item.lines)
+            ],
+            blocked_years=[
+                item.year
+                for item in maps
+                if any(line.risk_level == "blocked" for line in item.lines)
+            ],
+            ascii_table=self._correction_map_ascii_table(maps),
+            methodology=(
+                "Read-only Korrekturkarte fuer Steuerjahre. Sie nutzt ausschliesslich "
+                "die bestehende Filing-Summary je Jahr und berechnet keine Steuerdaten "
+                "neu. Sie ist keine Rechtsberatung; sie zeigt, welche V2-Zahlen und "
+                "Belege fuer eine Vorjahrespruefung oder Nachreichung relevant sind."
+            ),
+        )
+
+    def _correction_map_from_readiness_snapshot(self) -> TaxYearsCorrectionMap | None:
+        path = self._bmf_filing_readiness_snapshot_path()
+        if path is None:
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        years_payload = payload.get("years")
+        if not isinstance(years_payload, list):
+            return None
+        selected_years = [
+            int(item["year"])
+            for item in years_payload
+            if isinstance(item, dict) and item.get("year") is not None
+        ]
+        payment_rows = {row.year: row for row in self.payment_overview(years=selected_years).rows}
+        maps: list[TaxYearCorrectionMap] = []
+        for item in years_payload:
+            if not isinstance(item, dict):
+                continue
+            year = int(item.get("year"))
+            taxable_private = Decimal(str(item.get("taxable_private_disposals_eur") or "0"))
+            rewards_income = Decimal(str(item.get("rewards_mining_staking_income_eur") or "0"))
+            derivative_pnl = Decimal(str(item.get("derivative_pnl_eur") or "0"))
+            payment_row = payment_rows.get(year)
+            tax_free = payment_row.tax_free_private_disposals_eur if payment_row is not None else Decimal("0")
+            appendix_items = int(item.get("appendix_items_count") or 0)
+            appendix_manual = int(item.get("appendix_manual_evidence_required_count") or 0)
+            blocking_codes = item.get("blocking_gap_codes") if isinstance(item.get("blocking_gap_codes"), list) else []
+            review_codes = item.get("review_gap_codes") if isinstance(item.get("review_gap_codes"), list) else []
+            lines = self._snapshot_correction_lines(
+                year=year,
+                taxable_private=taxable_private,
+                rewards_income=rewards_income,
+                derivative_pnl=derivative_pnl,
+                tax_free=tax_free,
+                appendix_items=appendix_items,
+                appendix_manual=appendix_manual,
+                review_codes_count=len(review_codes),
+                blocking_codes_count=len(blocking_codes),
+            )
+            amendment_relevant = any(
+                line.action_category in {"eintragen", "korrigieren_pruefen"} or line.risk_level == "blocked"
+                for line in lines
+            )
+            if blocking_codes:
+                reason = "Vor Korrektur/Nachreichung blockierende BMF-Punkte klaeren."
+            elif amendment_relevant:
+                reason = (
+                    "V2 enthaelt eintragungsrelevante Jahreswerte. Wenn die urspruengliche "
+                    "Erklaerung davon abweicht oder diese Werte fehlten, Korrektur/Nachreichung pruefen."
+                )
+            else:
+                reason = "Keine eintragungsrelevanten V2-Betraege; Belege archivieren."
+            maps.append(
+                TaxYearCorrectionMap(
+                    year=year,
+                    generated_at=datetime.now(timezone.utc).isoformat(),
+                    filing_status=str(item.get("status_label") or item.get("filing_status") or "-"),
+                    amendment_review_recommended=amendment_relevant,
+                    amendment_reason=reason,
+                    taxable_private_disposals_eur=taxable_private,
+                    rewards_mining_staking_income_eur=rewards_income,
+                    derivative_pnl_eur=derivative_pnl,
+                    tax_free_private_disposals_eur=tax_free,
+                    lines=lines,
+                    ascii_table=self._year_correction_map_ascii_table(year, lines, reason),
+                    methodology=(
+                        "Schnelle read-only Korrekturkarte aus dem BMF-Filing-Readiness-"
+                        "Snapshot und Payment-Overview. Fuer Detailbelege den Jahres-"
+                        "Endpunkt oder das Jahres-Belegpaket oeffnen."
+                    ),
+                )
+            )
+        maps.sort(key=lambda entry: entry.year)
+        return TaxYearsCorrectionMap(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            years=maps,
+            amendment_review_years=[entry.year for entry in maps if entry.amendment_review_recommended],
+            archive_only_years=[entry.year for entry in maps if not entry.amendment_review_recommended],
+            blocked_years=[
+                entry.year
+                for entry in maps
+                if any(line.risk_level == "blocked" for line in entry.lines)
+            ],
+            ascii_table=self._correction_map_ascii_table(maps),
+            methodology=(
+                "Read-only Gesamt-Korrekturkarte aus dem vorhandenen BMF-Filing-"
+                "Readiness-Snapshot. Sie ist fuer die UI optimiert und schreibt "
+                "keine FIFO-Lots, Preise, Imports oder Review-Entscheidungen."
+            ),
+        )
+
+    def _snapshot_correction_lines(
+        self,
+        *,
+        year: int,
+        taxable_private: Decimal,
+        rewards_income: Decimal,
+        derivative_pnl: Decimal,
+        tax_free: Decimal,
+        appendix_items: int,
+        appendix_manual: int,
+        review_codes_count: int,
+        blocking_codes_count: int,
+    ) -> list[TaxYearCorrectionMapLine]:
+        lines: list[TaxYearCorrectionMapLine] = []
+        order = 1
+        for label, amount, target in (
+            (
+                "Privates Veraeusserungsergebnis",
+                taxable_private,
+                "Anlage SO: Gewinn/Verlust aus privaten Veraeusserungsgeschaeften mit Kryptowerten",
+            ),
+            (
+                "Rewards / Mining / Staking",
+                rewards_income,
+                "Sonstige Einkuenfte bzw. EÜR-nahe Einnahmen pruefen",
+            ),
+            (
+                "Derivate / Termingeschaefte",
+                derivative_pnl,
+                "Nicht mit privaten Krypto-FIFO-Zeilen vermischen",
+            ),
+        ):
+            if amount:
+                lines.append(
+                    TaxYearCorrectionMapLine(
+                        order=order,
+                        topic="entry",
+                        label=label,
+                        action_category="korrigieren_pruefen",
+                        amount_eur=amount,
+                        declaration_target=target,
+                        evidence_ref=f"/api/v1/tax-years/{year}/filing-summary",
+                        correction_note=(
+                            "Betrag mit der urspruenglich abgegebenen Steuererklaerung "
+                            "vergleichen und bei Abweichung als Korrektur-/Nachreichungsposition pruefen."
+                        ),
+                        risk_level="review",
+                    )
+                )
+                order += 1
+        if tax_free:
+            lines.append(
+                TaxYearCorrectionMapLine(
+                    order=order,
+                    topic="tax_free",
+                    label="Steuerfreie Veraeusserungen > 365 Tage",
+                    action_category="archivieren",
+                    amount_eur=tax_free,
+                    declaration_target="Nicht in den steuerpflichtigen Anlage-SO-Saldo uebernehmen",
+                    evidence_ref="/api/v1/export/tax-lines.csv",
+                    correction_note="Nach Haltefrist steuerfrei; fuer Rueckfragen mit FIFO-Beleg archivieren.",
+                    risk_level="info",
+                )
+            )
+            order += 1
+        if appendix_items:
+            lines.append(
+                TaxYearCorrectionMapLine(
+                    order=order,
+                    topic="appendix",
+                    label="BMF-Abschlussbeilage Herkunft",
+                    action_category="beilegen",
+                    amount_eur=None,
+                    declaration_target="Nicht als Betrag eintragen; Herkunftsbeilage archivieren/beilegen",
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    correction_note=(
+                        f"{appendix_items} Herkunftsposition(en), {appendix_manual} manuell zu pruefen. "
+                        "Die Beilage erzeugt keinen zusaetzlichen Steuerbetrag."
+                    ),
+                    risk_level="review" if appendix_manual else "info",
+                )
+            )
+            order += 1
+        if review_codes_count or blocking_codes_count:
+            lines.append(
+                TaxYearCorrectionMapLine(
+                    order=order,
+                    topic="review",
+                    label="BMF-/Methodik-Pruefpunkte",
+                    action_category="pruefen" if blocking_codes_count else "beilegen",
+                    amount_eur=None,
+                    declaration_target="Nicht als Betrag eintragen; Status mit Jahrespaket belegen",
+                    evidence_ref=f"/api/v1/tax-years/{year}/methodology",
+                    correction_note=(
+                        f"{review_codes_count} Review-Code(s), {blocking_codes_count} Blocker-Code(s) "
+                        "aus dem BMF-Filing-Readiness-Snapshot."
+                    ),
+                    risk_level="blocked" if blocking_codes_count else "review",
+                )
+            )
+            order += 1
+        lines.append(
+            TaxYearCorrectionMapLine(
+                order=order,
+                topic="evidence",
+                label="Jahres-Belegpaket",
+                action_category="archivieren",
+                amount_eur=None,
+                declaration_target="Exportpaket archivieren und bei Rueckfragen vorlegen",
+                evidence_ref=f"/api/v1/export/tax-years/{year}/evidence-package.zip",
+                correction_note="Enthaelt Filing Summary, Korrekturkarte, Belegkarte und FIFO-/Herkunftsbelege.",
+                risk_level="info",
+            )
+        )
+        return lines
+
+    def year_correction_map(self, year: int) -> TaxYearCorrectionMap:
+        summary = self.filing_summary(year)
+        lines: list[TaxYearCorrectionMapLine] = []
+        order = 1
+        amendment_relevant = False
+        blocked = False
+        for line in summary.lines:
+            action_category, risk_level, note = self._correction_action_for_filing_line(line, summary)
+            if action_category in {"eintragen", "korrigieren_pruefen"}:
+                amendment_relevant = True
+            if risk_level == "blocked":
+                blocked = True
+            lines.append(
+                TaxYearCorrectionMapLine(
+                    order=order,
+                    topic=line.topic,
+                    label=line.label,
+                    action_category=action_category,
+                    amount_eur=line.amount_eur,
+                    declaration_target=line.declaration_target,
+                    evidence_ref=line.evidence_ref,
+                    correction_note=note,
+                    risk_level=risk_level,
+                )
+            )
+            order += 1
+
+        if blocked:
+            reason = "Vor Korrektur/Nachreichung blockierende Jahrespunkte klaeren."
+        elif amendment_relevant:
+            reason = (
+                "V2 enthaelt eintragungsrelevante Jahreswerte. Wenn die urspruengliche "
+                "Erklaerung davon abweicht oder diese Werte fehlten, Korrektur/Nachreichung pruefen."
+            )
+        else:
+            reason = "Keine eintragungsrelevanten V2-Betraege; Belege archivieren."
+        return TaxYearCorrectionMap(
+            year=year,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            filing_status=summary.status_label,
+            amendment_review_recommended=amendment_relevant or blocked,
+            amendment_reason=reason,
+            taxable_private_disposals_eur=summary.taxable_private_disposals_eur,
+            rewards_mining_staking_income_eur=summary.rewards_mining_staking_income_eur,
+            derivative_pnl_eur=summary.derivative_pnl_eur,
+            tax_free_private_disposals_eur=summary.tax_free_private_disposals_eur,
+            lines=lines,
+            ascii_table=self._year_correction_map_ascii_table(year, lines, reason),
+            methodology=(
+                "Read-only Vorjahres-Korrekturkarte aus der vorhandenen Filing-Summary. "
+                "Eintraege mit Betrag zeigen moegliche Erklaerungs- oder Korrekturwerte; "
+                "Belege und BMF-Herkunftsbeilagen werden nicht als zusaetzliche "
+                "Betragszeilen verstanden."
+            ),
+        )
+
+    def _correction_action_for_filing_line(
+        self,
+        line: TaxYearFilingSummaryLine,
+        summary: TaxYearFilingSummary,
+    ) -> tuple[
+        Literal["eintragen", "korrigieren_pruefen", "beilegen", "archivieren", "pruefen"],
+        Literal["info", "review", "blocked"],
+        str,
+    ]:
+        amount = line.amount_eur or Decimal("0")
+        if line.topic in {"private_disposal", "income", "derivative"} and amount:
+            return (
+                "korrigieren_pruefen",
+                "review" if summary.export_ready else "blocked",
+                (
+                    "Betrag mit der urspruenglich abgegebenen Steuererklaerung vergleichen. "
+                    "Bei Abweichung als Korrektur-/Nachreichungsposition mit Belegpfad pruefen."
+                ),
+            )
+        if line.topic == "tax_free":
+            return (
+                "archivieren",
+                "info",
+                (
+                    "Nach Haltefrist steuerfrei; nicht in den steuerpflichtigen Saldo uebernehmen, "
+                    "aber fuer Rueckfragen mit FIFO-Beleg archivieren."
+                ),
+            )
+        if line.topic == "appendix":
+            risk: Literal["info", "review", "blocked"] = (
+                "review" if summary.bmf_closure_appendix_manual_evidence_required_count else "info"
+            )
+            return (
+                "beilegen",
+                risk,
+                (
+                    "BMF-Herkunftsbeilage beilegen oder archivieren. Sie erklaert Herkunft/"
+                    "Transferstatus und erzeugt keinen zusaetzlichen Steuerbetrag."
+                ),
+            )
+        if line.topic == "review" or not summary.export_ready:
+            return (
+                "pruefen",
+                "blocked" if not summary.export_ready else "review",
+                "Review-/Methodikpunkt vor Abgabe oder Korrektur gegen Belege pruefen.",
+            )
+        return (
+            "archivieren",
+            "info",
+            "Beleg im Jahrespaket archivieren und nur bei Rueckfragen vorlegen.",
+        )
+
+    def _year_correction_map_ascii_table(
+        self,
+        year: int,
+        lines: list[TaxYearCorrectionMapLine],
+        reason: str,
+    ) -> str:
+        header = "Jahr | Aktion | Bereich | Betrag | Ziel"
+        sep = "---|---|---|---|---"
+        body = [
+            " | ".join(
+                [
+                    str(year),
+                    item.action_category,
+                    item.label,
+                    self._fmt_eur(item.amount_eur or Decimal("0")) if item.amount_eur is not None else "-",
+                    item.declaration_target[:64],
+                ]
+            )
+            for item in lines
+        ]
+        return "\n".join([header, sep, *body, "", f"Hinweis: {reason}"])
+
+    def _correction_map_ascii_table(self, maps: list[TaxYearCorrectionMap]) -> str:
+        header = "Jahr | Status | Korrektur pruefen | Privat G/V | Rewards | Derivate | Steuerfrei"
+        sep = "---|---|---|---|---|---|---"
+        body = [
+            " | ".join(
+                [
+                    str(item.year),
+                    item.filing_status,
+                    "ja" if item.amendment_review_recommended else "nein",
+                    self._fmt_eur(item.taxable_private_disposals_eur),
+                    self._fmt_eur(item.rewards_mining_staking_income_eur),
+                    self._fmt_eur(item.derivative_pnl_eur),
+                    self._fmt_eur(item.tax_free_private_disposals_eur),
+                ]
+            )
+            for item in maps
+        ]
+        return "\n".join([header, sep, *body])
 
     def _filing_matrix_from_readiness_snapshot(self) -> TaxYearFilingMatrix | None:
         path = self._bmf_filing_readiness_snapshot_path()

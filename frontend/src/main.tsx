@@ -704,6 +704,15 @@ type Snapshot = {
     ascii_table: string;
     methodology: string;
   };
+  taxYearsCorrectionMap?: {
+    generated_at: string;
+    years: Array<Record<string, unknown>>;
+    amendment_review_years: number[];
+    archive_only_years: number[];
+    blocked_years: number[];
+    ascii_table: string;
+    methodology: string;
+  };
   taxMethodologySummary?: {
     generated_at: string;
     years: Array<Record<string, unknown>>;
@@ -1079,6 +1088,20 @@ type Snapshot = {
     warnings: string[];
     ascii_table: string;
     checklist_ascii?: string;
+    methodology: string;
+  };
+  taxYearCorrectionMap?: {
+    year: number;
+    generated_at: string;
+    filing_status: string;
+    amendment_review_recommended: boolean;
+    amendment_reason: string;
+    taxable_private_disposals_eur: string;
+    rewards_mining_staking_income_eur: string;
+    derivative_pnl_eur: string;
+    tax_free_private_disposals_eur: string;
+    lines: Array<Record<string, unknown>>;
+    ascii_table: string;
     methodology: string;
   };
   taxIncomeGuide?: {
@@ -1594,11 +1617,13 @@ function App() {
         taxYearsSummary: { key: "taxYearsSummary", label: "Steuerjahre", load: () => getApi<Snapshot["taxYearsSummary"]>("/api/v1/tax-years/summary") },
         taxPaymentOverview: { key: "taxPaymentOverview", label: "Steuer-Eingabezettel", load: () => getApi<Snapshot["taxPaymentOverview"]>("/api/v1/tax-years/payment-overview") },
         taxYearFilingMatrix: { key: "taxYearFilingMatrix", label: "Steuerjahr-Matrix", load: () => getApi<Snapshot["taxYearFilingMatrix"]>("/api/v1/tax-years/filing-matrix") },
+        taxYearsCorrectionMap: { key: "taxYearsCorrectionMap", label: "Korrekturkarte Jahre", load: () => getApi<Snapshot["taxYearsCorrectionMap"]>("/api/v1/tax-years/correction-map") },
         taxMethodologySummary: { key: "taxMethodologySummary", label: "BMF-Methodik", load: () => getApi<Snapshot["taxMethodologySummary"]>(`/api/v1/tax-methodology/summary?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxBmfActionPlan: { key: "taxBmfActionPlan", label: "BMF-Aktionsliste", load: () => getApi<Snapshot["taxBmfActionPlan"]>(`/api/v1/tax-methodology/bmf-action-plan?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxYearDetail: { key: "taxYearDetail", label: "Steuerjahr-Detail", load: () => getApi<Snapshot["taxYearDetail"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}`) },
         taxDeclarationGuide: { key: "taxDeclarationGuide", label: "Steuererklaerungshilfe", load: () => getApi<Snapshot["taxDeclarationGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/declaration-guide`) },
         taxYearFilingSummary: { key: "taxYearFilingSummary", label: "Steuerjahr-Erklaerung", load: () => getApi<Snapshot["taxYearFilingSummary"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/filing-summary`) },
+        taxYearCorrectionMap: { key: "taxYearCorrectionMap", label: "Korrekturkarte", load: () => getApi<Snapshot["taxYearCorrectionMap"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/correction-map`) },
         taxYearMethodology: { key: "taxYearMethodology", label: "BMF-Jahrescheck", load: () => getApi<Snapshot["taxYearMethodology"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/methodology`) },
         taxYearWalletFifoDelta: { key: "taxYearWalletFifoDelta", label: "Wallet-FIFO-Delta", load: () => getApi<Snapshot["taxYearWalletFifoDelta"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-delta`) },
         taxYearWalletFifoGaps: { key: "taxYearWalletFifoGaps", label: "Wallet-FIFO-Luecken", load: () => getApi<Snapshot["taxYearWalletFifoGaps"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-gaps?limit=80`) },
@@ -1650,6 +1675,7 @@ function App() {
         "taxYearsSummary",
         "taxPaymentOverview",
         "taxYearFilingMatrix",
+        "taxYearsCorrectionMap",
         "taxYearDetail",
         "taxDeclarationGuide",
         "taxYearFilingSummary",
@@ -3119,11 +3145,13 @@ function Content({
         taxYearsSummary={snapshot.taxYearsSummary}
         taxPaymentOverview={snapshot.taxPaymentOverview}
         taxYearFilingMatrix={snapshot.taxYearFilingMatrix}
+        taxYearsCorrectionMap={snapshot.taxYearsCorrectionMap}
         taxMethodologySummary={snapshot.taxMethodologySummary}
         taxBmfActionPlan={snapshot.taxBmfActionPlan}
         taxYearDetail={snapshot.taxYearDetail}
         taxDeclarationGuide={snapshot.taxDeclarationGuide}
         taxYearFilingSummary={snapshot.taxYearFilingSummary}
+        taxYearCorrectionMap={snapshot.taxYearCorrectionMap}
         taxYearMethodology={snapshot.taxYearMethodology}
         taxYearWalletFifoDelta={snapshot.taxYearWalletFifoDelta}
         taxYearWalletFifoGaps={snapshot.taxYearWalletFifoGaps}
@@ -7422,11 +7450,13 @@ function TaxPanel({
   taxYearsSummary,
   taxPaymentOverview,
   taxYearFilingMatrix,
+  taxYearsCorrectionMap,
   taxMethodologySummary,
   taxBmfActionPlan,
   taxYearDetail,
   taxDeclarationGuide,
   taxYearFilingSummary,
+  taxYearCorrectionMap,
   taxYearMethodology,
   taxYearWalletFifoDelta,
   taxYearWalletFifoGaps,
@@ -7481,11 +7511,13 @@ function TaxPanel({
   taxYearsSummary: Snapshot["taxYearsSummary"];
   taxPaymentOverview: Snapshot["taxPaymentOverview"];
   taxYearFilingMatrix: Snapshot["taxYearFilingMatrix"];
+  taxYearsCorrectionMap: Snapshot["taxYearsCorrectionMap"];
   taxMethodologySummary: Snapshot["taxMethodologySummary"];
   taxBmfActionPlan: Snapshot["taxBmfActionPlan"];
   taxYearDetail: Snapshot["taxYearDetail"];
   taxDeclarationGuide: Snapshot["taxDeclarationGuide"];
   taxYearFilingSummary: Snapshot["taxYearFilingSummary"];
+  taxYearCorrectionMap: Snapshot["taxYearCorrectionMap"];
   taxYearMethodology: Snapshot["taxYearMethodology"];
   taxYearWalletFifoDelta: Snapshot["taxYearWalletFifoDelta"];
   taxYearWalletFifoGaps: Snapshot["taxYearWalletFifoGaps"];
@@ -7603,6 +7635,9 @@ function TaxPanel({
   const proofLines = filingLines.filter((line) => ["appendix", "evidence", "review"].includes(String(line.topic)));
   const filingChecklist = taxYearFilingSummary?.checklist ?? [];
   const filingMatrixRows = taxYearFilingMatrix?.rows ?? [];
+  const correctionMapYears = (taxYearsCorrectionMap?.years ?? []) as Array<Record<string, unknown>>;
+  const activeCorrectionMap = (taxYearCorrectionMap ?? correctionMapYears.find((row) => String(row.year) === activeYearValue)) as Record<string, unknown> | undefined;
+  const correctionLines = (Array.isArray(activeCorrectionMap?.lines) ? activeCorrectionMap.lines : []) as Array<Record<string, unknown>>;
   const yearReviewDecisions = taxYearFilingSummary?.review_decisions ?? taxDeclarationGuide?.review_decisions ?? [];
   const activeEvidenceItems = taxYearEvidence?.items ?? [];
   const primaryEvidenceItems = activeEvidenceItems.filter((item) => item.required || item.category === "eintragen");
@@ -7709,6 +7744,67 @@ function TaxPanel({
           footer={taxYearFilingMatrix?.methodology ?? ""}
         />
       ) : null}
+
+      <div className="panel declarationGuidePanel">
+        <div className="panelToolbar">
+          <strong>Korrekturkarte Vorjahre</strong>
+          <span className={`statusPill ${activeCorrectionMap?.amendment_review_recommended ? "warning" : "ok"}`}>
+            {activeCorrectionMap?.amendment_review_recommended ? "Korrektur pruefen" : "archivieren"}
+          </span>
+        </div>
+        <p className="panelLead">
+          {String(activeCorrectionMap?.amendment_reason ?? "Korrekturkarte wird geladen.")}
+        </p>
+        <div className="portfolioSummaryStrip">
+          <Metric title="Privat G/V" value={`${formatCurrency(activeCorrectionMap?.taxable_private_disposals_eur)} EUR`} />
+          <Metric title="Rewards/Mining" value={`${formatCurrency(activeCorrectionMap?.rewards_mining_staking_income_eur)} EUR`} />
+          <Metric title="Derivate" value={`${formatCurrency(activeCorrectionMap?.derivative_pnl_eur)} EUR`} />
+          <Metric title="Steuerfrei" value={`${formatCurrency(activeCorrectionMap?.tax_free_private_disposals_eur)} EUR`} />
+          <Metric title="Jahre pruefen" value={String(taxYearsCorrectionMap?.amendment_review_years?.length ?? 0)} />
+        </div>
+        <div className="declarationActionBand">
+          <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/correction-map`)}>
+            <FileJson size={16} />
+            Korrekturkarte JSON
+          </button>
+          <button type="button" onClick={() => onDownload("/api/v1/tax-years/correction-map")}>
+            <FileJson size={16} />
+            Alle Jahre JSON
+          </button>
+          <button type="button" onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`)}>
+            <PackageCheck size={16} />
+            Jahres-Belegpaket
+          </button>
+        </div>
+        {correctionLines.length > 0 ? (
+          <TablePanel
+            title="Korrektur-/Archivierungszeilen"
+            rows={correctionLines.map((line) => ({
+              aktion: line.action_category,
+              bereich: line.label,
+              betrag_eur: line.amount_eur === null || line.amount_eur === undefined ? "-" : formatCurrency(line.amount_eur),
+              ziel: line.declaration_target,
+              risiko: line.risk_level,
+              beleg: line.evidence_ref ?? "-",
+              hinweis: line.correction_note
+            }))}
+            compact
+            rowActions={[
+              {
+                label: "Beleg oeffnen",
+                icon: <FileDown size={16} />,
+                onClick: (row) => onDownload(String(row.beleg ?? ""))
+              }
+            ]}
+            footer={String(activeCorrectionMap?.methodology ?? "")}
+          />
+        ) : null}
+        {taxYearsCorrectionMap?.ascii_table ? (
+          <pre className="asciiTable" aria-label="Kopierbare Korrekturkarte alle Jahre">
+            {taxYearsCorrectionMap.ascii_table}
+          </pre>
+        ) : null}
+      </div>
 
       <div className="panel">
         <div className="panelToolbar">

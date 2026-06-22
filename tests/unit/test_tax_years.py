@@ -1031,6 +1031,47 @@ def test_tax_year_filing_matrix_summarizes_year_actions(tmp_path):
     assert "SO 0.00 EUR" in row.display_line
 
 
+def test_tax_year_correction_map_guides_prior_year_review(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="helium",
+        filename="correction-map.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2021-01-01T00:00:00Z,HNT,10,buy,EUR,100\n"
+            "2021-06-01T00:00:00Z,HNT,-10,sell,EUR,40\n"
+            "2021-07-01T00:00:00Z,HNT,5,mining,EUR,15\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    TaxService(store).rebuild_fifo()
+
+    report = TaxYearService(store).year_correction_map(2021)
+    by_label = {line.label: line for line in report.lines}
+
+    assert report.amendment_review_recommended is True
+    assert report.taxable_private_disposals_eur == Decimal("-60.000000000000000000000000000000000000")
+    assert report.rewards_mining_staking_income_eur == Decimal("15.000000000000000000")
+    assert by_label["Privates Veraeusserungsergebnis"].action_category == "korrigieren_pruefen"
+    assert by_label["Rewards / Mining / Staking"].action_category == "korrigieren_pruefen"
+    assert by_label["Belegpaket"].action_category == "archivieren"
+    assert "Korrektur" in report.amendment_reason
+    assert "2021 | korrigieren_pruefen | Privates Veraeusserungsergebnis" in report.ascii_table
+
+    overview = TaxYearService(store).correction_map(years=[2021, 2022])
+    assert overview.amendment_review_years == [2021]
+    assert 2022 in overview.archive_only_years
+    assert "Jahr | Status | Korrektur pruefen" in overview.ascii_table
+
+    response = TestClient(create_app(store)).get("/api/v1/tax-years/2021/correction-map")
+    assert response.status_code == 200
+    assert response.json()["data"]["amendment_review_recommended"] is True
+
+    all_response = TestClient(create_app(store)).get("/api/v1/tax-years/correction-map")
+    assert all_response.status_code == 200
+    assert "years" in all_response.json()["data"]
+
+
 def test_tax_year_filing_summary_surfaces_cex_fifo_anchor_status(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
@@ -1255,10 +1296,14 @@ def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_pat
         names = set(package.namelist())
         assert "02_Steuerliche_CSVs/tax-year-2024-bmf-closure-appendix.json" in names
         assert "02_Steuerliche_CSVs/tax-year-2024-filing-checklist.csv" in names
+        assert "02_Steuerliche_CSVs/tax-year-2024-correction-map.json" in names
         packaged_checklist_csv = package.read("02_Steuerliche_CSVs/tax-year-2024-filing-checklist.csv").decode("utf-8")
         assert "beilegen,BMF-Abschlussbeilage Herkunft" in packaged_checklist_csv
+        correction_map = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2024-correction-map.json").decode("utf-8"))
+        assert correction_map["year"] == 2024
         manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
     assert "/api/v1/tax-years/2024/bmf-closure-appendix" in manifest["required_refs"]
+    assert "/api/v1/tax-years/2024/correction-map" in manifest["required_refs"]
     assert "/api/v1/export/tax-years/2024/filing-checklist.csv" in manifest["required_refs"]
 
 
@@ -1454,6 +1499,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/{year}/filing-summary"
     )
+    correction_map_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/correction-map"
+    )
     income_route = next(
         route
         for route in app.routes
@@ -1503,6 +1553,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         route
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/filing-matrix"
+    )
+    correction_map_summary_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/correction-map"
     )
     turnover_summary_route = next(
         route
@@ -1564,6 +1619,7 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert detail_route.endpoint(2021).status == "ok"
     assert guide_route.endpoint(2021).status == "ok"
     assert filing_route.endpoint(2021).status == "ok"
+    assert correction_map_route.endpoint(2021).status == "ok"
     assert income_route.endpoint(2021).status == "ok"
     assert drivers_route.endpoint(2021).status == "ok"
     assert asset_fifo_route.endpoint(2021, "BTC").status == "ok"
@@ -1574,6 +1630,7 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert external_inflows_route.endpoint(2021).status == "ok"
     assert payment_overview_route.endpoint().status == "ok"
     assert filing_matrix_route.endpoint().status == "ok"
+    assert correction_map_summary_route.endpoint().status == "ok"
     assert turnover_summary_route.endpoint().status == "ok"
     assert solana_program_summary_route.endpoint().status == "ok"
     assert solana_program_year_route.endpoint(2021).status == "ok"
