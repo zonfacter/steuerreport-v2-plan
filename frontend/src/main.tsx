@@ -1060,6 +1060,10 @@ type Snapshot = {
     derivative_pnl_eur: string;
     tax_free_private_disposals_eur: string;
     tax_free_lines_count: number;
+    bmf_closure_appendix_status?: string | null;
+    bmf_closure_appendix_items_count?: number;
+    bmf_closure_appendix_manual_evidence_required_count?: number;
+    can_file_with_conservative_appendix?: boolean;
     lines: Array<Record<string, unknown>>;
     review_decisions: Array<Record<string, unknown>>;
     warnings: string[];
@@ -7579,8 +7583,8 @@ function TaxPanel({
         ? `${unresolvedInboundProvenance} offene Zufluss-Herkunft(en)`
       : "FIFO-Nachverfolgung wird geladen";
   const filingLines = taxYearFilingSummary?.lines ?? [];
-  const entryLines = filingLines.filter((line) => line.topic !== "evidence" && line.topic !== "review");
-  const proofLines = filingLines.filter((line) => line.topic === "evidence" || line.topic === "review");
+  const entryLines = filingLines.filter((line) => !["appendix", "evidence", "review"].includes(String(line.topic)));
+  const proofLines = filingLines.filter((line) => ["appendix", "evidence", "review"].includes(String(line.topic)));
   const yearReviewDecisions = taxYearFilingSummary?.review_decisions ?? taxDeclarationGuide?.review_decisions ?? [];
   const activeEvidenceItems = taxYearEvidence?.items ?? [];
   const primaryEvidenceItems = activeEvidenceItems.filter((item) => item.required || item.category === "eintragen");
@@ -8965,6 +8969,14 @@ function TaxPanel({
           <Metric title="Rewards/Mining" value={`${formatCurrency(taxYearFilingSummary?.rewards_mining_staking_income_eur)} EUR`} />
           <Metric title="Derivate" value={`${formatCurrency(taxYearFilingSummary?.derivative_pnl_eur)} EUR`} />
           <Metric title="Steuerfrei" value={`${formatCurrency(taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
+          <Metric
+            title="Herkunftsbeilage"
+            value={
+              taxYearFilingSummary?.bmf_closure_appendix_items_count
+                ? `${taxYearFilingSummary.bmf_closure_appendix_items_count} Position(en)`
+                : "keine"
+            }
+          />
         </div>
         <div className="declarationSummaryGrid">
           {entryLines.map((line) => (
@@ -11314,6 +11326,9 @@ function declarationTopicTone(value: string): "ok" | "warning" | "blocked" {
   if (value === "review") {
     return "blocked";
   }
+  if (value === "appendix") {
+    return "warning";
+  }
   return "ok";
 }
 
@@ -11349,6 +11364,9 @@ function declarationTopicLabel(value: string): string {
   }
   if (value === "tax_free") {
     return "Steuerfrei";
+  }
+  if (value === "appendix") {
+    return "Herkunft";
   }
   if (value === "review") {
     return "Pruefen";
