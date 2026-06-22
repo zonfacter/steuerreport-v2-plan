@@ -423,7 +423,8 @@ def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp
         wallet_fifo_unmatched_count=0,
         wallet_fifo_exchange_sequencing_count=0,
         wallet_fifo_delta_eur=Decimal("0"),
-        wallet_fifo_unresolved_provenance_count=10,
+        wallet_fifo_unresolved_provenance_count=13,
+        wallet_fifo_documented_non_live_count=1,
         wallet_fifo_documented_fiat_purchase_count=2,
         wallet_fifo_documented_legacy_cex_deposit_count=3,
         wallet_fifo_documented_legacy_cex_deposit_mirror_count=1,
@@ -431,11 +432,16 @@ def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp
         wallet_fifo_documented_legacy_counterparty_mirror_count=1,
         wallet_fifo_documented_exchange_deposit_history_count=1,
         wallet_fifo_documented_legacy_hnt_external_payment_count=1,
+        wallet_fifo_documented_token_redenomination_count=1,
+        wallet_fifo_documented_manual_cex_deposit_count=1,
+        wallet_fifo_documented_external_or_unknown_count=1,
+        wallet_fifo_documented_unverified_cex_count=1,
         asset_fifo_possible_recalculation_count=0,
         asset_fifo_attribution_review_count=0,
     )
     by_code = {gap.code: gap for gap in gaps}
 
+    assert by_code["wallet_fifo_non_live_opening_balance_documented"].count == 1
     assert by_code["wallet_fifo_fiat_purchase_documented"].count == 2
     assert by_code["wallet_fifo_legacy_cex_deposit_documented"].count == 3
     assert by_code["wallet_fifo_legacy_cex_deposit_mirror_documented"].count == 1
@@ -443,6 +449,10 @@ def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp
     assert by_code["wallet_fifo_legacy_counterparty_mirror_documented"].count == 1
     assert by_code["wallet_fifo_exchange_deposit_history_documented"].count == 1
     assert by_code["wallet_fifo_legacy_hnt_external_payment_documented"].count == 1
+    assert by_code["wallet_fifo_token_redenomination_documented"].count == 1
+    assert by_code["wallet_fifo_manual_cex_deposit_documented"].count == 1
+    assert by_code["wallet_fifo_external_or_unknown_origin_documented"].count == 1
+    assert by_code["wallet_fifo_unverified_cex_deposit_documented"].count == 1
     assert not any(gap.code == "wallet_fifo_unresolved_inbound_provenance" for gap in gaps)
 
 

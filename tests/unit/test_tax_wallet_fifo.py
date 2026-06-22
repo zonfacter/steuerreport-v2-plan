@@ -1326,6 +1326,177 @@ def test_wallet_fifo_provenance_closure_documents_exchange_deposit_history(tmp_p
     assert "Sender-Ownership" in item.tax_treatment_hint
 
 
+def test_wallet_fifo_provenance_closure_documents_binance_btt_bttc_redenomination(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(source="binance", filename="transaction-history.csv", file_hash="btt-bttc-redenomination")
+    )
+    outflow_raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "Account": "Spot",
+                    "Change": "-4194.464",
+                    "Coin": "BTT",
+                    "Operation": "Token Swap - Redenomination/Rebranding",
+                    "Time": "22-01-24 12:18:36",
+                }
+            ),
+        ),
+    )
+    inflow_raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=2,
+            payload_json=json.dumps(
+                {
+                    "Account": "Spot",
+                    "Change": "4194464",
+                    "Coin": "BTTC",
+                    "Operation": "Airdrop Assets",
+                    "Time": "22-01-24 18:47:31",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2021, 12, 31, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="BTTC",
+                quantity=Decimal("4194.464"),
+                quote_asset="USDT",
+                quote_quantity=Decimal("25"),
+                account="Spot",
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2022, 1, 24, 12, 18, 36, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="BTTC",
+                quantity=Decimal("-4194.464"),
+                account="Spot",
+                raw_object_id=outflow_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2022, 1, 24, 18, 47, 31, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="BTTC",
+                quantity=Decimal("4194464"),
+                account="Spot",
+                raw_object_id=inflow_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2022, 1, 25, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="USDT",
+                quantity=Decimal("100"),
+                quote_asset="BTTC",
+                quote_quantity=Decimal("4194464"),
+                account="Spot",
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2022)
+    item = report.items[0]
+
+    assert report.documented_token_redenomination_count == 1
+    assert item.pool_id == "binance:Spot"
+    assert item.closure_status == "documented_binance_btt_bttc_redenomination"
+    assert item.requires_review is False
+    assert "1:1000" in item.tax_treatment_hint
+
+
+def test_wallet_fifo_provenance_closure_documents_manual_cex_deposit_history(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    manual_batch = store.create_import_batch(
+        ImportBatchCreate(source="manual-csv", filename="btc-opening.csv", file_hash="manual-btc-deposit")
+    )
+    manual_raw = store.add_raw_object(
+        manual_batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "account": "binance",
+                    "amount": "0.01036997",
+                    "asset": "BTC",
+                    "quote_asset": "EUR",
+                    "quote_quantity": "254.942392828916",
+                    "source_ref": "btc-chain-tx",
+                    "time": "2023-06-09T20:30:41Z",
+                    "tx_id": "manual-opening:binance-btc-deposit-2023-06-09",
+                    "type": "deposit",
+                }
+            ),
+        ),
+    )
+    deposit_batch = store.create_import_batch(
+        ImportBatchCreate(source="binance", filename="Binance-Deposit-History.xlsx", file_hash="btc-deposit-history")
+    )
+    store.add_raw_object(
+        deposit_batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "Address": "1KsYCTB1KgzLUz752NkEj9tnXUguaxaWox",
+                    "Amount": "0.01036997",
+                    "Coin": "BTC",
+                    "Network": "BTC",
+                    "Status": "Completed",
+                    "TXID": "btc-chain-tx",
+                    "Time": "23-06-09 20:30:41",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="manual-csv",
+                event_time=datetime(2023, 6, 9, 20, 30, 41, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="BTC",
+                quantity=Decimal("0.01036997"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("254.942392828916"),
+                account="binance",
+                tx_id="manual-opening:binance-btc-deposit-2023-06-09",
+                raw_object_id=manual_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="manual-csv",
+                event_time=datetime(2023, 6, 10, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="USDT",
+                quantity=Decimal("300"),
+                quote_asset="BTC",
+                quote_quantity=Decimal("0.01036997"),
+                account="binance",
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2023)
+    item = report.items[0]
+
+    assert report.documented_manual_cex_deposit_count == 1
+    assert item.pool_id == "manual-csv:binance"
+    assert item.closure_status == "documented_manual_cex_deposit_history"
+    assert item.requires_review is False
+    assert "Sender-Ownership" in item.tax_treatment_hint
+
+
 def test_wallet_fifo_marks_reviewed_cex_exchange_outflow_anchor_as_resolved(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     txid = "cex-reviewed-deposit-tx"

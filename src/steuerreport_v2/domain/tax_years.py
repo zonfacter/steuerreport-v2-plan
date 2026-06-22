@@ -2403,6 +2403,8 @@ class TaxYearService:
                 "documented_fairspot_staking_return",
                 "documented_legacy_counterparty_mirror",
                 "documented_legacy_hnt_payment_provenance",
+                "documented_binance_btt_bttc_redenomination",
+                "documented_manual_cex_deposit_history",
                 "documented_exchange_deposit_history",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
@@ -2495,6 +2497,28 @@ class TaxYearService:
                     "Helium-Raw-Evidence mit Payer/Payee, TX-Hash, Zeitstempel, "
                     "Menge und Oracle-Wert beilegen. Externe Payment-Anteile "
                     "konservativ offenlegen."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_binance_btt_bttc_redenomination":
+                recommended_tax_treatment = (
+                    "Als belegte BTT/BTTC-Redenomination fuehren; keine neue "
+                    "externe Herkunft, kein Reward und kein Eigenwallet-Transfer."
+                )
+                filing_disclosure = (
+                    "Binance-Transaction-History mit BTT-Abgang `Token Swap - "
+                    "Redenomination/Rebranding` und BTTC-Zugang `Airdrop Assets` "
+                    "im Faktor 1:1000 beilegen."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_manual_cex_deposit_history":
+                recommended_tax_treatment = (
+                    "Als dokumentierten CEX-Deposit/externen Zufluss fuehren; keine "
+                    "steuerneutrale Eigenwallet-Umbuchung behaupten, solange "
+                    "Sender-Ownership fehlt."
+                )
+                filing_disclosure = (
+                    "Manuellen Deposit-Lot und CEX-Deposit-History mit Adresse, "
+                    "Netzwerk, TXID, Zeitstempel und Menge gemeinsam beilegen."
                 )
                 manual_evidence_required = False
             elif item.closure_status == "external_or_unknown_origin_documented":
@@ -4325,6 +4349,13 @@ class TaxYearService:
                     "Eine neue steuerliche Bewertung ist erst nach Belegklaerung ausgeschlossen."
                 ),
                 "Rohimport-Zeilen und Normalizer-Zuordnung fuer dieses Asset pruefen.",
+            )
+        if abs(row.total_related_gain_loss_eur) < min_abs_gain_eur:
+            return (
+                "no_action",
+                "none_expected",
+                "Kein materielles Korrektursignal im gewaehlten Schwellwert.",
+                "Keine Aktion noetig.",
             )
         current_disposal_roles = role_counts.get("direct_tax_asset", 0) + role_counts.get("disposal_asset", 0) + role_counts.get("disposal_quote_asset", 0)
         cost_basis_roles = role_counts.get("acquisition_asset", 0) + role_counts.get("acquisition_quote_asset", 0)

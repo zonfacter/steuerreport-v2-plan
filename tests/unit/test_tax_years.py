@@ -12,6 +12,7 @@ from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.contracts.review import ReviewDecisionCreate
+from steuerreport_v2.contracts.tax_years import TaxYearAssetFifoPlausibilityRow
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.tax_years import TaxYearService
@@ -597,6 +598,37 @@ def test_tax_year_asset_fifo_correction_review_keeps_historical_cost_basis_trace
     assert by_asset["BTC"].recommended_action == "keep_tax_sum_review_presentation"
     assert by_asset["BTC"].tax_sum_impact == "already_in_existing_tax_lines"
     assert "historische Kostenbasis" in by_asset["BTC"].conclusion
+
+
+def test_tax_year_asset_fifo_correction_review_ignores_sub_threshold_quote_only_dust():
+    row = TaxYearAssetFifoPlausibilityRow(
+        year=2023,
+        asset="BNB",
+        risk_level="high",
+        linked_tax_lines_count=92,
+        linked_gain_loss_eur=Decimal("0.196277990140708774"),
+        total_related_gain_loss_eur=Decimal("0.196277990140708774"),
+        reasons=["asset_only_seen_in_related_quote_or_counter_events", "many_related_quote_or_counter_lines"],
+        drilldown_endpoint="/api/v1/tax-years/2023/asset-fifo-drilldown?asset=BNB",
+    )
+
+    action, tax_impact, conclusion, next_step = TaxYearService._asset_fifo_correction_decision(
+        row,
+        role_counts={
+            "direct_tax_asset": 0,
+            "disposal_asset": 0,
+            "disposal_quote_asset": 92,
+            "acquisition_asset": 0,
+            "acquisition_quote_asset": 0,
+        },
+        related_missing_raw_evidence_count=0,
+        min_abs_gain_eur=Decimal("100"),
+    )
+
+    assert action == "no_action"
+    assert tax_impact == "none_expected"
+    assert "Kein materielles Korrektursignal" in conclusion
+    assert next_step == "Keine Aktion noetig."
 
 
 def test_tax_year_turnover_audit_separates_gross_volume_from_taxable_gain(tmp_path):

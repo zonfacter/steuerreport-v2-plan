@@ -468,7 +468,11 @@ class TaxMethodologyService:
                 "documented_fairspot_staking_return",
                 "documented_legacy_counterparty_mirror",
                 "documented_legacy_hnt_payment_provenance",
+                "documented_binance_btt_bttc_redenomination",
+                "documented_manual_cex_deposit_history",
                 "documented_exchange_deposit_history",
+                "external_or_unknown_origin_documented",
+                "unverified_cex_deposit_sender",
             }:
                 continue
             items.append(
@@ -613,6 +617,11 @@ class TaxMethodologyService:
             year=year,
             unmatched_count=wallet_fifo.unmatched_count,
         )
+        wallet_fifo_documented_non_live_count = self._documented_non_live_count(
+            wallet_fifo_service,
+            year=year,
+            unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+        )
         wallet_fifo_documented_fiat_purchase_count = self._documented_fiat_purchase_count(
             wallet_fifo_service,
             year=year,
@@ -658,6 +667,34 @@ class TaxMethodologyService:
                 unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
             )
         )
+        wallet_fifo_documented_token_redenomination_count = (
+            self._documented_token_redenomination_count(
+                wallet_fifo_service,
+                year=year,
+                unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+            )
+        )
+        wallet_fifo_documented_manual_cex_deposit_count = (
+            self._documented_manual_cex_deposit_count(
+                wallet_fifo_service,
+                year=year,
+                unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+            )
+        )
+        wallet_fifo_documented_external_or_unknown_count = (
+            self._documented_external_or_unknown_count(
+                wallet_fifo_service,
+                year=year,
+                unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+            )
+        )
+        wallet_fifo_documented_unverified_cex_count = (
+            self._documented_unverified_cex_count(
+                wallet_fifo_service,
+                year=year,
+                unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+            )
+        )
         asset_fifo_review = self.tax_years.asset_fifo_correction_review(
             year,
             limit=200,
@@ -678,6 +715,7 @@ class TaxMethodologyService:
             wallet_fifo_exchange_sequencing_count=wallet_fifo_exchange_sequencing_count,
             wallet_fifo_delta_eur=wallet_fifo.delta_gain_loss_eur,
             wallet_fifo_unresolved_provenance_count=wallet_fifo.unresolved_inbound_provenance_count,
+            wallet_fifo_documented_non_live_count=wallet_fifo_documented_non_live_count,
             wallet_fifo_documented_fiat_purchase_count=wallet_fifo_documented_fiat_purchase_count,
             wallet_fifo_documented_legacy_cex_deposit_count=wallet_fifo_documented_legacy_cex_deposit_count,
             wallet_fifo_documented_legacy_cex_deposit_mirror_count=(
@@ -695,6 +733,12 @@ class TaxMethodologyService:
             wallet_fifo_documented_legacy_hnt_external_payment_count=(
                 wallet_fifo_documented_legacy_hnt_external_payment_count
             ),
+            wallet_fifo_documented_token_redenomination_count=(
+                wallet_fifo_documented_token_redenomination_count
+            ),
+            wallet_fifo_documented_manual_cex_deposit_count=wallet_fifo_documented_manual_cex_deposit_count,
+            wallet_fifo_documented_external_or_unknown_count=wallet_fifo_documented_external_or_unknown_count,
+            wallet_fifo_documented_unverified_cex_count=wallet_fifo_documented_unverified_cex_count,
             asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
             asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
         )
@@ -772,6 +816,22 @@ class TaxMethodologyService:
             if item.closure_status == "documented_fiat_purchase"
         )
 
+    def _documented_non_live_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return sum(
+            item.events_count
+            for item in closure.items
+            if item.closure_status == "documented_non_live_opening_balance"
+        )
+
     def _documented_legacy_cex_deposit_count(
         self,
         wallet_fifo_service: WalletFifoPreviewService,
@@ -843,6 +903,62 @@ class TaxMethodologyService:
             return 0
         closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
         return closure.documented_legacy_hnt_external_payment_count
+
+    def _documented_token_redenomination_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return closure.documented_token_redenomination_count
+
+    def _documented_manual_cex_deposit_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return closure.documented_manual_cex_deposit_count
+
+    def _documented_external_or_unknown_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return sum(
+            item.events_count
+            for item in closure.items
+            if item.closure_status == "external_or_unknown_origin_documented"
+        )
+
+    def _documented_unverified_cex_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return sum(
+            item.events_count
+            for item in closure.items
+            if item.closure_status == "unverified_cex_deposit_sender"
+        )
 
     def _is_documented_exchange_sequencing_gap(
         self,
@@ -1027,6 +1143,7 @@ class TaxMethodologyService:
         wallet_fifo_exchange_sequencing_count: int,
         wallet_fifo_delta_eur: Decimal,
         wallet_fifo_unresolved_provenance_count: int,
+        wallet_fifo_documented_non_live_count: int,
         wallet_fifo_documented_fiat_purchase_count: int,
         wallet_fifo_documented_legacy_cex_deposit_count: int,
         wallet_fifo_documented_legacy_cex_deposit_mirror_count: int,
@@ -1034,6 +1151,10 @@ class TaxMethodologyService:
         wallet_fifo_documented_legacy_counterparty_mirror_count: int,
         wallet_fifo_documented_exchange_deposit_history_count: int,
         wallet_fifo_documented_legacy_hnt_external_payment_count: int,
+        wallet_fifo_documented_token_redenomination_count: int,
+        wallet_fifo_documented_manual_cex_deposit_count: int,
+        wallet_fifo_documented_external_or_unknown_count: int,
+        wallet_fifo_documented_unverified_cex_count: int,
         asset_fifo_possible_recalculation_count: int,
         asset_fifo_attribution_review_count: int,
     ) -> list[TaxMethodologyGap]:
@@ -1115,14 +1236,37 @@ class TaxMethodologyService:
         unresolved_after_documented_fiat = max(
             0,
             wallet_fifo_unresolved_provenance_count
+            - wallet_fifo_documented_non_live_count
             - wallet_fifo_documented_fiat_purchase_count
             - wallet_fifo_documented_legacy_cex_deposit_count
             - wallet_fifo_documented_legacy_cex_deposit_mirror_count
             - wallet_fifo_documented_fairspot_staking_return_count
             - wallet_fifo_documented_legacy_counterparty_mirror_count
             - wallet_fifo_documented_exchange_deposit_history_count
-            - wallet_fifo_documented_legacy_hnt_external_payment_count,
+            - wallet_fifo_documented_legacy_hnt_external_payment_count
+            - wallet_fifo_documented_token_redenomination_count
+            - wallet_fifo_documented_manual_cex_deposit_count
+            - wallet_fifo_documented_external_or_unknown_count
+            - wallet_fifo_documented_unverified_cex_count,
         )
+        if wallet_fifo_documented_non_live_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_non_live_opening_balance_documented",
+                    severity="info",
+                    message=(
+                        f"{wallet_fifo_documented_non_live_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse sind als belegte Non-Live-Anfangsbestaende dokumentiert."
+                    ),
+                    count=wallet_fifo_documented_non_live_count,
+                    action=(
+                        "Als Anfangsbestand im Jahresbeleg ausweisen; nicht als Live-Zufluss "
+                        "oder Eigenwallet-Transfer eskalieren."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    blocks_bmf_ready=False,
+                )
+            )
         if wallet_fifo_documented_fiat_purchase_count:
             gaps.append(
                 TaxMethodologyGap(
@@ -1250,6 +1394,82 @@ class TaxMethodologyService:
                     count=wallet_fifo_documented_legacy_hnt_external_payment_count,
                     action=(
                         "Konservativ als externe Legacy-HNT-Zahlung im Jahresbeleg offenlegen; "
+                        "nicht als steuerneutralen Eigenwallet-Transfer behandeln."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    blocks_bmf_ready=False,
+                )
+            )
+        if wallet_fifo_documented_token_redenomination_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_token_redenomination_documented",
+                    severity="info",
+                    message=(
+                        f"{wallet_fifo_documented_token_redenomination_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse sind als Token-Redenomination/Rebranding mit "
+                        "passender Gegenzeile belegt."
+                    ),
+                    count=wallet_fifo_documented_token_redenomination_count,
+                    action=(
+                        "Als Redenomination im Jahresbeleg dokumentieren; nicht als "
+                        "Reward, externe Herkunft oder Eigenwallet-Transfer behandeln."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    blocks_bmf_ready=False,
+                )
+            )
+        if wallet_fifo_documented_manual_cex_deposit_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_manual_cex_deposit_documented",
+                    severity="info",
+                    message=(
+                        f"{wallet_fifo_documented_manual_cex_deposit_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse sind durch manuelle Deposit-Lots plus "
+                        "CEX-Deposit-History belegt."
+                    ),
+                    count=wallet_fifo_documented_manual_cex_deposit_count,
+                    action=(
+                        "Als dokumentierten CEX-Deposit/externen Zufluss im Jahresbeleg "
+                        "offenlegen; Sender-Ownership nur bei Zusatzbeleg behaupten."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    blocks_bmf_ready=False,
+                )
+            )
+        if wallet_fifo_documented_external_or_unknown_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_external_or_unknown_origin_documented",
+                    severity="info",
+                    message=(
+                        f"{wallet_fifo_documented_external_or_unknown_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse sind durch Onchain/RPC-Batch konservativ "
+                        "als extern/unklar dokumentiert."
+                    ),
+                    count=wallet_fifo_documented_external_or_unknown_count,
+                    action=(
+                        "Konservativ im Jahresbeleg offenlegen; nicht als steuerneutralen "
+                        "Eigenwallet-Transfer behandeln."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    blocks_bmf_ready=False,
+                )
+            )
+        if wallet_fifo_documented_unverified_cex_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_unverified_cex_deposit_documented",
+                    severity="info",
+                    message=(
+                        f"{wallet_fifo_documented_unverified_cex_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse haben CEX-Deposit-Belege, aber keinen "
+                        "Sender-Ownership-Nachweis."
+                    ),
+                    count=wallet_fifo_documented_unverified_cex_count,
+                    action=(
+                        "Konservativ als CEX-Deposit mit fehlender Sender-Ownership offenlegen; "
                         "nicht als steuerneutralen Eigenwallet-Transfer behandeln."
                     ),
                     evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
@@ -1562,6 +1782,9 @@ class TaxMethodologyService:
             "wallet_fifo_evidence_overlay_ok": "Wallet-FIFO Evidence vorhanden",
             "wallet_fifo_unresolved_inbound_provenance": "Wallet-FIFO Zufluss-Herkunft offen",
             "wallet_fifo_fiat_purchase_documented": "Wallet-FIFO Fiat-Anschaffung dokumentiert",
+            "wallet_fifo_non_live_opening_balance_documented": (
+                "Wallet-FIFO Anfangsbestand dokumentiert"
+            ),
             "wallet_fifo_legacy_cex_deposit_documented": "Wallet-FIFO Legacy-HNT-CEX-Deposit dokumentiert",
             "wallet_fifo_legacy_cex_deposit_mirror_documented": (
                 "Wallet-FIFO Legacy-HNT-CEX-Deposit-Spiegel dokumentiert"
@@ -1577,6 +1800,14 @@ class TaxMethodologyService:
             ),
             "wallet_fifo_legacy_hnt_external_payment_documented": (
                 "Wallet-FIFO externe Legacy-HNT-Zahlung dokumentiert"
+            ),
+            "wallet_fifo_token_redenomination_documented": "Wallet-FIFO Token-Redenomination dokumentiert",
+            "wallet_fifo_manual_cex_deposit_documented": "Wallet-FIFO manueller CEX-Deposit dokumentiert",
+            "wallet_fifo_external_or_unknown_origin_documented": (
+                "Wallet-FIFO externe/unklare Herkunft dokumentiert"
+            ),
+            "wallet_fifo_unverified_cex_deposit_documented": (
+                "Wallet-FIFO CEX-Deposit ohne Sender-Ownership dokumentiert"
             ),
             "asset_fifo_possible_recalculation": "Asset-FIFO moegliche Neuberechnung",
             "asset_fifo_quote_attribution_documented": "Quote-/Attribution dokumentiert",

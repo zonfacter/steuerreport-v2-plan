@@ -2289,6 +2289,8 @@ class WalletFifoPreviewService:
         fairspot_staking_return_count = 0
         legacy_counterparty_mirror_count = 0
         legacy_hnt_external_payment_count = 0
+        token_redenomination_count = 0
+        manual_cex_deposit_count = 0
         exchange_deposit_history_count = 0
         for group in priority_report.groups:
             category = "unresolved_provenance"
@@ -2471,40 +2473,115 @@ class WalletFifoPreviewService:
                                     "dokumentieren; Restereignisse fachlich pruefen."
                                 )
                             else:
-                                documented_exchange_deposit_count = (
-                                    self._provenance_group_exchange_deposit_history_count(
+                                documented_redenomination_count = (
+                                    self._provenance_group_binance_btt_bttc_redenomination_count(
                                         year=year,
                                         group=group,
                                         canonical_events=canonical_events,
                                         raw_evidence_by_id=raw_evidence_by_id,
                                     )
                                 )
-                                exchange_deposit_history_count += documented_exchange_deposit_count
+                                token_redenomination_count += documented_redenomination_count
                                 if (
-                                    documented_exchange_deposit_count
-                                    and documented_exchange_deposit_count == group.events_count
+                                    documented_redenomination_count
+                                    and documented_redenomination_count == group.events_count
                                 ):
-                                    category = "exchange_deposit_history"
-                                    closure_status = "documented_exchange_deposit_history"
+                                    category = "token_redenomination"
+                                    closure_status = "documented_binance_btt_bttc_redenomination"
                                     requires_review = False
                                     tax_hint = (
-                                        "Exchange-Deposit-History belegt Zeitstempel, Asset, Menge, Netzwerk "
-                                        "und TXID; Sender-Ownership wird daraus nicht automatisch behauptet."
+                                        "Binance-Transaction-History belegt BTT-Abgang und BTTC-Zugang "
+                                        "am selben Tag im Faktor 1:1000; keine neue externe Herkunft."
                                     )
                                     action = (
-                                        "Als dokumentierten Exchange-Deposit/externen Zufluss im Jahresbeleg "
-                                        "ausweisen; nur bei spaeterem Sendernachweis als Eigenwallet-Transfer "
-                                        "mit FIFO-Fortfuehrung behandeln."
+                                        "Als BTT/BTTC-Redenomination im Jahresbeleg ausweisen; "
+                                        "keine steuerneutrale Eigenwallet-Umbuchung und keinen Reward behaupten."
                                     )
-                                elif documented_exchange_deposit_count:
+                                elif documented_redenomination_count:
                                     tax_hint = (
-                                        f"{documented_exchange_deposit_count} von {group.events_count} Ereignissen "
-                                        "sind durch Exchange-Deposit-History mit TXID/Netzwerk belegt; Rest bleibt Review."
+                                        f"{documented_redenomination_count} von {group.events_count} Ereignissen "
+                                        "sind als Binance-BTT/BTTC-Redenomination belegt; Rest bleibt Review."
                                     )
                                     action = (
-                                        f"{documented_exchange_deposit_count} belegte Exchange-Deposits dokumentieren; "
-                                        "fehlende Deposit-History/TXIDs fuer Restereignisse nachziehen."
+                                        f"{documented_redenomination_count} Redenomination-Belege dokumentieren; "
+                                        "fehlende Gegenzeilen fuer Restereignisse nachziehen."
                                     )
+                                if category != "unresolved_provenance":
+                                    pass
+                                else:
+                                    documented_manual_cex_deposit_count = (
+                                        self._provenance_group_manual_cex_deposit_history_count(
+                                            year=year,
+                                            group=group,
+                                            canonical_events=canonical_events,
+                                            raw_evidence_by_id=raw_evidence_by_id,
+                                            deposit_history_rows=deposit_history_rows,
+                                            deposit_history_index=deposit_history_index,
+                                        )
+                                    )
+                                    manual_cex_deposit_count += documented_manual_cex_deposit_count
+                                    if (
+                                        documented_manual_cex_deposit_count
+                                        and documented_manual_cex_deposit_count == group.events_count
+                                    ):
+                                        category = "manual_cex_deposit_history"
+                                        closure_status = "documented_manual_cex_deposit_history"
+                                        requires_review = False
+                                        tax_hint = (
+                                            "Manueller Deposit-Lot ist mit Binance Deposit-History "
+                                            "inklusive Adresse, Netzwerk, TXID, Zeitstempel und Menge belegt; "
+                                            "Sender-Ownership wird nicht automatisch behauptet."
+                                        )
+                                        action = (
+                                            "Als dokumentierten CEX-Deposit/externen Zufluss im Jahresbeleg "
+                                            "ausweisen; nur bei spaeterem Sendernachweis als Eigenwallet-Transfer behandeln."
+                                        )
+                                    elif documented_manual_cex_deposit_count:
+                                        tax_hint = (
+                                            f"{documented_manual_cex_deposit_count} von {group.events_count} manuellen "
+                                            "Deposit-Lots sind mit Binance Deposit-History belegt; Rest bleibt Review."
+                                        )
+                                        action = (
+                                            f"{documented_manual_cex_deposit_count} manuelle CEX-Deposit-Belege "
+                                            "dokumentieren; fehlende Deposit-History fuer Restereignisse nachziehen."
+                                        )
+                                if category != "unresolved_provenance":
+                                    pass
+                                else:
+                                    documented_exchange_deposit_count = (
+                                        self._provenance_group_exchange_deposit_history_count(
+                                            year=year,
+                                            group=group,
+                                            canonical_events=canonical_events,
+                                            raw_evidence_by_id=raw_evidence_by_id,
+                                        )
+                                    )
+                                    exchange_deposit_history_count += documented_exchange_deposit_count
+                                    if (
+                                        documented_exchange_deposit_count
+                                        and documented_exchange_deposit_count == group.events_count
+                                    ):
+                                        category = "exchange_deposit_history"
+                                        closure_status = "documented_exchange_deposit_history"
+                                        requires_review = False
+                                        tax_hint = (
+                                            "Exchange-Deposit-History belegt Zeitstempel, Asset, Menge, Netzwerk "
+                                            "und TXID; Sender-Ownership wird daraus nicht automatisch behauptet."
+                                        )
+                                        action = (
+                                            "Als dokumentierten Exchange-Deposit/externen Zufluss im Jahresbeleg "
+                                            "ausweisen; nur bei spaeterem Sendernachweis als Eigenwallet-Transfer "
+                                            "mit FIFO-Fortfuehrung behandeln."
+                                        )
+                                    elif documented_exchange_deposit_count:
+                                        tax_hint = (
+                                            f"{documented_exchange_deposit_count} von {group.events_count} Ereignissen "
+                                            "sind durch Exchange-Deposit-History mit TXID/Netzwerk belegt; Rest bleibt Review."
+                                        )
+                                        action = (
+                                            f"{documented_exchange_deposit_count} belegte Exchange-Deposits dokumentieren; "
+                                            "fehlende Deposit-History/TXIDs fuer Restereignisse nachziehen."
+                                        )
             if category == "unresolved_provenance" and group.source.lower() == "binance" and group.asset.upper() == "SOL":
                 category = "cex_deposit_sender_ownership"
                 cex_status = cex_status_by_asset.get(group.asset.upper())
@@ -2568,6 +2645,8 @@ class WalletFifoPreviewService:
             documented_fairspot_staking_return_count=fairspot_staking_return_count,
             documented_legacy_counterparty_mirror_count=legacy_counterparty_mirror_count,
             documented_legacy_hnt_external_payment_count=legacy_hnt_external_payment_count,
+            documented_token_redenomination_count=token_redenomination_count,
+            documented_manual_cex_deposit_count=manual_cex_deposit_count,
             documented_exchange_deposit_history_count=exchange_deposit_history_count,
             external_or_unknown_count=sum(1 for item in items if item.closure_status == "external_or_unknown_origin_documented"),
             unverified_cex_count=sum(1 for item in items if item.closure_status == "unverified_cex_deposit_sender"),
@@ -2773,6 +2852,63 @@ class WalletFifoPreviewService:
             documented += 1
         return min(documented, group.events_count)
 
+    def _provenance_group_manual_cex_deposit_history_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+        deposit_history_rows: list[WalletFifoOriginRawEvidence],
+        deposit_history_index: dict[tuple[str, Decimal], list[WalletFifoOriginRawEvidence]],
+    ) -> int:
+        if group.source.lower() != "manual-csv":
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == group.source.lower()
+            and event.asset.upper() == group.asset.upper()
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        documented = 0
+        for event in group_events:
+            evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            payload = evidence.payload if evidence is not None else {}
+            if str(payload.get("type") or "").strip().lower() not in {"deposit", "opening deposit"}:
+                continue
+            candidate = WalletFifoGapCandidateEvent(
+                event_id=event.event_id,
+                event_time=event.event_time,
+                event_type=event.event_type,
+                source=event.source,
+                account=event.account,
+                pool_id=self._pool_id(event),
+                asset=event.asset.upper(),
+                quantity=event.quantity,
+                quote_asset=event.quote_asset,
+                quote_quantity=event.quote_quantity,
+                tx_id=str(payload.get("source_ref") or event.tx_id or ""),
+                source_ref=event.source_ref,
+                raw_object_id=event.raw_object_id,
+                relation="provisional_same_pool_inbound",
+                seconds_before_gap=0,
+            )
+            deposit = self._matching_deposit_history_from_rows(
+                candidate,
+                deposit_history_rows,
+                deposit_history_index=deposit_history_index,
+            )
+            if deposit is None:
+                continue
+            deposit_payload = deposit.payload
+            if not self._payload_str(deposit_payload, "TXID") or not self._payload_str(deposit_payload, "Address"):
+                continue
+            documented += 1
+        return min(documented, group.events_count)
+
     def _payload_is_exchange_deposit_history(self, payload: dict[str, object]) -> bool:
         tx_type = (
             self._payload_str(payload, "tx_type")
@@ -2793,6 +2929,73 @@ class WalletFifoPreviewService:
             or self._payload_str(payload, "Time")
         )
         return bool(txid and network and timestamp)
+
+    def _provenance_group_binance_btt_bttc_redenomination_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> int:
+        if group.source.lower() != "binance" or group.asset.upper() != "BTTC":
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == "binance"
+            and event.asset.upper() == "BTTC"
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        outflows = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == "binance"
+            and event.asset.upper() == "BTTC"
+            and self._pool_id(event) == group.pool_id
+            and event.quantity < 0
+        ]
+        documented = 0
+        for event in group_events:
+            evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            payload = evidence.payload if evidence is not None else {}
+            if self._payload_str(payload, "Operation") != "Airdrop Assets":
+                continue
+            if (self._payload_str(payload, "Coin") or "").upper() != "BTTC":
+                continue
+            if self._matching_btt_bttc_redenomination_outflow(
+                target_event=event,
+                outflows=outflows,
+                raw_evidence_by_id=raw_evidence_by_id,
+            ):
+                documented += 1
+        return min(documented, group.events_count)
+
+    def _matching_btt_bttc_redenomination_outflow(
+        self,
+        *,
+        target_event: CanonicalEvent,
+        outflows: list[CanonicalEvent],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> CanonicalEvent | None:
+        for outflow in outflows:
+            if outflow.event_time.date() != target_event.event_time.date():
+                continue
+            if outflow.event_time >= target_event.event_time:
+                continue
+            if abs((abs(outflow.quantity) * Decimal("1000")) - target_event.quantity) > Decimal("0.00000001"):
+                continue
+            evidence = raw_evidence_by_id.get(outflow.raw_object_id or "")
+            payload = evidence.payload if evidence is not None else {}
+            if self._payload_str(payload, "Operation") != "Token Swap - Redenomination/Rebranding":
+                continue
+            if (self._payload_str(payload, "Coin") or "").upper() != "BTT":
+                continue
+            return outflow
+        return None
 
     def _provenance_group_legacy_hnt_cex_deposit_mirror_count(
         self,
