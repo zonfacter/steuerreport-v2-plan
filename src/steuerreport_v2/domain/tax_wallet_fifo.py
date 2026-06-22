@@ -2287,6 +2287,7 @@ class WalletFifoPreviewService:
         legacy_cex_deposit_count = 0
         legacy_cex_deposit_mirror_count = 0
         fairspot_staking_return_count = 0
+        legacy_counterparty_mirror_count = 0
         for group in priority_report.groups:
             category = "unresolved_provenance"
             closure_status = "review_required"
@@ -2396,6 +2397,35 @@ class WalletFifoPreviewService:
                                 f"{documented_fairspot_count} belegte Fairspot/Staking-Ruecktransfers dokumentieren; "
                                 "fehlende Sender-Ownership fuer Restereignisse nachziehen."
                             )
+                        else:
+                            documented_counterparty_mirror_count = (
+                                self._provenance_group_legacy_counterparty_mirror_count(
+                                    year=year,
+                                    group=group,
+                                    canonical_events=canonical_events,
+                                    raw_evidence_by_id=raw_evidence_by_id,
+                                )
+                            )
+                            legacy_counterparty_mirror_count += documented_counterparty_mirror_count
+                            if documented_counterparty_mirror_count and documented_counterparty_mirror_count == group.events_count:
+                                category = "legacy_counterparty_mirror"
+                                closure_status = "documented_legacy_counterparty_mirror"
+                                requires_review = False
+                                tax_hint = (
+                                    "Legacy-HNT-Zielpool ist als Gegenpartei-Spiegel eines "
+                                    "Main-Legacy-Outflows mit TX-Hash belegt; nicht als eigene "
+                                    "aktuelle Wallet fortfuehren."
+                                )
+                                action = "Als Gegenpartei-/Service-Spiegel des Main-Legacy-Outflows dokumentieren."
+                            elif documented_counterparty_mirror_count:
+                                tax_hint = (
+                                    f"{documented_counterparty_mirror_count} von {group.events_count} Ereignissen "
+                                    "sind als Gegenpartei-Spiegel eines Main-Legacy-Outflows belegt; Rest bleibt Review."
+                                )
+                                action = (
+                                    f"{documented_counterparty_mirror_count} belegte Legacy-Gegenpartei-Spiegel "
+                                    "dokumentieren; Restereignisse fachlich pruefen."
+                                )
             if category == "unresolved_provenance" and group.source.lower() == "binance" and group.asset.upper() == "SOL":
                 category = "cex_deposit_sender_ownership"
                 cex_status = cex_status_by_asset.get(group.asset.upper())
@@ -2457,6 +2487,7 @@ class WalletFifoPreviewService:
             documented_legacy_cex_deposit_count=legacy_cex_deposit_count,
             documented_legacy_cex_deposit_mirror_count=legacy_cex_deposit_mirror_count,
             documented_fairspot_staking_return_count=fairspot_staking_return_count,
+            documented_legacy_counterparty_mirror_count=legacy_counterparty_mirror_count,
             external_or_unknown_count=sum(1 for item in items if item.closure_status == "external_or_unknown_origin_documented"),
             unverified_cex_count=sum(1 for item in items if item.closure_status == "unverified_cex_deposit_sender"),
             tax_neutral_candidate_count=sum(1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"),
@@ -2676,6 +2707,87 @@ class WalletFifoPreviewService:
                 continue
             documented += 1
         return min(documented, group.events_count)
+
+    def _provenance_group_legacy_counterparty_mirror_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> int:
+        if group.asset.upper() != "HNT" or group.source.lower() != "helium":
+            return 0
+        if group.pool_id == f"helium:{self.MAIN_HELIUM_LEGACY_WALLET}":
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == group.source.lower()
+            and event.asset.upper() == "HNT"
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        main_outflows = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == "helium"
+            and event.asset.upper() == "HNT"
+            and event.account == self.MAIN_HELIUM_LEGACY_WALLET
+            and event.quantity < 0
+        ]
+        documented = 0
+        for event in group_events:
+            if self._matching_legacy_main_outflow(
+                target_event=event,
+                main_outflows=main_outflows,
+                raw_evidence_by_id=raw_evidence_by_id,
+            ):
+                documented += 1
+        return min(documented, group.events_count)
+
+    def _matching_legacy_main_outflow(
+        self,
+        *,
+        target_event: CanonicalEvent,
+        main_outflows: list[CanonicalEvent],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> CanonicalEvent | None:
+        amount_tolerance = Decimal("0.01")
+        target_account = str(target_event.account or "").replace("\u00a0", "").strip()
+        if not target_account:
+            return None
+        for outflow in main_outflows:
+            if outflow.event_time.date() != target_event.event_time.date():
+                continue
+            if abs(abs(outflow.quantity) - abs(target_event.quantity)) > amount_tolerance:
+                continue
+            evidence = raw_evidence_by_id.get(outflow.raw_object_id or "")
+            payload = evidence.payload if evidence is not None else {}
+            payer = str(payload.get("payer") or payload.get("Payer") or payload.get("Sender") or "").replace("\u00a0", "").strip()
+            payee = str(payload.get("payee") or payload.get("Payee") or payload.get("Receiver") or "").replace("\u00a0", "").strip()
+            if payer != self.MAIN_HELIUM_LEGACY_WALLET:
+                continue
+            if not self._legacy_account_matches(target_account, payee):
+                continue
+            if not self._payload_str(payload, "transaction_hash") and not self._payload_str(payload, "TXID"):
+                continue
+            return outflow
+        return None
+
+    def _legacy_account_matches(self, short_or_full: str, full: str) -> bool:
+        candidate = short_or_full.replace("\u00a0", "").strip()
+        target = full.replace("\u00a0", "").strip()
+        if not candidate or not target:
+            return False
+        if candidate == target:
+            return True
+        if "..." not in candidate:
+            return False
+        prefix, suffix = candidate.split("...", 1)
+        return bool(prefix) and bool(suffix) and target.startswith(prefix) and target.endswith(suffix)
 
     def _is_legacy_helium_wallet_like(self, value: str) -> bool:
         normalized = value.replace("\u00a0", "").strip()

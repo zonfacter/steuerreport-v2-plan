@@ -1185,6 +1185,88 @@ def test_wallet_fifo_provenance_closure_counts_fairspot_staking_return(tmp_path)
     assert "1 von 2" in item.tax_treatment_hint
 
 
+def test_wallet_fifo_provenance_closure_documents_legacy_counterparty_mirror(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    main_wallet = WalletFifoPreviewService.MAIN_HELIUM_LEGACY_WALLET
+    service_wallet = "133bkeRPNK4BFhGfcf3uzmARbBfACprQ1TjWFMaxoHQoBqc5kfQ"
+    short_service_wallet = "13xfSeV2U...pCbA78Yp\u00a0"
+    helium_batch = store.create_import_batch(
+        ImportBatchCreate(source="helium", filename="helium-main-service.csv", file_hash="legacy-counterparty-mirror")
+    )
+    outflow_raw = store.add_raw_object(
+        helium_batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "date": "14.08.2021 17:15",
+                    "hnt_amount": "100",
+                    "payee": service_wallet,
+                    "payer": main_wallet,
+                    "transaction_hash": "main-to-service-tx",
+                    "type": "payment_v2",
+                }
+            ),
+        ),
+    )
+    mirror_raw = store.add_raw_object(
+        helium_batch.batch_id,
+        RawObjectCreate(
+            row_number=2,
+            payload_json=json.dumps(
+                {
+                    "Amount": "100",
+                    "Receiver": short_service_wallet,
+                    "Sender": "133iWieuw...xU6WUW8v\u00a0",
+                    "Time": "2021-08-14 at 07:15PM",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2021, 8, 14, 17, 15, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="HNT",
+                quantity=Decimal("-100"),
+                account=main_wallet,
+                tx_id="main-to-service-tx",
+                raw_object_id=outflow_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2021, 8, 14, 19, 15, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="HNT",
+                quantity=Decimal("100"),
+                account=short_service_wallet,
+                raw_object_id=mirror_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2021, 8, 15, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="USDT",
+                quantity=Decimal("900"),
+                quote_asset="HNT",
+                quote_quantity=Decimal("100"),
+                account=short_service_wallet,
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2021)
+    item = report.items[0]
+
+    assert report.documented_legacy_counterparty_mirror_count == 1
+    assert item.pool_id == f"helium:{short_service_wallet}"
+    assert item.closure_status == "documented_legacy_counterparty_mirror"
+    assert item.requires_review is False
+
+
 def test_wallet_fifo_marks_reviewed_cex_exchange_outflow_anchor_as_resolved(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     txid = "cex-reviewed-deposit-tx"

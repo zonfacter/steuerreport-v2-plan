@@ -2401,6 +2401,7 @@ class TaxYearService:
                 "documented_legacy_hnt_cex_deposit",
                 "documented_legacy_hnt_cex_deposit_mirror",
                 "documented_fairspot_staking_return",
+                "documented_legacy_counterparty_mirror",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
             }
@@ -2455,6 +2456,18 @@ class TaxYearService:
                     "Helium-Raw-Evidence mit Payer/Payee, Transaction-Hash, "
                     "Zeitstempel und Menge beilegen. Fairspot bleibt "
                     "Transfer-Gegenpartei, nicht aktuelle Portfolio-Wallet."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_legacy_counterparty_mirror":
+                recommended_tax_treatment = (
+                    "Als belegten Gegenpartei-/Service-Spiegel eines Main-Legacy-"
+                    "Outflows fuehren; nicht als aktuelle eigene Wallet oder "
+                    "neue Anschaffung fortfuehren."
+                )
+                filing_disclosure = (
+                    "Main-Legacy-Outflow mit TX-Hash, Zieladresse, Zeitstempel "
+                    "und Menge beilegen. Steuerliche Behandlung des Main-Outflows "
+                    "separat ueber Tax-Lines/Belegkette nachvollziehen."
                 )
                 manual_evidence_required = False
             elif item.closure_status == "external_or_unknown_origin_documented":

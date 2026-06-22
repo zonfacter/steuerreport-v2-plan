@@ -428,6 +428,7 @@ def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp
         wallet_fifo_documented_legacy_cex_deposit_count=3,
         wallet_fifo_documented_legacy_cex_deposit_mirror_count=1,
         wallet_fifo_documented_fairspot_staking_return_count=1,
+        wallet_fifo_documented_legacy_counterparty_mirror_count=1,
         asset_fifo_possible_recalculation_count=0,
         asset_fifo_attribution_review_count=0,
     )
@@ -437,7 +438,8 @@ def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp
     assert by_code["wallet_fifo_legacy_cex_deposit_documented"].count == 3
     assert by_code["wallet_fifo_legacy_cex_deposit_mirror_documented"].count == 1
     assert by_code["wallet_fifo_fairspot_staking_return_documented"].count == 1
-    assert by_code["wallet_fifo_unresolved_inbound_provenance"].count == 3
+    assert by_code["wallet_fifo_legacy_counterparty_mirror_documented"].count == 1
+    assert by_code["wallet_fifo_unresolved_inbound_provenance"].count == 2
 
 
 def test_tax_methodology_report_blocks_asset_fifo_recalculation_candidates(tmp_path):
