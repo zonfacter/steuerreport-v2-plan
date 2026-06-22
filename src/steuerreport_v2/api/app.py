@@ -358,6 +358,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     )
     db = store or DuckDbStore()
 
+    @app.get("/health")
     @app.get("/api/v1/health")
     def health() -> ApiResponse[dict]:
         return ApiResponse(data=build_health_payload(db))

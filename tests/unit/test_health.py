@@ -13,6 +13,7 @@ def test_health_route_is_registered(tmp_path):
     app = create_app(DuckDbStore(tmp_path / "steuerreport_v2.duckdb"))
 
     assert any(route.path == "/api/v1/health" for route in app.routes)
+    assert any(route.path == "/health" for route in app.routes)
 
 
 def test_vertical_slice_routes_are_registered(tmp_path):
