@@ -18,6 +18,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxPaymentChecklistItem,
     TaxPaymentOverview,
     TaxPaymentOverviewRow,
+    TaxYearFilingChecklistItem,
     TaxYearFilingSummary,
     TaxYearFilingSummaryLine,
     TaxYearAssetFifoDrilldown,
@@ -1072,6 +1073,7 @@ class TaxYearService:
                 )
                 order += 1
 
+        checklist = self._filing_checklist(lines)
         return TaxYearFilingSummary(
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
@@ -1092,11 +1094,13 @@ class TaxYearService:
             ),
             can_file_with_conservative_appendix=bmf_closure_appendix.can_file_with_conservative_appendix,
             lines=lines,
+            checklist=checklist,
             review_decisions=review_decisions,
             warnings=warnings,
             ascii_table=self._filing_ascii_table(year, lines),
+            checklist_ascii=self._filing_checklist_ascii(year, checklist),
             methodology=(
-                "Read-only Steuerjahr-Erklaerung aus Tax-Year-Status, Declaration-Guide "
+                "Read-only Steuerjahr-Erklaerung aus Tax-Year-Status, Declaration-Guide, "
                 "BMF-Abschlussbeilage und vorhandenen Exportverweisen. Es werden keine "
                 "FIFO-Lots, Preise, Imports oder Steuerentscheidungen geschrieben."
             ),
@@ -1130,6 +1134,87 @@ class TaxYearService:
                     self._fmt_eur(line.amount_eur) if line.amount_eur is not None else "-",
                     line.tax_treatment,
                     line.declaration_target,
+                ]
+            )
+        widths = [max(len(str(row[index])) for row in rows) for index in range(len(rows[0]))]
+        sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+
+        def fmt(row: list[str]) -> str:
+            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+
+        return "\n".join([sep, fmt(rows[0]), sep, *(fmt(row) for row in rows[1:]), sep])
+
+    def _filing_checklist(
+        self, lines: list[TaxYearFilingSummaryLine]
+    ) -> list[TaxYearFilingChecklistItem]:
+        items: list[TaxYearFilingChecklistItem] = []
+        for line in lines:
+            category = self._filing_checklist_category(line)
+            items.append(
+                TaxYearFilingChecklistItem(
+                    order=line.order,
+                    category=category,
+                    label=line.label,
+                    action=self._filing_checklist_action(line, category),
+                    source_topic=line.topic,
+                    amount_eur=line.amount_eur,
+                    evidence_ref=line.evidence_ref,
+                    done_when=self._filing_checklist_done_when(line, category),
+                    note=line.note,
+                )
+            )
+        return items
+
+    @staticmethod
+    def _filing_checklist_category(line: TaxYearFilingSummaryLine) -> Literal[
+        "eintragen", "beilegen", "archivieren", "pruefen"
+    ]:
+        if line.topic in {"private_disposal", "income"} and line.amount_eur not in (None, Decimal("0")):
+            return "eintragen"
+        if line.topic == "derivative":
+            return "pruefen"
+        if line.topic == "appendix":
+            return "beilegen" if "konservativ belegbar" in line.tax_treatment else "pruefen"
+        if line.topic == "review":
+            return "pruefen"
+        if line.topic == "evidence":
+            return "archivieren"
+        return "archivieren"
+
+    def _filing_checklist_action(self, line: TaxYearFilingSummaryLine, category: str) -> str:
+        if category == "eintragen":
+            return (
+                f"Betrag {self._fmt_eur(line.amount_eur or Decimal('0'))} "
+                "in der angegebenen Steuererklaerungsrubrik beruecksichtigen."
+            )
+        if category == "beilegen":
+            return "Nachweis als Beilage zum Steuerjahr bereithalten; keinen zusaetzlichen Betrag eintragen."
+        if category == "pruefen":
+            return "Vor Abgabe fachlich pruefen und erst danach final behandeln."
+        return "Nachweis im Jahrespaket archivieren und bei Rueckfragen vorlegen."
+
+    @staticmethod
+    def _filing_checklist_done_when(line: TaxYearFilingSummaryLine, category: str) -> str:
+        if category == "eintragen":
+            return "Der Betrag ist in der Steuererklaerung erfasst und der Beleg ist abgelegt."
+        if category == "beilegen":
+            return "Die Beilage ist im Jahrespaket vorhanden oder separat fuer das Finanzamt bereit."
+        if category == "pruefen":
+            return "Eine Review- oder Steuerberaterentscheidung ist dokumentiert."
+        return "Der Export oder JSON-Beleg ist im Jahresordner gespeichert."
+
+    def _filing_checklist_ascii(
+        self, year: int, checklist: list[TaxYearFilingChecklistItem]
+    ) -> str:
+        rows = [["Jahr", "Kategorie", "Punkt", "Betrag", "Erledigt wenn"]]
+        for item in checklist:
+            rows.append(
+                [
+                    str(year),
+                    item.category,
+                    item.label,
+                    self._fmt_eur(item.amount_eur) if item.amount_eur is not None else "-",
+                    item.done_when,
                 ]
             )
         widths = [max(len(str(row[index])) for row in rows) for index in range(len(rows[0]))]

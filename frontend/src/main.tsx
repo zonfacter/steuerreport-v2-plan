@@ -1065,9 +1065,11 @@ type Snapshot = {
     bmf_closure_appendix_manual_evidence_required_count?: number;
     can_file_with_conservative_appendix?: boolean;
     lines: Array<Record<string, unknown>>;
+    checklist?: Array<Record<string, unknown>>;
     review_decisions: Array<Record<string, unknown>>;
     warnings: string[];
     ascii_table: string;
+    checklist_ascii?: string;
     methodology: string;
   };
   taxIncomeGuide?: {
@@ -7585,6 +7587,7 @@ function TaxPanel({
   const filingLines = taxYearFilingSummary?.lines ?? [];
   const entryLines = filingLines.filter((line) => !["appendix", "evidence", "review"].includes(String(line.topic)));
   const proofLines = filingLines.filter((line) => ["appendix", "evidence", "review"].includes(String(line.topic)));
+  const filingChecklist = taxYearFilingSummary?.checklist ?? [];
   const yearReviewDecisions = taxYearFilingSummary?.review_decisions ?? taxDeclarationGuide?.review_decisions ?? [];
   const activeEvidenceItems = taxYearEvidence?.items ?? [];
   const primaryEvidenceItems = activeEvidenceItems.filter((item) => item.required || item.category === "eintragen");
@@ -9019,6 +9022,28 @@ function TaxPanel({
             Jahres-Belegpaket
           </button>
         </div>
+        {filingChecklist.length > 0 ? (
+          <TablePanel
+            title="Finanzamt-Checkliste"
+            rows={filingChecklist.map((item) => ({
+              kategorie: item.category,
+              punkt: item.label,
+              betrag_eur: item.amount_eur === null || item.amount_eur === undefined ? "-" : formatCurrency(item.amount_eur),
+              aktion: item.action,
+              erledigt_wenn: item.done_when,
+              beleg: item.evidence_ref ?? "-"
+            }))}
+            compact
+            rowActions={[
+              {
+                label: "Beleg oeffnen",
+                icon: <FileDown size={16} />,
+                onClick: (row) => onDownload(String(row.beleg ?? ""))
+              }
+            ]}
+            footer="Eintragen sind Steuererklaerungswerte. Beilegen und Archivieren sind Nachweise, keine zusaetzlichen Betragszeilen."
+          />
+        ) : null}
         <TablePanel
           title="Eintragung und Behandlung"
           rows={entryLines.map((line) => ({
@@ -9102,6 +9127,11 @@ function TaxPanel({
         {taxYearFilingSummary?.ascii_table ? (
           <pre className="asciiTable" aria-label="Kopierbare Steuerjahr-Erklaerung">
             {taxYearFilingSummary.ascii_table}
+          </pre>
+        ) : null}
+        {taxYearFilingSummary?.checklist_ascii ? (
+          <pre className="asciiTable" aria-label="Kopierbare Finanzamt-Checkliste">
+            {taxYearFilingSummary.checklist_ascii}
           </pre>
         ) : null}
         {(taxYearFilingSummary?.warnings ?? []).length > 0 ? (

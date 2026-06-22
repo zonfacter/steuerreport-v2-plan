@@ -983,6 +983,13 @@ def test_tax_year_filing_summary_explains_entry_targets(tmp_path):
     assert by_topic["income"].evidence_ref == "/api/v1/export/tax-income-guide.csv"
     assert by_topic["tax_free"].declaration_target.startswith("Nicht in den steuerpflichtigen")
     assert by_topic["evidence"].evidence_ref == "/api/v1/export/evidence-package.zip"
+    checklist_by_label = {item.label: item for item in report.checklist}
+    assert checklist_by_label["Privates Veraeusserungsergebnis"].category == "eintragen"
+    assert checklist_by_label["Rewards / Mining / Staking"].category == "eintragen"
+    assert checklist_by_label["Steuerfreie Veraeusserungen > 365 Tage"].category == "archivieren"
+    assert checklist_by_label["Belegpaket"].category == "archivieren"
+    assert "Jahr" in report.checklist_ascii
+    assert "eintragen" in report.checklist_ascii
     assert len(report.review_decisions) == 1
     assert report.review_decisions[0].title == "HNT Preisbeleg 2021 akzeptiert"
     assert report.review_decisions[0].effect_summary == "Import: none | Ledger: none | FIFO: none | Tax-Lines: none"
@@ -1195,6 +1202,11 @@ def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_pat
     assert appendix_line.evidence_ref == "/api/v1/tax-years/2024/bmf-closure-appendix"
     assert "2 Herkunftsposition" in appendix_line.note
     assert "BMF-Abschlussbeilage Herkunft" in filing_summary.ascii_table
+    appendix_checklist = next(item for item in filing_summary.checklist if item.source_topic == "appendix")
+    assert appendix_checklist.category == "beilegen"
+    assert appendix_checklist.evidence_ref == "/api/v1/tax-years/2024/bmf-closure-appendix"
+    assert "keinen zusaetzlichen Betrag eintragen" in appendix_checklist.action
+    assert "BMF-Abschlussbeilage Herkunft" in filing_summary.checklist_ascii
 
     package_response = TestClient(create_app(store)).get("/api/v1/export/tax-years/2024/evidence-package.zip")
     assert package_response.status_code == 200

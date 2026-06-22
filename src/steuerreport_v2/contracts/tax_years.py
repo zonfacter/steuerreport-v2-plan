@@ -154,6 +154,18 @@ class TaxYearFilingSummaryLine(BaseModel):
     note: str
 
 
+class TaxYearFilingChecklistItem(BaseModel):
+    order: int
+    category: Literal["eintragen", "beilegen", "archivieren", "pruefen"]
+    label: str
+    action: str
+    source_topic: str
+    amount_eur: Decimal | None = None
+    evidence_ref: str | None = None
+    done_when: str
+    note: str
+
+
 class TaxYearFilingSummary(BaseModel):
     year: int
     generated_at: str
@@ -172,9 +184,11 @@ class TaxYearFilingSummary(BaseModel):
     bmf_closure_appendix_manual_evidence_required_count: int = 0
     can_file_with_conservative_appendix: bool = False
     lines: list[TaxYearFilingSummaryLine] = Field(default_factory=list)
+    checklist: list[TaxYearFilingChecklistItem] = Field(default_factory=list)
     review_decisions: list[TaxYearReviewDecisionSummary] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     ascii_table: str
+    checklist_ascii: str
     methodology: str
 
 
