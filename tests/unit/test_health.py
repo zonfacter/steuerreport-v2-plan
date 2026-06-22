@@ -1,5 +1,9 @@
+from fastapi.testclient import TestClient
+
 from steuerreport_v2.api.app import build_health_payload, create_app
+from steuerreport_v2.contracts.review import ReviewDecisionCreate, ReviewGate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.review import ReviewService
 
 
 def test_health_payload_reports_duckdb(tmp_path):
@@ -14,6 +18,39 @@ def test_health_route_is_registered(tmp_path):
 
     assert any(route.path == "/api/v1/health" for route in app.routes)
     assert any(route.path == "/health" for route in app.routes)
+
+
+def test_heavy_read_only_routes_are_cached_and_invalidated(tmp_path, monkeypatch):
+    calls = {"gate": 0}
+
+    def fake_gate(self):
+        calls["gate"] += 1
+        return ReviewGate(
+            allow_export=True,
+            issues_open=0,
+            issues_high_open=0,
+            issues=[],
+        )
+
+    monkeypatch.setattr(ReviewService, "gate", fake_gate)
+    app = create_app(DuckDbStore(tmp_path / "steuerreport_v2.duckdb"))
+    client = TestClient(app)
+
+    assert client.get("/api/v1/review/gates").status_code == 200
+    assert client.get("/api/v1/review/gates").status_code == 200
+    assert calls["gate"] == 1
+
+    decision = ReviewDecisionCreate(
+        decision_type="test",
+        scope="test:cache",
+        title="Cache invalidation",
+        rationale="Unit test",
+        actor="test",
+        source="test",
+    )
+    assert client.post("/api/v1/review/decisions", json=decision.model_dump(mode="json")).status_code == 200
+    assert client.get("/api/v1/review/gates").status_code == 200
+    assert calls["gate"] == 2
 
 
 def test_vertical_slice_routes_are_registered(tmp_path):

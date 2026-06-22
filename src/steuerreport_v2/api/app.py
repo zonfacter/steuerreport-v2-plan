@@ -4,6 +4,8 @@ import csv
 import hashlib
 import io
 import json
+from threading import RLock
+from time import monotonic
 import zipfile
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -357,6 +359,31 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     db = store or DuckDbStore()
+    response_cache: dict[str, tuple[float, object]] = {}
+    response_cache_locks: dict[str, RLock] = {}
+    response_cache_guard = RLock()
+
+    def cached_response(key: str, ttl_seconds: float, factory):
+        now = monotonic()
+        with response_cache_guard:
+            entry = response_cache.get(key)
+            if entry is not None and now - entry[0] <= ttl_seconds:
+                return entry[1]
+            key_lock = response_cache_locks.setdefault(key, RLock())
+        with key_lock:
+            now = monotonic()
+            with response_cache_guard:
+                entry = response_cache.get(key)
+                if entry is not None and now - entry[0] <= ttl_seconds:
+                    return entry[1]
+            value = factory()
+            with response_cache_guard:
+                response_cache[key] = (monotonic(), value)
+            return value
+
+    def clear_response_cache() -> None:
+        with response_cache_guard:
+            response_cache.clear()
 
     @app.get("/health")
     @app.get("/api/v1/health")
@@ -373,7 +400,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/cockpit/summary")
     def cockpit_summary() -> ApiResponse[CockpitSummary]:
-        return ApiResponse(data=CockpitService(db).summary())
+        return ApiResponse(
+            data=cached_response("cockpit:summary", 10, lambda: CockpitService(db).summary())
+        )
 
     @app.get("/api/v1/admin/settings")
     def list_admin_settings() -> ApiResponse[list[AdminSetting]]:
@@ -1289,7 +1318,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/portfolio/snapshot")
     def portfolio_snapshot() -> ApiResponse[PortfolioSnapshot]:
-        return ApiResponse(data=PortfolioService(db).snapshot())
+        return ApiResponse(
+            data=cached_response("portfolio:snapshot", 10, lambda: PortfolioService(db).snapshot())
+        )
 
     @app.get("/api/v1/portfolio/valuation-audit")
     def portfolio_valuation_audit() -> ApiResponse[PortfolioValuationAuditReport]:
@@ -1658,7 +1689,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/review/gates")
     def review_gates() -> ApiResponse[ReviewGate]:
-        return ApiResponse(data=ReviewService(db).gate())
+        return ApiResponse(
+            data=cached_response("review:gates", 10, lambda: ReviewService(db).gate())
+        )
 
     @app.get("/api/v1/review/tasks")
     def review_tasks(
@@ -1674,7 +1707,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.post("/api/v1/review/decisions")
     def add_review_decision(payload: ReviewDecisionCreate) -> ApiResponse[ReviewDecision]:
-        return ApiResponse(data=db.add_review_decision(payload))
+        decision = db.add_review_decision(payload)
+        clear_response_cache()
+        return ApiResponse(data=decision)
 
     @app.get("/api/v1/review/decisions")
     def list_review_decisions() -> ApiResponse[list[ReviewDecision]]:
@@ -1918,7 +1953,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/filing-matrix")
     def tax_years_filing_matrix() -> ApiResponse[TaxYearFilingMatrix]:
-        return ApiResponse(data=TaxYearService(db).filing_matrix())
+        return ApiResponse(
+            data=cached_response(
+                "tax-years:filing-matrix",
+                10,
+                lambda: TaxYearService(db).filing_matrix(),
+            )
+        )
 
     @app.get("/api/v1/tax-years/correction-map")
     def tax_years_correction_map() -> ApiResponse[TaxYearsCorrectionMap]:
@@ -2859,7 +2900,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/reports/center")
     def report_center() -> ApiResponse[ReportCenterStatus]:
-        return ApiResponse(data=ReportCenterService(db).center())
+        return ApiResponse(
+            data=cached_response("reports:center", 10, lambda: ReportCenterService(db).center())
+        )
 
     @app.get("/api/v1/export/evidence-manifest.json")
     def download_evidence_manifest() -> Response:
