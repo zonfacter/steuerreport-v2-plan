@@ -2399,6 +2399,7 @@ class TaxYearService:
                 "documented_non_live_opening_balance",
                 "documented_fiat_purchase",
                 "documented_legacy_hnt_cex_deposit",
+                "documented_legacy_hnt_cex_deposit_mirror",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
             }
@@ -2430,6 +2431,17 @@ class TaxYearService:
                 filing_disclosure = (
                     "Heliumtracker-Abgang und Binance-Deposit-History mit Adresse, "
                     "TXID, Zeitstempel und Menge gemeinsam beilegen."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_legacy_hnt_cex_deposit_mirror":
+                recommended_tax_treatment = (
+                    "Als Binance-Deposit-History-Spiegel eines belegten Legacy-HNT-"
+                    "Transfers fuehren; keine zweite Anschaffung und keine "
+                    "Veraeusserung durch den Spiegelbeleg."
+                )
+                filing_disclosure = (
+                    "Binance-Deposit-History mit TXID/Adresse und passenden "
+                    "Heliumtracker-Abgang gemeinsam beilegen."
                 )
                 manual_evidence_required = False
             elif item.closure_status == "external_or_unknown_origin_documented":

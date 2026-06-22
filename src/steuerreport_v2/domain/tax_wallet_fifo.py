@@ -2285,6 +2285,7 @@ class WalletFifoPreviewService:
         deposit_history_rows = self._deposit_history_candidates()
         deposit_history_index = self._deposit_history_index(deposit_history_rows)
         legacy_cex_deposit_count = 0
+        legacy_cex_deposit_mirror_count = 0
         for group in priority_report.groups:
             category = "unresolved_provenance"
             closure_status = "review_required"
@@ -2323,6 +2324,7 @@ class WalletFifoPreviewService:
                     deposit_history_index=deposit_history_index,
                 )
                 legacy_cex_deposit_count += documented_legacy_count
+                documented_mirror_count = 0
                 if documented_legacy_count and documented_legacy_count == group.events_count:
                     category = "legacy_hnt_cex_deposit"
                     closure_status = "documented_legacy_hnt_cex_deposit"
@@ -2341,6 +2343,32 @@ class WalletFifoPreviewService:
                         f"{documented_legacy_count} belegte Legacy-HNT-CEX-Deposits dokumentieren; "
                         "fehlende Deposit-History/TXIDs fuer Restereignisse nachziehen."
                     )
+                else:
+                    documented_mirror_count = self._provenance_group_legacy_hnt_cex_deposit_mirror_count(
+                        year=year,
+                        group=group,
+                        canonical_events=canonical_events,
+                        raw_evidence_by_id=raw_evidence_by_id,
+                    )
+                    legacy_cex_deposit_mirror_count += documented_mirror_count
+                    if documented_mirror_count and documented_mirror_count == group.events_count:
+                        category = "legacy_hnt_cex_deposit_mirror"
+                        closure_status = "documented_legacy_hnt_cex_deposit_mirror"
+                        requires_review = False
+                        tax_hint = (
+                            "Binance-Deposit-History-Spiegel ist mit Heliumtracker-Abgang "
+                            "zur Boerse verbunden; keine zweite Anschaffung behaupten."
+                        )
+                        action = "Als Spiegelbeleg des Legacy-HNT-CEX-Deposits im Jahresbeleg ausweisen."
+                    elif documented_mirror_count:
+                        tax_hint = (
+                            f"{documented_mirror_count} von {group.events_count} Binance-Deposit-"
+                            "Spiegelereignissen sind mit Heliumtracker-Abgaengen belegt; Rest bleibt Review."
+                        )
+                        action = (
+                            f"{documented_mirror_count} belegte Binance-HNT-Deposit-Spiegel dokumentieren; "
+                            "fehlende Heliumtracker-Gegenbelege fuer Restereignisse nachziehen."
+                        )
             if category == "unresolved_provenance" and group.source.lower() == "binance" and group.asset.upper() == "SOL":
                 category = "cex_deposit_sender_ownership"
                 cex_status = cex_status_by_asset.get(group.asset.upper())
@@ -2400,6 +2428,7 @@ class WalletFifoPreviewService:
             documented_non_live_count=sum(1 for item in items if item.closure_status == "documented_non_live_opening_balance"),
             documented_fiat_purchase_count=sum(1 for item in items if item.closure_status == "documented_fiat_purchase"),
             documented_legacy_cex_deposit_count=legacy_cex_deposit_count,
+            documented_legacy_cex_deposit_mirror_count=legacy_cex_deposit_mirror_count,
             external_or_unknown_count=sum(1 for item in items if item.closure_status == "external_or_unknown_origin_documented"),
             unverified_cex_count=sum(1 for item in items if item.closure_status == "unverified_cex_deposit_sender"),
             tax_neutral_candidate_count=sum(1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"),
@@ -2518,6 +2547,73 @@ class WalletFifoPreviewService:
                 continue
             documented += 1
         return min(documented, group.events_count)
+
+    def _provenance_group_legacy_hnt_cex_deposit_mirror_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> int:
+        if group.asset.upper() != "HNT" or group.source.lower() != "binance":
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == group.source.lower()
+            and event.asset.upper() == "HNT"
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        if not group_events:
+            return 0
+        helium_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == "helium"
+            and event.asset.upper() == "HNT"
+            and event.quantity > 0
+        ]
+        documented = 0
+        for event in group_events:
+            deposit_evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            deposit_payload = deposit_evidence.payload if deposit_evidence is not None else {}
+            if not self._payload_str(deposit_payload, "TXID") or not self._payload_str(deposit_payload, "Address"):
+                continue
+            if self._matching_legacy_hnt_binance_outflow(
+                event=event,
+                helium_events=helium_events,
+                raw_evidence_by_id=raw_evidence_by_id,
+            ):
+                documented += 1
+        return min(documented, group.events_count)
+
+    def _matching_legacy_hnt_binance_outflow(
+        self,
+        *,
+        event: CanonicalEvent,
+        helium_events: list[CanonicalEvent],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> CanonicalEvent | None:
+        amount_tolerance = Decimal("0.01")
+        for helium_event in helium_events:
+            if abs(abs(helium_event.quantity) - abs(event.quantity)) > amount_tolerance:
+                continue
+            if helium_event.event_time.date() != event.event_time.date():
+                continue
+            evidence = raw_evidence_by_id.get(helium_event.raw_object_id or "")
+            payload = evidence.payload if evidence is not None else {}
+            receiver = str(payload.get("Receiver") or helium_event.account or "").strip().lower()
+            sender = str(payload.get("Sender") or "").strip()
+            if "binance" not in receiver:
+                continue
+            if sender and not self._is_legacy_helium_wallet_like(sender):
+                continue
+            return helium_event
+        return None
 
     def _is_legacy_helium_wallet_like(self, value: str) -> bool:
         normalized = value.replace("\u00a0", "").strip()

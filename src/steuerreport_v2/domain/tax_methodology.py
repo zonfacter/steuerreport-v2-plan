@@ -464,6 +464,7 @@ class TaxMethodologyService:
                 "documented_non_live_opening_balance",
                 "documented_fiat_purchase",
                 "documented_legacy_hnt_cex_deposit",
+                "documented_legacy_hnt_cex_deposit_mirror",
             }:
                 continue
             items.append(
@@ -618,6 +619,13 @@ class TaxMethodologyService:
             year=year,
             unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
         )
+        wallet_fifo_documented_legacy_cex_deposit_mirror_count = (
+            self._documented_legacy_cex_deposit_mirror_count(
+                wallet_fifo_service,
+                year=year,
+                unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+            )
+        )
         asset_fifo_review = self.tax_years.asset_fifo_correction_review(
             year,
             limit=200,
@@ -640,6 +648,9 @@ class TaxMethodologyService:
             wallet_fifo_unresolved_provenance_count=wallet_fifo.unresolved_inbound_provenance_count,
             wallet_fifo_documented_fiat_purchase_count=wallet_fifo_documented_fiat_purchase_count,
             wallet_fifo_documented_legacy_cex_deposit_count=wallet_fifo_documented_legacy_cex_deposit_count,
+            wallet_fifo_documented_legacy_cex_deposit_mirror_count=(
+                wallet_fifo_documented_legacy_cex_deposit_mirror_count
+            ),
             asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
             asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
         )
@@ -728,6 +739,18 @@ class TaxMethodologyService:
             return 0
         closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
         return closure.documented_legacy_cex_deposit_count
+
+    def _documented_legacy_cex_deposit_mirror_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return closure.documented_legacy_cex_deposit_mirror_count
 
     def _is_documented_exchange_sequencing_gap(
         self,
@@ -914,6 +937,7 @@ class TaxMethodologyService:
         wallet_fifo_unresolved_provenance_count: int,
         wallet_fifo_documented_fiat_purchase_count: int,
         wallet_fifo_documented_legacy_cex_deposit_count: int,
+        wallet_fifo_documented_legacy_cex_deposit_mirror_count: int,
         asset_fifo_possible_recalculation_count: int,
         asset_fifo_attribution_review_count: int,
     ) -> list[TaxMethodologyGap]:
@@ -996,7 +1020,8 @@ class TaxMethodologyService:
             0,
             wallet_fifo_unresolved_provenance_count
             - wallet_fifo_documented_fiat_purchase_count
-            - wallet_fifo_documented_legacy_cex_deposit_count,
+            - wallet_fifo_documented_legacy_cex_deposit_count
+            - wallet_fifo_documented_legacy_cex_deposit_mirror_count,
         )
         if wallet_fifo_documented_fiat_purchase_count:
             gaps.append(
@@ -1029,6 +1054,25 @@ class TaxMethodologyService:
                     action=(
                         "Als Legacy-HNT-Transfer zur Boerse im Jahresbeleg dokumentieren; "
                         "nicht als Verkauf oder neue Anschaffung werten."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    blocks_bmf_ready=False,
+                )
+            )
+        if wallet_fifo_documented_legacy_cex_deposit_mirror_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_legacy_cex_deposit_mirror_documented",
+                    severity="info",
+                    message=(
+                        f"{wallet_fifo_documented_legacy_cex_deposit_mirror_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse sind als Binance-Deposit-History-Spiegel "
+                        "zu Legacy-HNT-Transfers belegt."
+                    ),
+                    count=wallet_fifo_documented_legacy_cex_deposit_mirror_count,
+                    action=(
+                        "Als Spiegelbeleg zum Legacy-HNT-CEX-Deposit dokumentieren; "
+                        "nicht als zweite Anschaffung oder Verkauf werten."
                     ),
                     evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
                     blocks_bmf_ready=False,
@@ -1341,6 +1385,9 @@ class TaxMethodologyService:
             "wallet_fifo_unresolved_inbound_provenance": "Wallet-FIFO Zufluss-Herkunft offen",
             "wallet_fifo_fiat_purchase_documented": "Wallet-FIFO Fiat-Anschaffung dokumentiert",
             "wallet_fifo_legacy_cex_deposit_documented": "Wallet-FIFO Legacy-HNT-CEX-Deposit dokumentiert",
+            "wallet_fifo_legacy_cex_deposit_mirror_documented": (
+                "Wallet-FIFO Legacy-HNT-CEX-Deposit-Spiegel dokumentiert"
+            ),
             "asset_fifo_possible_recalculation": "Asset-FIFO moegliche Neuberechnung",
             "asset_fifo_quote_attribution_documented": "Quote-/Attribution dokumentiert",
             "external_inflows_need_evidence": "Externe Zufluesse klaeren",

@@ -1016,6 +1016,90 @@ def test_wallet_fifo_provenance_closure_counts_partial_legacy_hnt_cex_deposit(tm
     assert "1 von 2" in item.tax_treatment_hint
 
 
+def test_wallet_fifo_provenance_closure_documents_legacy_hnt_cex_deposit_mirror(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    helium_batch = store.create_import_batch(
+        ImportBatchCreate(source="helium", filename="Heliumtracker 2021.xlsx", file_hash="legacy-hnt-mirror")
+    )
+    helium_raw = store.add_raw_object(
+        helium_batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "Amount": "10",
+                    "Receiver": "Binance",
+                    "Sender": "133iWieuw...xU6WUW8v\u00a0",
+                    "Time": "2021-09-05 at 03:14PM",
+                }
+            ),
+        ),
+    )
+    deposit_batch = store.create_import_batch(
+        ImportBatchCreate(source="binance", filename="Binance-Deposit-History.xlsx", file_hash="legacy-hnt-mirror-deposit")
+    )
+    deposit_raw = store.add_raw_object(
+        deposit_batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "Address": "138bCXPVfSq7yyTfoDUrVwztPmUr4WGyA7TED9Y41djmF7rjA8y",
+                    "Amount": "10.004",
+                    "Coin": "HNT",
+                    "Network": "HNT",
+                    "Status": "Completed",
+                    "TXID": "legacy-hnt-deposit-mirror-tx",
+                    "Time": "21-09-05 15:17:15",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2021, 9, 5, 15, 14, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="HNT",
+                quantity=Decimal("10"),
+                account="Binance",
+                raw_object_id=helium_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2021, 9, 5, 15, 17, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="HNT",
+                quantity=Decimal("10.004"),
+                account="binance",
+                tx_id="legacy-hnt-deposit-mirror-tx",
+                raw_object_id=deposit_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2021, 9, 6, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="USDT",
+                quantity=Decimal("90"),
+                quote_asset="HNT",
+                quote_quantity=Decimal("10.004"),
+                account="binance",
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2021)
+    by_pool = {item.pool_id: item for item in report.items}
+
+    assert report.documented_legacy_cex_deposit_count == 1
+    assert report.documented_legacy_cex_deposit_mirror_count == 1
+    assert by_pool["helium:Binance"].closure_status == "documented_legacy_hnt_cex_deposit"
+    assert by_pool["binance:binance"].closure_status == "documented_legacy_hnt_cex_deposit_mirror"
+    assert by_pool["binance:binance"].requires_review is False
+
+
 def test_wallet_fifo_marks_reviewed_cex_exchange_outflow_anchor_as_resolved(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     txid = "cex-reviewed-deposit-tx"
