@@ -204,7 +204,9 @@ p {
   border: 1px solid #dedbd2;
   border-radius: 999px;
   color: #5d685f;
+  display: inline-grid;
   font-size: 12px;
+  gap: 2px;
   line-height: 1.2;
   max-width: 220px;
   overflow: hidden;
@@ -229,6 +231,13 @@ p {
   background: #fff0ec;
   border-color: #e4b6aa;
   color: #8d2d1a;
+}
+
+.loadingStepDuration {
+  color: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
 }
 
 .toolSafetyPanel {

@@ -1380,6 +1380,7 @@ type LoaderStatus = {
   label: string;
   status: "pending" | "loading" | "ok" | "error";
   detail?: string;
+  duration_ms?: number;
 };
 
 type TaxViewMode = "guided" | "details" | "expert";
@@ -1774,18 +1775,39 @@ function App() {
       setLoaderStatuses(loaders.map((loader) => ({ key: loader.key, label: loader.label, status: "pending" })));
       const runLoader = async (loader: SnapshotLoader) => {
         setLoaderStatuses((current) =>
-          current.map((item) => (item.key === loader.key ? { ...item, status: "loading", detail: undefined } : item))
+          current.map((item) => (item.key === loader.key ? { ...item, status: "loading", detail: undefined, duration_ms: undefined } : item))
         );
+        const startedAt = performance.now();
         try {
           const value = await loader.load();
+          const durationMs = performance.now() - startedAt;
           setLoaderStatuses((current) =>
-            current.map((item) => (item.key === loader.key ? { ...item, status: "ok", detail: undefined } : item))
+            current.map((item) =>
+              item.key === loader.key
+                ? {
+                    ...item,
+                    status: "ok",
+                    detail: `${loader.label} geladen in ${formatDurationMs(durationMs)}`,
+                    duration_ms: durationMs
+                  }
+                : item
+            )
           );
           return value;
         } catch (caught) {
+          const durationMs = performance.now() - startedAt;
           const detail = caught instanceof Error ? caught.message : "fehlgeschlagen";
           setLoaderStatuses((current) =>
-            current.map((item) => (item.key === loader.key ? { ...item, status: "error", detail } : item))
+            current.map((item) =>
+              item.key === loader.key
+                ? {
+                    ...item,
+                    status: "error",
+                    detail: `${detail} nach ${formatDurationMs(durationMs)}`,
+                    duration_ms: durationMs
+                  }
+                : item
+            )
           );
           throw caught;
         }
@@ -2694,16 +2716,37 @@ function LoadingStatusPanel({ loading, statuses }: { loading: boolean; statuses:
   const done = statuses.filter((item) => item.status === "ok" || item.status === "error").length;
   const failed = statuses.filter((item) => item.status === "error").length;
   const active = statuses.find((item) => item.status === "loading") ?? statuses.find((item) => item.status === "pending");
-  if (!loading && failed === 0) {
+  const slowStatuses = statuses
+    .filter((item) => item.status === "ok" && Number(item.duration_ms ?? 0) >= 5000)
+    .sort((left, right) => Number(right.duration_ms ?? 0) - Number(left.duration_ms ?? 0));
+  if (!loading && failed === 0 && slowStatuses.length === 0) {
     return null;
   }
   const progress = Math.round((done / statuses.length) * 100);
+  const slowSummary = slowStatuses
+    .slice(0, 3)
+    .map((item) => `${item.label} ${formatDurationMs(item.duration_ms)}`)
+    .join(" · ");
   return (
     <section className={`loadingPanel ${failed > 0 ? "hasFailures" : ""}`} aria-live="polite">
       <div className="loadingPanelHeader">
         <div>
-          <strong>{loading ? `Daten werden geladen (${done}/${statuses.length})` : `Teilweise geladen (${done}/${statuses.length})`}</strong>
-          <span>{active ? `Aktuell: ${active.label}` : failed > 0 ? `${failed} Datenpaket(e) fehlgeschlagen` : "Abgeschlossen"}</span>
+          <strong>
+            {loading
+              ? `Daten werden geladen (${done}/${statuses.length})`
+              : failed > 0
+                ? `Teilweise geladen (${done}/${statuses.length})`
+                : `Geladen (${done}/${statuses.length})`}
+          </strong>
+          <span>
+            {active
+              ? `Aktuell: ${active.label}`
+              : failed > 0
+                ? `${failed} Datenpaket(e) fehlgeschlagen`
+                : slowSummary
+                  ? `Langsame Pakete: ${slowSummary}`
+                  : "Abgeschlossen"}
+          </span>
         </div>
         <span className="loadingPercent">{progress}%</span>
       </div>
@@ -2714,6 +2757,7 @@ function LoadingStatusPanel({ loading, statuses }: { loading: boolean; statuses:
         {statuses.map((item) => (
           <span key={String(item.key)} className={`loadingStep ${item.status}`} title={item.detail ?? item.label}>
             {item.label}
+            {item.duration_ms ? <span className="loadingStepDuration">{formatDurationMs(item.duration_ms)}</span> : null}
           </span>
         ))}
       </div>
@@ -4015,6 +4059,17 @@ function filingActionStatusLabel(status: unknown): string {
     blocked: "blockiert"
   };
   return labels[normalized] ?? normalized;
+}
+
+function formatDurationMs(durationMs: unknown): string {
+  const value = Number(durationMs ?? 0);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+  if (value < 1000) {
+    return `${Math.round(value)}ms`;
+  }
+  return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}s`;
 }
 
 function bmfTone(status: string): "ok" | "warning" | "blocked" {
