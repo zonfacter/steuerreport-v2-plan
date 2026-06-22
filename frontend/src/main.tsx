@@ -699,6 +699,7 @@ type Snapshot = {
     generated_at: string;
     rows: Array<Record<string, unknown>>;
     ready_years: number[];
+    conservative_ready_years?: number[];
     review_years: number[];
     blocked_years: number[];
     ascii_table: string;
@@ -4003,6 +4004,17 @@ function taxYearTone(state: string): "ok" | "warning" | "blocked" {
     return "warning";
   }
   return "blocked";
+}
+
+function filingActionStatusLabel(status: unknown): string {
+  const normalized = String(status ?? "");
+  const labels: Record<string, string> = {
+    ready: "bereit",
+    conservative_ready: "konservativ bereit",
+    review: "pruefen",
+    blocked: "blockiert"
+  };
+  return labels[normalized] ?? normalized;
 }
 
 function bmfTone(status: string): "ok" | "warning" | "blocked" {
@@ -7710,7 +7722,7 @@ function TaxPanel({
               : {};
             return {
               jahr: row.year,
-              status: row.action_status,
+              status: filingActionStatusLabel(row.action_status),
               anlage_so_eur: formatCurrency(row.taxable_private_disposals_eur),
               rewards_eur: formatCurrency(row.rewards_mining_staking_income_eur),
               derivate_eur: formatCurrency(row.derivative_pnl_eur),

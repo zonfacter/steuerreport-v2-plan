@@ -11,6 +11,7 @@ from typing import Literal
 from steuerreport_v2.contracts.tax_years import (
     TaxDeclarationGuide,
     TaxDeclarationGuideEntry,
+    TaxYearFilingActionStatus,
     TaxIncomeAssetBreakdown,
     TaxIncomeEventPreview,
     TaxIncomeReport,
@@ -1173,6 +1174,7 @@ class TaxYearService:
             generated_at=datetime.now(timezone.utc).isoformat(),
             rows=rows,
             ready_years=[row.year for row in rows if row.action_status == "ready"],
+            conservative_ready_years=[row.year for row in rows if row.action_status == "conservative_ready"],
             review_years=[row.year for row in rows if row.action_status == "review"],
             blocked_years=[row.year for row in rows if row.action_status == "blocked"],
             ascii_table=self._filing_matrix_ascii_table(rows),
@@ -1618,20 +1620,25 @@ class TaxYearService:
             appendix_items_count = int(item.get("appendix_items_count") or 0)
             appendix_manual_count = int(item.get("appendix_manual_evidence_required_count") or 0)
             derivative_pnl = Decimal(str(item.get("derivative_pnl_eur") or "0"))
-            counts = self._filing_matrix_snapshot_counts(
-                payment_row=payment_row,
-                appendix_items_count=appendix_items_count,
-                derivative_pnl=derivative_pnl,
-                review_codes_count=len(review_codes),
-                blocking_codes_count=len(blocking_codes),
-            )
-            action_status: Literal["ready", "review", "blocked"]
+            action_status: TaxYearFilingActionStatus
             if blocking_codes:
                 action_status = "blocked"
             elif item.get("bmf_ready") is True and not review_codes:
                 action_status = "ready"
+            elif item.get("can_file_with_conservative_appendix") is True or item.get("filing_status") == "conservative_appendix":
+                action_status = "conservative_ready"
             else:
                 action_status = "review"
+            counts = self._filing_matrix_snapshot_counts(
+                payment_row=payment_row,
+                appendix_items_count=appendix_items_count,
+                derivative_pnl=derivative_pnl,
+                review_codes_count=0 if action_status == "conservative_ready" else len(review_codes),
+                blocking_codes_count=len(blocking_codes),
+            )
+            next_action = self._filing_matrix_snapshot_next_action(counts, action_status)
+            if action_status != "conservative_ready" and item.get("next_action"):
+                next_action = str(item.get("next_action"))
             taxable_private = Decimal(str(item.get("taxable_private_disposals_eur") or "0"))
             rewards_income = Decimal(str(item.get("rewards_mining_staking_income_eur") or "0"))
             row = TaxYearFilingMatrixRow(
@@ -1639,7 +1646,7 @@ class TaxYearService:
                 status_label=str(item.get("status_label") or item.get("filing_status") or "-"),
                 export_ready=not bool(blocking_codes),
                 action_status=action_status,
-                next_action=str(item.get("next_action") or self._filing_matrix_snapshot_next_action(counts, action_status)),
+                next_action=next_action,
                 taxable_private_disposals_eur=taxable_private,
                 rewards_mining_staking_income_eur=rewards_income,
                 derivative_pnl_eur=derivative_pnl,
@@ -1668,6 +1675,7 @@ class TaxYearService:
             generated_at=datetime.now(timezone.utc).isoformat(),
             rows=rows,
             ready_years=[row.year for row in rows if row.action_status == "ready"],
+            conservative_ready_years=[row.year for row in rows if row.action_status == "conservative_ready"],
             review_years=[row.year for row in rows if row.action_status == "review"],
             blocked_years=[row.year for row in rows if row.action_status == "blocked"],
             ascii_table=self._filing_matrix_ascii_table(rows),
@@ -1708,10 +1716,12 @@ class TaxYearService:
 
     @staticmethod
     def _filing_matrix_snapshot_next_action(
-        counts: dict[str, int], action_status: Literal["ready", "review", "blocked"]
+        counts: dict[str, int], action_status: TaxYearFilingActionStatus
     ) -> str:
         if action_status == "blocked":
             return "Blockierende Punkte vor Export oder Abgabe klaeren."
+        if action_status == "conservative_ready":
+            return "Konservativ belegbar: Herkunftsbeilage und Jahrespaket mit abgeben."
         if counts.get("pruefen", 0):
             return f"{counts.get('pruefen', 0)} Pruefpunkt(e) fachlich klaeren."
         if counts.get("beilegen", 0):
@@ -1733,9 +1743,11 @@ class TaxYearService:
     @staticmethod
     def _filing_matrix_action_status(
         summary: TaxYearFilingSummary, counts: dict[str, int]
-    ) -> Literal["ready", "review", "blocked"]:
+    ) -> TaxYearFilingActionStatus:
         if not summary.export_ready:
             return "blocked"
+        if summary.can_file_with_conservative_appendix and not summary.bmf_closure_appendix_manual_evidence_required_count:
+            return "conservative_ready"
         if counts.get("pruefen", 0) or summary.warnings:
             return "review"
         return "ready"
@@ -1744,10 +1756,12 @@ class TaxYearService:
     def _filing_matrix_next_action(
         summary: TaxYearFilingSummary,
         counts: dict[str, int],
-        action_status: Literal["ready", "review", "blocked"],
+        action_status: TaxYearFilingActionStatus,
     ) -> str:
         if action_status == "blocked":
             return "Blockierende Punkte vor Export oder Abgabe klaeren."
+        if action_status == "conservative_ready":
+            return "Konservativ belegbar: Herkunftsbeilage und Jahrespaket mit abgeben."
         if counts.get("pruefen", 0):
             return f"{counts.get('pruefen', 0)} Pruefpunkt(e) fachlich klaeren."
         if summary.bmf_closure_appendix_items_count:
@@ -1760,7 +1774,7 @@ class TaxYearService:
         self,
         summary: TaxYearFilingSummary,
         counts: dict[str, int],
-        action_status: Literal["ready", "review", "blocked"],
+        action_status: TaxYearFilingActionStatus,
     ) -> str:
         return (
             f"{summary.year} | {action_status} | SO {self._fmt_eur(summary.taxable_private_disposals_eur)} | "

@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 TaxYearState = Literal["finished", "blocked", "open", "historical_open", "empty"]
+TaxYearFilingActionStatus = Literal["ready", "conservative_ready", "review", "blocked"]
 
 
 class TaxYearIssue(BaseModel):
@@ -196,7 +197,7 @@ class TaxYearFilingMatrixRow(BaseModel):
     year: int
     status_label: str
     export_ready: bool
-    action_status: Literal["ready", "review", "blocked"]
+    action_status: TaxYearFilingActionStatus
     next_action: str
     taxable_private_disposals_eur: Decimal = Decimal("0")
     rewards_mining_staking_income_eur: Decimal = Decimal("0")
@@ -218,6 +219,7 @@ class TaxYearFilingMatrix(BaseModel):
     generated_at: str
     rows: list[TaxYearFilingMatrixRow] = Field(default_factory=list)
     ready_years: list[int] = Field(default_factory=list)
+    conservative_ready_years: list[int] = Field(default_factory=list)
     review_years: list[int] = Field(default_factory=list)
     blocked_years: list[int] = Field(default_factory=list)
     ascii_table: str

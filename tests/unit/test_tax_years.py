@@ -1031,6 +1031,54 @@ def test_tax_year_filing_matrix_summarizes_year_actions(tmp_path):
     assert "SO 0.00 EUR" in row.display_line
 
 
+def test_tax_year_filing_matrix_marks_conservative_snapshot_ready(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    snapshot_dir = tmp_path / "var" / "bmf_filing_readiness"
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "latest_bmf_filing_readiness_2021_2025.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-22T00:00:00+00:00",
+                "years": [
+                    {
+                        "year": 2024,
+                        "filing_status": "conservative_appendix",
+                        "status_label": "Konservativ belegbar mit Beilage",
+                        "bmf_ready": False,
+                        "can_file_with_conservative_appendix": True,
+                        "blocking_gap_codes": [],
+                        "review_gap_codes": ["external_or_unknown_origin_documented"],
+                        "appendix_status": "review",
+                        "appendix_items_count": 3,
+                        "appendix_manual_evidence_required_count": 0,
+                        "taxable_private_disposals_eur": "18490.21",
+                        "rewards_mining_staking_income_eur": "1097.06",
+                        "derivative_pnl_eur": "0",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    matrix = TaxYearService(store).filing_matrix()
+    row = matrix.rows[0]
+
+    assert row.year == 2024
+    assert row.action_status == "conservative_ready"
+    assert row.export_ready is True
+    assert row.warnings_count == 1
+    assert row.checklist_counts.get("pruefen", 0) == 0
+    assert row.checklist_counts["beilegen"] == 1
+    assert row.bmf_closure_appendix_manual_evidence_required_count == 0
+    assert matrix.ready_years == []
+    assert matrix.conservative_ready_years == [2024]
+    assert matrix.review_years == []
+    assert matrix.blocked_years == []
+    assert "Konservativ belegbar" in row.next_action
+    assert "conservative_ready" in matrix.ascii_table
+
+
 def test_tax_year_correction_map_guides_prior_year_review(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
