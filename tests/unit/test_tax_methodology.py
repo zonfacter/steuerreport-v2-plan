@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.tax_methodology import TaxBmfClosureBacklogReport, TaxBmfFilingReadinessReport
 from steuerreport_v2.contracts.events import CanonicalEventCreate
+from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax import TaxService
@@ -352,6 +353,52 @@ def test_tax_methodology_blocks_unresolved_wallet_fifo_inbound_provenance(tmp_pa
     gap = next(gap for gap in report.gaps if gap.code == "wallet_fifo_unresolved_inbound_provenance")
     assert gap.count == 1
     assert gap.blocks_bmf_ready is True
+
+
+def test_tax_methodology_does_not_block_documented_fiat_purchase_provenance(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(source="binance", filename="Binance-Fiat-Buy-History.xlsx", file_hash="methodology-fiat-buy")
+    )
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json='{"Spend Amount":"1000.00 EUR","Receive Amount":"1169.434027 USDT","Transaction ID":"fiat-buy-tx"}',
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2021, 4, 19, 17, 16, 48, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="USDT",
+                quantity=Decimal("1169.434027"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("1000"),
+                account="binance",
+                tx_id="fiat-buy-tx",
+                raw_object_id=raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2021, 4, 20, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("10"),
+                quote_asset="USDT",
+                quote_quantity=Decimal("100"),
+                account="binance",
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = TaxMethodologyService(store).report(2021)
+
+    assert any(gap.code == "wallet_fifo_fiat_purchase_documented" for gap in report.gaps)
+    assert not any(gap.code == "wallet_fifo_unresolved_inbound_provenance" for gap in report.gaps)
 
 
 def test_tax_methodology_report_blocks_asset_fifo_recalculation_candidates(tmp_path):

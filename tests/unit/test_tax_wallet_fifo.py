@@ -842,6 +842,67 @@ def test_wallet_fifo_provenance_closure_summarizes_unverified_cex_and_opening_ba
     assert response.json()["data"]["documented_non_live_count"] == 1
 
 
+def test_wallet_fifo_provenance_closure_documents_binance_fiat_purchase(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(source="binance", filename="Binance-Fiat-Buy-History.xlsx", file_hash="fiat-buy")
+    )
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=3,
+            payload_json=json.dumps(
+                {
+                    "Fee": "20.00 EUR",
+                    "Method": "Credit Card",
+                    "Price": "0.83801222 USDT/EUR",
+                    "Receive Amount": "1169.434027 USDT",
+                    "Spend Amount": "1000.00 EUR",
+                    "Status": "Successful",
+                    "Time": "21-04-19 17:16:48",
+                    "Transaction ID": "fiat-buy-tx",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2021, 4, 19, 17, 16, 48, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="USDT",
+                quantity=Decimal("1169.434027"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("1000"),
+                account="binance",
+                tx_id="fiat-buy-tx",
+                raw_object_id=raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2021, 4, 20, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("10"),
+                quote_asset="USDT",
+                quote_quantity=Decimal("100"),
+                account="binance",
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2021)
+    item = report.items[0]
+
+    assert item.category == "fiat_purchase"
+    assert item.closure_status == "documented_fiat_purchase"
+    assert item.requires_review is False
+    assert report.documented_fiat_purchase_count == 1
+    assert report.review_required_count == 0
+
+
 def test_wallet_fifo_marks_reviewed_cex_exchange_outflow_anchor_as_resolved(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     txid = "cex-reviewed-deposit-tx"

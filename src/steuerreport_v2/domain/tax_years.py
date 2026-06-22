@@ -2397,6 +2397,7 @@ class TaxYearService:
             manual_evidence_required = item.requires_review
             conservative_treatment_available = item.closure_status in {
                 "documented_non_live_opening_balance",
+                "documented_fiat_purchase",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
             }
@@ -2408,6 +2409,16 @@ class TaxYearService:
                 filing_disclosure = (
                     "Anfangsbestand separat im Belegpaket ausweisen und nicht als "
                     "Portfolio-Live-Wallet oder neuen Transfer eskalieren."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_fiat_purchase":
+                recommended_tax_treatment = (
+                    "Als belegte Anschaffung gegen Fiat fuehren; kein Transfer, "
+                    "keine steuerneutrale Umbuchung und keine offene Senderwallet."
+                )
+                filing_disclosure = (
+                    "Binance-Fiat-Buy-History mit Betrag, Fiat-Gegenwert, "
+                    "Zeitstempel und Transaction-ID im Belegpaket ausweisen."
                 )
                 manual_evidence_required = False
             elif item.closure_status == "external_or_unknown_origin_documented":

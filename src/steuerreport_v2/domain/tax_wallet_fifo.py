@@ -123,6 +123,7 @@ class WalletFifoPreviewService:
     _SOLANA_ORIGIN_TRACE_CACHE: dict[tuple[str, str, str, str, str], WalletFifoSolanaOriginTrace] = {}
     _PREVIEW_CACHE_TTL_SECONDS = 300
     _PREVIEW_CACHE: dict[tuple[str, str, tuple[object, ...]], tuple[float, WalletFifoPreviewReport]] = {}
+    _PROVENANCE_CLOSURE_CACHE: dict[tuple[str, int, int], tuple[float, WalletFifoYearProvenanceClosureReport]] = {}
     _PREVIEW_DISK_CACHE_DIRNAME = ".steuerreport_v2_cache/wallet_fifo_preview"
     DEFAULT_CEX_SENDER_OWNERSHIP_DIR = Path("/workspace/steuerreport-v2-plan/var/cex_deposit_sender_ownership")
     KNOWN_OWN_SOLANA_WALLETS = {
@@ -2258,6 +2259,12 @@ class WalletFifoPreviewService:
         )
 
     def provenance_closure_report(self, year: int, *, limit: int = 50) -> WalletFifoYearProvenanceClosureReport:
+        normalized_limit = max(1, min(limit, 500))
+        cache_key = (str(self.store.path), year, normalized_limit)
+        now = time.monotonic()
+        cached = self._PROVENANCE_CLOSURE_CACHE.get(cache_key)
+        if cached is not None and now - cached[0] <= self._PREVIEW_CACHE_TTL_SECONDS:
+            return cached[1].model_copy(deep=True)
         priority_report = self.provenance_priorities(year=year, limit=500)
         solana_batch = self.solana_provenance_batch_latest(year=year, asset="SOL")
         cex_sender = self.cex_sender_ownership_latest(year=year, cex="binance", network="SOL")
@@ -2267,6 +2274,14 @@ class WalletFifoPreviewService:
             if decision.asset
         }
         items: list[WalletFifoYearProvenanceClosureItem] = []
+        canonical_events = self.store.list_canonical_events()
+        raw_evidence_by_id = self._raw_evidence_map(
+            [
+                event.raw_object_id
+                for event in canonical_events
+                if event.raw_object_id and event.event_time.year == year and event.source.lower() == "binance"
+            ]
+        )
         for group in priority_report.groups:
             category = "unresolved_provenance"
             closure_status = "review_required"
@@ -2284,6 +2299,17 @@ class WalletFifoPreviewService:
                     f"?asset={group.asset}&pool_id={group.pool_id}"
                 )
                 action = "Als Anfangsbestand in der Steuerbeilage ausweisen; nicht als Live-Transfer eskalieren."
+            elif self._provenance_group_documents_fiat_purchase(
+                year=year,
+                group=group,
+                canonical_events=canonical_events,
+                raw_evidence_by_id=raw_evidence_by_id,
+            ):
+                category = "fiat_purchase"
+                closure_status = "documented_fiat_purchase"
+                requires_review = False
+                tax_hint = "Belegte Anschaffung gegen Fiat; kein Wallet-/Depot-Transfer und keine steuerneutrale Umbuchung."
+                action = "Als EUR-Anschaffung im Jahresbeleg ausweisen; nicht als offene Transfer-Herkunft eskalieren."
             elif group.source.lower() == "binance" and group.asset.upper() == "SOL":
                 category = "cex_deposit_sender_ownership"
                 cex_status = cex_status_by_asset.get(group.asset.upper())
@@ -2334,13 +2360,14 @@ class WalletFifoPreviewService:
                     recommended_action=action,
                 )
             )
-        shown = items[: max(1, min(limit, 500))]
-        return WalletFifoYearProvenanceClosureReport(
+        shown = items[:normalized_limit]
+        report = WalletFifoYearProvenanceClosureReport(
             generated_at=datetime.now(timezone.utc),
             year=year,
             unresolved_inbound_provenance_count=priority_report.unresolved_inbound_provenance_count,
             groups_count=priority_report.groups_count,
             documented_non_live_count=sum(1 for item in items if item.closure_status == "documented_non_live_opening_balance"),
+            documented_fiat_purchase_count=sum(1 for item in items if item.closure_status == "documented_fiat_purchase"),
             external_or_unknown_count=sum(1 for item in items if item.closure_status == "external_or_unknown_origin_documented"),
             unverified_cex_count=sum(1 for item in items if item.closure_status == "unverified_cex_deposit_sender"),
             tax_neutral_candidate_count=sum(1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"),
@@ -2355,6 +2382,46 @@ class WalletFifoPreviewService:
                 "oder Review-Entscheidungen."
             ),
         )
+        self._PROVENANCE_CLOSURE_CACHE[cache_key] = (now, report.model_copy(deep=True))
+        return report
+
+    def _provenance_group_documents_fiat_purchase(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> bool:
+        if group.source.lower() != "binance":
+            return False
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == "binance"
+            and event.asset.upper() == group.asset.upper()
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+            and event.quote_asset is not None
+            and event.quote_asset.upper() in {"EUR", "USD"}
+        ]
+        if len(group_events) != group.events_count:
+            return False
+        quantity_total = sum((event.quantity for event in group_events), Decimal("0"))
+        if quantity_total != group.quantity_total:
+            return False
+        for event in group_events:
+            evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            if evidence is None or evidence.source.lower() != "binance":
+                return False
+            filename = evidence.filename.lower()
+            payload = evidence.payload
+            if "fiat-buy" not in filename and not (
+                "Spend Amount" in payload and "Receive Amount" in payload and "Transaction ID" in payload
+            ):
+                return False
+        return True
 
     def provenance_events(
         self,

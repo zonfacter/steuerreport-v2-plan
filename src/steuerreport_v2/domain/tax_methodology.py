@@ -460,7 +460,7 @@ class TaxMethodologyService:
         appendix = self.tax_years.bmf_closure_appendix(year)
         items: list[TaxBmfClosureBacklogItem] = []
         for appendix_item in appendix.items:
-            if appendix_item.closure_status == "documented_non_live_opening_balance":
+            if appendix_item.closure_status in {"documented_non_live_opening_balance", "documented_fiat_purchase"}:
                 continue
             items.append(
                 TaxBmfClosureBacklogItem(
@@ -604,6 +604,11 @@ class TaxMethodologyService:
             year=year,
             unmatched_count=wallet_fifo.unmatched_count,
         )
+        wallet_fifo_documented_fiat_purchase_count = self._documented_fiat_purchase_count(
+            wallet_fifo_service,
+            year=year,
+            unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+        )
         asset_fifo_review = self.tax_years.asset_fifo_correction_review(
             year,
             limit=200,
@@ -624,6 +629,7 @@ class TaxMethodologyService:
             wallet_fifo_exchange_sequencing_count=wallet_fifo_exchange_sequencing_count,
             wallet_fifo_delta_eur=wallet_fifo.delta_gain_loss_eur,
             wallet_fifo_unresolved_provenance_count=wallet_fifo.unresolved_inbound_provenance_count,
+            wallet_fifo_documented_fiat_purchase_count=wallet_fifo_documented_fiat_purchase_count,
             asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
             asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
         )
@@ -684,6 +690,22 @@ class TaxMethodologyService:
             if self._is_documented_exchange_sequencing_gap(wallet_fifo_service, gap, events):
                 documented += 1
         return documented
+
+    def _documented_fiat_purchase_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return sum(
+            item.events_count
+            for item in closure.items
+            if item.closure_status == "documented_fiat_purchase"
+        )
 
     def _is_documented_exchange_sequencing_gap(
         self,
@@ -868,6 +890,7 @@ class TaxMethodologyService:
         wallet_fifo_exchange_sequencing_count: int,
         wallet_fifo_delta_eur: Decimal,
         wallet_fifo_unresolved_provenance_count: int,
+        wallet_fifo_documented_fiat_purchase_count: int,
         asset_fifo_possible_recalculation_count: int,
         asset_fifo_attribution_review_count: int,
     ) -> list[TaxMethodologyGap]:
@@ -946,18 +969,40 @@ class TaxMethodologyService:
                     blocks_bmf_ready=False,
                 )
             )
-        if wallet_fifo_unresolved_provenance_count:
+        unresolved_after_documented_fiat = max(
+            0,
+            wallet_fifo_unresolved_provenance_count - wallet_fifo_documented_fiat_purchase_count,
+        )
+        if wallet_fifo_documented_fiat_purchase_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_fiat_purchase_documented",
+                    severity="info",
+                    message=(
+                        f"{wallet_fifo_documented_fiat_purchase_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse sind durch Fiat-Kaufhistorie belegt."
+                    ),
+                    count=wallet_fifo_documented_fiat_purchase_count,
+                    action=(
+                        "Als EUR-/Fiat-Anschaffung im Jahresbeleg dokumentieren; "
+                        "nicht als Transfer-Herkunft eskalieren."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    blocks_bmf_ready=False,
+                )
+            )
+        if unresolved_after_documented_fiat:
             gaps.append(
                 TaxMethodologyGap(
                     code="wallet_fifo_unresolved_inbound_provenance",
                     severity="blocker",
                     message=(
-                        f"{wallet_fifo_unresolved_provenance_count} Wallet-/Depot-FIFO-"
+                        f"{unresolved_after_documented_fiat} Wallet-/Depot-FIFO-"
                         "Zufluss/Zufluesse wurden nur provisorisch fortgeschrieben; "
                         "die Herkunft ist noch nicht als eigener Transfer, Bridge "
                         "oder Anfangsbestand belegt."
                     ),
-                    count=wallet_fifo_unresolved_provenance_count,
+                    count=unresolved_after_documented_fiat,
                     action=(
                         "Herkunft mit Withdrawal-/Deposit-/Onchain-Beleg verknuepfen "
                         "oder als belegten Anfangsbestand fachlich entscheiden."
@@ -1251,6 +1296,7 @@ class TaxMethodologyService:
             "wallet_fifo_delta_present": "Wallet-FIFO Delta dokumentieren",
             "wallet_fifo_evidence_overlay_ok": "Wallet-FIFO Evidence vorhanden",
             "wallet_fifo_unresolved_inbound_provenance": "Wallet-FIFO Zufluss-Herkunft offen",
+            "wallet_fifo_fiat_purchase_documented": "Wallet-FIFO Fiat-Anschaffung dokumentiert",
             "asset_fifo_possible_recalculation": "Asset-FIFO moegliche Neuberechnung",
             "asset_fifo_quote_attribution_documented": "Quote-/Attribution dokumentiert",
             "external_inflows_need_evidence": "Externe Zufluesse klaeren",
