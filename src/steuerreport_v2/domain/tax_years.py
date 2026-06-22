@@ -105,6 +105,7 @@ class TaxYearService:
         self._status_cache: dict[int, TaxYearStatus] = {}
         self._declaration_guide_cache: dict[int, TaxDeclarationGuide] = {}
         self._external_inflow_report_cache: dict[tuple[int, int], TaxExternalInflowReport] = {}
+        self._bmf_closure_appendix_cache: dict[tuple[int, int], TaxYearBmfClosureAppendix] = {}
 
     def summary(self) -> TaxYearsSummary:
         years = self._available_years()
@@ -3173,6 +3174,10 @@ class TaxYearService:
     def bmf_closure_appendix(self, year: int, *, limit: int = 500) -> TaxYearBmfClosureAppendix:
         from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 
+        cache_key = (year, limit)
+        cached = self._bmf_closure_appendix_cache.get(cache_key)
+        if cached is not None:
+            return cached.model_copy(deep=True)
         closure = WalletFifoPreviewService(self.store).provenance_closure_report(year=year, limit=limit)
         items: list[TaxYearBmfClosureAppendixItem] = []
         for item in closure.items:
@@ -3385,7 +3390,7 @@ class TaxYearService:
             status = "review"
         else:
             status = "ready"
-        return TaxYearBmfClosureAppendix(
+        report = TaxYearBmfClosureAppendix(
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
             status=status,
@@ -3406,6 +3411,8 @@ class TaxYearService:
                 "Wallets angenommen."
             ),
         )
+        self._bmf_closure_appendix_cache[cache_key] = report.model_copy(deep=True)
+        return report
 
     def external_inflow_report(self, year: int, *, limit: int = 200) -> TaxExternalInflowReport:
         cache_key = (year, limit)
