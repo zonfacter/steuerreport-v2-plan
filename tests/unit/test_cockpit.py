@@ -292,6 +292,29 @@ def test_cockpit_summary_reports_review_and_price_tasks(tmp_path):
     assert {task.target for task in summary.tasks} >= {"review", "portfolio"}
 
 
+def test_cockpit_ignores_unpriced_live_token_identifiers_for_price_task(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    live_at = datetime.now(timezone.utc)
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="solana_wallet:2DWZNY:test",
+                connector_id="solana_wallet",
+                asset="2DWZNY...NRQC",
+                quantity=Decimal("1000000"),
+                source="solscan_pro:/account/portfolio",
+                fetched_at=live_at,
+            )
+        ]
+    )
+
+    summary = CockpitService(store).summary()
+
+    assert summary.price_coverage.missing_assets == []
+    assert summary.price_coverage.coverage_pct == Decimal("100.00")
+    assert not any(task.title == "Preisdeckung vervollstaendigen" for task in summary.tasks)
+
+
 def test_cockpit_summary_api_contract(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     _build_portfolio(store)

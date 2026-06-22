@@ -605,6 +605,8 @@ class CockpitService:
                     if amount == 0:
                         continue
                     price = fiat_price_point(symbol) or prices.get(symbol)
+                    if price is None and self._is_unpriced_live_token_identifier(symbol):
+                        continue
                     value = amount * price.price_eur if price is not None else Decimal("0")
                     item = asset_totals.setdefault(
                         symbol,
@@ -815,8 +817,19 @@ class CockpitService:
                 continue
             if fiat_price_point(symbol) is not None or prices.get(symbol) is not None:
                 continue
+            if self._is_unpriced_live_token_identifier(symbol):
+                continue
             missing.add(symbol)
         return sorted(missing)
+
+    @staticmethod
+    def _is_unpriced_live_token_identifier(symbol: str) -> bool:
+        normalized = str(symbol or "").strip().upper()
+        if "..." in normalized:
+            return True
+        if len(normalized) >= 24 and normalized.replace("_", "").replace("-", "").isalnum():
+            return True
+        return False
 
     def _live_reconciliation_status(
         self,
