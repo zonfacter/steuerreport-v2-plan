@@ -172,6 +172,53 @@ class TaxBmfFilingReadinessSnapshot(BaseModel):
     note: str
 
 
+class TaxBmfClosureBacklogItem(BaseModel):
+    year: int
+    priority: int = 0
+    category: Literal[
+        "wallet_fifo_provenance",
+        "solana_batch",
+        "asset_fifo_review",
+        "wallet_fifo_delta",
+        "exchange_sequencing",
+        "documentation",
+    ]
+    blocker_type: str
+    severity: TaxMethodologySeverity
+    asset: str | None = None
+    source: str | None = None
+    pool_id: str | None = None
+    events_count: int = 0
+    quantity_total: Decimal = Decimal("0")
+    exposure_eur: Decimal = Decimal("0")
+    closure_status: str | None = None
+    required_evidence: str
+    next_action: str
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class TaxBmfClosureBacklogYear(BaseModel):
+    year: int
+    status: TaxMethodologyStatus
+    bmf_ready: bool = False
+    blocker_items_count: int = 0
+    review_items_count: int = 0
+    total_exposure_eur: Decimal = Decimal("0")
+    top_actions: list[str] = Field(default_factory=list)
+    items: list[TaxBmfClosureBacklogItem] = Field(default_factory=list)
+
+
+class TaxBmfClosureBacklogReport(BaseModel):
+    generated_at: str
+    available_years: list[int] = Field(default_factory=list)
+    years: list[TaxBmfClosureBacklogYear] = Field(default_factory=list)
+    blocker_items_count: int = 0
+    review_items_count: int = 0
+    total_exposure_eur: Decimal = Decimal("0")
+    next_year_to_close: int | None = None
+    methodology: str
+
+
 class TaxRewardBmfRecheckYear(BaseModel):
     year: int
     status: TaxMethodologyStatus

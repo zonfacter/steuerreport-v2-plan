@@ -8,6 +8,9 @@ from pathlib import Path
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionItem,
     TaxBmfActionPlan,
+    TaxBmfClosureBacklogItem,
+    TaxBmfClosureBacklogReport,
+    TaxBmfClosureBacklogYear,
     TaxBmfFilingReadinessReport,
     TaxBmfFilingReadinessSnapshot,
     TaxBmfFilingReadinessYear,
@@ -367,6 +370,154 @@ class TaxMethodologyService:
             if candidate.exists():
                 return candidate
         return candidates[-1]
+
+    def bmf_closure_backlog(self, year: int | None = None) -> TaxBmfClosureBacklogReport:
+        generated_at = self._now()
+        available_years = [year] if year is not None else [
+            item_year for item_year in self._available_years() if 2021 <= item_year <= 2025
+        ]
+        rows = [self._bmf_closure_backlog_year(item_year) for item_year in available_years]
+        blockers = sum(row.blocker_items_count for row in rows)
+        reviews = sum(row.review_items_count for row in rows)
+        total_exposure = sum((row.total_exposure_eur for row in rows), Decimal("0"))
+        next_year = next((row.year for row in rows if row.blocker_items_count), None)
+        return TaxBmfClosureBacklogReport(
+            generated_at=generated_at,
+            available_years=available_years,
+            years=rows,
+            blocker_items_count=blockers,
+            review_items_count=reviews,
+            total_exposure_eur=total_exposure,
+            next_year_to_close=next_year,
+            methodology=(
+                "Read-only BMF-Closure-Backlog aus Methodology-Gaps und "
+                "BMF-Closure-Appendix. Priorisiert technische Blocker, offene "
+                "Wallet-/Depot-Herkunft, Asset-FIFO-Reviews und reine "
+                "Dokumentationswarnungen. Es werden keine Steuerdaten, Lots, "
+                "Imports, Preise oder Review-Entscheidungen geschrieben."
+            ),
+        )
+
+    def _bmf_closure_backlog_year(self, year: int) -> TaxBmfClosureBacklogYear:
+        report = self.report(year)
+        appendix = self.tax_years.bmf_closure_appendix(year)
+        items: list[TaxBmfClosureBacklogItem] = []
+        for appendix_item in appendix.items:
+            if appendix_item.closure_status == "documented_non_live_opening_balance":
+                continue
+            items.append(
+                TaxBmfClosureBacklogItem(
+                    year=year,
+                    priority=self._backlog_priority(
+                        appendix_item.closure_status,
+                        appendix_item.carried_cost_basis_eur_total,
+                    ),
+                    category=self._backlog_category_from_appendix(appendix_item.closure_status),
+                    blocker_type=appendix_item.closure_status,
+                    severity="blocker" if appendix_item.manual_evidence_required else "warning",
+                    asset=appendix_item.asset,
+                    source=appendix_item.source,
+                    pool_id=appendix_item.pool_id,
+                    events_count=appendix_item.events_count,
+                    quantity_total=appendix_item.quantity_total,
+                    exposure_eur=appendix_item.carried_cost_basis_eur_total,
+                    closure_status=appendix_item.closure_status,
+                    required_evidence=self._required_evidence_for_appendix(appendix_item.closure_status),
+                    next_action=appendix_item.recommended_action,
+                    evidence_refs=appendix_item.evidence_refs,
+                )
+            )
+
+        appendix_blockers = {
+            item.blocker_type
+            for item in items
+            if item.category in {"wallet_fifo_provenance", "solana_batch"}
+        }
+        for gap in report.gaps:
+            if gap.code == "wallet_fifo_unresolved_inbound_provenance" and appendix_blockers:
+                continue
+            if gap.code in {"wallet_fifo_evidence_overlay_ok", "asset_fifo_quote_attribution_documented"}:
+                continue
+            items.append(
+                TaxBmfClosureBacklogItem(
+                    year=year,
+                    priority=self._backlog_priority(gap.code, Decimal("0")),
+                    category=self._backlog_category_from_gap(gap.code),
+                    blocker_type=gap.code,
+                    severity=gap.severity,
+                    events_count=gap.count,
+                    required_evidence=self._required_evidence_for_gap(gap.code),
+                    next_action=gap.action,
+                    evidence_refs=[gap.evidence_ref] if gap.evidence_ref else [],
+                )
+            )
+
+        items.sort(key=lambda item: (item.priority, item.year, item.asset or "", item.source or "", item.blocker_type))
+        blocker_count = sum(1 for item in items if item.severity == "blocker")
+        review_count = sum(1 for item in items if item.severity != "blocker")
+        exposure = sum((item.exposure_eur for item in items), Decimal("0"))
+        return TaxBmfClosureBacklogYear(
+            year=year,
+            status=report.status,
+            bmf_ready=report.bmf_ready,
+            blocker_items_count=blocker_count,
+            review_items_count=review_count,
+            total_exposure_eur=exposure,
+            top_actions=[item.next_action for item in items[:3]],
+            items=items,
+        )
+
+    def _backlog_priority(self, code: str, exposure_eur: Decimal) -> int:
+        if code == "solana_batch_incomplete":
+            return 10
+        if code == "asset_fifo_possible_recalculation":
+            return 20
+        if code in {"unverified_cex_deposit_sender", "tax_neutral_candidate_review_required"}:
+            return 30
+        if code in {"review_required", "external_or_unknown_origin_documented"}:
+            return 40 if abs(exposure_eur) >= Decimal("1000") else 50
+        if code == "wallet_fifo_unresolved_inbound_provenance":
+            return 45
+        if code == "wallet_fifo_delta_present":
+            return 70
+        if code == "wallet_fifo_exchange_sequencing_documented":
+            return 80
+        return 90
+
+    def _backlog_category_from_appendix(self, closure_status: str) -> str:
+        if closure_status == "solana_batch_incomplete":
+            return "solana_batch"
+        return "wallet_fifo_provenance"
+
+    def _backlog_category_from_gap(self, code: str) -> str:
+        if code == "asset_fifo_possible_recalculation":
+            return "asset_fifo_review"
+        if code == "wallet_fifo_delta_present":
+            return "wallet_fifo_delta"
+        if code == "wallet_fifo_exchange_sequencing_documented":
+            return "exchange_sequencing"
+        if code.startswith("wallet_fifo"):
+            return "wallet_fifo_provenance"
+        return "documentation"
+
+    def _required_evidence_for_appendix(self, closure_status: str) -> str:
+        evidence_by_status = {
+            "solana_batch_incomplete": "Solana-Provenance-Batch erneut erzeugen oder Raw-TX-Belege nachziehen.",
+            "unverified_cex_deposit_sender": "CEX-Deposit-Beleg plus Sender-Ownership-Nachweis.",
+            "tax_neutral_candidate_review_required": "Review-Decision mit TXID, Sender, Empfaenger, Menge und FIFO-Fortfuehrung.",
+            "external_or_unknown_origin_documented": "Service-/Programm-/Exchange-Kontext oder konservative Offenlegung.",
+            "review_required": "Withdrawal-/Deposit-/Onchain-Beleg mit Adresse, TXID, Zeitstempel und Menge.",
+        }
+        return evidence_by_status.get(closure_status, "Fachlichen Beleg und Review-Entscheidung nachreichen.")
+
+    def _required_evidence_for_gap(self, code: str) -> str:
+        evidence_by_code = {
+            "asset_fifo_possible_recalculation": "Asset-FIFO-Correction-Review und Entscheidung, ob Tax-Lines nachgerechnet werden muessen.",
+            "wallet_fifo_delta_present": "Wallet-FIFO-Delta im Jahresbeleg dokumentieren.",
+            "wallet_fifo_exchange_sequencing_documented": "Exchange-Sequencing-Ausnahme mit Gap-Diagnose dokumentieren.",
+            "wallet_fifo_unresolved_inbound_provenance": "Herkunft mit Withdrawal-/Deposit-/Onchain-Beleg verknuepfen.",
+        }
+        return evidence_by_code.get(code, "Methodology-Gap fachlich dokumentieren.")
 
     def status(self, year: int) -> TaxYearComplianceStatus:
         return self._status_from_report(self.report(year))

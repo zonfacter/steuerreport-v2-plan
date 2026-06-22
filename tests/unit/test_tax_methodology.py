@@ -215,6 +215,84 @@ def test_bmf_filing_readiness_snapshot_roundtrip(tmp_path):
     assert snapshot.report.conservative_appendix_years == [2024]
 
 
+def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service._available_years = lambda: [2023]
+    service.report = lambda year: SimpleNamespace(
+        year=year,
+        status="blocked",
+        bmf_ready=False,
+        gaps=[
+            SimpleNamespace(
+                code="wallet_fifo_unresolved_inbound_provenance",
+                severity="blocker",
+                count=8,
+                blocks_bmf_ready=True,
+                action="Herkunft klaeren.",
+                evidence_ref="/origin",
+            ),
+            SimpleNamespace(
+                code="asset_fifo_possible_recalculation",
+                severity="blocker",
+                count=1,
+                blocks_bmf_ready=True,
+                action="Asset-FIFO Review.",
+                evidence_ref="/asset-fifo",
+            ),
+            SimpleNamespace(
+                code="wallet_fifo_delta_present",
+                severity="warning",
+                count=1,
+                blocks_bmf_ready=False,
+                action="Delta dokumentieren.",
+                evidence_ref="/delta",
+            ),
+        ],
+    )
+    service.tax_years.bmf_closure_appendix = lambda year: SimpleNamespace(
+        items=[
+            SimpleNamespace(
+                closure_status="solana_batch_incomplete",
+                manual_evidence_required=True,
+                asset="SOL",
+                source="solana_rpc",
+                pool_id="solana:wallet",
+                events_count=4,
+                quantity_total=Decimal("55.29"),
+                carried_cost_basis_eur_total=Decimal("1000"),
+                recommended_action="Solana Batch erneuern.",
+                evidence_refs=["/batch"],
+            ),
+            SimpleNamespace(
+                closure_status="documented_non_live_opening_balance",
+                manual_evidence_required=False,
+                asset="USDT",
+                source="opening-balance",
+                pool_id="opening:wallet",
+                events_count=1,
+                quantity_total=Decimal("3"),
+                carried_cost_basis_eur_total=Decimal("3"),
+                recommended_action="Archivieren.",
+                evidence_refs=["/opening"],
+            ),
+        ]
+    )
+
+    report = service.bmf_closure_backlog()
+    year = report.years[0]
+
+    assert report.next_year_to_close == 2023
+    assert year.blocker_items_count == 2
+    assert year.review_items_count == 1
+    assert [item.blocker_type for item in year.items[:2]] == [
+        "solana_batch_incomplete",
+        "asset_fifo_possible_recalculation",
+    ]
+    assert all(item.blocker_type != "documented_non_live_opening_balance" for item in year.items)
+    assert year.items[0].required_evidence.startswith("Solana-Provenance-Batch")
+
+
 def test_tax_methodology_blocks_unresolved_wallet_fifo_inbound_provenance(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_canonical_events(
