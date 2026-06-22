@@ -9009,6 +9009,10 @@ function TaxPanel({
             <FileJson size={16} />
             Jahres-Erklaerung JSON
           </button>
+          <button type="button" onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/filing-checklist.csv`)}>
+            <FileDown size={16} />
+            Checkliste CSV
+          </button>
           <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/evidence`)}>
             <FileJson size={16} />
             Belegkarte JSON
