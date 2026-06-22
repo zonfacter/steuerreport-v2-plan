@@ -1213,6 +1213,12 @@ class TaxYearService:
             ),
         )
 
+    def _year_correction_map_from_readiness_snapshot(self, year: int) -> TaxYearCorrectionMap | None:
+        snapshot_map = self._correction_map_from_readiness_snapshot()
+        if snapshot_map is None:
+            return None
+        return next((item for item in snapshot_map.years if item.year == year), None)
+
     def _correction_map_from_readiness_snapshot(self) -> TaxYearsCorrectionMap | None:
         path = self._bmf_filing_readiness_snapshot_path()
         if path is None:
@@ -1322,18 +1328,21 @@ class TaxYearService:
     ) -> list[TaxYearCorrectionMapLine]:
         lines: list[TaxYearCorrectionMapLine] = []
         order = 1
-        for label, amount, target in (
+        for topic, label, amount, target in (
             (
+                "private_disposal",
                 "Privates Veraeusserungsergebnis",
                 taxable_private,
                 "Anlage SO: Gewinn/Verlust aus privaten Veraeusserungsgeschaeften mit Kryptowerten",
             ),
             (
+                "income",
                 "Rewards / Mining / Staking",
                 rewards_income,
                 "Sonstige Einkuenfte bzw. EÜR-nahe Einnahmen pruefen",
             ),
             (
+                "derivative",
                 "Derivate / Termingeschaefte",
                 derivative_pnl,
                 "Nicht mit privaten Krypto-FIFO-Zeilen vermischen",
@@ -1343,7 +1352,7 @@ class TaxYearService:
                 lines.append(
                     TaxYearCorrectionMapLine(
                         order=order,
-                        topic="entry",
+                        topic=topic,
                         label=label,
                         action_category="korrigieren_pruefen",
                         amount_eur=amount,
@@ -1424,6 +1433,9 @@ class TaxYearService:
         return lines
 
     def year_correction_map(self, year: int) -> TaxYearCorrectionMap:
+        snapshot_map = self._year_correction_map_from_readiness_snapshot(year)
+        if snapshot_map is not None:
+            return snapshot_map
         summary = self.filing_summary(year)
         lines: list[TaxYearCorrectionMapLine] = []
         order = 1
@@ -1711,8 +1723,6 @@ class TaxYearService:
         candidates = [
             self.store.path.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
             self.store.path.parent.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
-            Path.cwd() / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
-            Path("/workspace/steuerreport-v2-plan/var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json"),
         ]
         for candidate in candidates:
             if candidate.exists():

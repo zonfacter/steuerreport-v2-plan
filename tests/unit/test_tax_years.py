@@ -1083,6 +1083,47 @@ def test_tax_year_correction_map_guides_prior_year_review(tmp_path):
     assert "Amendment_Review_Recommended" in all_csv_response.text
 
 
+def test_tax_year_correction_map_uses_local_readiness_snapshot_for_single_year(tmp_path):
+    snapshot_dir = tmp_path / "var" / "bmf_filing_readiness"
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "latest_bmf_filing_readiness_2021_2025.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-22T00:00:00Z",
+                "years": [
+                    {
+                        "year": 2024,
+                        "filing_status": "conservative_appendix",
+                        "status_label": "Konservativ belegbar",
+                        "bmf_ready": False,
+                        "can_file_with_conservative_appendix": True,
+                        "appendix_status": "ready",
+                        "appendix_items_count": 2,
+                        "appendix_manual_evidence_required_count": 0,
+                        "taxable_private_disposals_eur": "18490.205",
+                        "rewards_mining_staking_income_eur": "1097.06",
+                        "derivative_pnl_eur": "0",
+                        "blocking_gap_codes": [],
+                        "review_gap_codes": ["wallet_fifo_delta_present"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+
+    report = TaxYearService(store).year_correction_map(2024)
+
+    assert report.filing_status == "Konservativ belegbar"
+    assert report.taxable_private_disposals_eur == Decimal("18490.205")
+    assert report.rewards_mining_staking_income_eur == Decimal("1097.06")
+    assert report.amendment_review_recommended is True
+    assert [line.topic for line in report.lines[:2]] == ["private_disposal", "income"]
+    assert report.lines[-1].evidence_ref == "/api/v1/export/tax-years/2024/evidence-package.zip"
+    assert "Snapshot" in report.methodology
+
+
 def test_tax_year_filing_summary_surfaces_cex_fifo_anchor_status(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
