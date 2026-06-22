@@ -1179,10 +1179,11 @@ def test_wallet_fifo_provenance_closure_counts_fairspot_staking_return(tmp_path)
     item = report.items[0]
 
     assert report.documented_fairspot_staking_return_count == 1
+    assert report.documented_legacy_hnt_external_payment_count == 1
     assert item.pool_id == f"helium:{main_wallet}"
-    assert item.closure_status == "review_required"
-    assert item.requires_review is True
-    assert "1 von 2" in item.tax_treatment_hint
+    assert item.closure_status == "documented_legacy_hnt_payment_provenance"
+    assert item.requires_review is False
+    assert "externe Legacy-HNT-Zahlung" in item.tax_treatment_hint
 
 
 def test_wallet_fifo_provenance_closure_documents_legacy_counterparty_mirror(tmp_path):
@@ -1265,6 +1266,64 @@ def test_wallet_fifo_provenance_closure_documents_legacy_counterparty_mirror(tmp
     assert item.pool_id == f"helium:{short_service_wallet}"
     assert item.closure_status == "documented_legacy_counterparty_mirror"
     assert item.requires_review is False
+
+
+def test_wallet_fifo_provenance_closure_documents_exchange_deposit_history(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(source="pionex", filename="deposit-withdraw.csv", file_hash="pionex-usdt-deposit")
+    )
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "amount": "200.00000000",
+                    "coin": "USDT",
+                    "date(UTC+0)": "2021-12-25 16:23:04",
+                    "fee": "0",
+                    "network": "TRC20",
+                    "tx_type": "DEPOSIT",
+                    "txid": "b742f811bf6372301484d585166ebb0f334996185285c8fc91ced3830c724182",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2021, 12, 25, 16, 23, 4, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="USDT",
+                quantity=Decimal("200"),
+                account="pionex",
+                tx_id="b742f811bf6372301484d585166ebb0f334996185285c8fc91ced3830c724182",
+                raw_object_id=raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2021, 12, 26, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="BTC",
+                quantity=Decimal("0.004"),
+                quote_asset="USDT",
+                quote_quantity=Decimal("200"),
+                account="pionex",
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2021)
+    item = report.items[0]
+
+    assert report.documented_exchange_deposit_history_count == 1
+    assert item.pool_id == "pionex:pionex"
+    assert item.closure_status == "documented_exchange_deposit_history"
+    assert item.requires_review is False
+    assert "Sender-Ownership" in item.tax_treatment_hint
 
 
 def test_wallet_fifo_marks_reviewed_cex_exchange_outflow_anchor_as_resolved(tmp_path):

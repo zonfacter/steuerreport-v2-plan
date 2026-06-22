@@ -2402,6 +2402,8 @@ class TaxYearService:
                 "documented_legacy_hnt_cex_deposit_mirror",
                 "documented_fairspot_staking_return",
                 "documented_legacy_counterparty_mirror",
+                "documented_legacy_hnt_payment_provenance",
+                "documented_exchange_deposit_history",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
             }
@@ -2468,6 +2470,31 @@ class TaxYearService:
                     "Main-Legacy-Outflow mit TX-Hash, Zieladresse, Zeitstempel "
                     "und Menge beilegen. Steuerliche Behandlung des Main-Outflows "
                     "separat ueber Tax-Lines/Belegkette nachvollziehen."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_exchange_deposit_history":
+                recommended_tax_treatment = (
+                    "Als belegten Exchange-Deposit/externen Zufluss fuehren; keine "
+                    "steuerneutrale Eigenwallet-Umbuchung und keine FIFO-Fortfuehrung "
+                    "behaupten, solange Sender-Ownership fehlt."
+                )
+                filing_disclosure = (
+                    "Exchange-Deposit-History mit TXID, Netzwerk, Zeitstempel, Asset "
+                    "und Menge beilegen. Spaetere Sendernachweise koennen per Review "
+                    "zu Transfer/FIFO-Fortfuehrung nachgezogen werden."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_legacy_hnt_payment_provenance":
+                recommended_tax_treatment = (
+                    "Als belegte Legacy-HNT-Payment-Provenance fuehren. Fairspot-"
+                    "Ruecktransfers koennen als steuerneutraler Ruecktransfer "
+                    "dokumentiert werden; externe Payments ohne Sender-Ownership "
+                    "nicht als Eigenwallet-Transfer/FIFO-Fortfuehrung behaupten."
+                )
+                filing_disclosure = (
+                    "Helium-Raw-Evidence mit Payer/Payee, TX-Hash, Zeitstempel, "
+                    "Menge und Oracle-Wert beilegen. Externe Payment-Anteile "
+                    "konservativ offenlegen."
                 )
                 manual_evidence_required = False
             elif item.closure_status == "external_or_unknown_origin_documented":

@@ -549,6 +549,8 @@ class WalletFifoYearProvenanceClosureReport(BaseModel):
     documented_legacy_cex_deposit_mirror_count: int = 0
     documented_fairspot_staking_return_count: int = 0
     documented_legacy_counterparty_mirror_count: int = 0
+    documented_legacy_hnt_external_payment_count: int = 0
+    documented_exchange_deposit_history_count: int = 0
     external_or_unknown_count: int = 0
     unverified_cex_count: int = 0
     tax_neutral_candidate_count: int = 0

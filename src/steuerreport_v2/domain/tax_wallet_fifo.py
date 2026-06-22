@@ -2288,6 +2288,8 @@ class WalletFifoPreviewService:
         legacy_cex_deposit_mirror_count = 0
         fairspot_staking_return_count = 0
         legacy_counterparty_mirror_count = 0
+        legacy_hnt_external_payment_count = 0
+        exchange_deposit_history_count = 0
         for group in priority_report.groups:
             category = "unresolved_provenance"
             closure_status = "review_required"
@@ -2379,6 +2381,15 @@ class WalletFifoPreviewService:
                             raw_evidence_by_id=raw_evidence_by_id,
                         )
                         fairspot_staking_return_count += documented_fairspot_count
+                        documented_external_payment_count = (
+                            self._provenance_group_legacy_hnt_external_payment_count(
+                                year=year,
+                                group=group,
+                                canonical_events=canonical_events,
+                                raw_evidence_by_id=raw_evidence_by_id,
+                            )
+                        )
+                        legacy_hnt_external_payment_count += documented_external_payment_count
                         if documented_fairspot_count and documented_fairspot_count == group.events_count:
                             category = "fairspot_staking_return"
                             closure_status = "documented_fairspot_staking_return"
@@ -2388,6 +2399,39 @@ class WalletFifoPreviewService:
                                 "durch Helium-Raw-Evidence belegt."
                             )
                             action = "Als steuerneutralen Staking-/Service-Ruecktransfer mit FIFO-Fortfuehrung dokumentieren."
+                        elif (
+                            documented_external_payment_count
+                            and documented_external_payment_count == group.events_count
+                        ):
+                            category = "legacy_hnt_external_payment"
+                            closure_status = "documented_legacy_hnt_payment_provenance"
+                            requires_review = False
+                            tax_hint = (
+                                "Legacy-HNT-Zufluss ist durch Helium-Payment-Raw-Evidence "
+                                "mit Payer, Payee, TX-Hash, Zeitstempel, Menge und Oracle-Wert belegt; "
+                                "keine Eigenwallet-Transferannahme."
+                            )
+                            action = (
+                                "Konservativ als externe Legacy-HNT-Zahlung im Jahresbeleg ausweisen; "
+                                "nur bei spaeterem Sender-Ownership-Nachweis als Transfer/FIFO-Fortfuehrung behandeln."
+                            )
+                        elif (
+                            documented_external_payment_count
+                            and documented_fairspot_count + documented_external_payment_count == group.events_count
+                        ):
+                            category = "legacy_hnt_mixed_payment_provenance"
+                            closure_status = "documented_legacy_hnt_payment_provenance"
+                            requires_review = False
+                            tax_hint = (
+                                f"{documented_fairspot_count} Ereignis(se) sind als Fairspot/Staking-"
+                                f"Ruecktransfer und {documented_external_payment_count} Ereignis(se) "
+                                "als externe Legacy-HNT-Zahlung mit Helium-Raw-Evidence belegt."
+                            )
+                            action = (
+                                "Fairspot-Anteil als steuerneutralen Ruecktransfer dokumentieren; "
+                                "externen Payment-Anteil konservativ offenlegen und nicht als "
+                                "Eigenwallet-Transfer behandeln."
+                            )
                         elif documented_fairspot_count:
                             tax_hint = (
                                 f"{documented_fairspot_count} von {group.events_count} Ereignissen sind "
@@ -2426,6 +2470,41 @@ class WalletFifoPreviewService:
                                     f"{documented_counterparty_mirror_count} belegte Legacy-Gegenpartei-Spiegel "
                                     "dokumentieren; Restereignisse fachlich pruefen."
                                 )
+                            else:
+                                documented_exchange_deposit_count = (
+                                    self._provenance_group_exchange_deposit_history_count(
+                                        year=year,
+                                        group=group,
+                                        canonical_events=canonical_events,
+                                        raw_evidence_by_id=raw_evidence_by_id,
+                                    )
+                                )
+                                exchange_deposit_history_count += documented_exchange_deposit_count
+                                if (
+                                    documented_exchange_deposit_count
+                                    and documented_exchange_deposit_count == group.events_count
+                                ):
+                                    category = "exchange_deposit_history"
+                                    closure_status = "documented_exchange_deposit_history"
+                                    requires_review = False
+                                    tax_hint = (
+                                        "Exchange-Deposit-History belegt Zeitstempel, Asset, Menge, Netzwerk "
+                                        "und TXID; Sender-Ownership wird daraus nicht automatisch behauptet."
+                                    )
+                                    action = (
+                                        "Als dokumentierten Exchange-Deposit/externen Zufluss im Jahresbeleg "
+                                        "ausweisen; nur bei spaeterem Sendernachweis als Eigenwallet-Transfer "
+                                        "mit FIFO-Fortfuehrung behandeln."
+                                    )
+                                elif documented_exchange_deposit_count:
+                                    tax_hint = (
+                                        f"{documented_exchange_deposit_count} von {group.events_count} Ereignissen "
+                                        "sind durch Exchange-Deposit-History mit TXID/Netzwerk belegt; Rest bleibt Review."
+                                    )
+                                    action = (
+                                        f"{documented_exchange_deposit_count} belegte Exchange-Deposits dokumentieren; "
+                                        "fehlende Deposit-History/TXIDs fuer Restereignisse nachziehen."
+                                    )
             if category == "unresolved_provenance" and group.source.lower() == "binance" and group.asset.upper() == "SOL":
                 category = "cex_deposit_sender_ownership"
                 cex_status = cex_status_by_asset.get(group.asset.upper())
@@ -2488,6 +2567,8 @@ class WalletFifoPreviewService:
             documented_legacy_cex_deposit_mirror_count=legacy_cex_deposit_mirror_count,
             documented_fairspot_staking_return_count=fairspot_staking_return_count,
             documented_legacy_counterparty_mirror_count=legacy_counterparty_mirror_count,
+            documented_legacy_hnt_external_payment_count=legacy_hnt_external_payment_count,
+            documented_exchange_deposit_history_count=exchange_deposit_history_count,
             external_or_unknown_count=sum(1 for item in items if item.closure_status == "external_or_unknown_origin_documented"),
             unverified_cex_count=sum(1 for item in items if item.closure_status == "unverified_cex_deposit_sender"),
             tax_neutral_candidate_count=sum(1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"),
@@ -2606,6 +2687,112 @@ class WalletFifoPreviewService:
                 continue
             documented += 1
         return min(documented, group.events_count)
+
+    def _provenance_group_legacy_hnt_external_payment_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> int:
+        if group.asset.upper() != "HNT" or group.source.lower() != "helium":
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == group.source.lower()
+            and event.asset.upper() == "HNT"
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        documented = 0
+        for event in group_events:
+            evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            payload = evidence.payload if evidence is not None else {}
+            tx_type = str(payload.get("type") or payload.get("Type") or "").strip().lower()
+            if not tx_type.startswith("payment_"):
+                continue
+            payer = str(payload.get("payer") or payload.get("Payer") or payload.get("Sender") or "").replace("\u00a0", "").strip()
+            payee = str(payload.get("payee") or payload.get("Payee") or payload.get("Receiver") or event.account or "").replace("\u00a0", "").strip()
+            if not payer or not payee:
+                continue
+            if payer in {self.MAIN_HELIUM_LEGACY_WALLET, self.FAIRSPOT_STAKING_WALLET}:
+                continue
+            if payee != str(event.account or "").replace("\u00a0", "").strip():
+                continue
+            if not self._payload_str(payload, "transaction_hash") and not self._payload_str(payload, "TXID"):
+                continue
+            documented += 1
+        return min(documented, group.events_count)
+
+    def _provenance_group_exchange_deposit_history_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> int:
+        if group.source.lower() not in {"pionex"}:
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == group.source.lower()
+            and event.asset.upper() == group.asset.upper()
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        if not group_events:
+            return 0
+        documented = 0
+        for event in group_events:
+            evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            if evidence is None:
+                continue
+            payload = evidence.payload
+            if not self._payload_is_exchange_deposit_history(payload):
+                continue
+            payload_asset = (
+                self._payload_str(payload, "coin")
+                or self._payload_str(payload, "Coin")
+                or self._payload_str(payload, "asset")
+                or self._payload_str(payload, "Asset")
+                or ""
+            ).upper()
+            if payload_asset and payload_asset != group.asset.upper():
+                continue
+            payload_amount = self._payload_decimal(payload, "amount")
+            if payload_amount is None:
+                payload_amount = self._payload_decimal(payload, "Amount")
+            if payload_amount is not None and abs(payload_amount - event.quantity) > Decimal("0.00000001"):
+                continue
+            documented += 1
+        return min(documented, group.events_count)
+
+    def _payload_is_exchange_deposit_history(self, payload: dict[str, object]) -> bool:
+        tx_type = (
+            self._payload_str(payload, "tx_type")
+            or self._payload_str(payload, "Tx Type")
+            or self._payload_str(payload, "type")
+            or self._payload_str(payload, "Type")
+            or ""
+        ).lower()
+        if tx_type and "deposit" not in tx_type:
+            return False
+        txid = self._payload_str(payload, "txid") or self._payload_str(payload, "TXID") or self._payload_str(payload, "TxID")
+        network = self._payload_str(payload, "network") or self._payload_str(payload, "Network")
+        timestamp = (
+            self._payload_str(payload, "date(UTC+0)")
+            or self._payload_str(payload, "date")
+            or self._payload_str(payload, "Date")
+            or self._payload_str(payload, "time")
+            or self._payload_str(payload, "Time")
+        )
+        return bool(txid and network and timestamp)
 
     def _provenance_group_legacy_hnt_cex_deposit_mirror_count(
         self,
