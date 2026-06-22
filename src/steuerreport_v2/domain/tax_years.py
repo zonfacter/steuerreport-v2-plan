@@ -2398,6 +2398,7 @@ class TaxYearService:
             conservative_treatment_available = item.closure_status in {
                 "documented_non_live_opening_balance",
                 "documented_fiat_purchase",
+                "documented_legacy_hnt_cex_deposit",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
             }
@@ -2419,6 +2420,16 @@ class TaxYearService:
                 filing_disclosure = (
                     "Binance-Fiat-Buy-History mit Betrag, Fiat-Gegenwert, "
                     "Zeitstempel und Transaction-ID im Belegpaket ausweisen."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_legacy_hnt_cex_deposit":
+                recommended_tax_treatment = (
+                    "Als belegten Legacy-HNT-Transfer zur Boerse fuehren; keine "
+                    "Veraeusserung durch den Transfer selbst und keine neue Anschaffung."
+                )
+                filing_disclosure = (
+                    "Heliumtracker-Abgang und Binance-Deposit-History mit Adresse, "
+                    "TXID, Zeitstempel und Menge gemeinsam beilegen."
                 )
                 manual_evidence_required = False
             elif item.closure_status == "external_or_unknown_origin_documented":

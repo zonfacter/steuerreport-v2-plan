@@ -2279,9 +2279,12 @@ class WalletFifoPreviewService:
             [
                 event.raw_object_id
                 for event in canonical_events
-                if event.raw_object_id and event.event_time.year == year and event.source.lower() == "binance"
+                if event.raw_object_id and event.event_time.year == year
             ]
         )
+        deposit_history_rows = self._deposit_history_candidates()
+        deposit_history_index = self._deposit_history_index(deposit_history_rows)
+        legacy_cex_deposit_count = 0
         for group in priority_report.groups:
             category = "unresolved_provenance"
             closure_status = "review_required"
@@ -2310,7 +2313,35 @@ class WalletFifoPreviewService:
                 requires_review = False
                 tax_hint = "Belegte Anschaffung gegen Fiat; kein Wallet-/Depot-Transfer und keine steuerneutrale Umbuchung."
                 action = "Als EUR-Anschaffung im Jahresbeleg ausweisen; nicht als offene Transfer-Herkunft eskalieren."
-            elif group.source.lower() == "binance" and group.asset.upper() == "SOL":
+            else:
+                documented_legacy_count = self._provenance_group_legacy_hnt_cex_deposit_count(
+                    year=year,
+                    group=group,
+                    canonical_events=canonical_events,
+                    raw_evidence_by_id=raw_evidence_by_id,
+                    deposit_history_rows=deposit_history_rows,
+                    deposit_history_index=deposit_history_index,
+                )
+                legacy_cex_deposit_count += documented_legacy_count
+                if documented_legacy_count and documented_legacy_count == group.events_count:
+                    category = "legacy_hnt_cex_deposit"
+                    closure_status = "documented_legacy_hnt_cex_deposit"
+                    requires_review = False
+                    tax_hint = (
+                        "Heliumtracker-Abgang zur Boerse und Binance-Deposit-History "
+                        "mit TXID/Adresse belegen den CEX-Deposit."
+                    )
+                    action = "Als dokumentierten Legacy-HNT-Transfer zur Boerse im Jahresbeleg ausweisen."
+                elif documented_legacy_count:
+                    tax_hint = (
+                        f"{documented_legacy_count} von {group.events_count} Ereignissen sind "
+                        "durch Heliumtracker plus Binance-Deposit-History belegt; Rest bleibt Review."
+                    )
+                    action = (
+                        f"{documented_legacy_count} belegte Legacy-HNT-CEX-Deposits dokumentieren; "
+                        "fehlende Deposit-History/TXIDs fuer Restereignisse nachziehen."
+                    )
+            if category == "unresolved_provenance" and group.source.lower() == "binance" and group.asset.upper() == "SOL":
                 category = "cex_deposit_sender_ownership"
                 cex_status = cex_status_by_asset.get(group.asset.upper())
                 if cex_status == "TAX_NEUTRAL_TRANSFER_PENDING_REVIEW":
@@ -2323,7 +2354,7 @@ class WalletFifoPreviewService:
                     f"/api/v1/tax-years/{year}/cex-sender-ownership-latest?cex=binance&network=SOL"
                 )
                 action = "Sender-Ownership belegen oder konservativ offen lassen; nicht automatisch steuerneutral schließen."
-            elif group.source.lower() == "solana_rpc" and group.asset.upper() == "SOL":
+            elif category == "unresolved_provenance" and group.source.lower() == "solana_rpc" and group.asset.upper() == "SOL":
                 category = "solana_external_or_unknown_origin"
                 if solana_batch.exists and solana_batch.failed_count == 0 and solana_batch.own_transfer_candidates_count == 0:
                     closure_status = "external_or_unknown_origin_documented"
@@ -2368,6 +2399,7 @@ class WalletFifoPreviewService:
             groups_count=priority_report.groups_count,
             documented_non_live_count=sum(1 for item in items if item.closure_status == "documented_non_live_opening_balance"),
             documented_fiat_purchase_count=sum(1 for item in items if item.closure_status == "documented_fiat_purchase"),
+            documented_legacy_cex_deposit_count=legacy_cex_deposit_count,
             external_or_unknown_count=sum(1 for item in items if item.closure_status == "external_or_unknown_origin_documented"),
             unverified_cex_count=sum(1 for item in items if item.closure_status == "unverified_cex_deposit_sender"),
             tax_neutral_candidate_count=sum(1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"),
@@ -2422,6 +2454,77 @@ class WalletFifoPreviewService:
             ):
                 return False
         return True
+
+    def _provenance_group_legacy_hnt_cex_deposit_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+        deposit_history_rows: list[WalletFifoOriginRawEvidence],
+        deposit_history_index: dict[tuple[str, Decimal], list[WalletFifoOriginRawEvidence]],
+    ) -> int:
+        if group.asset.upper() != "HNT" or group.source.lower() != "helium":
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == group.source.lower()
+            and event.asset.upper() == "HNT"
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        if not group_events:
+            return 0
+        documented = 0
+        for event in group_events:
+            raw_evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            payload = raw_evidence.payload if raw_evidence is not None else {}
+            receiver = str(payload.get("Receiver") or event.account or "").strip().lower()
+            sender = str(payload.get("Sender") or "").strip()
+            if "binance" not in receiver:
+                continue
+            if sender and not self._is_legacy_helium_wallet_like(sender):
+                continue
+            candidate = WalletFifoGapCandidateEvent(
+                event_id=event.event_id,
+                event_time=event.event_time,
+                event_type=event.event_type,
+                source=event.source,
+                account=event.account,
+                pool_id=self._pool_id(event),
+                asset=event.asset.upper(),
+                quantity=event.quantity,
+                quote_asset=event.quote_asset,
+                quote_quantity=event.quote_quantity,
+                tx_id=event.tx_id,
+                source_ref=event.source_ref,
+                raw_object_id=event.raw_object_id,
+                relation="provisional_same_pool_inbound",
+                seconds_before_gap=0,
+            )
+            deposit = self._matching_deposit_history_from_rows(
+                candidate,
+                deposit_history_rows,
+                deposit_history_index=deposit_history_index,
+            )
+            if deposit is None:
+                continue
+            deposit_payload = deposit.payload
+            if not self._payload_str(deposit_payload, "TXID") or not self._payload_str(deposit_payload, "Address"):
+                continue
+            documented += 1
+        return min(documented, group.events_count)
+
+    def _is_legacy_helium_wallet_like(self, value: str) -> bool:
+        normalized = value.replace("\u00a0", "").strip()
+        if not normalized:
+            return False
+        if "..." in normalized:
+            return True
+        return len(normalized) >= 30 and normalized[0] == "1"
 
     def provenance_events(
         self,
@@ -5835,18 +5938,40 @@ class WalletFifoPreviewService:
             ).fetchall()
         return [self._evidence_from_row(row) for row in rows]
 
+    def _deposit_history_index(
+        self,
+        rows: list[WalletFifoOriginRawEvidence],
+    ) -> dict[tuple[str, Decimal], list[WalletFifoOriginRawEvidence]]:
+        index: dict[tuple[str, Decimal], list[WalletFifoOriginRawEvidence]] = defaultdict(list)
+        for evidence in rows:
+            payload = evidence.payload
+            asset = str(payload.get("Coin", "")).upper()
+            amount = self._payload_decimal(payload, "Amount")
+            if asset and amount is not None:
+                index[(asset, amount)].append(evidence)
+        return index
+
     def _matching_deposit_history_from_rows(
         self,
         candidate: WalletFifoGapCandidateEvent,
         rows: list[WalletFifoOriginRawEvidence],
+        *,
+        deposit_history_index: dict[tuple[str, Decimal], list[WalletFifoOriginRawEvidence]] | None = None,
     ) -> WalletFifoOriginRawEvidence | None:
         best: tuple[int, WalletFifoOriginRawEvidence] | None = None
-        for evidence in rows:
+        candidate_amount = abs(candidate.quantity)
+        indexed_rows = (
+            deposit_history_index.get((candidate.asset.upper(), candidate_amount), [])
+            if deposit_history_index is not None
+            else []
+        )
+        candidate_rows = indexed_rows or rows
+        for evidence in candidate_rows:
             payload = evidence.payload
             if str(payload.get("Coin", "")).upper() != candidate.asset.upper():
                 continue
             amount = self._payload_decimal(payload, "Amount")
-            if amount is None or abs(amount - abs(candidate.quantity)) > Decimal("0.00000001"):
+            if amount is None or abs(amount - candidate_amount) > Decimal("0.00000001"):
                 continue
             score = 10
             payload_time = str(payload.get("Time", ""))

@@ -401,6 +401,41 @@ def test_tax_methodology_does_not_block_documented_fiat_purchase_provenance(tmp_
     assert not any(gap.code == "wallet_fifo_unresolved_inbound_provenance" for gap in report.gaps)
 
 
+def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp_path):
+    service = TaxMethodologyService(DuckDbStore(tmp_path / "steuerreport_v2.duckdb"))
+
+    gaps = service._gaps(
+        year=2021,
+        tax_lines_count=1,
+        income_events_count=0,
+        derivative_lines_count=0,
+        unmatched_disposals=0,
+        missing_price_groups=0,
+        review_issues_count=0,
+        external_review_count=0,
+        external_unmatched_count=0,
+        traceability={
+            "activity_count": 1,
+            "tax_lines_without_event_count": 0,
+            "lots_without_event_count": 0,
+            "tax_lines_with_event_trace": 1,
+        },
+        wallet_fifo_unmatched_count=0,
+        wallet_fifo_exchange_sequencing_count=0,
+        wallet_fifo_delta_eur=Decimal("0"),
+        wallet_fifo_unresolved_provenance_count=10,
+        wallet_fifo_documented_fiat_purchase_count=2,
+        wallet_fifo_documented_legacy_cex_deposit_count=3,
+        asset_fifo_possible_recalculation_count=0,
+        asset_fifo_attribution_review_count=0,
+    )
+    by_code = {gap.code: gap for gap in gaps}
+
+    assert by_code["wallet_fifo_fiat_purchase_documented"].count == 2
+    assert by_code["wallet_fifo_legacy_cex_deposit_documented"].count == 3
+    assert by_code["wallet_fifo_unresolved_inbound_provenance"].count == 5
+
+
 def test_tax_methodology_report_blocks_asset_fifo_recalculation_candidates(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     _import_trade_csv(

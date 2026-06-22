@@ -545,6 +545,7 @@ class WalletFifoYearProvenanceClosureReport(BaseModel):
     groups_count: int = 0
     documented_non_live_count: int = 0
     documented_fiat_purchase_count: int = 0
+    documented_legacy_cex_deposit_count: int = 0
     external_or_unknown_count: int = 0
     unverified_cex_count: int = 0
     tax_neutral_candidate_count: int = 0
