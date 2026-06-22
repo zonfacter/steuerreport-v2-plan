@@ -997,6 +997,40 @@ def test_tax_year_filing_summary_explains_entry_targets(tmp_path):
     assert "Rewards / Mining / Staking" in report.ascii_table
 
 
+def test_tax_year_filing_matrix_summarizes_year_actions(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="helium",
+        filename="filing-matrix.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2020-01-01T00:00:00Z,SOL,1,buy,EUR,10\n"
+            "2021-06-01T00:00:00Z,SOL,-1,sell,EUR,30\n"
+            "2021-07-01T00:00:00Z,HNT,5,mining,EUR,15\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    TaxService(store).rebuild_fifo()
+
+    matrix = TaxYearService(store).filing_matrix(years=[2021])
+    row = matrix.rows[0]
+
+    assert row.year == 2021
+    assert row.action_status == "review"
+    assert row.taxable_private_disposals_eur == Decimal("0")
+    assert row.tax_free_private_disposals_eur == Decimal("20.000000000000000000000000000000000000")
+    assert row.rewards_mining_staking_income_eur == Decimal("15.000000000000000000")
+    assert row.checklist_counts["eintragen"] == 1
+    assert row.checklist_counts["archivieren"] == 3
+    assert row.filing_checklist_csv_endpoint == "/api/v1/export/tax-years/2021/filing-checklist.csv"
+    assert row.evidence_package_endpoint == "/api/v1/export/tax-years/2021/evidence-package.zip"
+    assert matrix.ready_years == []
+    assert matrix.review_years == [2021]
+    assert matrix.blocked_years == []
+    assert "Naechster Schritt" in matrix.ascii_table
+    assert "SO 0.00 EUR" in row.display_line
+
+
 def test_tax_year_filing_summary_surfaces_cex_fifo_anchor_status(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
@@ -1465,6 +1499,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/payment-overview"
     )
+    filing_matrix_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/filing-matrix"
+    )
     turnover_summary_route = next(
         route
         for route in app.routes
@@ -1534,6 +1573,7 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert evidence_route.endpoint(2021).status == "ok"
     assert external_inflows_route.endpoint(2021).status == "ok"
     assert payment_overview_route.endpoint().status == "ok"
+    assert filing_matrix_route.endpoint().status == "ok"
     assert turnover_summary_route.endpoint().status == "ok"
     assert solana_program_summary_route.endpoint().status == "ok"
     assert solana_program_year_route.endpoint(2021).status == "ok"

@@ -5,6 +5,7 @@ from collections import defaultdict
 from decimal import Decimal
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 from steuerreport_v2.contracts.tax_years import (
@@ -19,6 +20,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxPaymentOverview,
     TaxPaymentOverviewRow,
     TaxYearFilingChecklistItem,
+    TaxYearFilingMatrix,
+    TaxYearFilingMatrixRow,
     TaxYearFilingSummary,
     TaxYearFilingSummaryLine,
     TaxYearAssetFifoDrilldown,
@@ -1123,6 +1126,265 @@ class TaxYearService:
         if status.export_blocked:
             parts.append("vor Einreichung blockierende Punkte klaeren")
         return f"{status.year}: " + "; ".join(parts) + "."
+
+    def filing_matrix(self, *, years: list[int] | None = None) -> TaxYearFilingMatrix:
+        if years is None:
+            snapshot_matrix = self._filing_matrix_from_readiness_snapshot()
+            if snapshot_matrix is not None:
+                return snapshot_matrix
+        selected_years = sorted(years if years is not None else self._payment_available_years())
+        rows: list[TaxYearFilingMatrixRow] = []
+        for year in selected_years:
+            summary = self.filing_summary(year)
+            counts: dict[str, int] = defaultdict(int)
+            for item in summary.checklist:
+                counts[item.category] += 1
+            action_status = self._filing_matrix_action_status(summary, counts)
+            rows.append(
+                TaxYearFilingMatrixRow(
+                    year=year,
+                    status_label=summary.status_label,
+                    export_ready=summary.export_ready,
+                    action_status=action_status,
+                    next_action=self._filing_matrix_next_action(summary, counts, action_status),
+                    taxable_private_disposals_eur=summary.taxable_private_disposals_eur,
+                    rewards_mining_staking_income_eur=summary.rewards_mining_staking_income_eur,
+                    derivative_pnl_eur=summary.derivative_pnl_eur,
+                    tax_free_private_disposals_eur=summary.tax_free_private_disposals_eur,
+                    checklist_counts=dict(counts),
+                    bmf_closure_appendix_status=summary.bmf_closure_appendix_status,
+                    bmf_closure_appendix_items_count=summary.bmf_closure_appendix_items_count,
+                    bmf_closure_appendix_manual_evidence_required_count=(
+                        summary.bmf_closure_appendix_manual_evidence_required_count
+                    ),
+                    warnings_count=len(summary.warnings),
+                    review_decisions_count=len(summary.review_decisions),
+                    filing_summary_endpoint=f"/api/v1/tax-years/{year}/filing-summary",
+                    filing_checklist_csv_endpoint=f"/api/v1/export/tax-years/{year}/filing-checklist.csv",
+                    evidence_package_endpoint=f"/api/v1/export/tax-years/{year}/evidence-package.zip",
+                    display_line=self._filing_matrix_display_line(summary, counts, action_status),
+                )
+            )
+        return TaxYearFilingMatrix(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            rows=rows,
+            ready_years=[row.year for row in rows if row.action_status == "ready"],
+            review_years=[row.year for row in rows if row.action_status == "review"],
+            blocked_years=[row.year for row in rows if row.action_status == "blocked"],
+            ascii_table=self._filing_matrix_ascii_table(rows),
+            methodology=(
+                "Read-only Jahresmatrix aus bestehenden Filing-Summaries. "
+                "Sie verdichtet Eintragen, Beilegen, Archivieren und Pruefen pro Jahr "
+                "und schreibt keine FIFO-Lots, Preise, Imports oder Review-Entscheidungen."
+            ),
+        )
+
+    def _filing_matrix_from_readiness_snapshot(self) -> TaxYearFilingMatrix | None:
+        path = self._bmf_filing_readiness_snapshot_path()
+        if path is None:
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        years_payload = payload.get("years")
+        if not isinstance(years_payload, list):
+            return None
+
+        payment_rows = {
+            row.year: row
+            for row in self.payment_overview(
+                years=[
+                    int(item["year"])
+                    for item in years_payload
+                    if isinstance(item, dict) and item.get("year") is not None
+                ]
+            ).rows
+        }
+        rows: list[TaxYearFilingMatrixRow] = []
+        for item in years_payload:
+            if not isinstance(item, dict):
+                continue
+            year = int(item.get("year"))
+            payment_row = payment_rows.get(year)
+            blocking_codes = item.get("blocking_gap_codes") if isinstance(item.get("blocking_gap_codes"), list) else []
+            review_codes = item.get("review_gap_codes") if isinstance(item.get("review_gap_codes"), list) else []
+            appendix_items_count = int(item.get("appendix_items_count") or 0)
+            appendix_manual_count = int(item.get("appendix_manual_evidence_required_count") or 0)
+            derivative_pnl = Decimal(str(item.get("derivative_pnl_eur") or "0"))
+            counts = self._filing_matrix_snapshot_counts(
+                payment_row=payment_row,
+                appendix_items_count=appendix_items_count,
+                derivative_pnl=derivative_pnl,
+                review_codes_count=len(review_codes),
+                blocking_codes_count=len(blocking_codes),
+            )
+            action_status: Literal["ready", "review", "blocked"]
+            if blocking_codes:
+                action_status = "blocked"
+            elif item.get("bmf_ready") is True and not review_codes:
+                action_status = "ready"
+            else:
+                action_status = "review"
+            taxable_private = Decimal(str(item.get("taxable_private_disposals_eur") or "0"))
+            rewards_income = Decimal(str(item.get("rewards_mining_staking_income_eur") or "0"))
+            row = TaxYearFilingMatrixRow(
+                year=year,
+                status_label=str(item.get("status_label") or item.get("filing_status") or "-"),
+                export_ready=not bool(blocking_codes),
+                action_status=action_status,
+                next_action=str(item.get("next_action") or self._filing_matrix_snapshot_next_action(counts, action_status)),
+                taxable_private_disposals_eur=taxable_private,
+                rewards_mining_staking_income_eur=rewards_income,
+                derivative_pnl_eur=derivative_pnl,
+                tax_free_private_disposals_eur=(
+                    payment_row.tax_free_private_disposals_eur if payment_row is not None else Decimal("0")
+                ),
+                checklist_counts=counts,
+                bmf_closure_appendix_status=str(item.get("appendix_status") or "") or None,
+                bmf_closure_appendix_items_count=appendix_items_count,
+                bmf_closure_appendix_manual_evidence_required_count=appendix_manual_count,
+                warnings_count=len(review_codes),
+                review_decisions_count=0,
+                filing_summary_endpoint=str(item.get("filing_summary_endpoint") or f"/api/v1/tax-years/{year}/filing-summary"),
+                filing_checklist_csv_endpoint=f"/api/v1/export/tax-years/{year}/filing-checklist.csv",
+                evidence_package_endpoint=str(
+                    item.get("evidence_package_endpoint") or f"/api/v1/export/tax-years/{year}/evidence-package.zip"
+                ),
+                display_line=(
+                    f"{year} | {action_status} | SO {self._fmt_eur(taxable_private)} | "
+                    f"Rewards {self._fmt_eur(rewards_income)} | "
+                    f"Beilegen {counts.get('beilegen', 0)} | Pruefen {counts.get('pruefen', 0)}"
+                ),
+            )
+            rows.append(row)
+        return TaxYearFilingMatrix(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            rows=rows,
+            ready_years=[row.year for row in rows if row.action_status == "ready"],
+            review_years=[row.year for row in rows if row.action_status == "review"],
+            blocked_years=[row.year for row in rows if row.action_status == "blocked"],
+            ascii_table=self._filing_matrix_ascii_table(rows),
+            methodology=(
+                "Read-only Jahresmatrix aus dem letzten BMF-Filing-Readiness-Snapshot "
+                f"`{path}` plus schneller Payment-Overview. Die Matrix schreibt keine "
+                "FIFO-Lots, Preise, Imports oder Review-Entscheidungen."
+            ),
+        )
+
+    @staticmethod
+    def _filing_matrix_snapshot_counts(
+        *,
+        payment_row: TaxPaymentOverviewRow | None,
+        appendix_items_count: int,
+        derivative_pnl: Decimal,
+        review_codes_count: int,
+        blocking_codes_count: int,
+    ) -> dict[str, int]:
+        counts: dict[str, int] = defaultdict(int)
+        if payment_row is not None:
+            if payment_row.private_disposals_gain_loss_eur:
+                counts["eintragen"] += 1
+            else:
+                counts["archivieren"] += 1
+            if payment_row.rewards_mining_staking_income_eur:
+                counts["eintragen"] += 1
+            if payment_row.tax_free_private_disposals_eur:
+                counts["archivieren"] += 1
+        if derivative_pnl:
+            counts["pruefen"] += 1
+        if appendix_items_count:
+            counts["beilegen"] += 1
+        if review_codes_count or blocking_codes_count:
+            counts["pruefen"] += review_codes_count + blocking_codes_count
+        counts["archivieren"] += 1
+        return dict(counts)
+
+    @staticmethod
+    def _filing_matrix_snapshot_next_action(
+        counts: dict[str, int], action_status: Literal["ready", "review", "blocked"]
+    ) -> str:
+        if action_status == "blocked":
+            return "Blockierende Punkte vor Export oder Abgabe klaeren."
+        if counts.get("pruefen", 0):
+            return f"{counts.get('pruefen', 0)} Pruefpunkt(e) fachlich klaeren."
+        if counts.get("beilegen", 0):
+            return "Herkunftsbeilage und Jahrespaket bereithalten."
+        if counts.get("eintragen", 0):
+            return "Eintragungswerte uebernehmen und Belege archivieren."
+        return "Jahrespaket archivieren; keine V2-Eingabebetraege."
+
+    def _bmf_filing_readiness_snapshot_path(self) -> Path | None:
+        candidates = [
+            self.store.path.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            self.store.path.parent.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            Path.cwd() / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            Path("/workspace/steuerreport-v2-plan/var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json"),
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return None
+
+    @staticmethod
+    def _filing_matrix_action_status(
+        summary: TaxYearFilingSummary, counts: dict[str, int]
+    ) -> Literal["ready", "review", "blocked"]:
+        if not summary.export_ready:
+            return "blocked"
+        if counts.get("pruefen", 0) or summary.warnings:
+            return "review"
+        return "ready"
+
+    @staticmethod
+    def _filing_matrix_next_action(
+        summary: TaxYearFilingSummary,
+        counts: dict[str, int],
+        action_status: Literal["ready", "review", "blocked"],
+    ) -> str:
+        if action_status == "blocked":
+            return "Blockierende Punkte vor Export oder Abgabe klaeren."
+        if counts.get("pruefen", 0):
+            return f"{counts.get('pruefen', 0)} Pruefpunkt(e) fachlich klaeren."
+        if summary.bmf_closure_appendix_items_count:
+            return "Herkunftsbeilage und Jahrespaket bereithalten."
+        if counts.get("eintragen", 0):
+            return "Eintragungswerte uebernehmen und Belege archivieren."
+        return "Jahrespaket archivieren; keine V2-Eingabebetraege."
+
+    def _filing_matrix_display_line(
+        self,
+        summary: TaxYearFilingSummary,
+        counts: dict[str, int],
+        action_status: Literal["ready", "review", "blocked"],
+    ) -> str:
+        return (
+            f"{summary.year} | {action_status} | SO {self._fmt_eur(summary.taxable_private_disposals_eur)} | "
+            f"Rewards {self._fmt_eur(summary.rewards_mining_staking_income_eur)} | "
+            f"Beilegen {counts.get('beilegen', 0)} | Pruefen {counts.get('pruefen', 0)}"
+        )
+
+    def _filing_matrix_ascii_table(self, rows: list[TaxYearFilingMatrixRow]) -> str:
+        table_rows = [["Jahr", "Status", "Anlage SO", "Rewards", "Beilegen", "Pruefen", "Naechster Schritt"]]
+        for row in rows:
+            table_rows.append(
+                [
+                    str(row.year),
+                    row.action_status,
+                    self._fmt_eur(row.taxable_private_disposals_eur),
+                    self._fmt_eur(row.rewards_mining_staking_income_eur),
+                    str(row.checklist_counts.get("beilegen", 0)),
+                    str(row.checklist_counts.get("pruefen", 0)),
+                    row.next_action,
+                ]
+            )
+        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+        sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+
+        def fmt(row: list[str]) -> str:
+            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+
+        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
 
     def _filing_ascii_table(self, year: int, lines: list[TaxYearFilingSummaryLine]) -> str:
         rows = [["Jahr", "Bereich", "Betrag", "Steuerliche Behandlung", "Ziel"]]

@@ -695,6 +695,15 @@ type Snapshot = {
     ascii_table: string;
     methodology: string;
   };
+  taxYearFilingMatrix?: {
+    generated_at: string;
+    rows: Array<Record<string, unknown>>;
+    ready_years: number[];
+    review_years: number[];
+    blocked_years: number[];
+    ascii_table: string;
+    methodology: string;
+  };
   taxMethodologySummary?: {
     generated_at: string;
     years: Array<Record<string, unknown>>;
@@ -1584,6 +1593,7 @@ function App() {
         taxSummary: { key: "taxSummary", label: "Tax-Summary", load: () => getApi<Record<string, unknown> | null>("/api/v1/tax/summary") },
         taxYearsSummary: { key: "taxYearsSummary", label: "Steuerjahre", load: () => getApi<Snapshot["taxYearsSummary"]>("/api/v1/tax-years/summary") },
         taxPaymentOverview: { key: "taxPaymentOverview", label: "Steuer-Eingabezettel", load: () => getApi<Snapshot["taxPaymentOverview"]>("/api/v1/tax-years/payment-overview") },
+        taxYearFilingMatrix: { key: "taxYearFilingMatrix", label: "Steuerjahr-Matrix", load: () => getApi<Snapshot["taxYearFilingMatrix"]>("/api/v1/tax-years/filing-matrix") },
         taxMethodologySummary: { key: "taxMethodologySummary", label: "BMF-Methodik", load: () => getApi<Snapshot["taxMethodologySummary"]>(`/api/v1/tax-methodology/summary?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxBmfActionPlan: { key: "taxBmfActionPlan", label: "BMF-Aktionsliste", load: () => getApi<Snapshot["taxBmfActionPlan"]>(`/api/v1/tax-methodology/bmf-action-plan?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxYearDetail: { key: "taxYearDetail", label: "Steuerjahr-Detail", load: () => getApi<Snapshot["taxYearDetail"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}`) },
@@ -1639,6 +1649,7 @@ function App() {
         "health",
         "taxYearsSummary",
         "taxPaymentOverview",
+        "taxYearFilingMatrix",
         "taxYearDetail",
         "taxDeclarationGuide",
         "taxYearFilingSummary",
@@ -3107,6 +3118,7 @@ function Content({
         taxHoldingPeriods={snapshot.taxHoldingPeriods}
         taxYearsSummary={snapshot.taxYearsSummary}
         taxPaymentOverview={snapshot.taxPaymentOverview}
+        taxYearFilingMatrix={snapshot.taxYearFilingMatrix}
         taxMethodologySummary={snapshot.taxMethodologySummary}
         taxBmfActionPlan={snapshot.taxBmfActionPlan}
         taxYearDetail={snapshot.taxYearDetail}
@@ -7409,6 +7421,7 @@ function TaxPanel({
   taxHoldingPeriods,
   taxYearsSummary,
   taxPaymentOverview,
+  taxYearFilingMatrix,
   taxMethodologySummary,
   taxBmfActionPlan,
   taxYearDetail,
@@ -7467,6 +7480,7 @@ function TaxPanel({
   taxHoldingPeriods: Snapshot["taxHoldingPeriods"];
   taxYearsSummary: Snapshot["taxYearsSummary"];
   taxPaymentOverview: Snapshot["taxPaymentOverview"];
+  taxYearFilingMatrix: Snapshot["taxYearFilingMatrix"];
   taxMethodologySummary: Snapshot["taxMethodologySummary"];
   taxBmfActionPlan: Snapshot["taxBmfActionPlan"];
   taxYearDetail: Snapshot["taxYearDetail"];
@@ -7588,6 +7602,7 @@ function TaxPanel({
   const entryLines = filingLines.filter((line) => !["appendix", "evidence", "review"].includes(String(line.topic)));
   const proofLines = filingLines.filter((line) => ["appendix", "evidence", "review"].includes(String(line.topic)));
   const filingChecklist = taxYearFilingSummary?.checklist ?? [];
+  const filingMatrixRows = taxYearFilingMatrix?.rows ?? [];
   const yearReviewDecisions = taxYearFilingSummary?.review_decisions ?? taxDeclarationGuide?.review_decisions ?? [];
   const activeEvidenceItems = taxYearEvidence?.items ?? [];
   const primaryEvidenceItems = activeEvidenceItems.filter((item) => item.required || item.category === "eintragen");
@@ -7650,6 +7665,50 @@ function TaxPanel({
           <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
         </div>
       </section>
+
+      {filingMatrixRows.length > 0 ? (
+        <TablePanel
+          title="Jahresmatrix: Eintragen, Beilegen, Pruefen"
+          rows={filingMatrixRows.map((row) => {
+            const counts = (row.checklist_counts && typeof row.checklist_counts === "object")
+              ? row.checklist_counts as Record<string, unknown>
+              : {};
+            return {
+              jahr: row.year,
+              status: row.action_status,
+              anlage_so_eur: formatCurrency(row.taxable_private_disposals_eur),
+              rewards_eur: formatCurrency(row.rewards_mining_staking_income_eur),
+              derivate_eur: formatCurrency(row.derivative_pnl_eur),
+              beilegen: counts.beilegen ?? 0,
+              pruefen: counts.pruefen ?? 0,
+              herkunft: row.bmf_closure_appendix_items_count ?? 0,
+              naechster_schritt: row.next_action,
+              filing: row.filing_summary_endpoint,
+              checklist_csv: row.filing_checklist_csv_endpoint,
+              paket: row.evidence_package_endpoint
+            };
+          })}
+          compact
+          rowActions={[
+            {
+              label: "Jahr oeffnen",
+              icon: <ReceiptText size={16} />,
+              onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
+            },
+            {
+              label: "Checkliste CSV",
+              icon: <FileDown size={16} />,
+              onClick: (row) => onDownload(String(row.checklist_csv ?? ""))
+            },
+            {
+              label: "Belegpaket",
+              icon: <PackageCheck size={16} />,
+              onClick: (row) => onDownload(String(row.paket ?? ""))
+            }
+          ]}
+          footer={taxYearFilingMatrix?.methodology ?? ""}
+        />
+      ) : null}
 
       <div className="panel">
         <div className="panelToolbar">

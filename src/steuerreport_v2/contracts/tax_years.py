@@ -192,6 +192,38 @@ class TaxYearFilingSummary(BaseModel):
     methodology: str
 
 
+class TaxYearFilingMatrixRow(BaseModel):
+    year: int
+    status_label: str
+    export_ready: bool
+    action_status: Literal["ready", "review", "blocked"]
+    next_action: str
+    taxable_private_disposals_eur: Decimal = Decimal("0")
+    rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    derivative_pnl_eur: Decimal = Decimal("0")
+    tax_free_private_disposals_eur: Decimal = Decimal("0")
+    checklist_counts: dict[str, int] = Field(default_factory=dict)
+    bmf_closure_appendix_status: str | None = None
+    bmf_closure_appendix_items_count: int = 0
+    bmf_closure_appendix_manual_evidence_required_count: int = 0
+    warnings_count: int = 0
+    review_decisions_count: int = 0
+    filing_summary_endpoint: str
+    filing_checklist_csv_endpoint: str
+    evidence_package_endpoint: str
+    display_line: str
+
+
+class TaxYearFilingMatrix(BaseModel):
+    generated_at: str
+    rows: list[TaxYearFilingMatrixRow] = Field(default_factory=list)
+    ready_years: list[int] = Field(default_factory=list)
+    review_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    ascii_table: str
+    methodology: str
+
+
 class TaxIncomeAssetBreakdown(BaseModel):
     asset: str
     event_type: str

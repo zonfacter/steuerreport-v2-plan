@@ -224,6 +224,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearDetail,
     TaxYearDriverReport,
     TaxYearEvidenceReport,
+    TaxYearFilingMatrix,
     TaxYearFilingSummary,
     TaxYearTurnoverAudit,
     TaxYearsTurnoverAuditSummary,
@@ -1911,6 +1912,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-years/payment-overview")
     def tax_years_payment_overview() -> ApiResponse[TaxPaymentOverview]:
         return ApiResponse(data=TaxYearService(db).payment_overview())
+
+    @app.get("/api/v1/tax-years/filing-matrix")
+    def tax_years_filing_matrix() -> ApiResponse[TaxYearFilingMatrix]:
+        return ApiResponse(data=TaxYearService(db).filing_matrix())
 
     @app.get("/api/v1/tax-years/turnover-audit-summary")
     def tax_years_turnover_audit_summary(limit: int = 20) -> ApiResponse[TaxYearsTurnoverAuditSummary]:
