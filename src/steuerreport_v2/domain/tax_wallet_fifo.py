@@ -2286,6 +2286,7 @@ class WalletFifoPreviewService:
         deposit_history_index = self._deposit_history_index(deposit_history_rows)
         legacy_cex_deposit_count = 0
         legacy_cex_deposit_mirror_count = 0
+        fairspot_staking_return_count = 0
         for group in priority_report.groups:
             category = "unresolved_provenance"
             closure_status = "review_required"
@@ -2369,6 +2370,32 @@ class WalletFifoPreviewService:
                             f"{documented_mirror_count} belegte Binance-HNT-Deposit-Spiegel dokumentieren; "
                             "fehlende Heliumtracker-Gegenbelege fuer Restereignisse nachziehen."
                         )
+                    else:
+                        documented_fairspot_count = self._provenance_group_fairspot_staking_return_count(
+                            year=year,
+                            group=group,
+                            canonical_events=canonical_events,
+                            raw_evidence_by_id=raw_evidence_by_id,
+                        )
+                        fairspot_staking_return_count += documented_fairspot_count
+                        if documented_fairspot_count and documented_fairspot_count == group.events_count:
+                            category = "fairspot_staking_return"
+                            closure_status = "documented_fairspot_staking_return"
+                            requires_review = False
+                            tax_hint = (
+                                "Fairspot/Staking-Ruecktransfer zur Main-Legacy-Wallet ist "
+                                "durch Helium-Raw-Evidence belegt."
+                            )
+                            action = "Als steuerneutralen Staking-/Service-Ruecktransfer mit FIFO-Fortfuehrung dokumentieren."
+                        elif documented_fairspot_count:
+                            tax_hint = (
+                                f"{documented_fairspot_count} von {group.events_count} Ereignissen sind "
+                                "als Fairspot/Staking-Ruecktransfer belegt; Rest bleibt Review."
+                            )
+                            action = (
+                                f"{documented_fairspot_count} belegte Fairspot/Staking-Ruecktransfers dokumentieren; "
+                                "fehlende Sender-Ownership fuer Restereignisse nachziehen."
+                            )
             if category == "unresolved_provenance" and group.source.lower() == "binance" and group.asset.upper() == "SOL":
                 category = "cex_deposit_sender_ownership"
                 cex_status = cex_status_by_asset.get(group.asset.upper())
@@ -2429,6 +2456,7 @@ class WalletFifoPreviewService:
             documented_fiat_purchase_count=sum(1 for item in items if item.closure_status == "documented_fiat_purchase"),
             documented_legacy_cex_deposit_count=legacy_cex_deposit_count,
             documented_legacy_cex_deposit_mirror_count=legacy_cex_deposit_mirror_count,
+            documented_fairspot_staking_return_count=fairspot_staking_return_count,
             external_or_unknown_count=sum(1 for item in items if item.closure_status == "external_or_unknown_origin_documented"),
             unverified_cex_count=sum(1 for item in items if item.closure_status == "unverified_cex_deposit_sender"),
             tax_neutral_candidate_count=sum(1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"),
@@ -2614,6 +2642,40 @@ class WalletFifoPreviewService:
                 continue
             return helium_event
         return None
+
+    def _provenance_group_fairspot_staking_return_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> int:
+        if group.asset.upper() != "HNT" or group.source.lower() != "helium":
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == group.source.lower()
+            and event.asset.upper() == "HNT"
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        documented = 0
+        for event in group_events:
+            evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            payload = evidence.payload if evidence is not None else {}
+            payer = str(payload.get("payer") or payload.get("Payer") or payload.get("Sender") or "").replace("\u00a0", "").strip()
+            payee = str(payload.get("payee") or payload.get("Payee") or payload.get("Receiver") or event.account or "").replace("\u00a0", "").strip()
+            if payer != self.FAIRSPOT_STAKING_WALLET:
+                continue
+            if payee != self.MAIN_HELIUM_LEGACY_WALLET:
+                continue
+            if not self._payload_str(payload, "transaction_hash") and not self._payload_str(payload, "TXID"):
+                continue
+            documented += 1
+        return min(documented, group.events_count)
 
     def _is_legacy_helium_wallet_like(self, value: str) -> bool:
         normalized = value.replace("\u00a0", "").strip()

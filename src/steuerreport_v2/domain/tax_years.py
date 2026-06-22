@@ -2400,6 +2400,7 @@ class TaxYearService:
                 "documented_fiat_purchase",
                 "documented_legacy_hnt_cex_deposit",
                 "documented_legacy_hnt_cex_deposit_mirror",
+                "documented_fairspot_staking_return",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
             }
@@ -2442,6 +2443,18 @@ class TaxYearService:
                 filing_disclosure = (
                     "Binance-Deposit-History mit TXID/Adresse und passenden "
                     "Heliumtracker-Abgang gemeinsam beilegen."
+                )
+                manual_evidence_required = False
+            elif item.closure_status == "documented_fairspot_staking_return":
+                recommended_tax_treatment = (
+                    "Als belegten Fairspot/Staking-Ruecktransfer zur Main-Legacy-"
+                    "Wallet fuehren; keine Veraeusserung durch den Transfer selbst "
+                    "und keine neue Anschaffung."
+                )
+                filing_disclosure = (
+                    "Helium-Raw-Evidence mit Payer/Payee, Transaction-Hash, "
+                    "Zeitstempel und Menge beilegen. Fairspot bleibt "
+                    "Transfer-Gegenpartei, nicht aktuelle Portfolio-Wallet."
                 )
                 manual_evidence_required = False
             elif item.closure_status == "external_or_unknown_origin_documented":

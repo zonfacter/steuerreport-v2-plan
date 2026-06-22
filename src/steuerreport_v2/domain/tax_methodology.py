@@ -465,6 +465,7 @@ class TaxMethodologyService:
                 "documented_fiat_purchase",
                 "documented_legacy_hnt_cex_deposit",
                 "documented_legacy_hnt_cex_deposit_mirror",
+                "documented_fairspot_staking_return",
             }:
                 continue
             items.append(
@@ -626,6 +627,13 @@ class TaxMethodologyService:
                 unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
             )
         )
+        wallet_fifo_documented_fairspot_staking_return_count = (
+            self._documented_fairspot_staking_return_count(
+                wallet_fifo_service,
+                year=year,
+                unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+            )
+        )
         asset_fifo_review = self.tax_years.asset_fifo_correction_review(
             year,
             limit=200,
@@ -650,6 +658,9 @@ class TaxMethodologyService:
             wallet_fifo_documented_legacy_cex_deposit_count=wallet_fifo_documented_legacy_cex_deposit_count,
             wallet_fifo_documented_legacy_cex_deposit_mirror_count=(
                 wallet_fifo_documented_legacy_cex_deposit_mirror_count
+            ),
+            wallet_fifo_documented_fairspot_staking_return_count=(
+                wallet_fifo_documented_fairspot_staking_return_count
             ),
             asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
             asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
@@ -751,6 +762,18 @@ class TaxMethodologyService:
             return 0
         closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
         return closure.documented_legacy_cex_deposit_mirror_count
+
+    def _documented_fairspot_staking_return_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return closure.documented_fairspot_staking_return_count
 
     def _is_documented_exchange_sequencing_gap(
         self,
@@ -938,6 +961,7 @@ class TaxMethodologyService:
         wallet_fifo_documented_fiat_purchase_count: int,
         wallet_fifo_documented_legacy_cex_deposit_count: int,
         wallet_fifo_documented_legacy_cex_deposit_mirror_count: int,
+        wallet_fifo_documented_fairspot_staking_return_count: int,
         asset_fifo_possible_recalculation_count: int,
         asset_fifo_attribution_review_count: int,
     ) -> list[TaxMethodologyGap]:
@@ -1021,7 +1045,8 @@ class TaxMethodologyService:
             wallet_fifo_unresolved_provenance_count
             - wallet_fifo_documented_fiat_purchase_count
             - wallet_fifo_documented_legacy_cex_deposit_count
-            - wallet_fifo_documented_legacy_cex_deposit_mirror_count,
+            - wallet_fifo_documented_legacy_cex_deposit_mirror_count
+            - wallet_fifo_documented_fairspot_staking_return_count,
         )
         if wallet_fifo_documented_fiat_purchase_count:
             gaps.append(
@@ -1073,6 +1098,25 @@ class TaxMethodologyService:
                     action=(
                         "Als Spiegelbeleg zum Legacy-HNT-CEX-Deposit dokumentieren; "
                         "nicht als zweite Anschaffung oder Verkauf werten."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    blocks_bmf_ready=False,
+                )
+            )
+        if wallet_fifo_documented_fairspot_staking_return_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_fairspot_staking_return_documented",
+                    severity="info",
+                    message=(
+                        f"{wallet_fifo_documented_fairspot_staking_return_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse sind als Fairspot/Staking-Ruecktransfer belegt."
+                    ),
+                    count=wallet_fifo_documented_fairspot_staking_return_count,
+                    action=(
+                        "Als steuerneutralen Staking-/Service-Ruecktransfer mit "
+                        "FIFO-Fortfuehrung dokumentieren; Fairspot nicht als "
+                        "aktuelle Portfolio-Wallet bewerten."
                     ),
                     evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
                     blocks_bmf_ready=False,
@@ -1387,6 +1431,9 @@ class TaxMethodologyService:
             "wallet_fifo_legacy_cex_deposit_documented": "Wallet-FIFO Legacy-HNT-CEX-Deposit dokumentiert",
             "wallet_fifo_legacy_cex_deposit_mirror_documented": (
                 "Wallet-FIFO Legacy-HNT-CEX-Deposit-Spiegel dokumentiert"
+            ),
+            "wallet_fifo_fairspot_staking_return_documented": (
+                "Wallet-FIFO Fairspot/Staking-Ruecktransfer dokumentiert"
             ),
             "asset_fifo_possible_recalculation": "Asset-FIFO moegliche Neuberechnung",
             "asset_fifo_quote_attribution_documented": "Quote-/Attribution dokumentiert",

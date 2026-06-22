@@ -1100,6 +1100,91 @@ def test_wallet_fifo_provenance_closure_documents_legacy_hnt_cex_deposit_mirror(
     assert by_pool["binance:binance"].requires_review is False
 
 
+def test_wallet_fifo_provenance_closure_counts_fairspot_staking_return(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    main_wallet = WalletFifoPreviewService.MAIN_HELIUM_LEGACY_WALLET
+    fairspot = WalletFifoPreviewService.FAIRSPOT_STAKING_WALLET
+    helium_batch = store.create_import_batch(
+        ImportBatchCreate(source="helium", filename="helium-main-legacy.csv", file_hash="fairspot-return")
+    )
+    fairspot_raw = store.add_raw_object(
+        helium_batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "date": "08.07.2021 18:30",
+                    "hnt_amount": "99,75",
+                    "payee": main_wallet,
+                    "payer": fairspot,
+                    "transaction_hash": "fairspot-return-tx",
+                    "type": "payment_v2",
+                }
+            ),
+        ),
+    )
+    unknown_raw = store.add_raw_object(
+        helium_batch.batch_id,
+        RawObjectCreate(
+            row_number=2,
+            payload_json=json.dumps(
+                {
+                    "date": "22.06.2021 08:58",
+                    "hnt_amount": "96,479374",
+                    "payee": main_wallet,
+                    "payer": "14YeKFGXE23yAdACj6hu5NWEcYzzKxptYbm5jHgzw9A1P1UQfMv",
+                    "transaction_hash": "unknown-legacy-inflow-tx",
+                    "type": "payment_v1",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2021, 7, 8, 18, 30, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="HNT",
+                quantity=Decimal("99.75"),
+                account=main_wallet,
+                tx_id="fairspot-return-tx",
+                raw_object_id=fairspot_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2021, 6, 22, 8, 58, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="HNT",
+                quantity=Decimal("96.479374"),
+                account=main_wallet,
+                tx_id="unknown-legacy-inflow-tx",
+                raw_object_id=unknown_raw.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2021, 7, 9, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="USDT",
+                quantity=Decimal("900"),
+                quote_asset="HNT",
+                quote_quantity=Decimal("196.229374"),
+                account=main_wallet,
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2021)
+    item = report.items[0]
+
+    assert report.documented_fairspot_staking_return_count == 1
+    assert item.pool_id == f"helium:{main_wallet}"
+    assert item.closure_status == "review_required"
+    assert item.requires_review is True
+    assert "1 von 2" in item.tax_treatment_hint
+
+
 def test_wallet_fifo_marks_reviewed_cex_exchange_outflow_anchor_as_resolved(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     txid = "cex-reviewed-deposit-tx"
