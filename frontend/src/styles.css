@@ -916,6 +916,152 @@ p {
   min-height: 90px;
 }
 
+.taxFilingActionGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.taxFilingActionColumn {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.taxFilingActionColumn.ok {
+  border-color: #add3ba;
+}
+
+.taxFilingActionColumn.warning {
+  border-color: #e2c56c;
+}
+
+.taxFilingActionColumn.blocked {
+  border-color: #e4b6aa;
+}
+
+.taxFilingActionHeader {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.taxFilingActionHeader > span {
+  align-items: center;
+  background: #f0f4ef;
+  border-radius: 8px;
+  color: #1f6f8b;
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.taxFilingActionHeader strong {
+  color: #17201b;
+  display: block;
+  font-size: 15px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.taxFilingActionHeader small {
+  color: #6b746d;
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.taxFilingActionColumn p {
+  color: #58655d;
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+  min-height: 54px;
+  overflow-wrap: anywhere;
+}
+
+.taxFilingActionItems {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.taxFilingActionItem {
+  background: #f8f7f3;
+  border: 1px solid #ece8e0;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 56px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.taxFilingActionItem strong,
+.taxFilingActionItem span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taxFilingActionItem strong {
+  color: #26372f;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.taxFilingActionItem span {
+  color: #6b746d;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.taxFilingActionMeta {
+  align-items: end;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.taxFilingActionMeta > span {
+  color: #26372f;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.taxFilingActionMeta button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 6px;
+  color: #1f6f8b;
+  cursor: pointer;
+  display: flex;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.taxFilingActionEmpty,
+.taxFilingActionMore {
+  color: #6b746d;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .taxViewSwitch {
   background: #ffffff;
   border: 1px solid #d8d6cf;
@@ -2432,6 +2578,7 @@ th {
   .fifoProofMetrics,
   .taxFilingDecision,
   .portfolioDecision,
+  .taxFilingActionGrid,
   .toolSafetyPanel,
   .taxFilingDecisionMetrics,
   .taxViewSwitch,

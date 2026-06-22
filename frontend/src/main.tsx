@@ -7647,6 +7647,47 @@ function TaxPanel({
   const proofLines = filingLines.filter((line) => ["appendix", "evidence", "review"].includes(String(line.topic)));
   const filingChecklist = taxYearFilingSummary?.checklist ?? [];
   const filingMatrixRows = taxYearFilingMatrix?.rows ?? [];
+  const activeFilingMatrixRow = filingMatrixRows.find((row) => String(row.year) === activeYearValue);
+  const groupedFilingChecklist = {
+    eintragen: filingChecklist.filter((item) => String(item.category) === "eintragen"),
+    beilegen: filingChecklist.filter((item) => String(item.category) === "beilegen"),
+    pruefen: filingChecklist.filter((item) => String(item.category) === "pruefen"),
+    archivieren: filingChecklist.filter((item) => String(item.category) === "archivieren")
+  };
+  const filingActionGroups = [
+    {
+      key: "eintragen",
+      label: "Eintragen",
+      detail: "Betraege fuer Anlage SO, Rewards oder Sonderposten uebernehmen.",
+      tone: "ok",
+      icon: <ReceiptText size={18} />,
+      items: groupedFilingChecklist.eintragen
+    },
+    {
+      key: "beilegen",
+      label: "Beilegen",
+      detail: "BMF-/Herkunftsbeilage und Jahrespaket zur Erklaerung bereithalten.",
+      tone: "warning",
+      icon: <PackageCheck size={18} />,
+      items: groupedFilingChecklist.beilegen
+    },
+    {
+      key: "pruefen",
+      label: "Separat pruefen",
+      detail: "Nicht automatisch in die Hauptsumme mischen; vor Abgabe fachlich ansehen.",
+      tone: groupedFilingChecklist.pruefen.length > 0 ? "warning" : "ok",
+      icon: <AlertTriangle size={18} />,
+      items: groupedFilingChecklist.pruefen
+    },
+    {
+      key: "archivieren",
+      label: "Archivieren",
+      detail: "Nicht eintragen, aber fuer Stichtag, Haltefrist und Nachweis aufbewahren.",
+      tone: "ok",
+      icon: <Database size={18} />,
+      items: groupedFilingChecklist.archivieren
+    }
+  ];
   const correctionMapYears = (taxYearsCorrectionMap?.years ?? []) as Array<Record<string, unknown>>;
   const activeCorrectionMap = (taxYearCorrectionMap ?? correctionMapYears.find((row) => String(row.year) === activeYearValue)) as Record<string, unknown> | undefined;
   const correctionLines = (Array.isArray(activeCorrectionMap?.lines) ? activeCorrectionMap.lines : []) as Array<Record<string, unknown>>;
@@ -7688,6 +7729,11 @@ function TaxPanel({
             <span className={`statusPill ${yearDecisionTone}`}>
               {String(activePaymentRow?.declaration_bucket ?? (yearNeedsReview ? "pruefen" : "bereit"))}
             </span>
+            {activeFilingMatrixRow?.action_status ? (
+              <span className={`statusPill ${String(activeFilingMatrixRow.action_status) === "blocked" ? "blocked" : String(activeFilingMatrixRow.action_status) === "review" ? "warning" : "ok"}`}>
+                {filingActionStatusLabel(activeFilingMatrixRow.action_status)}
+              </span>
+            ) : null}
             <span>{String(activePaymentRow?.where_to_enter ?? "Eingabeziel wird geladen")}</span>
           </div>
         </div>
@@ -7711,6 +7757,48 @@ function TaxPanel({
           <Metric title="Derivate" value={`${formatCurrency(activePaymentRow?.derivative_pnl_eur ?? taxYearFilingSummary?.derivative_pnl_eur)} EUR`} />
           <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
         </div>
+      </section>
+
+      <section className="taxFilingActionGrid" aria-label="Jahresaktionen fuer die Steuererklaerung">
+        {filingActionGroups.map((group) => (
+          <div key={group.key} className={`taxFilingActionColumn ${group.tone}`}>
+            <div className="taxFilingActionHeader">
+              <span>{group.icon}</span>
+              <div>
+                <strong>{group.label}</strong>
+                <small>{group.items.length} Punkt(e)</small>
+              </div>
+            </div>
+            <p>{group.detail}</p>
+            <div className="taxFilingActionItems">
+              {group.items.length === 0 ? (
+                <span className="taxFilingActionEmpty">Keine Aktion in diesem Bereich.</span>
+              ) : (
+                group.items.slice(0, 4).map((item, index) => (
+                  <div key={`${group.key}-${index}`} className="taxFilingActionItem">
+                    <div>
+                      <strong>{String(item.label ?? item.source_topic ?? group.label)}</strong>
+                      <span>{String(item.target ?? item.done_when ?? item.action ?? "")}</span>
+                    </div>
+                    <div className="taxFilingActionMeta">
+                      {item.amount_eur !== null && item.amount_eur !== undefined ? (
+                        <span>{formatCurrency(item.amount_eur)} EUR</span>
+                      ) : null}
+                      {item.evidence_ref ? (
+                        <button type="button" onClick={() => onDownload(String(item.evidence_ref))} title="Beleg oeffnen">
+                          <FileDown size={14} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              )}
+              {group.items.length > 4 ? (
+                <span className="taxFilingActionMore">+{group.items.length - 4} weitere in der Checkliste</span>
+              ) : null}
+            </div>
+          </div>
+        ))}
       </section>
 
       {filingMatrixRows.length > 0 ? (
