@@ -190,6 +190,54 @@ def test_bmf_filing_readiness_surfaces_conservative_appendix_without_ready_flag(
     assert "2024 | Konservativ belegbar | 18490.20 EUR" in report.ascii_table
 
 
+def test_bmf_filing_readiness_treats_documented_review_only_year_as_conservative(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service._available_years = lambda: [2025]
+    service.report = lambda year: SimpleNamespace(
+        year=year,
+        status="review",
+        bmf_ready=False,
+        gaps=[
+            SimpleNamespace(
+                code="wallet_fifo_delta_present",
+                severity="warning",
+                blocks_bmf_ready=False,
+            ),
+            SimpleNamespace(
+                code="wallet_fifo_evidence_overlay_ok",
+                severity="info",
+                blocks_bmf_ready=False,
+            ),
+        ],
+    )
+    service.tax_years.payment_overview = lambda years: SimpleNamespace(
+        rows=[
+            SimpleNamespace(
+                year=2025,
+                private_disposals_gain_loss_eur=Decimal("-923.63"),
+                rewards_mining_staking_income_eur=Decimal("45.43"),
+                derivative_pnl_eur=Decimal("0"),
+            )
+        ]
+    )
+    service.tax_years.bmf_closure_appendix = lambda year: SimpleNamespace(
+        status="ready",
+        items_count=0,
+        manual_evidence_required_count=0,
+        can_file_with_conservative_appendix=False,
+    )
+
+    report = service.bmf_filing_readiness()
+    row = report.years[0]
+
+    assert report.conservative_appendix_years == [2025]
+    assert report.review_years == []
+    assert row.filing_status == "conservative_appendix"
+    assert row.can_file_with_conservative_appendix is False
+    assert "Nicht-blockierende Review-Hinweise" in row.next_action
+
+
 def test_bmf_filing_readiness_snapshot_roundtrip(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)

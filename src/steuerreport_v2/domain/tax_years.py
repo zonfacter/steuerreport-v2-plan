@@ -3326,6 +3326,7 @@ class TaxYearService:
                     "Sender-/Service-Kontext belegt wird, kann der Fall per Review "
                     "zu Transfer/FIFO-Fortfuehrung nachgezogen werden."
                 )
+                manual_evidence_required = False
             elif item.closure_status == "unverified_cex_deposit_sender":
                 recommended_tax_treatment = (
                     "Binance-Deposit nur dann als steuerneutralen Depotwechsel nutzen, "
@@ -3336,6 +3337,7 @@ class TaxYearService:
                     "CEX-Deposit-Beleg und Sender-Ownership-Report beilegen. Die "
                     "Sender-Wallet ist nicht in der Owned-Wallet-Registry belegt."
                 )
+                manual_evidence_required = False
             elif item.closure_status == "tax_neutral_candidate_review_required":
                 recommended_tax_treatment = (
                     "Potentiell steuerneutraler Transfer; erst nach fachlicher "

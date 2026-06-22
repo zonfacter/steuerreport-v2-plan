@@ -39,6 +39,12 @@ class TaxMethodologyService:
     EXCHANGE_SEQUENCING_POOLS = {"binance", "bitget", "pionex"}
     DEFAULT_BMF_FILING_READINESS_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_filing_readiness")
     DEFAULT_BMF_CLOSURE_BACKLOG_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_closure_backlog")
+    CONSERVATIVE_REVIEW_ONLY_CODES = {
+        "asset_fifo_quote_attribution_documented",
+        "income_only_year",
+        "wallet_fifo_delta_present",
+        "wallet_fifo_evidence_overlay_ok",
+    }
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
@@ -268,6 +274,9 @@ class TaxMethodologyService:
         can_file_with_conservative_appendix = bool(
             appendix is not None and appendix.can_file_with_conservative_appendix
         )
+        can_file_with_documented_review_only = bool(review_codes) and not blocking_codes and all(
+            code in self.CONSERVATIVE_REVIEW_ONLY_CODES for code in review_codes
+        )
         if report.status == "empty":
             filing_status = "empty"
             label = "Keine Aktivitaet"
@@ -276,13 +285,19 @@ class TaxMethodologyService:
             filing_status = "bmf_ready"
             label = "BMF-ready"
             next_action = "Filing Summary und Belegpaket fuer die Steuererklaerung verwenden."
-        elif can_file_with_conservative_appendix:
+        elif can_file_with_conservative_appendix or can_file_with_documented_review_only:
             filing_status = "conservative_appendix"
             label = "Konservativ belegbar"
-            next_action = (
-                "BMF-Closure-Appendix beilegen und keine offene Herkunft als "
-                "steuerneutralen Eigenwallet-Transfer behaupten."
-            )
+            if can_file_with_conservative_appendix:
+                next_action = (
+                    "BMF-Closure-Appendix beilegen und keine offene Herkunft als "
+                    "steuerneutralen Eigenwallet-Transfer behaupten."
+                )
+            else:
+                next_action = (
+                    "Nicht-blockierende Review-Hinweise im Jahrespaket beilegen; "
+                    "keine zusaetzlichen Steuerbetraege aus der Warnung ableiten."
+                )
         elif blocking_codes:
             filing_status = "blocked"
             label = "Blockiert"

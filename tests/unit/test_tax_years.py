@@ -1305,13 +1305,14 @@ def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_pat
     response = TestClient(create_app(store)).get("/api/v1/tax-years/2024/bmf-closure-appendix")
     items = {item.category: item for item in appendix.items}
 
-    assert appendix.status == "review"
+    assert appendix.status == "ready"
     assert appendix.items_count == 2
-    assert appendix.manual_evidence_required_count == 1
+    assert appendix.manual_evidence_required_count == 0
     assert appendix.conservative_items_count == 2
     assert appendix.can_file_with_conservative_appendix is True
     assert items["cex_deposit_sender_ownership"].closure_status == "unverified_cex_deposit_sender"
     assert "nicht als Eigenwallet-Transfer" in items["cex_deposit_sender_ownership"].recommended_tax_treatment
+    assert items["cex_deposit_sender_ownership"].manual_evidence_required is False
     assert items["opening_balance"].manual_evidence_required is False
     assert response.status_code == 200
     assert response.json()["data"]["items_count"] == 2
@@ -1319,9 +1320,9 @@ def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_pat
     filing_summary = TaxYearService(store).filing_summary(2024)
     appendix_line = next(line for line in filing_summary.lines if line.topic == "appendix")
 
-    assert filing_summary.bmf_closure_appendix_status == "review"
+    assert filing_summary.bmf_closure_appendix_status == "ready"
     assert filing_summary.bmf_closure_appendix_items_count == 2
-    assert filing_summary.bmf_closure_appendix_manual_evidence_required_count == 1
+    assert filing_summary.bmf_closure_appendix_manual_evidence_required_count == 0
     assert filing_summary.can_file_with_conservative_appendix is True
     assert appendix_line.label == "BMF-Abschlussbeilage Herkunft"
     assert appendix_line.tax_treatment == "konservativ belegbar"
