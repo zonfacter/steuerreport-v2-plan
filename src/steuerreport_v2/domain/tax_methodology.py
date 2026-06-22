@@ -10,6 +10,7 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionPlan,
     TaxBmfClosureBacklogItem,
     TaxBmfClosureBacklogReport,
+    TaxBmfClosureBacklogSnapshot,
     TaxBmfClosureBacklogYear,
     TaxBmfFilingReadinessReport,
     TaxBmfFilingReadinessSnapshot,
@@ -37,6 +38,7 @@ class TaxMethodologyService:
     EXCHANGE_SEQUENCING_GAP_WINDOW = timedelta(minutes=5)
     EXCHANGE_SEQUENCING_POOLS = {"binance", "bitget", "pionex"}
     DEFAULT_BMF_FILING_READINESS_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_filing_readiness")
+    DEFAULT_BMF_CLOSURE_BACKLOG_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_closure_backlog")
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
@@ -398,6 +400,61 @@ class TaxMethodologyService:
             ),
         )
 
+    def bmf_closure_backlog_snapshot(
+        self,
+        *,
+        artifact_path: Path | None = None,
+    ) -> TaxBmfClosureBacklogSnapshot:
+        path = artifact_path or self._bmf_closure_backlog_snapshot_path()
+        if not path.exists():
+            return TaxBmfClosureBacklogSnapshot(
+                generated_at=self._now(),
+                snapshot_exists=False,
+                artifact_path=str(path),
+                report=None,
+                status="missing",
+                note=(
+                    "Noch kein BMF-Closure-Backlog-Snapshot vorhanden. "
+                    "Erzeuge ihn mit scripts/run_bmf_closure_backlog_snapshot_20260622.py."
+                ),
+            )
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            report = TaxBmfClosureBacklogReport.model_validate(payload)
+        except Exception as exc:
+            return TaxBmfClosureBacklogSnapshot(
+                generated_at=self._now(),
+                snapshot_exists=True,
+                artifact_path=str(path),
+                report=None,
+                status="invalid",
+                note=f"Snapshot konnte nicht validiert werden: {exc}",
+            )
+        return TaxBmfClosureBacklogSnapshot(
+            generated_at=self._now(),
+            snapshot_exists=True,
+            artifact_path=str(path),
+            report=report,
+            status="available",
+            note="Read-only Snapshot aus var/bmf_closure_backlog; API berechnet dabei keine Methodology neu.",
+        )
+
+    def write_bmf_closure_backlog_snapshot(
+        self,
+        *,
+        output_dir: Path | None = None,
+    ) -> Path:
+        out = output_dir or self.DEFAULT_BMF_CLOSURE_BACKLOG_DIR
+        out.mkdir(parents=True, exist_ok=True)
+        report = self.bmf_closure_backlog()
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        artifact = out / f"{timestamp}_bmf_closure_backlog_2021_2025.json"
+        latest = out / "latest_bmf_closure_backlog_2021_2025.json"
+        content = json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8")
+        artifact.write_bytes(content)
+        latest.write_bytes(content)
+        return latest
+
     def _bmf_closure_backlog_year(self, year: int) -> TaxBmfClosureBacklogYear:
         report = self.report(year)
         appendix = self.tax_years.bmf_closure_appendix(year)
@@ -518,6 +575,18 @@ class TaxMethodologyService:
             "wallet_fifo_unresolved_inbound_provenance": "Herkunft mit Withdrawal-/Deposit-/Onchain-Beleg verknuepfen.",
         }
         return evidence_by_code.get(code, "Methodology-Gap fachlich dokumentieren.")
+
+    def _bmf_closure_backlog_snapshot_path(self) -> Path:
+        candidates = [
+            self.store.path.parent / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
+            self.store.path.parent.parent / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
+            Path.cwd() / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
+            self.DEFAULT_BMF_CLOSURE_BACKLOG_DIR / "latest_bmf_closure_backlog_2021_2025.json",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[-1]
 
     def status(self, year: int) -> TaxYearComplianceStatus:
         return self._status_from_report(self.report(year))

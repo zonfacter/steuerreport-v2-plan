@@ -174,6 +174,7 @@ from steuerreport_v2.contracts.tax import (
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionPlan,
     TaxBmfClosureBacklogReport,
+    TaxBmfClosureBacklogSnapshot,
     TaxBmfFilingReadinessReport,
     TaxBmfFilingReadinessSnapshot,
     TaxRewardBmfRecheckReport,
@@ -1946,6 +1947,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-methodology/bmf-closure-backlog")
     def tax_methodology_bmf_closure_backlog(year: int | None = None) -> ApiResponse[TaxBmfClosureBacklogReport]:
         return ApiResponse(data=TaxMethodologyService(db).bmf_closure_backlog(year=year))
+
+    @app.get("/api/v1/tax-methodology/bmf-closure-backlog-snapshot")
+    def tax_methodology_bmf_closure_backlog_snapshot() -> ApiResponse[TaxBmfClosureBacklogSnapshot]:
+        return ApiResponse(data=TaxMethodologyService(db).bmf_closure_backlog_snapshot())
 
     @app.get("/api/v1/tax-methodology/bmf-filing-readiness")
     def tax_methodology_bmf_filing_readiness(year: int | None = None) -> ApiResponse[TaxBmfFilingReadinessReport]:

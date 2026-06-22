@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from steuerreport_v2.api.app import create_app
-from steuerreport_v2.contracts.tax_methodology import TaxBmfFilingReadinessReport
+from steuerreport_v2.contracts.tax_methodology import TaxBmfClosureBacklogReport, TaxBmfFilingReadinessReport
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
@@ -291,6 +291,31 @@ def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
     ]
     assert all(item.blocker_type != "documented_non_live_opening_balance" for item in year.items)
     assert year.items[0].required_evidence.startswith("Solana-Provenance-Batch")
+
+
+def test_bmf_closure_backlog_snapshot_roundtrip(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service.bmf_closure_backlog = lambda year=None: TaxBmfClosureBacklogReport(
+        generated_at="2026-06-22T00:00:00+00:00",
+        available_years=[2021, 2022, 2023, 2024, 2025],
+        years=[],
+        blocker_items_count=23,
+        review_items_count=6,
+        total_exposure_eur=Decimal("73299.96"),
+        next_year_to_close=2021,
+        methodology="unit",
+    )
+
+    latest = service.write_bmf_closure_backlog_snapshot(output_dir=tmp_path / "backlog")
+    snapshot = service.bmf_closure_backlog_snapshot(artifact_path=latest)
+
+    assert latest.name == "latest_bmf_closure_backlog_2021_2025.json"
+    assert snapshot.status == "available"
+    assert snapshot.snapshot_exists is True
+    assert snapshot.report is not None
+    assert snapshot.report.blocker_items_count == 23
+    assert snapshot.report.next_year_to_close == 2021
 
 
 def test_tax_methodology_blocks_unresolved_wallet_fifo_inbound_provenance(tmp_path):
