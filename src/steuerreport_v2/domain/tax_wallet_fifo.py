@@ -2509,6 +2509,7 @@ class WalletFifoPreviewService:
                 candidate,
                 deposit_history_rows,
                 deposit_history_index=deposit_history_index,
+                amount_tolerance=Decimal("0.01"),
             )
             if deposit is None:
                 continue
@@ -5957,8 +5958,10 @@ class WalletFifoPreviewService:
         rows: list[WalletFifoOriginRawEvidence],
         *,
         deposit_history_index: dict[tuple[str, Decimal], list[WalletFifoOriginRawEvidence]] | None = None,
+        amount_tolerance: Decimal = Decimal("0.00000001"),
     ) -> WalletFifoOriginRawEvidence | None:
         best: tuple[int, WalletFifoOriginRawEvidence] | None = None
+        exact_tolerance = Decimal("0.00000001")
         candidate_amount = abs(candidate.quantity)
         indexed_rows = (
             deposit_history_index.get((candidate.asset.upper(), candidate_amount), [])
@@ -5971,12 +5974,19 @@ class WalletFifoPreviewService:
             if str(payload.get("Coin", "")).upper() != candidate.asset.upper():
                 continue
             amount = self._payload_decimal(payload, "Amount")
-            if amount is None or abs(amount - candidate_amount) > Decimal("0.00000001"):
+            if amount is None:
+                continue
+            amount_delta = abs(amount - candidate_amount)
+            if amount_delta > amount_tolerance:
+                continue
+            payload_time = str(payload.get("Time", ""))
+            if amount_delta > exact_tolerance and candidate.event_time.strftime("%y-%m-%d") not in payload_time:
                 continue
             score = 10
-            payload_time = str(payload.get("Time", ""))
             if candidate.event_time.strftime("%y-%m-%d") in payload_time:
                 score -= 5
+            if amount_delta > exact_tolerance:
+                score += 1
             if candidate.tx_id and str(payload.get("TXID", "")) == candidate.tx_id:
                 score -= 10
             if best is None or score < best[0]:

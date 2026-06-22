@@ -946,12 +946,29 @@ def test_wallet_fifo_provenance_closure_counts_partial_legacy_hnt_cex_deposit(tm
             payload_json=json.dumps(
                 {
                     "Address": "138bCXPVfSq7yyTfoDUrVwztPmUr4WGyA7TED9Y41djmF7rjA8y",
-                    "Amount": "10",
+                    "Amount": "10.004",
                     "Coin": "HNT",
                     "Network": "HNT",
                     "Status": "Completed",
                     "TXID": "legacy-hnt-deposit-tx",
                     "Time": "21-09-05 15:17:15",
+                }
+            ),
+        ),
+    )
+    store.add_raw_object(
+        deposit_batch.batch_id,
+        RawObjectCreate(
+            row_number=2,
+            payload_json=json.dumps(
+                {
+                    "Address": "138bCXPVfSq7yyTfoDUrVwztPmUr4WGyA7TED9Y41djmF7rjA8y",
+                    "Amount": "20.004",
+                    "Coin": "HNT",
+                    "Network": "HNT",
+                    "Status": "Completed",
+                    "TXID": "wrong-day-rounded-hnt-deposit-tx",
+                    "Time": "21-09-05 18:00:00",
                 }
             ),
         ),
