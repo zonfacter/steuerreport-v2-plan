@@ -145,7 +145,7 @@ class TaxDeclarationGuide(BaseModel):
 
 class TaxYearFilingSummaryLine(BaseModel):
     order: int
-    topic: Literal["private_disposal", "income", "derivative", "tax_free", "evidence", "review"]
+    topic: Literal["private_disposal", "income", "derivative", "tax_free", "appendix", "evidence", "review"]
     label: str
     amount_eur: Decimal | None = None
     tax_treatment: str
@@ -167,6 +167,10 @@ class TaxYearFilingSummary(BaseModel):
     derivative_pnl_eur: Decimal = Decimal("0")
     tax_free_private_disposals_eur: Decimal = Decimal("0")
     tax_free_lines_count: int = 0
+    bmf_closure_appendix_status: str | None = None
+    bmf_closure_appendix_items_count: int = 0
+    bmf_closure_appendix_manual_evidence_required_count: int = 0
+    can_file_with_conservative_appendix: bool = False
     lines: list[TaxYearFilingSummaryLine] = Field(default_factory=list)
     review_decisions: list[TaxYearReviewDecisionSummary] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

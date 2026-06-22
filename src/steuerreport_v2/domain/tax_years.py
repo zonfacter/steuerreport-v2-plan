@@ -865,6 +865,7 @@ class TaxYearService:
         status = self._status_for_year(year)
         guide = self.declaration_guide(year)
         review_decisions = self._review_decisions_for_year(year)
+        bmf_closure_appendix = self.bmf_closure_appendix(year)
         lines: list[TaxYearFilingSummaryLine] = []
         order = 1
 
@@ -989,6 +990,34 @@ class TaxYearService:
             )
             order += 1
 
+        if bmf_closure_appendix.items_count:
+            appendix_ready = (
+                bmf_closure_appendix.status == "ready"
+                or bmf_closure_appendix.can_file_with_conservative_appendix
+            )
+            lines.append(
+                TaxYearFilingSummaryLine(
+                    order=order,
+                    topic="appendix",
+                    label="BMF-Abschlussbeilage Herkunft",
+                    amount_eur=None,
+                    tax_treatment=(
+                        "konservativ belegbar"
+                        if appendix_ready
+                        else "vor Einreichung pruefen"
+                    ),
+                    declaration_target="Nicht als Betrag eintragen; Herkunftsbeilage archivieren/beilegen",
+                    evidence_ref=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
+                    note=(
+                        f"{bmf_closure_appendix.items_count} Herkunftsposition(en), "
+                        f"{bmf_closure_appendix.conservative_items_count} konservativ belegbar, "
+                        f"{bmf_closure_appendix.manual_evidence_required_count} manuell zu pruefen. "
+                        "Keine offene Herkunft als steuerneutralen Eigenwallet-Transfer behaupten."
+                    ),
+                )
+            )
+            order += 1
+
         lines.append(
             TaxYearFilingSummaryLine(
                 order=order,
@@ -1022,6 +1051,11 @@ class TaxYearService:
             order += 1
 
         warnings = list(guide.caveats)
+        if bmf_closure_appendix.items_count and bmf_closure_appendix.status != "ready":
+            warnings.append(
+                "BMF-Abschlussbeilage enthaelt konservativ dokumentierte Herkunftspositionen; "
+                "Details vor Abgabe mit dem Belegpaket pruefen."
+            )
         for issue in status.issues:
             if issue.blocks_export:
                 lines.append(
@@ -1051,14 +1085,20 @@ class TaxYearService:
             derivative_pnl_eur=status.derivative_pnl_eur,
             tax_free_private_disposals_eur=status.tax_free_gain_loss_eur,
             tax_free_lines_count=status.tax_free_lines_count,
+            bmf_closure_appendix_status=bmf_closure_appendix.status,
+            bmf_closure_appendix_items_count=bmf_closure_appendix.items_count,
+            bmf_closure_appendix_manual_evidence_required_count=(
+                bmf_closure_appendix.manual_evidence_required_count
+            ),
+            can_file_with_conservative_appendix=bmf_closure_appendix.can_file_with_conservative_appendix,
             lines=lines,
             review_decisions=review_decisions,
             warnings=warnings,
             ascii_table=self._filing_ascii_table(year, lines),
             methodology=(
                 "Read-only Steuerjahr-Erklaerung aus Tax-Year-Status, Declaration-Guide "
-                "und vorhandenen Exportverweisen. Es werden keine FIFO-Lots, Preise, "
-                "Imports oder Steuerentscheidungen geschrieben."
+                "BMF-Abschlussbeilage und vorhandenen Exportverweisen. Es werden keine "
+                "FIFO-Lots, Preise, Imports oder Steuerentscheidungen geschrieben."
             ),
         )
 

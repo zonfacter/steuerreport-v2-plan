@@ -1182,6 +1182,20 @@ def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_pat
     assert response.status_code == 200
     assert response.json()["data"]["items_count"] == 2
 
+    filing_summary = TaxYearService(store).filing_summary(2024)
+    appendix_line = next(line for line in filing_summary.lines if line.topic == "appendix")
+
+    assert filing_summary.bmf_closure_appendix_status == "review"
+    assert filing_summary.bmf_closure_appendix_items_count == 2
+    assert filing_summary.bmf_closure_appendix_manual_evidence_required_count == 1
+    assert filing_summary.can_file_with_conservative_appendix is True
+    assert appendix_line.label == "BMF-Abschlussbeilage Herkunft"
+    assert appendix_line.tax_treatment == "konservativ belegbar"
+    assert appendix_line.declaration_target.startswith("Nicht als Betrag eintragen")
+    assert appendix_line.evidence_ref == "/api/v1/tax-years/2024/bmf-closure-appendix"
+    assert "2 Herkunftsposition" in appendix_line.note
+    assert "BMF-Abschlussbeilage Herkunft" in filing_summary.ascii_table
+
     package_response = TestClient(create_app(store)).get("/api/v1/export/tax-years/2024/evidence-package.zip")
     assert package_response.status_code == 200
     with ZipFile(BytesIO(package_response.content)) as package:
