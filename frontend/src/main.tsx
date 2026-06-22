@@ -7767,9 +7767,17 @@ function TaxPanel({
             <FileJson size={16} />
             Korrekturkarte JSON
           </button>
+          <button type="button" onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/correction-map.csv`)}>
+            <FileDown size={16} />
+            Korrekturkarte CSV
+          </button>
           <button type="button" onClick={() => onDownload("/api/v1/tax-years/correction-map")}>
             <FileJson size={16} />
             Alle Jahre JSON
+          </button>
+          <button type="button" onClick={() => onDownload("/api/v1/export/tax-years/correction-map.csv")}>
+            <FileDown size={16} />
+            Alle Jahre CSV
           </button>
           <button type="button" onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`)}>
             <PackageCheck size={16} />

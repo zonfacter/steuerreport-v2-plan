@@ -1991,6 +1991,90 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def tax_year_correction_map(year: int) -> ApiResponse[TaxYearCorrectionMap]:
         return ApiResponse(data=TaxYearService(db).year_correction_map(year))
 
+    def render_tax_year_correction_map_csv(year: int, *, service: TaxYearService | None = None) -> str:
+        correction_map = (service or TaxYearService(db)).year_correction_map(year)
+        output = io.StringIO()
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "Year",
+                "Order",
+                "Action_Category",
+                "Topic",
+                "Label",
+                "Amount_EUR",
+                "Risk_Level",
+                "Declaration_Target",
+                "Evidence_Ref",
+                "Correction_Note",
+            ],
+        )
+        writer.writeheader()
+        for line in correction_map.lines:
+            writer.writerow(
+                {
+                    "Year": year,
+                    "Order": line.order,
+                    "Action_Category": line.action_category,
+                    "Topic": line.topic,
+                    "Label": line.label,
+                    "Amount_EUR": line.amount_eur.quantize(Decimal("0.01")) if line.amount_eur is not None else "",
+                    "Risk_Level": line.risk_level,
+                    "Declaration_Target": line.declaration_target,
+                    "Evidence_Ref": line.evidence_ref or "",
+                    "Correction_Note": line.correction_note,
+                }
+            )
+        return output.getvalue()
+
+    def render_tax_years_correction_map_csv(*, service: TaxYearService | None = None) -> str:
+        correction_maps = (service or TaxYearService(db)).correction_map()
+        output = io.StringIO()
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "Year",
+                "Filing_Status",
+                "Amendment_Review_Recommended",
+                "Taxable_Private_Disposals_EUR",
+                "Rewards_Mining_Staking_Income_EUR",
+                "Derivative_Pnl_EUR",
+                "Tax_Free_Private_Disposals_EUR",
+                "Amendment_Reason",
+            ],
+        )
+        writer.writeheader()
+        for item in correction_maps.years:
+            writer.writerow(
+                {
+                    "Year": item.year,
+                    "Filing_Status": item.filing_status,
+                    "Amendment_Review_Recommended": "yes" if item.amendment_review_recommended else "no",
+                    "Taxable_Private_Disposals_EUR": item.taxable_private_disposals_eur.quantize(Decimal("0.01")),
+                    "Rewards_Mining_Staking_Income_EUR": item.rewards_mining_staking_income_eur.quantize(Decimal("0.01")),
+                    "Derivative_Pnl_EUR": item.derivative_pnl_eur.quantize(Decimal("0.01")),
+                    "Tax_Free_Private_Disposals_EUR": item.tax_free_private_disposals_eur.quantize(Decimal("0.01")),
+                    "Amendment_Reason": item.amendment_reason,
+                }
+            )
+        return output.getvalue()
+
+    @app.get("/api/v1/export/tax-years/correction-map.csv")
+    def download_tax_years_correction_map_csv() -> Response:
+        return Response(
+            content=render_tax_years_correction_map_csv(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=tax-years-correction-map.csv"},
+        )
+
+    @app.get("/api/v1/export/tax-years/{year}/correction-map.csv")
+    def download_tax_year_correction_map_csv(year: int) -> Response:
+        return Response(
+            content=render_tax_year_correction_map_csv(year),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=tax-year-{year}-correction-map.csv"},
+        )
+
     def render_tax_year_filing_checklist_csv(year: int, *, service: TaxYearService | None = None) -> str:
         summary = (service or TaxYearService(db)).filing_summary(year)
         output = io.StringIO()
@@ -3898,6 +3982,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         required_refs = {line.evidence_ref for line in filing_summary.lines if line.evidence_ref}
         required_refs.update(item.endpoint for item in evidence_report.items if item.required)
         required_refs.add(f"/api/v1/tax-years/{year}/correction-map")
+        required_refs.add(f"/api/v1/export/tax-years/{year}/correction-map.csv")
         required_refs.add(f"/api/v1/export/tax-years/{year}/filing-checklist.csv")
         required_refs.add("/api/v1/export/tax-payment-overview.json")
         required_refs.add(f"/api/v1/tax-years/{year}/wallet-fifo-delta")
@@ -3936,6 +4021,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 f"02_Steuerliche_CSVs/tax-year-{year}-correction-map.json",
                 json.dumps(correction_map.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/correction-map",
+            ),
+            (
+                f"02_Steuerliche_CSVs/tax-year-{year}-correction-map.csv",
+                render_tax_year_correction_map_csv(year, service=tax_year_service).encode("utf-8"),
+                f"/api/v1/export/tax-years/{year}/correction-map.csv",
             ),
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-evidence.json",

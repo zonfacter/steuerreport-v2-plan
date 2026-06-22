@@ -1071,6 +1071,17 @@ def test_tax_year_correction_map_guides_prior_year_review(tmp_path):
     assert all_response.status_code == 200
     assert "years" in all_response.json()["data"]
 
+    csv_response = TestClient(create_app(store)).get("/api/v1/export/tax-years/2021/correction-map.csv")
+    assert csv_response.status_code == 200
+    assert "filename=tax-year-2021-correction-map.csv" in csv_response.headers["content-disposition"]
+    assert "Action_Category,Topic,Label,Amount_EUR" in csv_response.text
+    assert "korrigieren_pruefen,private_disposal,Privates Veraeusserungsergebnis,-60.00" in csv_response.text
+
+    all_csv_response = TestClient(create_app(store)).get("/api/v1/export/tax-years/correction-map.csv")
+    assert all_csv_response.status_code == 200
+    assert "filename=tax-years-correction-map.csv" in all_csv_response.headers["content-disposition"]
+    assert "Amendment_Review_Recommended" in all_csv_response.text
+
 
 def test_tax_year_filing_summary_surfaces_cex_fifo_anchor_status(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
@@ -1297,13 +1308,17 @@ def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_pat
         assert "02_Steuerliche_CSVs/tax-year-2024-bmf-closure-appendix.json" in names
         assert "02_Steuerliche_CSVs/tax-year-2024-filing-checklist.csv" in names
         assert "02_Steuerliche_CSVs/tax-year-2024-correction-map.json" in names
+        assert "02_Steuerliche_CSVs/tax-year-2024-correction-map.csv" in names
         packaged_checklist_csv = package.read("02_Steuerliche_CSVs/tax-year-2024-filing-checklist.csv").decode("utf-8")
         assert "beilegen,BMF-Abschlussbeilage Herkunft" in packaged_checklist_csv
         correction_map = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2024-correction-map.json").decode("utf-8"))
         assert correction_map["year"] == 2024
+        correction_map_csv = package.read("02_Steuerliche_CSVs/tax-year-2024-correction-map.csv").decode("utf-8")
+        assert "Action_Category,Topic,Label,Amount_EUR" in correction_map_csv
         manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
     assert "/api/v1/tax-years/2024/bmf-closure-appendix" in manifest["required_refs"]
     assert "/api/v1/tax-years/2024/correction-map" in manifest["required_refs"]
+    assert "/api/v1/export/tax-years/2024/correction-map.csv" in manifest["required_refs"]
     assert "/api/v1/export/tax-years/2024/filing-checklist.csv" in manifest["required_refs"]
 
 
