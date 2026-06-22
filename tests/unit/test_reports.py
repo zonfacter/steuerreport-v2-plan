@@ -626,6 +626,7 @@ def test_tax_year_evidence_package_download_endpoint_contains_year_files(tmp_pat
             "README.txt",
             "00_Manifest/year-evidence-manifest.json",
             "02_Steuerliche_CSVs/tax-year-2021-filing-summary.json",
+            "02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv",
             "02_Steuerliche_CSVs/tax-year-2021-evidence.json",
             "02_Steuerliche_CSVs/tax-payment-overview.json",
             "03_Review_Entscheidungen/tax-year-2021-review-decisions.json",
@@ -646,14 +647,17 @@ def test_tax_year_evidence_package_download_endpoint_contains_year_files(tmp_pat
         assert "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-evidence.json" in manifest_paths
         assert "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-anchor-feasibility.json" in manifest_paths
         assert "03_Review_Entscheidungen/tax-year-2021-review-decisions.json" in manifest_paths
+        assert "02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv" in manifest_paths
         wallet_fifo = json.loads(package.read("06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-delta.json").decode("utf-8"))
         assert wallet_fifo["method_version"] == "wallet_asset_preview_v14"
         filing_summary = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2021-filing-summary.json").decode("utf-8"))
+        filing_checklist = package.read("02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv").decode("utf-8")
         evidence = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2021-evidence.json").decode("utf-8"))
         review_decisions = json.loads(package.read("03_Review_Entscheidungen/tax-year-2021-review-decisions.json").decode("utf-8"))
         cex_evidence = json.loads(package.read("06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-evidence.json").decode("utf-8"))
         cex_anchor = json.loads(package.read("06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-anchor-feasibility.json").decode("utf-8"))
         assert filing_summary["year"] == 2021
+        assert "Category,Label,Amount_EUR,Action" in filing_checklist
         assert evidence["year"] == 2021
         assert review_decisions["year"] == 2021
         assert review_decisions["decisions_count"] == 0

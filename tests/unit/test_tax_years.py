@@ -1208,13 +1208,24 @@ def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_pat
     assert "keinen zusaetzlichen Betrag eintragen" in appendix_checklist.action
     assert "BMF-Abschlussbeilage Herkunft" in filing_summary.checklist_ascii
 
+    checklist_response = TestClient(create_app(store)).get("/api/v1/export/tax-years/2024/filing-checklist.csv")
+    assert checklist_response.status_code == 200
+    assert "filename=tax-year-2024-filing-checklist.csv" in checklist_response.headers["content-disposition"]
+    checklist_csv = checklist_response.text
+    assert "Category,Label,Amount_EUR,Action" in checklist_csv
+    assert "beilegen,BMF-Abschlussbeilage Herkunft" in checklist_csv
+
     package_response = TestClient(create_app(store)).get("/api/v1/export/tax-years/2024/evidence-package.zip")
     assert package_response.status_code == 200
     with ZipFile(BytesIO(package_response.content)) as package:
         names = set(package.namelist())
         assert "02_Steuerliche_CSVs/tax-year-2024-bmf-closure-appendix.json" in names
+        assert "02_Steuerliche_CSVs/tax-year-2024-filing-checklist.csv" in names
+        packaged_checklist_csv = package.read("02_Steuerliche_CSVs/tax-year-2024-filing-checklist.csv").decode("utf-8")
+        assert "beilegen,BMF-Abschlussbeilage Herkunft" in packaged_checklist_csv
         manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
     assert "/api/v1/tax-years/2024/bmf-closure-appendix" in manifest["required_refs"]
+    assert "/api/v1/export/tax-years/2024/filing-checklist.csv" in manifest["required_refs"]
 
 
 def test_tax_year_evidence_report_counts_year_review_decisions(tmp_path):

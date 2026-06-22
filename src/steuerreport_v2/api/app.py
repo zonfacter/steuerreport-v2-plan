@@ -1976,6 +1976,52 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def tax_year_filing_summary(year: int) -> ApiResponse[TaxYearFilingSummary]:
         return ApiResponse(data=TaxYearService(db).filing_summary(year))
 
+    def render_tax_year_filing_checklist_csv(year: int, *, service: TaxYearService | None = None) -> str:
+        summary = (service or TaxYearService(db)).filing_summary(year)
+        output = io.StringIO()
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "Year",
+                "Order",
+                "Category",
+                "Label",
+                "Amount_EUR",
+                "Action",
+                "Done_When",
+                "Evidence_Ref",
+                "Source_Topic",
+                "Note",
+            ],
+        )
+        writer.writeheader()
+        for item in summary.checklist:
+            writer.writerow(
+                {
+                    "Year": year,
+                    "Order": item.order,
+                    "Category": item.category,
+                    "Label": item.label,
+                    "Amount_EUR": item.amount_eur.quantize(Decimal("0.01")) if item.amount_eur is not None else "",
+                    "Action": item.action,
+                    "Done_When": item.done_when,
+                    "Evidence_Ref": item.evidence_ref or "",
+                    "Source_Topic": item.source_topic,
+                    "Note": item.note,
+                }
+            )
+        return output.getvalue()
+
+    @app.get("/api/v1/export/tax-years/{year}/filing-checklist.csv")
+    def download_tax_year_filing_checklist_csv(year: int) -> Response:
+        return Response(
+            content=render_tax_year_filing_checklist_csv(year),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=tax-year-{year}-filing-checklist.csv"
+            },
+        )
+
     @app.get("/api/v1/tax-years/{year}/methodology")
     def tax_year_methodology(year: int) -> ApiResponse[TaxMethodologyReport]:
         return ApiResponse(data=TaxMethodologyService(db).report(year))
@@ -3835,6 +3881,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             }
         required_refs = {line.evidence_ref for line in filing_summary.lines if line.evidence_ref}
         required_refs.update(item.endpoint for item in evidence_report.items if item.required)
+        required_refs.add(f"/api/v1/export/tax-years/{year}/filing-checklist.csv")
         required_refs.add("/api/v1/export/tax-payment-overview.json")
         required_refs.add(f"/api/v1/tax-years/{year}/wallet-fifo-delta")
         required_refs.add(f"/api/v1/tax-years/{year}/wallet-fifo-gaps?limit=80")
@@ -3862,6 +3909,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 f"02_Steuerliche_CSVs/tax-year-{year}-filing-summary.json",
                 json.dumps(filing_summary.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/filing-summary",
+            ),
+            (
+                f"02_Steuerliche_CSVs/tax-year-{year}-filing-checklist.csv",
+                render_tax_year_filing_checklist_csv(year, service=tax_year_service).encode("utf-8"),
+                f"/api/v1/export/tax-years/{year}/filing-checklist.csv",
             ),
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-evidence.json",
