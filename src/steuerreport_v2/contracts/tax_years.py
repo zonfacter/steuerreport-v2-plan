@@ -422,6 +422,51 @@ class TaxYearGainLossRealityCheck(BaseModel):
     methodology: str
 
 
+class TaxYearGainEvidenceLine(BaseModel):
+    tax_line_id: str
+    asset: str
+    acquired_at: str
+    disposed_at: str
+    holding_days: int
+    quantity: Decimal
+    acquisition_cost_eur: Decimal
+    disposal_proceeds_eur: Decimal
+    gain_loss_eur: Decimal
+    gain_loss_ratio_pct: Decimal = Decimal("0")
+    lot_id: str
+    acquisition_event_id: str | None = None
+    acquisition_source: str | None = None
+    acquisition_event_type: str | None = None
+    acquisition_quote_asset: str | None = None
+    acquisition_raw_object_id: str | None = None
+    acquisition_raw_evidence: str
+    disposal_event_id: str | None = None
+    disposal_source: str | None = None
+    disposal_event_type: str | None = None
+    disposal_quote_asset: str | None = None
+    disposal_raw_object_id: str | None = None
+    disposal_raw_evidence: str
+    valuation_path: str
+    risk_level: Literal["ok", "review", "high"]
+    review_reasons: list[str] = Field(default_factory=list)
+    asset_fifo_drilldown_endpoint: str
+
+
+class TaxYearGainEvidenceReview(BaseModel):
+    year: int
+    generated_at: str
+    taxable_gain_loss_eur: Decimal = Decimal("0")
+    reviewed_gain_loss_eur: Decimal = Decimal("0")
+    reviewed_lines_count: int = 0
+    high_risk_lines_count: int = 0
+    review_lines_count: int = 0
+    ok_lines_count: int = 0
+    lines: list[TaxYearGainEvidenceLine] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    ascii_table: str
+    methodology: str
+
+
 class TaxLossRealizationLot(BaseModel):
     lot_id: str
     asset: str

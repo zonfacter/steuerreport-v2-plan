@@ -27,6 +27,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxRewardTradingSeparationRow,
     TaxYearGainLossRealityAssetRow,
     TaxYearGainLossRealityCheck,
+    TaxYearGainEvidenceLine,
+    TaxYearGainEvidenceReview,
     TaxYearCorrectionMap,
     TaxYearCorrectionMapLine,
     TaxYearFilingChecklistItem,
@@ -2054,6 +2056,79 @@ class TaxYearService:
 
         return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
 
+    def _gain_evidence_ascii_table(self, rows: list[TaxYearGainEvidenceLine]) -> str:
+        table_rows = [["Risiko", "Asset", "G/V", "Kosten", "Erloes", "Erwerb Roh", "Verkauf Roh", "Bewertung"]]
+        for row in rows:
+            table_rows.append(
+                [
+                    row.risk_level,
+                    row.asset,
+                    self._fmt_eur(row.gain_loss_eur),
+                    self._fmt_eur(row.acquisition_cost_eur),
+                    self._fmt_eur(row.disposal_proceeds_eur),
+                    row.acquisition_raw_evidence,
+                    row.disposal_raw_evidence,
+                    row.valuation_path,
+                ]
+            )
+        if len(table_rows) == 1:
+            table_rows.append(["-", "-", self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), "-", "-", "-"])
+        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+        sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+
+        def fmt(row: list[str]) -> str:
+            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+
+        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+
+    @staticmethod
+    def _gain_evidence_valuation_path(acquisition_quote_asset: str | None, disposal_quote_asset: str | None) -> str:
+        parts: list[str] = []
+        if acquisition_quote_asset:
+            parts.append(f"acq_quote={acquisition_quote_asset.upper()}")
+        else:
+            parts.append("acq_price_lookup_or_reward_basis")
+        if disposal_quote_asset:
+            parts.append(f"disp_quote={disposal_quote_asset.upper()}")
+        else:
+            parts.append("disp_price_lookup")
+        return " | ".join(parts)
+
+    @staticmethod
+    def _gain_evidence_reasons(
+        *,
+        acquisition_raw_object_id: str | None,
+        disposal_raw_object_id: str | None,
+        acquisition_quote_asset: str | None,
+        disposal_quote_asset: str | None,
+        acquisition_source: str | None,
+        disposal_source: str | None,
+        gain_loss_ratio_pct: Decimal,
+    ) -> list[str]:
+        reasons: list[str] = []
+        if not acquisition_raw_object_id:
+            reasons.append("acquisition_raw_missing")
+        if not disposal_raw_object_id:
+            reasons.append("disposal_raw_missing")
+        quote_assets = {str(item).upper() for item in (acquisition_quote_asset, disposal_quote_asset) if item}
+        if quote_assets and not quote_assets.issubset({"EUR"}):
+            reasons.append("non_eur_quote_or_stablecoin_valuation")
+        if abs(gain_loss_ratio_pct) >= Decimal("50"):
+            reasons.append("large_gain_loss_ratio")
+        if acquisition_source and disposal_source and acquisition_source != disposal_source:
+            reasons.append("cross_source_fifo")
+        return reasons or ["evidence_path_present"]
+
+    @staticmethod
+    def _gain_evidence_risk(reasons: list[str]) -> Literal["ok", "review", "high"]:
+        high = {"acquisition_raw_missing", "disposal_raw_missing"}
+        if any(reason in high for reason in reasons):
+            return "high"
+        review = {"non_eur_quote_or_stablecoin_valuation", "large_gain_loss_ratio", "cross_source_fifo"}
+        if any(reason in review for reason in reasons):
+            return "review"
+        return "ok"
+
     def _loss_realization_ascii_table(self, rows: list[TaxLossRealizationLot]) -> str:
         table_rows = [
             [
@@ -2572,6 +2647,116 @@ class TaxYearService:
                 "Er trennt realisierte steuerpflichtige FIFO-Ergebnisse, steuerfreie Ergebnisse nach Haltefrist "
                 "und heute noch offene unrealisierte Gewinne/Verluste. Es werden keine Steuerdaten neu berechnet "
                 "oder geschrieben."
+            ),
+        )
+
+    def gain_evidence_review(self, year: int, *, limit: int = 80) -> TaxYearGainEvidenceReview:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select
+                    l.tax_line_id,
+                    l.asset,
+                    lot.acquired_at,
+                    l.disposed_at,
+                    l.holding_days,
+                    l.quantity,
+                    l.acquisition_cost_eur,
+                    l.disposal_proceeds_eur,
+                    l.gain_loss_eur,
+                    l.lot_id,
+                    ae.event_id,
+                    ae.source,
+                    ae.event_type,
+                    ae.quote_asset,
+                    ae.raw_object_id,
+                    de.event_id,
+                    de.source,
+                    de.event_type,
+                    de.quote_asset,
+                    de.raw_object_id
+                from tax_lines l
+                join tax_lots lot on lot.lot_id = l.lot_id
+                left join canonical_events ae on ae.event_id = lot.source_event_id
+                left join canonical_events de on de.event_id = l.source_event_id
+                where date_part('year', l.disposed_at)::integer = ?
+                  and l.holding_days <= 365
+                order by abs(l.gain_loss_eur) desc, l.disposed_at, l.tax_line_id
+                limit ?
+                """,
+                [year, max(1, min(limit, 500))],
+            ).fetchall()
+        lines: list[TaxYearGainEvidenceLine] = []
+        for row in rows:
+            gain_loss = row[8] or Decimal("0")
+            proceeds = row[7] or Decimal("0")
+            ratio = (gain_loss / proceeds * Decimal("100")) if proceeds else Decimal("0")
+            reasons = self._gain_evidence_reasons(
+                acquisition_raw_object_id=row[14],
+                disposal_raw_object_id=row[19],
+                acquisition_quote_asset=row[13],
+                disposal_quote_asset=row[18],
+                acquisition_source=row[11],
+                disposal_source=row[16],
+                gain_loss_ratio_pct=ratio,
+            )
+            risk = self._gain_evidence_risk(reasons)
+            lines.append(
+                TaxYearGainEvidenceLine(
+                    tax_line_id=row[0],
+                    asset=row[1],
+                    acquired_at=row[2].isoformat(),
+                    disposed_at=row[3].isoformat(),
+                    holding_days=int(row[4] or 0),
+                    quantity=row[5],
+                    acquisition_cost_eur=row[6],
+                    disposal_proceeds_eur=proceeds,
+                    gain_loss_eur=gain_loss,
+                    gain_loss_ratio_pct=ratio,
+                    lot_id=row[9],
+                    acquisition_event_id=row[10],
+                    acquisition_source=row[11],
+                    acquisition_event_type=row[12],
+                    acquisition_quote_asset=row[13],
+                    acquisition_raw_object_id=row[14],
+                    acquisition_raw_evidence="present" if row[14] else "missing",
+                    disposal_event_id=row[15],
+                    disposal_source=row[16],
+                    disposal_event_type=row[17],
+                    disposal_quote_asset=row[18],
+                    disposal_raw_object_id=row[19],
+                    disposal_raw_evidence="present" if row[19] else "missing",
+                    valuation_path=self._gain_evidence_valuation_path(row[13], row[18]),
+                    risk_level=risk,
+                    review_reasons=reasons,
+                    asset_fifo_drilldown_endpoint=f"/api/v1/tax-years/{year}/asset-fifo-drilldown?asset={row[1]}",
+                )
+            )
+        taxable_total = sum(
+            (line.gain_loss_eur for line in self._tax_lines() if line.disposed_at.year == year and self._is_taxable_private_disposal(line)),
+            Decimal("0"),
+        )
+        return TaxYearGainEvidenceReview(
+            year=year,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            taxable_gain_loss_eur=taxable_total,
+            reviewed_gain_loss_eur=sum((line.gain_loss_eur for line in lines), Decimal("0")),
+            reviewed_lines_count=len(lines),
+            high_risk_lines_count=sum(1 for line in lines if line.risk_level == "high"),
+            review_lines_count=sum(1 for line in lines if line.risk_level == "review"),
+            ok_lines_count=sum(1 for line in lines if line.risk_level == "ok"),
+            lines=lines,
+            caveats=[
+                "Read-only Belegcheck: bewertet vorhandene Tax-Lines, rechnet FIFO aber nicht neu.",
+                "Fehlende Rohbelege, nicht-EUR-Quote-Beine und hohe Gewinnquoten sind Review-Signale, keine automatische Korrektur.",
+                "Die geprueften Top-Zeilen sind nach absolutem G/V sortiert und decken nicht zwingend alle kleinen Zeilen ab.",
+            ],
+            ascii_table=self._gain_evidence_ascii_table(lines),
+            methodology=(
+                "Read-only Gewinn-Belegcheck aus tax_lines, tax_lots, canonical_events und raw_objects. "
+                "Der Report priorisiert die groessten steuerpflichtigen Gewinn-/Verlustzeilen und markiert, "
+                "ob Erwerbs- und Veraeusserungsrohbelege vorhanden sind, ob EUR direkt aus dem Event kommt "
+                "oder Quote-/Stablecoin-/implizite Bewertungen geprueft werden muessen."
             ),
         )
 

@@ -1189,6 +1189,20 @@ type Snapshot = {
     ascii_table: string;
     methodology: string;
   };
+  taxYearGainEvidenceReview?: {
+    year: number;
+    generated_at: string;
+    taxable_gain_loss_eur: string;
+    reviewed_gain_loss_eur: string;
+    reviewed_lines_count: number;
+    high_risk_lines_count: number;
+    review_lines_count: number;
+    ok_lines_count: number;
+    lines: Array<Record<string, unknown>>;
+    caveats: string[];
+    ascii_table: string;
+    methodology: string;
+  };
   taxYearTurnoverAudit?: {
     year: number;
     generated_at: string;
@@ -1711,6 +1725,7 @@ function App() {
         taxRewardTradingSeparation: { key: "taxRewardTradingSeparation", label: "Reward vs Handel", load: () => getApi<Snapshot["taxRewardTradingSeparation"]>("/api/v1/tax-years/reward-trading-separation") },
         taxYearDrivers: { key: "taxYearDrivers", label: "Gewinntreiber", load: () => getApi<Snapshot["taxYearDrivers"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/drivers?limit=80`) },
         taxYearGainLossRealityCheck: { key: "taxYearGainLossRealityCheck", label: "Realisiert vs gehalten", load: () => getApi<Snapshot["taxYearGainLossRealityCheck"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-loss-reality-check?limit=40`) },
+        taxYearGainEvidenceReview: { key: "taxYearGainEvidenceReview", label: "Gewinn-Belegcheck", load: () => getApi<Snapshot["taxYearGainEvidenceReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-evidence-review?limit=80`) },
         taxYearTurnoverAudit: { key: "taxYearTurnoverAudit", label: "Umsatz-Plausibilitaet", load: () => getApi<Snapshot["taxYearTurnoverAudit"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/turnover-audit?limit=20`) },
         taxYearsTurnoverAuditSummary: { key: "taxYearsTurnoverAuditSummary", label: "Umsatz-Plausibilitaet alle Jahre", load: () => getApi<Snapshot["taxYearsTurnoverAuditSummary"]>("/api/v1/tax-years/turnover-audit-summary?limit=8") },
         taxSolanaProgramIncomeReview: { key: "taxSolanaProgramIncomeReview", label: "Solana Programm-Kontext", load: () => getApi<Snapshot["taxSolanaProgramIncomeReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/solana-program-income-review?limit=20`) },
@@ -1744,6 +1759,7 @@ function App() {
         "taxDeclarationGuide",
         "taxYearFilingSummary",
         "taxYearTurnoverAudit",
+        "taxYearGainEvidenceReview",
         "taxYearsTurnoverAuditSummary",
         "taxSolanaProgramIncomeReview",
         "taxStablecoinFifoReview",
@@ -3290,6 +3306,7 @@ function Content({
         taxRewardTradingSeparation={snapshot.taxRewardTradingSeparation}
         taxYearDrivers={snapshot.taxYearDrivers}
         taxYearGainLossRealityCheck={snapshot.taxYearGainLossRealityCheck}
+        taxYearGainEvidenceReview={snapshot.taxYearGainEvidenceReview}
         taxYearTurnoverAudit={snapshot.taxYearTurnoverAudit}
         taxYearsTurnoverAuditSummary={snapshot.taxYearsTurnoverAuditSummary}
         taxSolanaProgramIncomeReview={snapshot.taxSolanaProgramIncomeReview}
@@ -7621,6 +7638,7 @@ function TaxPanel({
   taxRewardTradingSeparation,
   taxYearDrivers,
   taxYearGainLossRealityCheck,
+  taxYearGainEvidenceReview,
   taxYearTurnoverAudit,
   taxYearsTurnoverAuditSummary,
   taxSolanaProgramIncomeReview,
@@ -7686,6 +7704,7 @@ function TaxPanel({
   taxRewardTradingSeparation: Snapshot["taxRewardTradingSeparation"];
   taxYearDrivers: Snapshot["taxYearDrivers"];
   taxYearGainLossRealityCheck: Snapshot["taxYearGainLossRealityCheck"];
+  taxYearGainEvidenceReview: Snapshot["taxYearGainEvidenceReview"];
   taxYearTurnoverAudit: Snapshot["taxYearTurnoverAudit"];
   taxYearsTurnoverAuditSummary: Snapshot["taxYearsTurnoverAuditSummary"];
   taxSolanaProgramIncomeReview: Snapshot["taxSolanaProgramIncomeReview"];
@@ -10032,6 +10051,42 @@ function TaxPanel({
           rows={taxYearDrivers?.top_taxable_lines ?? []}
           footer="Nach absolutem Gewinn/Verlust sortiert."
         />
+      </section>
+
+      <section className="cockpitDataGrid">
+        <div className="panel">
+          <div className="panelToolbar">
+            <strong>Gewinn-Belegcheck {activeYearValue}</strong>
+            <span>{formatDateTime(taxYearGainEvidenceReview?.generated_at)}</span>
+          </div>
+          <div className="portfolioSummaryStrip">
+            <Metric title="Gepruefter G/V" value={`${formatCurrency(taxYearGainEvidenceReview?.reviewed_gain_loss_eur)} EUR`} />
+            <Metric title="High" value={String(taxYearGainEvidenceReview?.high_risk_lines_count ?? 0)} />
+            <Metric title="Review" value={String(taxYearGainEvidenceReview?.review_lines_count ?? 0)} />
+            <Metric title="OK" value={String(taxYearGainEvidenceReview?.ok_lines_count ?? 0)} />
+          </div>
+          <TablePanel
+            title="Top-Gewinnzeilen mit Belegstatus"
+            rows={(taxYearGainEvidenceReview?.lines ?? []).slice(0, 30).map((line) => ({
+              risiko: line.risk_level,
+              asset: line.asset,
+              gv_eur: formatCurrency(line.gain_loss_eur),
+              kosten_eur: formatCurrency(line.acquisition_cost_eur),
+              erloes_eur: formatCurrency(line.disposal_proceeds_eur),
+              haltedauer: line.holding_days,
+              erwerb_roh: line.acquisition_raw_evidence,
+              verkauf_roh: line.disposal_raw_evidence,
+              bewertung: line.valuation_path,
+              gruende: Array.isArray(line.review_reasons) ? line.review_reasons.join(", ") : line.review_reasons,
+              drilldown: line.asset_fifo_drilldown_endpoint
+            }))}
+            footer={(taxYearGainEvidenceReview?.caveats ?? []).join(" ") || taxYearGainEvidenceReview?.methodology || ""}
+            compact
+          />
+        </div>
+        <pre className="asciiTable" aria-label="Kopierbarer Gewinn-Belegcheck">
+          {taxYearGainEvidenceReview?.ascii_table ?? "Gewinn-Belegcheck wird geladen."}
+        </pre>
       </section>
 
       <section className="cockpitDataGrid">

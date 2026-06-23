@@ -545,6 +545,48 @@ def test_gain_loss_reality_check_separates_realized_from_unrealized_losses(tmp_p
     assert "Brutto-Umsatz" in report.plain_language_summary
 
 
+def test_gain_evidence_review_flags_missing_raw_and_non_eur_quote(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="gain-evidence.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2024-01-01T00:00:00Z,JUP,10,buy,USDT,10\n"
+            "2024-02-01T00:00:00Z,JUP,-10,sell,USDT,30\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = TaxYearService(store).gain_evidence_review(2024)
+    line = report.lines[0]
+
+    assert line.asset == "JUP"
+    assert line.risk_level == "review"
+    assert "non_eur_quote_or_stablecoin_valuation" in line.review_reasons
+    assert line.acquisition_raw_evidence == "present"
+    assert line.disposal_raw_evidence == "present"
+    assert "disp_quote=USDT" in line.valuation_path
+    assert "Risiko" in report.ascii_table
+
+
 def test_loss_realization_planner_marks_usable_and_expired_loss_windows(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -1788,6 +1830,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/{year}/gain-loss-reality-check"
     )
+    gain_evidence_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/gain-evidence-review"
+    )
     asset_fifo_route = next(
         route
         for route in app.routes
@@ -1912,6 +1959,7 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert income_route.endpoint(2021).status == "ok"
     assert drivers_route.endpoint(2021).status == "ok"
     assert gain_loss_reality_route.endpoint(2021).status == "ok"
+    assert gain_evidence_route.endpoint(2021).status == "ok"
     assert asset_fifo_route.endpoint(2021, "BTC").status == "ok"
     assert asset_fifo_plausibility_route.endpoint(2021).status == "ok"
     assert asset_fifo_correction_route.endpoint(2021).status == "ok"
