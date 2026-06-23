@@ -28,6 +28,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearGainLossRealityAssetRow,
     TaxYearGainLossRealityCheck,
     TaxYearGainEvidenceDeltaGroup,
+    TaxYearGainEvidenceAcquisitionEventDeltaLine,
+    TaxYearGainEvidenceAcquisitionEventDeltaReview,
     TaxYearGainEvidenceEventDeltaLine,
     TaxYearGainEvidenceEventDeltaReview,
     TaxYearGainEvidencePriceDeltaDrilldown,
@@ -2500,6 +2502,10 @@ class TaxYearService:
             limit=max(1, min(limit, 500)),
             include_split_delta=False,
         )
+        acquisition_event_level_by_id = self._gain_evidence_acquisition_event_delta_lines_by_id(
+            year,
+            limit=max(1, min(limit, 500)),
+        )
 
         rows: list[TaxYearGainEvidencePriceDeltaLine] = []
         root_counts: dict[str, int] = defaultdict(int)
@@ -2778,6 +2784,168 @@ class TaxYearService:
                 )
             )
         return {line.disposal_event_id: line for line in lines}
+
+    def _gain_evidence_acquisition_event_delta_lines_by_id(
+        self,
+        year: int,
+        *,
+        limit: int = 200,
+    ) -> dict[str, TaxYearGainEvidenceAcquisitionEventDeltaLine]:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select
+                    ae.event_id,
+                    min(lot.acquired_at) as acquired_at,
+                    any_value(ae.source) as source,
+                    any_value(ae.event_type) as event_type,
+                    any_value(ae.asset) as event_asset,
+                    any_value(ae.quantity) as event_quantity,
+                    any_value(ae.quote_asset) as quote_asset,
+                    any_value(ae.quote_quantity) as quote_quantity,
+                    count(*)::integer as tax_line_count,
+                    string_agg(distinct l.asset, ',') as assets,
+                    coalesce(sum(abs(l.quantity)), 0) as taxable_consumed_quantity,
+                    coalesce(sum(l.acquisition_cost_eur), 0) as actual_cost_eur
+                from tax_lines l
+                join tax_lots lot on lot.lot_id = l.lot_id
+                join canonical_events ae on ae.event_id = lot.source_event_id
+                where date_part('year', l.disposed_at)::integer = ?
+                  and l.holding_days <= 365
+                  and ae.event_id is not null
+                  and ae.quote_asset is not null
+                  and ae.quote_quantity is not null
+                group by ae.event_id
+                order by count(*) desc, abs(sum(l.acquisition_cost_eur)) desc, ae.event_id
+                limit ?
+                """,
+                [year, max(1, min(limit, 500))],
+            ).fetchall()
+        price_lookup = HistoricalPriceLookup(self.store)
+        lines: list[TaxYearGainEvidenceAcquisitionEventDeltaLine] = []
+        for (
+            event_id,
+            acquired_at,
+            source,
+            event_type,
+            event_asset,
+            event_quantity,
+            quote_asset,
+            quote_quantity,
+            tax_line_count,
+            assets,
+            taxable_consumed_quantity,
+            actual_cost_eur,
+        ) in rows:
+            event_asset_key = str(event_asset or "").upper()
+            asset_set = {asset.strip().upper() for asset in str(assets or "").split(",") if asset}
+            if event_asset_key in asset_set and event_quantity is not None and event_quantity > 0:
+                total_acquired_quantity = abs(event_quantity)
+            else:
+                total_acquired_quantity = taxable_consumed_quantity or None
+            taxable_fraction = (
+                taxable_consumed_quantity / total_acquired_quantity
+                if total_acquired_quantity and taxable_consumed_quantity <= total_acquired_quantity
+                else Decimal("1")
+            )
+            price = self._gain_evidence_price_check(
+                price_lookup=price_lookup,
+                quote_asset=quote_asset,
+                quote_quantity=quote_quantity,
+                fallback_asset=quote_asset,
+                fallback_quantity=abs(quote_quantity or Decimal("0")),
+                event_time=acquired_at,
+                actual_value=actual_cost_eur or Decimal("0"),
+            )
+            event_total_expected = price["expected_value"]
+            expected = event_total_expected * taxable_fraction if isinstance(event_total_expected, Decimal) else None
+            delta = (actual_cost_eur or Decimal("0")) - expected if expected is not None else None
+            delta_pct = abs(delta) / expected * Decimal("100") if expected else None
+            if price["price_source"] is None:
+                status: Literal["event_level_ok", "event_level_review", "missing_price_evidence"] = "missing_price_evidence"
+            elif delta is not None and (abs(delta) < Decimal("0.01") or (delta_pct is not None and delta_pct <= Decimal("0.5"))):
+                status = "event_level_ok"
+            else:
+                status = "event_level_review"
+            explanation, action = self._gain_evidence_event_delta_text(
+                status=status,
+                split_line_absolute_delta_eur=Decimal("0"),
+                event_delta_eur=delta if isinstance(delta, Decimal) else None,
+            )
+            if status == "event_level_ok":
+                explanation = "Das Erwerbs-Event ist anteilig plausibel; Erwerbsseiten-Teilzeilen-Deltas sind FIFO-Split-/Quote-Allocation-Artefakte."
+                action = "Erwerbs-Event-Level-Beleg archivieren; nicht als offenen Anschaffungspreisfehler werten."
+            lines.append(
+                TaxYearGainEvidenceAcquisitionEventDeltaLine(
+                    year=year,
+                    acquisition_event_id=event_id,
+                    acquired_at=acquired_at.isoformat(),
+                    source=source,
+                    event_type=event_type,
+                    event_asset=event_asset,
+                    event_quantity=event_quantity,
+                    quote_asset=quote_asset,
+                    quote_quantity=quote_quantity,
+                    price_asset=price["price_asset"],
+                    price_eur=price["price_eur"],
+                    price_source=price["price_source"],
+                    priced_at=price["priced_at"],
+                    price_age_days=price["price_age_days"],
+                    tax_line_count=int(tax_line_count or 0),
+                    assets=sorted(str(assets or "").split(",")) if assets else [],
+                    taxable_consumed_quantity=taxable_consumed_quantity or Decimal("0"),
+                    total_event_acquired_quantity=total_acquired_quantity,
+                    taxable_event_fraction=taxable_fraction,
+                    event_total_cost_eur=event_total_expected,  # type: ignore[arg-type]
+                    actual_cost_eur=actual_cost_eur or Decimal("0"),
+                    expected_cost_eur=expected,  # type: ignore[arg-type]
+                    event_delta_eur=delta,  # type: ignore[arg-type]
+                    event_delta_pct=delta_pct,  # type: ignore[arg-type]
+                    status=status,
+                    explanation=explanation,
+                    recommended_action=action,
+                )
+            )
+        return {line.acquisition_event_id: line for line in lines}
+
+    def gain_evidence_acquisition_event_delta_review(
+        self,
+        year: int,
+        *,
+        limit: int = 200,
+    ) -> TaxYearGainEvidenceAcquisitionEventDeltaReview:
+        lines = list(self._gain_evidence_acquisition_event_delta_lines_by_id(year, limit=limit).values())
+        lines.sort(
+            key=lambda line: (
+                line.status != "event_level_review",
+                -abs(line.event_delta_eur or Decimal("0")),
+                -line.actual_cost_eur,
+            )
+        )
+        expected_total = sum((line.expected_cost_eur or Decimal("0") for line in lines), Decimal("0"))
+        actual_total = sum((line.actual_cost_eur for line in lines), Decimal("0"))
+        return TaxYearGainEvidenceAcquisitionEventDeltaReview(
+            year=year,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            events_count=len(lines),
+            event_level_ok_count=sum(1 for line in lines if line.status == "event_level_ok"),
+            event_level_review_count=sum(1 for line in lines if line.status == "event_level_review"),
+            missing_price_count=sum(1 for line in lines if line.status == "missing_price_evidence"),
+            tax_line_count=sum(line.tax_line_count for line in lines),
+            actual_cost_eur=actual_total,
+            expected_cost_eur=expected_total,
+            event_delta_eur=actual_total - expected_total,
+            lines=lines,
+            caveats=[
+                "Read-only Erwerbs-Event-Plausibilisierung: keine Tax-Line-, Lot- oder FIFO-Aenderung.",
+                "Event-Level OK bedeutet, dass Anschaffungskosten anteilig zum Erwerbs-Event passen; andere Belegthemen bleiben separat.",
+            ],
+            methodology=(
+                "Aggregiert steuerpflichtig verbrauchte FIFO-Mengen je Acquisition-Event und vergleicht die Summe "
+                "der Anschaffungskosten mit quote_quantity mal historischem EUR-Preis, anteilig zur im Steuerjahr "
+                "steuerpflichtig verbrauchten Menge."
+            ),
+        )
 
     def gain_evidence_event_delta_review(
         self,
@@ -3391,6 +3559,10 @@ class TaxYearService:
             limit=max(1, min(limit, 500)),
             include_split_delta=False,
         )
+        acquisition_event_level_by_id = self._gain_evidence_acquisition_event_delta_lines_by_id(
+            year,
+            limit=max(1, min(limit, 500)),
+        )
         for row in rows:
             gain_loss = row[8] or Decimal("0")
             proceeds = row[7] or Decimal("0")
@@ -3447,12 +3619,27 @@ class TaxYearService:
             )
             event_level = event_level_by_id.get(row[16] or "")
             event_level_reconciled = bool(event_level and event_level.status == "event_level_ok")
+            acquisition_event_level = acquisition_event_level_by_id.get(row[10] or "")
+            acquisition_event_level_reconciled = bool(
+                acquisition_event_level and acquisition_event_level.status == "event_level_ok"
+            )
             acquisition_delta_eur = self._decimal_or_zero(acquisition_price["delta_eur"])
             disposal_delta_eur = self._decimal_or_zero(disposal_price["delta_eur"])
-            open_price_delta_eur = abs(acquisition_delta_eur) + (
+            open_price_delta_eur = (
+                Decimal("0") if acquisition_event_level_reconciled else abs(acquisition_delta_eur)
+            ) + (
                 Decimal("0") if event_level_reconciled else abs(disposal_delta_eur)
             )
             event_level_note = None
+            acquisition_event_level_note = None
+            if acquisition_event_level_reconciled and abs(acquisition_delta_eur) > Decimal("0.01"):
+                acquisition_event_level_note = (
+                    "Erwerbsseiten-Delta ist Acquisition-Event-Level abgeglichen; es ist als FIFO-Split-/Quote-Allocation-Artefakt zu behandeln."
+                )
+                if "acquisition_price_delta_review" in reasons:
+                    reasons = [reason for reason in reasons if reason != "acquisition_price_delta_review"]
+                if "acquisition_event_level_reconciled" not in reasons:
+                    reasons.append("acquisition_event_level_reconciled")
             if event_level_reconciled and abs(disposal_delta_eur) > Decimal("0.01"):
                 event_level_note = (
                     "Verkaufsseiten-Delta ist Event-Level abgeglichen; es ist als Handelsvolumen-/FIFO-Split-Artefakt zu behandeln."
@@ -3467,6 +3654,11 @@ class TaxYearService:
                 delta_recommended_action = (
                     "Event-Level-Beleg archivieren und nur offene Erwerbs-/Rohbelegthemen weiter pruefen."
                 )
+            if acquisition_event_level_reconciled and event_level_reconciled and open_price_delta_eur == Decimal("0"):
+                delta_explanation = (
+                    "Erwerbs- und Verkaufsseiten-Deltas sind auf Event-Level plausibel; das Brutto-Delta ist ein FIFO-Split-/Quote-Allocation-Artefakt."
+                )
+                delta_recommended_action = "Event-Level-Belege archivieren; kein offenes Preisdelta in dieser Zeile."
             risk = self._gain_evidence_risk(reasons)
             lines.append(
                 TaxYearGainEvidenceLine(
@@ -3522,6 +3714,15 @@ class TaxYearService:
                     event_level_delta_pct=event_level.event_delta_pct if event_level else None,
                     event_level_reconciled=event_level_reconciled,
                     event_level_note=event_level_note,
+                    acquisition_event_level_status=acquisition_event_level.status if acquisition_event_level else None,
+                    acquisition_event_level_delta_eur=(
+                        acquisition_event_level.event_delta_eur if acquisition_event_level else None
+                    ),
+                    acquisition_event_level_delta_pct=(
+                        acquisition_event_level.event_delta_pct if acquisition_event_level else None
+                    ),
+                    acquisition_event_level_reconciled=acquisition_event_level_reconciled,
+                    acquisition_event_level_note=acquisition_event_level_note,
                     valuation_path=self._gain_evidence_valuation_path(row[13], row[19]),
                     risk_level=risk,
                     review_reasons=reasons,
@@ -3544,6 +3745,9 @@ class TaxYearService:
             ok_lines_count=sum(1 for line in lines if line.risk_level == "ok"),
             price_delta_lines_count=sum(1 for line in lines if line.delta_classification != "no_material_delta"),
             event_level_reconciled_lines_count=sum(1 for line in lines if line.event_level_reconciled),
+            acquisition_event_level_reconciled_lines_count=sum(
+                1 for line in lines if line.acquisition_event_level_reconciled
+            ),
             material_price_delta_eur=sum((line.absolute_price_delta_eur for line in lines), Decimal("0")),
             open_price_delta_eur=sum((line.open_price_delta_eur for line in lines), Decimal("0")),
             delta_groups=delta_groups,

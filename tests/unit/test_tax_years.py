@@ -640,10 +640,12 @@ def test_gain_evidence_review_groups_stablecoin_price_delta(tmp_path):
     assert line.absolute_price_delta_eur == Decimal("2.000000000000000000")
     assert line.open_price_delta_eur == Decimal("2.000000000000000000")
     assert line.event_level_reconciled is True
+    assert line.acquisition_event_level_reconciled is False
     assert line.max_price_delta_pct == Decimal("25.00")
     assert "USD/EUR" in line.delta_explanation
     assert report.price_delta_lines_count == 1
     assert report.event_level_reconciled_lines_count == 1
+    assert report.acquisition_event_level_reconciled_lines_count == 0
     assert report.material_price_delta_eur == Decimal("2.000000000000000000")
     assert report.open_price_delta_eur == Decimal("2.000000000000000000")
     assert len(report.delta_groups) == 1
@@ -712,9 +714,11 @@ def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(t
     assert all(line.event_level_delta_eur == Decimal("0E-18") for line in report.lines)
     assert all("Event-Level ist plausibel" in line.explanation for line in report.lines)
     assert gain_report.event_level_reconciled_lines_count == 2
+    assert gain_report.acquisition_event_level_reconciled_lines_count == 2
     assert gain_report.material_price_delta_eur == Decimal("30.000000000000000000")
     assert gain_report.open_price_delta_eur == Decimal("0")
     assert all(line.event_level_reconciled for line in gain_report.lines)
+    assert all(line.acquisition_event_level_reconciled for line in gain_report.lines)
     assert all(line.open_price_delta_eur == Decimal("0") for line in gain_report.lines)
 
     event_report = TaxYearService(store).gain_evidence_event_delta_review(2024)
@@ -730,6 +734,13 @@ def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(t
     assert event.split_line_count == 2
     assert event.status == "event_level_ok"
     assert "aggregiert plausibel" in event.explanation
+
+    acquisition_event_report = TaxYearService(store).gain_evidence_acquisition_event_delta_review(2024)
+    assert acquisition_event_report.events_count == 2
+    assert acquisition_event_report.event_level_ok_count == 2
+    assert acquisition_event_report.event_level_review_count == 0
+    assert acquisition_event_report.event_delta_eur == Decimal("0E-18")
+    assert all(line.status == "event_level_ok" for line in acquisition_event_report.lines)
 
 
 def test_loss_realization_planner_marks_usable_and_expired_loss_windows(tmp_path):
