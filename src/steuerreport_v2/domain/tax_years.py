@@ -28,6 +28,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearGainLossRealityAssetRow,
     TaxYearGainLossRealityCheck,
     TaxYearGainEvidenceDeltaGroup,
+    TaxYearGainEvidencePriceDeltaDrilldown,
+    TaxYearGainEvidencePriceDeltaLine,
     TaxYearGainEvidenceLine,
     TaxYearGainEvidenceReview,
     TaxYearCorrectionMap,
@@ -2348,6 +2350,209 @@ class TaxYearService:
         ]
         groups.sort(key=lambda group: (group.risk_level != "high", -group.absolute_delta_eur))
         return groups
+
+    @staticmethod
+    def _gain_evidence_side_diagnosis(
+        *,
+        delta_eur: Decimal,
+        delta_pct: Decimal,
+        quote_asset: str | None,
+        quote_quantity: Decimal | None,
+        price_source: str | None,
+        event_split_count: int,
+    ) -> str:
+        if abs(delta_eur) < Decimal("0.01") and delta_pct <= Decimal("0.5"):
+            return "ok"
+        if not price_source:
+            return "missing_price_evidence"
+        if event_split_count > 1 and quote_quantity is not None:
+            return "quote_allocation_or_split_line"
+        quote = quote_asset.upper() if quote_asset else None
+        if quote in STABLECOIN_LIKE_ASSETS:
+            return "stablecoin_fx_or_market_delta"
+        if quote and quote != "EUR":
+            return "dex_route_or_token_quote_delta"
+        if HistoricalPriceLookup.is_derived_source(price_source):
+            return "derived_price_review"
+        return "normalizer_review"
+
+    @staticmethod
+    def _gain_evidence_dominant_side(
+        acquisition_delta: Decimal,
+        disposal_delta: Decimal,
+    ) -> Literal["acquisition", "disposal", "both", "none"]:
+        acq = abs(acquisition_delta)
+        disp = abs(disposal_delta)
+        if acq < Decimal("0.01") and disp < Decimal("0.01"):
+            return "none"
+        if acq and disp and min(acq, disp) / max(acq, disp) >= Decimal("0.25"):
+            return "both"
+        return "acquisition" if acq > disp else "disposal"
+
+    @staticmethod
+    def _gain_evidence_root_cause(acquisition_diagnosis: str, disposal_diagnosis: str) -> str:
+        diagnoses = [item for item in (acquisition_diagnosis, disposal_diagnosis) if item != "ok"]
+        if not diagnoses:
+            return "no_material_delta"
+        if "quote_allocation_or_split_line" in diagnoses:
+            return "quote_allocation_or_split_line"
+        if "missing_price_evidence" in diagnoses:
+            return "missing_price_evidence"
+        if "stablecoin_fx_or_market_delta" in diagnoses:
+            return "stablecoin_fx_or_market_delta"
+        if "dex_route_or_token_quote_delta" in diagnoses:
+            return "dex_route_or_token_quote_delta"
+        if "derived_price_review" in diagnoses:
+            return "derived_price_review"
+        return "normalizer_review"
+
+    @staticmethod
+    def _gain_evidence_root_cause_text(root_cause: str) -> tuple[str, str]:
+        if root_cause == "quote_allocation_or_split_line":
+            return (
+                "Dasselbe Quote-Bein eines Swap-/Trade-Events erscheint in mehreren FIFO-Zeilen; der erwartete Quote-Wert ist dadurch vermutlich nicht proportional auf die Teilzeilen verteilt.",
+                "Event-Rohdaten und Normalizer-Allocation pruefen: Quote-Menge muss je FIFO-Teilzeile anteilig oder ueber das Event aggregiert bewertet werden.",
+            )
+        if root_cause == "stablecoin_fx_or_market_delta":
+            return (
+                "Die Abweichung sitzt in einem Stablecoin-Bein; wahrscheinlich sind USD/EUR-Kurs, Tageszeitpunkt oder Stablecoin-Preisquelle massgeblich.",
+                "USDC/USDT-Mint, Quote-Menge, UTC-Zeitpunkt und USD/EUR-FX-Quelle gegen den Rohbeleg abgleichen.",
+            )
+        if root_cause == "dex_route_or_token_quote_delta":
+            return (
+                "Die Abweichung sitzt in einem Token-Quote-Bein einer DEX-/Swap-Route.",
+                "Route mit On-chain Transfers, Token-Mints und Jupiter/Solscan/Helius-Belegen gegenpruefen.",
+            )
+        if root_cause == "missing_price_evidence":
+            return (
+                "Mindestens eine Seite hat keinen belastbaren historischen EUR-Preis.",
+                "Preisquelle nachziehen oder Rohbeleg mit EUR-Gegenwert dokumentieren.",
+            )
+        if root_cause == "derived_price_review":
+            return (
+                "Mindestens eine Seite nutzt einen abgeleiteten Preis statt eines primaeren Belegs.",
+                "Abgeleitete Preisquelle mit Exchange- oder Explorer-Rohdaten plausibilisieren.",
+            )
+        return (
+            "Die Abweichung passt zu keinem bekannten Muster und muss im Normalizer-Mapping geprueft werden.",
+            "Raw-Object, quote_asset, quote_quantity und Event-Typ der betroffenen Seite pruefen.",
+        )
+
+    def gain_evidence_price_delta_drilldown(
+        self,
+        year: int,
+        *,
+        classification: str | None = None,
+        limit: int = 200,
+    ) -> TaxYearGainEvidencePriceDeltaDrilldown:
+        review = self.gain_evidence_review(year, limit=max(1, min(limit, 500)))
+        selected = [
+            line
+            for line in review.lines
+            if line.delta_classification != "no_material_delta"
+            and (classification is None or line.delta_classification == classification)
+        ]
+        acquisition_counts: dict[str, int] = defaultdict(int)
+        disposal_counts: dict[str, int] = defaultdict(int)
+        for line in selected:
+            if line.acquisition_event_id:
+                acquisition_counts[line.acquisition_event_id] += 1
+            if line.disposal_event_id:
+                disposal_counts[line.disposal_event_id] += 1
+
+        rows: list[TaxYearGainEvidencePriceDeltaLine] = []
+        root_counts: dict[str, int] = defaultdict(int)
+        dominant_counts = {"acquisition": 0, "disposal": 0, "both": 0, "none": 0}
+        split_line_review_count = 0
+        for line in selected:
+            acquisition_delta = line.acquisition_cost_delta_eur or Decimal("0")
+            disposal_delta = line.disposal_proceeds_delta_eur or Decimal("0")
+            acquisition_delta_pct = line.acquisition_cost_delta_pct or Decimal("0")
+            disposal_delta_pct = line.disposal_proceeds_delta_pct or Decimal("0")
+            acquisition_split_count = acquisition_counts.get(line.acquisition_event_id or "", 0)
+            disposal_split_count = disposal_counts.get(line.disposal_event_id or "", 0)
+            acquisition_diagnosis = self._gain_evidence_side_diagnosis(
+                delta_eur=acquisition_delta,
+                delta_pct=acquisition_delta_pct,
+                quote_asset=line.acquisition_quote_asset,
+                quote_quantity=line.acquisition_quote_quantity,
+                price_source=line.acquisition_price_source,
+                event_split_count=acquisition_split_count,
+            )
+            disposal_diagnosis = self._gain_evidence_side_diagnosis(
+                delta_eur=disposal_delta,
+                delta_pct=disposal_delta_pct,
+                quote_asset=line.disposal_quote_asset,
+                quote_quantity=line.disposal_quote_quantity,
+                price_source=line.disposal_price_source,
+                event_split_count=disposal_split_count,
+            )
+            dominant_side = self._gain_evidence_dominant_side(acquisition_delta, disposal_delta)
+            root_cause = self._gain_evidence_root_cause(acquisition_diagnosis, disposal_diagnosis)
+            explanation, action = self._gain_evidence_root_cause_text(root_cause)
+            root_counts[root_cause] += 1
+            dominant_counts[dominant_side] += 1
+            if root_cause == "quote_allocation_or_split_line":
+                split_line_review_count += 1
+            rows.append(
+                TaxYearGainEvidencePriceDeltaLine(
+                    year=year,
+                    tax_line_id=line.tax_line_id,
+                    asset=line.asset,
+                    acquired_at=line.acquired_at,
+                    disposed_at=line.disposed_at,
+                    gain_loss_eur=line.gain_loss_eur,
+                    classification=line.delta_classification,
+                    dominant_side=dominant_side,
+                    acquisition_delta_eur=acquisition_delta,
+                    acquisition_delta_pct=acquisition_delta_pct,
+                    disposal_delta_eur=disposal_delta,
+                    disposal_delta_pct=disposal_delta_pct,
+                    absolute_delta_eur=line.absolute_price_delta_eur,
+                    max_delta_pct=line.max_price_delta_pct,
+                    acquisition_quote_asset=line.acquisition_quote_asset,
+                    acquisition_quote_quantity=line.acquisition_quote_quantity,
+                    acquisition_event_id=line.acquisition_event_id,
+                    acquisition_event_split_count=acquisition_split_count,
+                    acquisition_side_diagnosis=acquisition_diagnosis,
+                    disposal_quote_asset=line.disposal_quote_asset,
+                    disposal_quote_quantity=line.disposal_quote_quantity,
+                    disposal_event_id=line.disposal_event_id,
+                    disposal_event_split_count=disposal_split_count,
+                    disposal_side_diagnosis=disposal_diagnosis,
+                    root_cause=root_cause,
+                    explanation=explanation,
+                    recommended_action=action,
+                    asset_fifo_drilldown_endpoint=line.asset_fifo_drilldown_endpoint,
+                )
+            )
+        rows.sort(key=lambda row: row.absolute_delta_eur, reverse=True)
+        return TaxYearGainEvidencePriceDeltaDrilldown(
+            year=year,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            classification_filter=classification,
+            lines_count=len(rows),
+            gain_loss_eur=sum((row.gain_loss_eur for row in rows), Decimal("0")),
+            absolute_delta_eur=sum((row.absolute_delta_eur for row in rows), Decimal("0")),
+            acquisition_delta_eur=sum((abs(row.acquisition_delta_eur) for row in rows), Decimal("0")),
+            disposal_delta_eur=sum((abs(row.disposal_delta_eur) for row in rows), Decimal("0")),
+            dominant_acquisition_count=dominant_counts["acquisition"],
+            dominant_disposal_count=dominant_counts["disposal"],
+            dominant_both_count=dominant_counts["both"],
+            split_line_review_count=split_line_review_count,
+            root_cause_counts=dict(sorted(root_counts.items())),
+            lines=rows,
+            caveats=[
+                "Read-only Drilldown: erklaert Preisdelta-Ursachen, korrigiert aber keine Tax-Lines.",
+                "Split-Line-Hinweise bedeuten: ein Event kann mehrere FIFO-Zeilen erzeugen; Quote-Werte muessen dann proportional oder aggregiert betrachtet werden.",
+            ],
+            methodology=(
+                "Der Drilldown nimmt die bestehenden Gain-Evidence-Zeilen, zaehlt wiederverwendete Erwerbs-/Disposal-Events "
+                "und diagnostiziert jede Seite separat. Grosse Deltas bei mehrfach genutzten Event-Quotes werden als "
+                "quote_allocation_or_split_line markiert, weil dort die wahrscheinlichste Ursache eine nicht anteilige "
+                "Quote-Bewertung pro FIFO-Teilzeile ist."
+            ),
+        )
 
     def _loss_realization_ascii_table(self, rows: list[TaxLossRealizationLot]) -> str:
         table_rows = [

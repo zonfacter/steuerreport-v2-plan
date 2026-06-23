@@ -222,6 +222,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxPaymentOverview,
     TaxRewardTradingSeparationReport,
     TaxYearGainLossRealityCheck,
+    TaxYearGainEvidencePriceDeltaDrilldown,
     TaxYearGainEvidenceReview,
     TaxYearBmfClosureAppendix,
     TaxYearAssetFifoCorrectionReviewReport,
@@ -2852,6 +2853,20 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-years/{year}/gain-evidence-review")
     def tax_year_gain_evidence_review(year: int, limit: int = 80) -> ApiResponse[TaxYearGainEvidenceReview]:
         return ApiResponse(data=TaxYearService(db).gain_evidence_review(year, limit=limit))
+
+    @app.get("/api/v1/tax-years/{year}/gain-evidence-price-deltas")
+    def tax_year_gain_evidence_price_deltas(
+        year: int,
+        classification: str | None = None,
+        limit: int = 200,
+    ) -> ApiResponse[TaxYearGainEvidencePriceDeltaDrilldown]:
+        return ApiResponse(
+            data=TaxYearService(db).gain_evidence_price_delta_drilldown(
+                year,
+                classification=classification,
+                limit=limit,
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/asset-fifo-drilldown")
     def tax_year_asset_fifo_drilldown(

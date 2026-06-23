@@ -647,6 +647,57 @@ def test_gain_evidence_review_groups_stablecoin_price_delta(tmp_path):
     assert group.absolute_delta_eur == Decimal("2.000000000000000000")
 
 
+def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="gain-evidence-split-delta.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2024-01-01T00:00:00Z,JUP,5,buy,USDT,5\n"
+            "2024-01-02T00:00:00Z,JUP,5,buy,USDT,10\n"
+            "2024-02-01T00:00:00Z,JUP,-10,sell,USDT,30\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = TaxYearService(store).gain_evidence_price_delta_drilldown(2024)
+
+    assert report.lines_count == 2
+    assert report.split_line_review_count == 2
+    assert report.root_cause_counts == {"quote_allocation_or_split_line": 2}
+    assert report.dominant_disposal_count == 2
+    assert report.absolute_delta_eur == Decimal("30.000000000000000000")
+    assert all(line.disposal_event_split_count == 2 for line in report.lines)
+    assert all(line.disposal_side_diagnosis == "quote_allocation_or_split_line" for line in report.lines)
+    assert all(line.root_cause == "quote_allocation_or_split_line" for line in report.lines)
+
+
 def test_loss_realization_planner_marks_usable_and_expired_loss_windows(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     now = datetime.now(timezone.utc).replace(microsecond=0)

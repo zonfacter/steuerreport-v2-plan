@@ -490,6 +490,56 @@ class TaxYearGainEvidenceDeltaGroup(BaseModel):
     recommended_action: str
 
 
+class TaxYearGainEvidencePriceDeltaLine(BaseModel):
+    year: int
+    tax_line_id: str
+    asset: str
+    acquired_at: str
+    disposed_at: str
+    gain_loss_eur: Decimal = Decimal("0")
+    classification: str
+    dominant_side: Literal["acquisition", "disposal", "both", "none"]
+    acquisition_delta_eur: Decimal = Decimal("0")
+    acquisition_delta_pct: Decimal = Decimal("0")
+    disposal_delta_eur: Decimal = Decimal("0")
+    disposal_delta_pct: Decimal = Decimal("0")
+    absolute_delta_eur: Decimal = Decimal("0")
+    max_delta_pct: Decimal = Decimal("0")
+    acquisition_quote_asset: str | None = None
+    acquisition_quote_quantity: Decimal | None = None
+    acquisition_event_id: str | None = None
+    acquisition_event_split_count: int = 0
+    acquisition_side_diagnosis: str
+    disposal_quote_asset: str | None = None
+    disposal_quote_quantity: Decimal | None = None
+    disposal_event_id: str | None = None
+    disposal_event_split_count: int = 0
+    disposal_side_diagnosis: str
+    root_cause: str
+    explanation: str
+    recommended_action: str
+    asset_fifo_drilldown_endpoint: str
+
+
+class TaxYearGainEvidencePriceDeltaDrilldown(BaseModel):
+    year: int
+    generated_at: str
+    classification_filter: str | None = None
+    lines_count: int = 0
+    gain_loss_eur: Decimal = Decimal("0")
+    absolute_delta_eur: Decimal = Decimal("0")
+    acquisition_delta_eur: Decimal = Decimal("0")
+    disposal_delta_eur: Decimal = Decimal("0")
+    dominant_acquisition_count: int = 0
+    dominant_disposal_count: int = 0
+    dominant_both_count: int = 0
+    split_line_review_count: int = 0
+    root_cause_counts: dict[str, int] = Field(default_factory=dict)
+    lines: list[TaxYearGainEvidencePriceDeltaLine] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    methodology: str
+
+
 class TaxYearGainEvidenceReview(BaseModel):
     year: int
     generated_at: str

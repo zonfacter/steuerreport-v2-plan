@@ -1206,6 +1206,24 @@ type Snapshot = {
     ascii_table: string;
     methodology: string;
   };
+  taxYearGainEvidencePriceDeltas?: {
+    year: number;
+    generated_at: string;
+    classification_filter?: string | null;
+    lines_count: number;
+    gain_loss_eur: string;
+    absolute_delta_eur: string;
+    acquisition_delta_eur: string;
+    disposal_delta_eur: string;
+    dominant_acquisition_count: number;
+    dominant_disposal_count: number;
+    dominant_both_count: number;
+    split_line_review_count: number;
+    root_cause_counts: Record<string, number>;
+    lines: Array<Record<string, unknown>>;
+    caveats: string[];
+    methodology: string;
+  };
   taxYearTurnoverAudit?: {
     year: number;
     generated_at: string;
@@ -1729,6 +1747,7 @@ function App() {
         taxYearDrivers: { key: "taxYearDrivers", label: "Gewinntreiber", load: () => getApi<Snapshot["taxYearDrivers"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/drivers?limit=80`) },
         taxYearGainLossRealityCheck: { key: "taxYearGainLossRealityCheck", label: "Realisiert vs gehalten", load: () => getApi<Snapshot["taxYearGainLossRealityCheck"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-loss-reality-check?limit=40`) },
         taxYearGainEvidenceReview: { key: "taxYearGainEvidenceReview", label: "Gewinn-Belegcheck", load: () => getApi<Snapshot["taxYearGainEvidenceReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-evidence-review?limit=80`) },
+        taxYearGainEvidencePriceDeltas: { key: "taxYearGainEvidencePriceDeltas", label: "Preisdelta-Drilldown", load: () => getApi<Snapshot["taxYearGainEvidencePriceDeltas"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-evidence-price-deltas?limit=200`) },
         taxYearTurnoverAudit: { key: "taxYearTurnoverAudit", label: "Umsatz-Plausibilitaet", load: () => getApi<Snapshot["taxYearTurnoverAudit"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/turnover-audit?limit=20`) },
         taxYearsTurnoverAuditSummary: { key: "taxYearsTurnoverAuditSummary", label: "Umsatz-Plausibilitaet alle Jahre", load: () => getApi<Snapshot["taxYearsTurnoverAuditSummary"]>("/api/v1/tax-years/turnover-audit-summary?limit=8") },
         taxSolanaProgramIncomeReview: { key: "taxSolanaProgramIncomeReview", label: "Solana Programm-Kontext", load: () => getApi<Snapshot["taxSolanaProgramIncomeReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/solana-program-income-review?limit=20`) },
@@ -1763,6 +1782,7 @@ function App() {
         "taxYearFilingSummary",
         "taxYearTurnoverAudit",
         "taxYearGainEvidenceReview",
+        "taxYearGainEvidencePriceDeltas",
         "taxYearsTurnoverAuditSummary",
         "taxSolanaProgramIncomeReview",
         "taxStablecoinFifoReview",
@@ -3310,6 +3330,7 @@ function Content({
         taxYearDrivers={snapshot.taxYearDrivers}
         taxYearGainLossRealityCheck={snapshot.taxYearGainLossRealityCheck}
         taxYearGainEvidenceReview={snapshot.taxYearGainEvidenceReview}
+        taxYearGainEvidencePriceDeltas={snapshot.taxYearGainEvidencePriceDeltas}
         taxYearTurnoverAudit={snapshot.taxYearTurnoverAudit}
         taxYearsTurnoverAuditSummary={snapshot.taxYearsTurnoverAuditSummary}
         taxSolanaProgramIncomeReview={snapshot.taxSolanaProgramIncomeReview}
@@ -7642,6 +7663,7 @@ function TaxPanel({
   taxYearDrivers,
   taxYearGainLossRealityCheck,
   taxYearGainEvidenceReview,
+  taxYearGainEvidencePriceDeltas,
   taxYearTurnoverAudit,
   taxYearsTurnoverAuditSummary,
   taxSolanaProgramIncomeReview,
@@ -7708,6 +7730,7 @@ function TaxPanel({
   taxYearDrivers: Snapshot["taxYearDrivers"];
   taxYearGainLossRealityCheck: Snapshot["taxYearGainLossRealityCheck"];
   taxYearGainEvidenceReview: Snapshot["taxYearGainEvidenceReview"];
+  taxYearGainEvidencePriceDeltas: Snapshot["taxYearGainEvidencePriceDeltas"];
   taxYearTurnoverAudit: Snapshot["taxYearTurnoverAudit"];
   taxYearsTurnoverAuditSummary: Snapshot["taxYearsTurnoverAuditSummary"];
   taxSolanaProgramIncomeReview: Snapshot["taxSolanaProgramIncomeReview"];
@@ -10086,6 +10109,45 @@ function TaxPanel({
               aktion: group.recommended_action
             }))}
             footer="Gruppen fassen Preisabweichungen zusammen, damit USD/EUR-FX, DEX-Quote, Transferkontext und Normalizer-Themen getrennt pruefbar sind."
+            compact
+          />
+          <div className="portfolioSummaryStrip">
+            <Metric title="Delta-Drilldown" value={String(taxYearGainEvidencePriceDeltas?.lines_count ?? 0)} />
+            <Metric title="Split-Line Review" value={String(taxYearGainEvidencePriceDeltas?.split_line_review_count ?? 0)} />
+            <Metric title="Erwerb dominiert" value={String(taxYearGainEvidencePriceDeltas?.dominant_acquisition_count ?? 0)} />
+            <Metric title="Verkauf dominiert" value={String(taxYearGainEvidencePriceDeltas?.dominant_disposal_count ?? 0)} />
+            <Metric title="Beide Seiten" value={String(taxYearGainEvidencePriceDeltas?.dominant_both_count ?? 0)} />
+          </div>
+          <TablePanel
+            title="Preisdelta Root-Causes"
+            rows={Object.entries(taxYearGainEvidencePriceDeltas?.root_cause_counts ?? {}).map(([rootCause, count]) => ({
+              root_cause: rootCause,
+              zeilen: count
+            }))}
+            footer={taxYearGainEvidencePriceDeltas?.methodology ?? ""}
+            compact
+          />
+          <TablePanel
+            title="Groesste Preisdelta-Zeilen"
+            rows={(taxYearGainEvidencePriceDeltas?.lines ?? []).slice(0, 30).map((line) => ({
+              root_cause: line.root_cause,
+              dominant: line.dominant_side,
+              asset: line.asset,
+              gv_eur: formatCurrency(line.gain_loss_eur),
+              delta_eur: formatCurrency(line.absolute_delta_eur),
+              erwerb_delta: formatCurrency(line.acquisition_delta_eur),
+              erwerb_pct: formatPercent(line.acquisition_delta_pct),
+              erwerb_split: line.acquisition_event_split_count,
+              erwerb_diag: line.acquisition_side_diagnosis,
+              verkauf_delta: formatCurrency(line.disposal_delta_eur),
+              verkauf_pct: formatPercent(line.disposal_delta_pct),
+              verkauf_split: line.disposal_event_split_count,
+              verkauf_diag: line.disposal_side_diagnosis,
+              erklaerung: line.explanation,
+              aktion: line.recommended_action,
+              drilldown: line.asset_fifo_drilldown_endpoint
+            }))}
+            footer={(taxYearGainEvidencePriceDeltas?.caveats ?? []).join(" ")}
             compact
           />
           <TablePanel
