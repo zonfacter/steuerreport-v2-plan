@@ -464,10 +464,30 @@ class TaxYearGainEvidenceLine(BaseModel):
     disposal_expected_proceeds_eur: Decimal | None = None
     disposal_proceeds_delta_eur: Decimal | None = None
     disposal_proceeds_delta_pct: Decimal | None = None
+    absolute_price_delta_eur: Decimal = Decimal("0")
+    max_price_delta_pct: Decimal = Decimal("0")
+    delta_classification: str = "no_material_delta"
+    delta_explanation: str
+    delta_recommended_action: str
     valuation_path: str
     risk_level: Literal["ok", "review", "high"]
     review_reasons: list[str] = Field(default_factory=list)
     asset_fifo_drilldown_endpoint: str
+
+
+class TaxYearGainEvidenceDeltaGroup(BaseModel):
+    year: int
+    classification: str
+    risk_level: Literal["ok", "review", "high"]
+    lines_count: int = 0
+    gain_loss_eur: Decimal = Decimal("0")
+    absolute_delta_eur: Decimal = Decimal("0")
+    max_delta_pct: Decimal = Decimal("0")
+    assets: list[str] = Field(default_factory=list)
+    quote_assets: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    explanation: str
+    recommended_action: str
 
 
 class TaxYearGainEvidenceReview(BaseModel):
@@ -479,6 +499,9 @@ class TaxYearGainEvidenceReview(BaseModel):
     high_risk_lines_count: int = 0
     review_lines_count: int = 0
     ok_lines_count: int = 0
+    price_delta_lines_count: int = 0
+    material_price_delta_eur: Decimal = Decimal("0")
+    delta_groups: list[TaxYearGainEvidenceDeltaGroup] = Field(default_factory=list)
     lines: list[TaxYearGainEvidenceLine] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
     ascii_table: str

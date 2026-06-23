@@ -27,6 +27,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxRewardTradingSeparationRow,
     TaxYearGainLossRealityAssetRow,
     TaxYearGainLossRealityCheck,
+    TaxYearGainEvidenceDeltaGroup,
     TaxYearGainEvidenceLine,
     TaxYearGainEvidenceReview,
     TaxYearCorrectionMap,
@@ -2196,6 +2197,158 @@ class TaxYearService:
             return "review"
         return "ok"
 
+    @staticmethod
+    def _decimal_or_zero(value: object) -> Decimal:
+        return value if isinstance(value, Decimal) else Decimal("0")
+
+    def _gain_evidence_delta_decision(
+        self,
+        *,
+        acquisition_quote_asset: str | None,
+        disposal_quote_asset: str | None,
+        acquisition_source: str | None,
+        disposal_source: str | None,
+        acquisition_price: dict[str, object],
+        disposal_price: dict[str, object],
+        reasons: list[str],
+    ) -> tuple[Decimal, Decimal, str, str, str]:
+        absolute_delta = abs(self._decimal_or_zero(acquisition_price.get("delta_eur"))) + abs(
+            self._decimal_or_zero(disposal_price.get("delta_eur"))
+        )
+        max_delta_pct = max(
+            self._decimal_or_zero(acquisition_price.get("delta_pct")),
+            self._decimal_or_zero(disposal_price.get("delta_pct")),
+        )
+        quote_assets = {
+            str(asset).upper()
+            for asset in (acquisition_quote_asset, disposal_quote_asset)
+            if asset
+        }
+        non_eur_quotes = {asset for asset in quote_assets if asset != "EUR"}
+        stablecoin_quotes = non_eur_quotes & STABLECOIN_LIKE_ASSETS
+        token_quotes = non_eur_quotes - STABLECOIN_LIKE_ASSETS
+        price_sources = {
+            str(source)
+            for source in (acquisition_price.get("price_source"), disposal_price.get("price_source"))
+            if source
+        }
+
+        if "acquisition_price_missing" in reasons or "disposal_price_missing" in reasons:
+            return (
+                absolute_delta,
+                max_delta_pct,
+                "missing_price_evidence",
+                "Mindestens eine Seite der FIFO-Zeile hat keinen historischen EUR-Preis.",
+                "Historischen Tagespreis oder Rohbeleg fuer Erwerb und Veraeusserung nachziehen; erst danach steuerlich final bewerten.",
+            )
+        if absolute_delta < Decimal("0.01") and max_delta_pct <= Decimal("0.5"):
+            return (
+                absolute_delta,
+                max_delta_pct,
+                "no_material_delta",
+                "Tax-Line-Wert und erwarteter Preiswert stimmen innerhalb der Materialitaet ueberein.",
+                "Kein manueller Eingriff noetig; Belegpfad archivieren.",
+            )
+        if stablecoin_quotes:
+            return (
+                absolute_delta,
+                max_delta_pct,
+                "stablecoin_fx_or_market_delta",
+                "Die Abweichung entsteht in einer Stablecoin-Quote; meist USD/EUR-FX, Tageskurs oder Zeitstempelversatz.",
+                "Quote-Menge, Stablecoin-Mint und USD/EUR-Preisquelle am exakten UTC-Zeitpunkt pruefen.",
+            )
+        if token_quotes:
+            return (
+                absolute_delta,
+                max_delta_pct,
+                "dex_route_or_token_quote_delta",
+                "Die Bewertung nutzt ein Token-Quote-Bein aus einem Swap oder DEX-Route statt direktem EUR.",
+                "On-chain Swap-Route mit Token-Transfers, Quote-Mint und Gegenwert aus Solscan/Helius/Jupiter abgleichen.",
+            )
+        if acquisition_source and disposal_source and acquisition_source != disposal_source:
+            return (
+                absolute_delta,
+                max_delta_pct,
+                "cross_source_fifo_context",
+                "Die FIFO-Kette verbindet unterschiedliche Quellen; Preisdelta kann aus Transfer-/Exchange-Kontext stammen.",
+                "Transferneutralitaet und Besitzkette zwischen den Quellen dokumentieren, danach FIFO-Vererbung bestaetigen.",
+            )
+        if any(HistoricalPriceLookup.is_derived_source(source) for source in price_sources):
+            return (
+                absolute_delta,
+                max_delta_pct,
+                "derived_price_review",
+                "Mindestens ein Preis ist abgeleitet; die Tax-Line ist plausibel, aber nicht primaer belegt.",
+                "Abgeleitete Preisquelle gegen Primaerquelle oder Exchange-/Explorer-Rohdaten gegenpruefen.",
+            )
+        return (
+            absolute_delta,
+            max_delta_pct,
+            "normalizer_review",
+            "Es liegt eine materielle Preisabweichung ohne eindeutige Quote- oder Quellenursache vor.",
+            "Raw-Object, Normalizer-Mapping, quote_asset und quote_quantity der betroffenen Events pruefen.",
+        )
+
+    def _gain_evidence_delta_groups(
+        self,
+        year: int,
+        lines: list[TaxYearGainEvidenceLine],
+    ) -> list[TaxYearGainEvidenceDeltaGroup]:
+        grouped: dict[str, dict[str, object]] = defaultdict(
+            lambda: {
+                "risk_level": "ok",
+                "lines_count": 0,
+                "gain_loss_eur": Decimal("0"),
+                "absolute_delta_eur": Decimal("0"),
+                "max_delta_pct": Decimal("0"),
+                "assets": set(),
+                "quote_assets": set(),
+                "sources": set(),
+                "explanation": "",
+                "recommended_action": "",
+            }
+        )
+        risk_rank = {"ok": 0, "review": 1, "high": 2}
+        for line in lines:
+            if line.delta_classification == "no_material_delta":
+                continue
+            item = grouped[line.delta_classification]
+            item["lines_count"] = int(item["lines_count"]) + 1
+            item["gain_loss_eur"] = item["gain_loss_eur"] + line.gain_loss_eur  # type: ignore[operator]
+            item["absolute_delta_eur"] = item["absolute_delta_eur"] + line.absolute_price_delta_eur  # type: ignore[operator]
+            item["max_delta_pct"] = max(item["max_delta_pct"], line.max_price_delta_pct)  # type: ignore[arg-type]
+            item["assets"].add(line.asset.upper())  # type: ignore[union-attr]
+            for quote_asset in (line.acquisition_quote_asset, line.disposal_quote_asset):
+                if quote_asset:
+                    item["quote_assets"].add(quote_asset.upper())  # type: ignore[union-attr]
+            for source in (line.acquisition_source, line.disposal_source):
+                if source:
+                    item["sources"].add(source)  # type: ignore[union-attr]
+            item["explanation"] = line.delta_explanation
+            item["recommended_action"] = line.delta_recommended_action
+            if risk_rank[line.risk_level] > risk_rank[str(item["risk_level"])]:
+                item["risk_level"] = line.risk_level
+
+        groups = [
+            TaxYearGainEvidenceDeltaGroup(
+                year=year,
+                classification=classification,
+                risk_level=item["risk_level"],  # type: ignore[arg-type]
+                lines_count=int(item["lines_count"]),
+                gain_loss_eur=item["gain_loss_eur"],  # type: ignore[arg-type]
+                absolute_delta_eur=item["absolute_delta_eur"],  # type: ignore[arg-type]
+                max_delta_pct=item["max_delta_pct"],  # type: ignore[arg-type]
+                assets=sorted(item["assets"]),  # type: ignore[arg-type]
+                quote_assets=sorted(item["quote_assets"]),  # type: ignore[arg-type]
+                sources=sorted(item["sources"]),  # type: ignore[arg-type]
+                explanation=str(item["explanation"]),
+                recommended_action=str(item["recommended_action"]),
+            )
+            for classification, item in grouped.items()
+        ]
+        groups.sort(key=lambda group: (group.risk_level != "high", -group.absolute_delta_eur))
+        return groups
+
     def _loss_realization_ascii_table(self, rows: list[TaxLossRealizationLot]) -> str:
         table_rows = [
             [
@@ -2787,7 +2940,7 @@ class TaxYearService:
                 acquisition_quote_asset=row[13],
                 disposal_quote_asset=row[19],
                 acquisition_source=row[11],
-                disposal_source=row[16],
+                disposal_source=row[17],
                 gain_loss_ratio_pct=ratio,
                 acquisition_price_delta_pct=acquisition_price["delta_pct"],
                 disposal_price_delta_pct=disposal_price["delta_pct"],
@@ -2797,6 +2950,21 @@ class TaxYearService:
                 disposal_price_source=disposal_price["price_source"],
             )
             risk = self._gain_evidence_risk(reasons)
+            (
+                absolute_price_delta_eur,
+                max_price_delta_pct,
+                delta_classification,
+                delta_explanation,
+                delta_recommended_action,
+            ) = self._gain_evidence_delta_decision(
+                acquisition_quote_asset=row[13],
+                disposal_quote_asset=row[19],
+                acquisition_source=row[11],
+                disposal_source=row[17],
+                acquisition_price=acquisition_price,
+                disposal_price=disposal_price,
+                reasons=reasons,
+            )
             lines.append(
                 TaxYearGainEvidenceLine(
                     tax_line_id=row[0],
@@ -2840,6 +3008,11 @@ class TaxYearService:
                     disposal_expected_proceeds_eur=disposal_price["expected_value"],
                     disposal_proceeds_delta_eur=disposal_price["delta_eur"],
                     disposal_proceeds_delta_pct=disposal_price["delta_pct"],
+                    absolute_price_delta_eur=absolute_price_delta_eur,
+                    max_price_delta_pct=max_price_delta_pct,
+                    delta_classification=delta_classification,
+                    delta_explanation=delta_explanation,
+                    delta_recommended_action=delta_recommended_action,
                     valuation_path=self._gain_evidence_valuation_path(row[13], row[19]),
                     risk_level=risk,
                     review_reasons=reasons,
@@ -2850,6 +3023,7 @@ class TaxYearService:
             (line.gain_loss_eur for line in self._tax_lines() if line.disposed_at.year == year and self._is_taxable_private_disposal(line)),
             Decimal("0"),
         )
+        delta_groups = self._gain_evidence_delta_groups(year, lines)
         return TaxYearGainEvidenceReview(
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
@@ -2859,10 +3033,14 @@ class TaxYearService:
             high_risk_lines_count=sum(1 for line in lines if line.risk_level == "high"),
             review_lines_count=sum(1 for line in lines if line.risk_level == "review"),
             ok_lines_count=sum(1 for line in lines if line.risk_level == "ok"),
+            price_delta_lines_count=sum(1 for line in lines if line.delta_classification != "no_material_delta"),
+            material_price_delta_eur=sum((line.absolute_price_delta_eur for line in lines), Decimal("0")),
+            delta_groups=delta_groups,
             lines=lines,
             caveats=[
                 "Read-only Belegcheck: bewertet vorhandene Tax-Lines, rechnet FIFO aber nicht neu.",
                 "Fehlende Rohbelege, nicht-EUR-Quote-Beine und hohe Gewinnquoten sind Review-Signale, keine automatische Korrektur.",
+                "Preisdelta-Gruppen erklaeren, warum Tax-Line-Wert und erwarteter Quote-/Preiswert abweichen koennen.",
                 "Die geprueften Top-Zeilen sind nach absolutem G/V sortiert und decken nicht zwingend alle kleinen Zeilen ab.",
             ],
             ascii_table=self._gain_evidence_ascii_table(lines),

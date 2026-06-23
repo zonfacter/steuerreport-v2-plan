@@ -1198,6 +1198,9 @@ type Snapshot = {
     high_risk_lines_count: number;
     review_lines_count: number;
     ok_lines_count: number;
+    price_delta_lines_count: number;
+    material_price_delta_eur: string;
+    delta_groups: Array<Record<string, unknown>>;
     lines: Array<Record<string, unknown>>;
     caveats: string[];
     ascii_table: string;
@@ -10064,7 +10067,27 @@ function TaxPanel({
             <Metric title="High" value={String(taxYearGainEvidenceReview?.high_risk_lines_count ?? 0)} />
             <Metric title="Review" value={String(taxYearGainEvidenceReview?.review_lines_count ?? 0)} />
             <Metric title="OK" value={String(taxYearGainEvidenceReview?.ok_lines_count ?? 0)} />
+            <Metric title="Preisdelta-Zeilen" value={String(taxYearGainEvidenceReview?.price_delta_lines_count ?? 0)} />
+            <Metric title="Preisdelta" value={`${formatCurrency(taxYearGainEvidenceReview?.material_price_delta_eur)} EUR`} />
           </div>
+          <TablePanel
+            title="Preisdelta-Gruppen"
+            rows={(taxYearGainEvidenceReview?.delta_groups ?? []).map((group) => ({
+              risiko: group.risk_level,
+              ursache: group.classification,
+              zeilen: group.lines_count,
+              gv_eur: formatCurrency(group.gain_loss_eur),
+              delta_eur: formatCurrency(group.absolute_delta_eur),
+              max_delta_pct: formatPercent(group.max_delta_pct),
+              assets: Array.isArray(group.assets) ? group.assets.join(", ") : group.assets,
+              quote_assets: Array.isArray(group.quote_assets) ? group.quote_assets.join(", ") : group.quote_assets,
+              quellen: Array.isArray(group.sources) ? group.sources.join(", ") : group.sources,
+              erklaerung: group.explanation,
+              aktion: group.recommended_action
+            }))}
+            footer="Gruppen fassen Preisabweichungen zusammen, damit USD/EUR-FX, DEX-Quote, Transferkontext und Normalizer-Themen getrennt pruefbar sind."
+            compact
+          />
           <TablePanel
             title="Top-Gewinnzeilen mit Belegstatus"
             rows={(taxYearGainEvidenceReview?.lines ?? []).slice(0, 30).map((line) => ({
@@ -10083,6 +10106,10 @@ function TaxPanel({
               verkauf_preisquelle: line.disposal_price_source ?? "-",
               verkauf_preisalter_tage: line.disposal_price_age_days ?? "-",
               verkauf_delta_pct: line.disposal_proceeds_delta_pct === null || line.disposal_proceeds_delta_pct === undefined ? "-" : formatPercent(line.disposal_proceeds_delta_pct),
+              delta_klasse: line.delta_classification,
+              delta_eur: formatCurrency(line.absolute_price_delta_eur),
+              delta_erklaerung: line.delta_explanation,
+              delta_aktion: line.delta_recommended_action,
               gruende: Array.isArray(line.review_reasons) ? line.review_reasons.join(", ") : line.review_reasons,
               drilldown: line.asset_fifo_drilldown_endpoint
             }))}

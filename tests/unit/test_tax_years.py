@@ -589,8 +589,62 @@ def test_gain_evidence_review_flags_missing_raw_and_non_eur_quote(tmp_path):
     assert line.disposal_expected_proceeds_eur == Decimal("30.000000000000000000")
     assert line.acquisition_cost_delta_eur == Decimal("0E-18")
     assert line.disposal_proceeds_delta_eur == Decimal("0E-18")
+    assert line.delta_classification == "no_material_delta"
+    assert line.absolute_price_delta_eur == Decimal("0E-18")
+    assert report.price_delta_lines_count == 0
+    assert report.material_price_delta_eur == Decimal("0E-18")
+    assert report.delta_groups == []
     assert "disp_quote=USDT" in line.valuation_path
     assert "Risiko" in report.ascii_table
+
+
+def test_gain_evidence_review_groups_stablecoin_price_delta(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="gain-evidence-delta.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2024-01-01T00:00:00Z,JUP,10,buy,USDT,10\n"
+            "2024-02-01T00:00:00Z,JUP,-10,sell,USDT,30\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.80"),
+            priced_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+    with store.connect() as con:
+        con.execute("update tax_lines set acquisition_cost_eur = 10 where asset = 'JUP'")
+
+    report = TaxYearService(store).gain_evidence_review(2024)
+    line = report.lines[0]
+
+    assert line.delta_classification == "stablecoin_fx_or_market_delta"
+    assert line.absolute_price_delta_eur == Decimal("2.000000000000000000")
+    assert line.max_price_delta_pct == Decimal("25.00")
+    assert "USD/EUR" in line.delta_explanation
+    assert report.price_delta_lines_count == 1
+    assert report.material_price_delta_eur == Decimal("2.000000000000000000")
+    assert len(report.delta_groups) == 1
+    group = report.delta_groups[0]
+    assert group.classification == "stablecoin_fx_or_market_delta"
+    assert group.lines_count == 1
+    assert group.quote_assets == ["USDT"]
+    assert group.absolute_delta_eur == Decimal("2.000000000000000000")
 
 
 def test_loss_realization_planner_marks_usable_and_expired_loss_windows(tmp_path):
