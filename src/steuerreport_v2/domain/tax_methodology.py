@@ -41,6 +41,7 @@ class TaxMethodologyService:
     DEFAULT_BMF_CLOSURE_BACKLOG_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_closure_backlog")
     CONSERVATIVE_REVIEW_ONLY_CODES = {
         "asset_fifo_quote_attribution_documented",
+        "gain_evidence_event_level_reconciled",
         "income_only_year",
         "wallet_fifo_delta_present",
         "wallet_fifo_evidence_overlay_ok",
@@ -105,10 +106,27 @@ class TaxMethodologyService:
             ),
         )
 
-    def bmf_action_plan(self, year: int | None = None) -> TaxBmfActionPlan:
+    def bmf_action_plan(
+        self,
+        year: int | None = None,
+        *,
+        include_gain_evidence: bool = False,
+        prefer_snapshot: bool = False,
+    ) -> TaxBmfActionPlan:
         generated_at = self._now()
         available_years = [year] if year is not None else self._available_years()
-        reports = [self.report(year) for year in available_years]
+        if prefer_snapshot and not include_gain_evidence and self._can_use_default_bmf_snapshot():
+            snapshot = self.bmf_filing_readiness_snapshot()
+            if snapshot.status == "available" and snapshot.report is not None:
+                return self._bmf_action_plan_from_readiness_snapshot(
+                    snapshot.report,
+                    generated_at=generated_at,
+                    year=year,
+                )
+        reports = [
+            self.report(item_year, include_gain_evidence=include_gain_evidence)
+            for item_year in available_years
+        ]
         items = [
             self._action_item_from_gap(report.year, gap)
             for report in reports
@@ -138,9 +156,81 @@ class TaxMethodologyService:
                 "Read-only BMF-Aktionsliste aus den Methodikreports aller Jahre. "
                 "Blocker muessen vor einer belastbaren Einreichung fachlich "
                 "geschlossen werden; Warnungen markieren dokumentationspflichtige "
-                "Deltas. Die Liste schreibt keine Steuerdaten."
+                "Deltas. Die Liste schreibt keine Steuerdaten. Schwere "
+                "Gain-Evidence-Detailnachweise werden nur mit "
+                "include_gain_evidence=true in die Aktionsliste geladen."
             ),
         )
+
+    def _bmf_action_plan_from_readiness_snapshot(
+        self,
+        report: TaxBmfFilingReadinessReport,
+        *,
+        generated_at: str,
+        year: int | None,
+    ) -> TaxBmfActionPlan:
+        rows = [row for row in report.years if year is None or row.year == year]
+        items: list[TaxBmfActionItem] = []
+        for row in rows:
+            for code in row.blocking_gap_codes:
+                items.append(self._snapshot_action_item(row.year, code, severity="blocker"))
+            for code in row.review_gap_codes:
+                items.append(self._snapshot_action_item(row.year, code, severity=self._snapshot_review_severity(code)))
+        return TaxBmfActionPlan(
+            generated_at=generated_at,
+            available_years=[row.year for row in rows],
+            ready_years=[row.year for row in rows if row.filing_status == "bmf_ready"],
+            review_years=[row.year for row in rows if row.filing_status == "review_required"],
+            blocked_years=[row.year for row in rows if row.filing_status == "blocked"],
+            empty_years=[row.year for row in rows if row.filing_status == "empty"],
+            blocking_items_count=sum(1 for item in items if item.severity == "blocker"),
+            review_items_count=sum(1 for item in items if item.severity == "warning"),
+            info_items_count=sum(1 for item in items if item.severity == "info"),
+            items=sorted(
+                items,
+                key=lambda item: (
+                    0 if item.severity == "blocker" else 1 if item.severity == "warning" else 2,
+                    item.year,
+                    item.category,
+                    item.code,
+                ),
+            ),
+            methodology=(
+                "Schnelle BMF-Aktionsliste aus dem letzten Filing-Readiness-Snapshot. "
+                "Fuer vollstaendige Live-Details den Jahres-Methodikreport oder "
+                "include_gain_evidence=true verwenden. Die Liste schreibt keine Steuerdaten."
+            ),
+        )
+
+    def _snapshot_action_item(
+        self,
+        year: int,
+        code: str,
+        *,
+        severity: str,
+    ) -> TaxBmfActionItem:
+        is_blocker = severity == "blocker"
+        return TaxBmfActionItem(
+            year=year,
+            category=self._gap_category(code),
+            severity=severity,
+            code=code,
+            title=self._gap_title(code),
+            detail=self._gap_title(code),
+            count=1,
+            blocks_bmf_ready=is_blocker,
+            evidence_ref=f"/api/v1/tax-years/{year}/methodology",
+            action=(
+                "Blockierenden Punkt im Jahres-Methodikreport oeffnen und Beleg/Review nachziehen."
+                if is_blocker
+                else "Als konservativen Beleg-/Review-Hinweis im Jahrespaket pruefen und archivieren."
+            ),
+        )
+
+    def _snapshot_review_severity(self, code: str) -> str:
+        if code in {"wallet_fifo_delta_present", "wallet_fifo_exchange_sequencing_documented"}:
+            return "warning"
+        return "info"
 
     def bmf_filing_readiness(self, year: int | None = None) -> TaxBmfFilingReadinessReport:
         generated_at = self._now()
@@ -259,7 +349,7 @@ class TaxMethodologyService:
         )
 
     def _bmf_filing_readiness_year(self, year: int, *, payment_row) -> TaxBmfFilingReadinessYear:
-        report = self.report(year)
+        report = self.report(year, include_gain_evidence=False)
         blocking_codes = [gap.code for gap in report.gaps if gap.blocks_bmf_ready or gap.severity == "blocker"]
         review_codes = [
             gap.code
@@ -388,6 +478,13 @@ class TaxMethodologyService:
                 return candidate
         return candidates[-1]
 
+    def _can_use_default_bmf_snapshot(self) -> bool:
+        default_db = Path("/workspace/steuerreport-v2-plan/data/steuerreport_v2.duckdb")
+        try:
+            return self.store.path.resolve() == default_db.resolve()
+        except FileNotFoundError:
+            return False
+
     def bmf_closure_backlog(self, year: int | None = None) -> TaxBmfClosureBacklogReport:
         generated_at = self._now()
         available_years = [year] if year is not None else [
@@ -471,7 +568,7 @@ class TaxMethodologyService:
         return latest
 
     def _bmf_closure_backlog_year(self, year: int) -> TaxBmfClosureBacklogYear:
-        report = self.report(year)
+        report = self.report(year, include_gain_evidence=False)
         appendix = self.tax_years.bmf_closure_appendix(year)
         items: list[TaxBmfClosureBacklogItem] = []
         for appendix_item in appendix.items:
@@ -619,7 +716,7 @@ class TaxMethodologyService:
     def status(self, year: int) -> TaxYearComplianceStatus:
         return self._status_from_report(self.report(year))
 
-    def report(self, year: int) -> TaxMethodologyReport:
+    def report(self, year: int, *, include_gain_evidence: bool = True) -> TaxMethodologyReport:
         generated_at = self._now()
         policy = self.policy()
         detail = self.tax_years.detail(year)
@@ -715,6 +812,11 @@ class TaxMethodologyService:
             limit=200,
             min_abs_gain_eur=self.ASSET_FIFO_CORRECTION_MIN_ABS_EUR,
         )
+        gain_evidence = (
+            self.tax_years.gain_evidence_review(year, limit=500)
+            if include_gain_evidence and detail.tax_lines_count
+            else None
+        )
         gaps = self._gaps(
             year=year,
             tax_lines_count=detail.tax_lines_count,
@@ -756,6 +858,23 @@ class TaxMethodologyService:
             wallet_fifo_documented_unverified_cex_count=wallet_fifo_documented_unverified_cex_count,
             asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
             asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
+            gain_evidence_price_delta_lines_count=(
+                gain_evidence.price_delta_lines_count if gain_evidence is not None else 0
+            ),
+            gain_evidence_material_price_delta_eur=(
+                gain_evidence.material_price_delta_eur if gain_evidence is not None else Decimal("0")
+            ),
+            gain_evidence_open_price_delta_eur=(
+                gain_evidence.open_price_delta_eur if gain_evidence is not None else Decimal("0")
+            ),
+            gain_evidence_event_level_reconciled_lines_count=(
+                gain_evidence.event_level_reconciled_lines_count if gain_evidence is not None else 0
+            ),
+            gain_evidence_acquisition_event_level_reconciled_lines_count=(
+                gain_evidence.acquisition_event_level_reconciled_lines_count
+                if gain_evidence is not None
+                else 0
+            ),
         )
         status = self._status(gaps, counts["activity_count"])
         traceability_score = self._traceability_score(gaps, counts)
@@ -776,6 +895,12 @@ class TaxMethodologyService:
                 wallet_fifo_exchange_sequencing_count=wallet_fifo_exchange_sequencing_count,
                 asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
                 asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
+                gain_evidence_price_delta_lines_count=(
+                    gain_evidence.price_delta_lines_count if gain_evidence is not None else 0
+                ),
+                gain_evidence_open_price_delta_eur=(
+                    gain_evidence.open_price_delta_eur if gain_evidence is not None else Decimal("0")
+                ),
                 traceability_score=traceability_score,
             ),
             gaps=gaps,
@@ -1172,6 +1297,11 @@ class TaxMethodologyService:
         wallet_fifo_documented_unverified_cex_count: int,
         asset_fifo_possible_recalculation_count: int,
         asset_fifo_attribution_review_count: int,
+        gain_evidence_price_delta_lines_count: int = 0,
+        gain_evidence_material_price_delta_eur: Decimal = Decimal("0"),
+        gain_evidence_open_price_delta_eur: Decimal = Decimal("0"),
+        gain_evidence_event_level_reconciled_lines_count: int = 0,
+        gain_evidence_acquisition_event_level_reconciled_lines_count: int = 0,
     ) -> list[TaxMethodologyGap]:
         gaps: list[TaxMethodologyGap] = []
         if traceability["activity_count"] == 0:
@@ -1548,6 +1678,31 @@ class TaxMethodologyService:
                     blocks_bmf_ready=False,
                 )
             )
+        if gain_evidence_price_delta_lines_count and abs(gain_evidence_open_price_delta_eur) <= Decimal("0.01"):
+            reconciled_lines = max(
+                gain_evidence_event_level_reconciled_lines_count,
+                gain_evidence_acquisition_event_level_reconciled_lines_count,
+            )
+            gaps.append(
+                TaxMethodologyGap(
+                    code="gain_evidence_event_level_reconciled",
+                    severity="info",
+                    message=(
+                        f"{gain_evidence_price_delta_lines_count} Gain-Evidence-Preisdelta-Zeile(n) "
+                        f"sind mit {reconciled_lines} Event-Level-Abgleich(en) plausibilisiert; "
+                        f"Brutto-Delta {gain_evidence_material_price_delta_eur} EUR, "
+                        f"offenes Delta {gain_evidence_open_price_delta_eur} EUR."
+                    ),
+                    count=gain_evidence_price_delta_lines_count,
+                    action=(
+                        "Event-Level-Gain-Evidence im Jahresbeleg archivieren; "
+                        "Brutto-Preisdelta nicht als zusaetzlichen Gewinn oder "
+                        "zusaetzlich eingesetztes Kapital interpretieren."
+                    ),
+                    evidence_ref=f"/api/v1/tax-years/{year}/gain-evidence-review?limit=500",
+                    blocks_bmf_ready=False,
+                )
+            )
         if unmatched_disposals:
             gaps.append(
                 TaxMethodologyGap(
@@ -1637,6 +1792,8 @@ class TaxMethodologyService:
         asset_fifo_possible_recalculation_count: int,
         asset_fifo_attribution_review_count: int,
         traceability_score: Decimal,
+        gain_evidence_price_delta_lines_count: int = 0,
+        gain_evidence_open_price_delta_eur: Decimal = Decimal("0"),
     ) -> list[TaxTraceabilityMetric]:
         tax_trace_status: TaxMethodologyStatus = "ok"
         if detail_tax_lines_count and counts["tax_lines_with_event_trace"] < detail_tax_lines_count:
@@ -1706,6 +1863,22 @@ class TaxMethodologyService:
                 value=asset_fifo_attribution_review_count,
                 target="dokumentiert",
                 detail="Quote-/Attribution-Hinweise, die nicht als zusaetzliche Steuerposition addiert werden duerfen.",
+            ),
+            TaxTraceabilityMetric(
+                key="gain_evidence_event_level_reconciliation",
+                label="Gain-Evidence Event-Level",
+                status=(
+                    "ok"
+                    if not gain_evidence_price_delta_lines_count
+                    or abs(gain_evidence_open_price_delta_eur) <= Decimal("0.01")
+                    else "review"
+                ),
+                value=gain_evidence_open_price_delta_eur,
+                target=Decimal("0"),
+                detail=(
+                    "Prueft, ob auffaellige Preisdelta-Summen aus FIFO-Split-/Quote-Allocation "
+                    "auf Erwerbs- und Verkaufs-Event-Level plausibel geschlossen sind."
+                ),
             ),
         ]
 
@@ -1783,6 +1956,8 @@ class TaxMethodologyService:
             return "review"
         if code.startswith("tax_line_trace"):
             return "traceability"
+        if code.startswith("gain_evidence"):
+            return "traceability"
         if code.startswith("no_tax_year_activity"):
             return "activity"
         if code.startswith("income"):
@@ -1826,6 +2001,7 @@ class TaxMethodologyService:
             ),
             "asset_fifo_possible_recalculation": "Asset-FIFO moegliche Neuberechnung",
             "asset_fifo_quote_attribution_documented": "Quote-/Attribution dokumentiert",
+            "gain_evidence_event_level_reconciled": "Gain-Evidence Event-Level plausibilisiert",
             "external_inflows_need_evidence": "Externe Zufluesse klaeren",
             "missing_price_groups": "Historische Preise ergaenzen",
             "review_issues_open": "Review-Issues schliessen",

@@ -47,9 +47,14 @@ def test_tax_methodology_report_marks_clean_year_as_bmf_ready_with_evidence_over
     assert [gap.code for gap in report.gaps] == [
         "wallet_fifo_evidence_overlay_ok",
         "asset_fifo_quote_attribution_documented",
+        "gain_evidence_event_level_reconciled",
     ]
     assert all(gap.blocks_bmf_ready is False for gap in report.gaps)
     assert any(metric.key == "asset_fifo_correction_candidates" for metric in report.metrics)
+    assert any(
+        metric.key == "gain_evidence_event_level_reconciliation" and metric.status == "ok"
+        for metric in report.metrics
+    )
 
 
 def test_tax_methodology_report_blocks_unmatched_disposals(tmp_path):
@@ -150,7 +155,7 @@ def test_bmf_filing_readiness_surfaces_conservative_appendix_without_ready_flag(
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)
     service._available_years = lambda: [2024]
-    service.report = lambda year: SimpleNamespace(
+    service.report = lambda year, **kwargs: SimpleNamespace(
         year=year,
         status="blocked",
         bmf_ready=False,
@@ -194,7 +199,7 @@ def test_bmf_filing_readiness_treats_documented_review_only_year_as_conservative
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)
     service._available_years = lambda: [2025]
-    service.report = lambda year: SimpleNamespace(
+    service.report = lambda year, **kwargs: SimpleNamespace(
         year=year,
         status="review",
         bmf_ready=False,
@@ -268,7 +273,7 @@ def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)
     service._available_years = lambda: [2023]
-    service.report = lambda year: SimpleNamespace(
+    service.report = lambda year, **kwargs: SimpleNamespace(
         year=year,
         status="blocked",
         bmf_ready=False,

@@ -2036,8 +2036,17 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=TaxMethodologyService(db).summary(year=year))
 
     @app.get("/api/v1/tax-methodology/bmf-action-plan")
-    def tax_methodology_bmf_action_plan(year: int | None = None) -> ApiResponse[TaxBmfActionPlan]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_action_plan(year=year))
+    def tax_methodology_bmf_action_plan(
+        year: int | None = None,
+        include_gain_evidence: bool = False,
+    ) -> ApiResponse[TaxBmfActionPlan]:
+        return ApiResponse(
+            data=TaxMethodologyService(db).bmf_action_plan(
+                year=year,
+                include_gain_evidence=include_gain_evidence,
+                prefer_snapshot=True,
+            )
+        )
 
     @app.get("/api/v1/tax-methodology/bmf-closure-backlog")
     def tax_methodology_bmf_closure_backlog(year: int | None = None) -> ApiResponse[TaxBmfClosureBacklogReport]:
@@ -2049,7 +2058,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-methodology/bmf-filing-readiness")
     def tax_methodology_bmf_filing_readiness(year: int | None = None) -> ApiResponse[TaxBmfFilingReadinessReport]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_filing_readiness(year=year))
+        service = TaxMethodologyService(db)
+        if year is None:
+            snapshot = service.bmf_filing_readiness_snapshot()
+            if snapshot.status == "available" and snapshot.report is not None:
+                return ApiResponse(data=snapshot.report)
+        return ApiResponse(data=service.bmf_filing_readiness(year=year))
 
     @app.get("/api/v1/tax-methodology/bmf-filing-readiness-snapshot")
     def tax_methodology_bmf_filing_readiness_snapshot() -> ApiResponse[TaxBmfFilingReadinessSnapshot]:
