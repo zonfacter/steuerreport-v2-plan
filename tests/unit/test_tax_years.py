@@ -591,8 +591,11 @@ def test_gain_evidence_review_flags_missing_raw_and_non_eur_quote(tmp_path):
     assert line.disposal_proceeds_delta_eur == Decimal("0E-18")
     assert line.delta_classification == "no_material_delta"
     assert line.absolute_price_delta_eur == Decimal("0E-18")
+    assert line.open_price_delta_eur == Decimal("0")
     assert report.price_delta_lines_count == 0
+    assert report.event_level_reconciled_lines_count == 1
     assert report.material_price_delta_eur == Decimal("0E-18")
+    assert report.open_price_delta_eur == Decimal("0")
     assert report.delta_groups == []
     assert "disp_quote=USDT" in line.valuation_path
     assert "Risiko" in report.ascii_table
@@ -635,16 +638,21 @@ def test_gain_evidence_review_groups_stablecoin_price_delta(tmp_path):
 
     assert line.delta_classification == "stablecoin_fx_or_market_delta"
     assert line.absolute_price_delta_eur == Decimal("2.000000000000000000")
+    assert line.open_price_delta_eur == Decimal("2.000000000000000000")
+    assert line.event_level_reconciled is True
     assert line.max_price_delta_pct == Decimal("25.00")
     assert "USD/EUR" in line.delta_explanation
     assert report.price_delta_lines_count == 1
+    assert report.event_level_reconciled_lines_count == 1
     assert report.material_price_delta_eur == Decimal("2.000000000000000000")
+    assert report.open_price_delta_eur == Decimal("2.000000000000000000")
     assert len(report.delta_groups) == 1
     group = report.delta_groups[0]
     assert group.classification == "stablecoin_fx_or_market_delta"
     assert group.lines_count == 1
     assert group.quote_assets == ["USDT"]
     assert group.absolute_delta_eur == Decimal("2.000000000000000000")
+    assert group.open_delta_eur == Decimal("2.000000000000000000")
 
 
 def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(tmp_path):
@@ -687,6 +695,7 @@ def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(t
     TaxService(store).rebuild_fifo()
 
     report = TaxYearService(store).gain_evidence_price_delta_drilldown(2024)
+    gain_report = TaxYearService(store).gain_evidence_review(2024)
 
     assert report.lines_count == 2
     assert report.split_line_review_count == 2
@@ -702,6 +711,11 @@ def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(t
     assert all(line.event_level_status == "event_level_ok" for line in report.lines)
     assert all(line.event_level_delta_eur == Decimal("0E-18") for line in report.lines)
     assert all("Event-Level ist plausibel" in line.explanation for line in report.lines)
+    assert gain_report.event_level_reconciled_lines_count == 2
+    assert gain_report.material_price_delta_eur == Decimal("30.000000000000000000")
+    assert gain_report.open_price_delta_eur == Decimal("0")
+    assert all(line.event_level_reconciled for line in gain_report.lines)
+    assert all(line.open_price_delta_eur == Decimal("0") for line in gain_report.lines)
 
     event_report = TaxYearService(store).gain_evidence_event_delta_review(2024)
     assert event_report.events_count == 1

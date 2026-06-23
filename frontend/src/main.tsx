@@ -1199,7 +1199,9 @@ type Snapshot = {
     review_lines_count: number;
     ok_lines_count: number;
     price_delta_lines_count: number;
+    event_level_reconciled_lines_count: number;
     material_price_delta_eur: string;
+    open_price_delta_eur: string;
     delta_groups: Array<Record<string, unknown>>;
     lines: Array<Record<string, unknown>>;
     caveats: string[];
@@ -10115,7 +10117,9 @@ function TaxPanel({
             <Metric title="Review" value={String(taxYearGainEvidenceReview?.review_lines_count ?? 0)} />
             <Metric title="OK" value={String(taxYearGainEvidenceReview?.ok_lines_count ?? 0)} />
             <Metric title="Preisdelta-Zeilen" value={String(taxYearGainEvidenceReview?.price_delta_lines_count ?? 0)} />
-            <Metric title="Preisdelta" value={`${formatCurrency(taxYearGainEvidenceReview?.material_price_delta_eur)} EUR`} />
+            <Metric title="Event abgeglichen" value={String(taxYearGainEvidenceReview?.event_level_reconciled_lines_count ?? 0)} />
+            <Metric title="Preisdelta brutto" value={`${formatCurrency(taxYearGainEvidenceReview?.material_price_delta_eur)} EUR`} />
+            <Metric title="Preisdelta offen" value={`${formatCurrency(taxYearGainEvidenceReview?.open_price_delta_eur)} EUR`} />
           </div>
           <TablePanel
             title="Preisdelta-Gruppen"
@@ -10125,6 +10129,7 @@ function TaxPanel({
               zeilen: group.lines_count,
               gv_eur: formatCurrency(group.gain_loss_eur),
               delta_eur: formatCurrency(group.absolute_delta_eur),
+              offen_eur: formatCurrency(group.open_delta_eur),
               max_delta_pct: formatPercent(group.max_delta_pct),
               assets: Array.isArray(group.assets) ? group.assets.join(", ") : group.assets,
               quote_assets: Array.isArray(group.quote_assets) ? group.quote_assets.join(", ") : group.quote_assets,
@@ -10232,6 +10237,9 @@ function TaxPanel({
               verkauf_delta_pct: line.disposal_proceeds_delta_pct === null || line.disposal_proceeds_delta_pct === undefined ? "-" : formatPercent(line.disposal_proceeds_delta_pct),
               delta_klasse: line.delta_classification,
               delta_eur: formatCurrency(line.absolute_price_delta_eur),
+              offen_eur: formatCurrency(line.open_price_delta_eur),
+              event_status: line.event_level_status ?? "-",
+              event_abgeglichen: line.event_level_reconciled ? "ja" : "nein",
               delta_erklaerung: line.delta_explanation,
               delta_aktion: line.delta_recommended_action,
               gruende: Array.isArray(line.review_reasons) ? line.review_reasons.join(", ") : line.review_reasons,

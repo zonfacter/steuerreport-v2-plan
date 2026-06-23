@@ -2304,6 +2304,7 @@ class TaxYearService:
                 "lines_count": 0,
                 "gain_loss_eur": Decimal("0"),
                 "absolute_delta_eur": Decimal("0"),
+                "open_delta_eur": Decimal("0"),
                 "max_delta_pct": Decimal("0"),
                 "assets": set(),
                 "quote_assets": set(),
@@ -2320,6 +2321,7 @@ class TaxYearService:
             item["lines_count"] = int(item["lines_count"]) + 1
             item["gain_loss_eur"] = item["gain_loss_eur"] + line.gain_loss_eur  # type: ignore[operator]
             item["absolute_delta_eur"] = item["absolute_delta_eur"] + line.absolute_price_delta_eur  # type: ignore[operator]
+            item["open_delta_eur"] = item["open_delta_eur"] + line.open_price_delta_eur  # type: ignore[operator]
             item["max_delta_pct"] = max(item["max_delta_pct"], line.max_price_delta_pct)  # type: ignore[arg-type]
             item["assets"].add(line.asset.upper())  # type: ignore[union-attr]
             for quote_asset in (line.acquisition_quote_asset, line.disposal_quote_asset):
@@ -2341,6 +2343,7 @@ class TaxYearService:
                 lines_count=int(item["lines_count"]),
                 gain_loss_eur=item["gain_loss_eur"],  # type: ignore[arg-type]
                 absolute_delta_eur=item["absolute_delta_eur"],  # type: ignore[arg-type]
+                open_delta_eur=item["open_delta_eur"],  # type: ignore[arg-type]
                 max_delta_pct=item["max_delta_pct"],  # type: ignore[arg-type]
                 assets=sorted(item["assets"]),  # type: ignore[arg-type]
                 quote_assets=sorted(item["quote_assets"]),  # type: ignore[arg-type]
@@ -2495,6 +2498,7 @@ class TaxYearService:
         event_level_by_id = self._gain_evidence_event_delta_lines_by_id(
             year,
             limit=max(1, min(limit, 500)),
+            include_split_delta=False,
         )
 
         rows: list[TaxYearGainEvidencePriceDeltaLine] = []
@@ -2645,6 +2649,7 @@ class TaxYearService:
         year: int,
         *,
         limit: int = 200,
+        include_split_delta: bool = True,
     ) -> dict[str, TaxYearGainEvidenceEventDeltaLine]:
         with self.store.connect() as con:
             rows = con.execute(
@@ -2676,10 +2681,13 @@ class TaxYearService:
                 [year, max(1, min(limit, 500))],
             ).fetchall()
 
-        split_delta_by_event, split_count_by_event = self._gain_evidence_split_delta_by_disposal_event(
-            year,
-            limit=limit,
-        )
+        if include_split_delta:
+            split_delta_by_event, split_count_by_event = self._gain_evidence_split_delta_by_disposal_event(
+                year,
+                limit=limit,
+            )
+        else:
+            split_delta_by_event, split_count_by_event = defaultdict(Decimal), defaultdict(int)
 
         price_lookup = HistoricalPriceLookup(self.store)
         lines: list[TaxYearGainEvidenceEventDeltaLine] = []
@@ -2777,7 +2785,13 @@ class TaxYearService:
         *,
         limit: int = 200,
     ) -> TaxYearGainEvidenceEventDeltaReview:
-        lines = list(self._gain_evidence_event_delta_lines_by_id(year, limit=limit).values())
+        lines = list(
+            self._gain_evidence_event_delta_lines_by_id(
+                year,
+                limit=limit,
+                include_split_delta=True,
+            ).values()
+        )
         lines.sort(
             key=lambda line: (
                 line.status != "event_level_review",
@@ -3372,6 +3386,11 @@ class TaxYearService:
             ).fetchall()
         lines: list[TaxYearGainEvidenceLine] = []
         price_lookup = HistoricalPriceLookup(self.store)
+        event_level_by_id = self._gain_evidence_event_delta_lines_by_id(
+            year,
+            limit=max(1, min(limit, 500)),
+            include_split_delta=False,
+        )
         for row in rows:
             gain_loss = row[8] or Decimal("0")
             proceeds = row[7] or Decimal("0")
@@ -3411,7 +3430,6 @@ class TaxYearService:
                 acquisition_price_source=acquisition_price["price_source"],
                 disposal_price_source=disposal_price["price_source"],
             )
-            risk = self._gain_evidence_risk(reasons)
             (
                 absolute_price_delta_eur,
                 max_price_delta_pct,
@@ -3427,6 +3445,29 @@ class TaxYearService:
                 disposal_price=disposal_price,
                 reasons=reasons,
             )
+            event_level = event_level_by_id.get(row[16] or "")
+            event_level_reconciled = bool(event_level and event_level.status == "event_level_ok")
+            acquisition_delta_eur = self._decimal_or_zero(acquisition_price["delta_eur"])
+            disposal_delta_eur = self._decimal_or_zero(disposal_price["delta_eur"])
+            open_price_delta_eur = abs(acquisition_delta_eur) + (
+                Decimal("0") if event_level_reconciled else abs(disposal_delta_eur)
+            )
+            event_level_note = None
+            if event_level_reconciled and abs(disposal_delta_eur) > Decimal("0.01"):
+                event_level_note = (
+                    "Verkaufsseiten-Delta ist Event-Level abgeglichen; es ist als Handelsvolumen-/FIFO-Split-Artefakt zu behandeln."
+                )
+                if "disposal_price_delta_review" in reasons:
+                    reasons = [reason for reason in reasons if reason != "disposal_price_delta_review"]
+                if "event_level_reconciled" not in reasons:
+                    reasons.append("event_level_reconciled")
+                delta_explanation = (
+                    "Das Verkaufsseiten-Delta ist auf Event-Level plausibel; offen bleibt nur ein moegliches Erwerbsseiten-Delta."
+                )
+                delta_recommended_action = (
+                    "Event-Level-Beleg archivieren und nur offene Erwerbs-/Rohbelegthemen weiter pruefen."
+                )
+            risk = self._gain_evidence_risk(reasons)
             lines.append(
                 TaxYearGainEvidenceLine(
                     tax_line_id=row[0],
@@ -3471,10 +3512,16 @@ class TaxYearService:
                     disposal_proceeds_delta_eur=disposal_price["delta_eur"],
                     disposal_proceeds_delta_pct=disposal_price["delta_pct"],
                     absolute_price_delta_eur=absolute_price_delta_eur,
+                    open_price_delta_eur=open_price_delta_eur,
                     max_price_delta_pct=max_price_delta_pct,
                     delta_classification=delta_classification,
                     delta_explanation=delta_explanation,
                     delta_recommended_action=delta_recommended_action,
+                    event_level_status=event_level.status if event_level else None,
+                    event_level_delta_eur=event_level.event_delta_eur if event_level else None,
+                    event_level_delta_pct=event_level.event_delta_pct if event_level else None,
+                    event_level_reconciled=event_level_reconciled,
+                    event_level_note=event_level_note,
                     valuation_path=self._gain_evidence_valuation_path(row[13], row[19]),
                     risk_level=risk,
                     review_reasons=reasons,
@@ -3496,13 +3543,16 @@ class TaxYearService:
             review_lines_count=sum(1 for line in lines if line.risk_level == "review"),
             ok_lines_count=sum(1 for line in lines if line.risk_level == "ok"),
             price_delta_lines_count=sum(1 for line in lines if line.delta_classification != "no_material_delta"),
+            event_level_reconciled_lines_count=sum(1 for line in lines if line.event_level_reconciled),
             material_price_delta_eur=sum((line.absolute_price_delta_eur for line in lines), Decimal("0")),
+            open_price_delta_eur=sum((line.open_price_delta_eur for line in lines), Decimal("0")),
             delta_groups=delta_groups,
             lines=lines,
             caveats=[
                 "Read-only Belegcheck: bewertet vorhandene Tax-Lines, rechnet FIFO aber nicht neu.",
                 "Fehlende Rohbelege, nicht-EUR-Quote-Beine und hohe Gewinnquoten sind Review-Signale, keine automatische Korrektur.",
                 "Preisdelta-Gruppen erklaeren, warum Tax-Line-Wert und erwarteter Quote-/Preiswert abweichen koennen.",
+                "Event-Level abgeglichene Verkaufsseiten-Deltas werden als Handelsvolumen-/FIFO-Split-Artefakt aus dem offenen Preisdelta herausgerechnet.",
                 "Die geprueften Top-Zeilen sind nach absolutem G/V sortiert und decken nicht zwingend alle kleinen Zeilen ab.",
             ],
             ascii_table=self._gain_evidence_ascii_table(lines),

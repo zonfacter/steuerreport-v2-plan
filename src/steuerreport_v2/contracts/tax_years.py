@@ -465,10 +465,16 @@ class TaxYearGainEvidenceLine(BaseModel):
     disposal_proceeds_delta_eur: Decimal | None = None
     disposal_proceeds_delta_pct: Decimal | None = None
     absolute_price_delta_eur: Decimal = Decimal("0")
+    open_price_delta_eur: Decimal = Decimal("0")
     max_price_delta_pct: Decimal = Decimal("0")
     delta_classification: str = "no_material_delta"
     delta_explanation: str
     delta_recommended_action: str
+    event_level_status: str | None = None
+    event_level_delta_eur: Decimal | None = None
+    event_level_delta_pct: Decimal | None = None
+    event_level_reconciled: bool = False
+    event_level_note: str | None = None
     valuation_path: str
     risk_level: Literal["ok", "review", "high"]
     review_reasons: list[str] = Field(default_factory=list)
@@ -482,6 +488,7 @@ class TaxYearGainEvidenceDeltaGroup(BaseModel):
     lines_count: int = 0
     gain_loss_eur: Decimal = Decimal("0")
     absolute_delta_eur: Decimal = Decimal("0")
+    open_delta_eur: Decimal = Decimal("0")
     max_delta_pct: Decimal = Decimal("0")
     assets: list[str] = Field(default_factory=list)
     quote_assets: list[str] = Field(default_factory=list)
@@ -606,7 +613,9 @@ class TaxYearGainEvidenceReview(BaseModel):
     review_lines_count: int = 0
     ok_lines_count: int = 0
     price_delta_lines_count: int = 0
+    event_level_reconciled_lines_count: int = 0
     material_price_delta_eur: Decimal = Decimal("0")
+    open_price_delta_eur: Decimal = Decimal("0")
     delta_groups: list[TaxYearGainEvidenceDeltaGroup] = Field(default_factory=list)
     lines: list[TaxYearGainEvidenceLine] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
