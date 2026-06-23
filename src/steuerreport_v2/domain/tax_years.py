@@ -12,6 +12,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxDeclarationGuide,
     TaxDeclarationGuideEntry,
     TaxYearFilingActionStatus,
+    TaxYearFilingClosureRow,
     TaxIncomeAssetBreakdown,
     TaxIncomeEventPreview,
     TaxIncomeReport,
@@ -28,6 +29,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearFilingSummary,
     TaxYearFilingSummaryLine,
     TaxYearsCorrectionMap,
+    TaxYearsFilingClosureOverview,
     TaxYearAssetFifoDrilldown,
     TaxYearAssetFifoEvent,
     TaxYearAssetFifoLine,
@@ -1216,6 +1218,122 @@ class TaxYearService:
             ),
         )
 
+    def filing_closure_overview(self, *, years: list[int] | None = None) -> TaxYearsFilingClosureOverview:
+        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        payment = self.payment_overview(years=selected_years)
+        filing = self.filing_matrix()
+        if not all(year in {row.year for row in filing.rows} for year in selected_years):
+            filing = self.filing_matrix(years=selected_years)
+        correction = self.correction_map()
+        if not all(year in {row.year for row in correction.years} for year in selected_years):
+            correction = self.correction_map(years=selected_years)
+        payment_by_year = {row.year: row for row in payment.rows}
+        filing_by_year = {row.year: row for row in filing.rows}
+        correction_by_year = {row.year: row for row in correction.years}
+        rows: list[TaxYearFilingClosureRow] = []
+        for year in selected_years:
+            payment_row = payment_by_year.get(year)
+            filing_row = filing_by_year.get(year)
+            correction_row = correction_by_year.get(year)
+            counts = filing_row.checklist_counts if filing_row is not None else {}
+            action_status: TaxYearFilingActionStatus = filing_row.action_status if filing_row is not None else "review"
+            private_disposals = (
+                filing_row.taxable_private_disposals_eur
+                if filing_row is not None
+                else payment_row.private_disposals_gain_loss_eur
+                if payment_row is not None
+                else Decimal("0")
+            )
+            rewards = (
+                filing_row.rewards_mining_staking_income_eur
+                if filing_row is not None
+                else payment_row.rewards_mining_staking_income_eur
+                if payment_row is not None
+                else Decimal("0")
+            )
+            derivative = (
+                filing_row.derivative_pnl_eur
+                if filing_row is not None
+                else payment_row.derivative_pnl_eur
+                if payment_row is not None
+                else Decimal("0")
+            )
+            tax_free = (
+                filing_row.tax_free_private_disposals_eur
+                if filing_row is not None
+                else payment_row.tax_free_private_disposals_eur
+                if payment_row is not None
+                else Decimal("0")
+            )
+            correction_action = (
+                "Korrektur/Nachreichung pruefen"
+                if correction_row is not None and correction_row.amendment_review_recommended
+                else "Archivieren"
+            )
+            next_action = filing_row.next_action if filing_row is not None else "Jahresdaten pruefen."
+            row = TaxYearFilingClosureRow(
+                year=year,
+                filing_status=action_status,
+                filing_status_label=filing_row.status_label if filing_row is not None else "Pruefen",
+                export_ready=filing_row.export_ready if filing_row is not None else False,
+                declaration_bucket=(
+                    payment_row.declaration_bucket if payment_row is not None else "keine Eingabe aus V2-Werten"
+                ),
+                where_to_enter=payment_row.where_to_enter if payment_row is not None else "Pruefen",
+                private_disposals_gain_loss_eur=private_disposals,
+                rewards_mining_staking_income_eur=rewards,
+                derivative_pnl_eur=derivative,
+                tax_free_private_disposals_eur=tax_free,
+                eintragen_count=int(counts.get("eintragen", 0) or 0),
+                beilegen_count=int(counts.get("beilegen", 0) or 0),
+                pruefen_count=int(counts.get("pruefen", 0) or 0),
+                archivieren_count=int(counts.get("archivieren", 0) or 0),
+                amendment_review_recommended=(
+                    correction_row.amendment_review_recommended if correction_row is not None else False
+                ),
+                amendment_reason=(
+                    correction_row.amendment_reason if correction_row is not None else "Korrekturkarte nicht geladen."
+                ),
+                next_action=next_action,
+                correction_action=correction_action,
+                filing_summary_endpoint=f"/api/v1/tax-years/{year}/filing-summary",
+                filing_checklist_csv_endpoint=f"/api/v1/export/tax-years/{year}/filing-checklist.csv",
+                correction_map_endpoint=f"/api/v1/tax-years/{year}/correction-map",
+                correction_map_csv_endpoint=f"/api/v1/export/tax-years/{year}/correction-map.csv",
+                evidence_package_endpoint=f"/api/v1/export/tax-years/{year}/evidence-package.zip",
+                display_line=(
+                    f"{year} | {action_status} | SO {self._fmt_eur(private_disposals)} | "
+                    f"Rewards {self._fmt_eur(rewards)} | Derivate {self._fmt_eur(derivative)} | "
+                    f"Steuerfrei {self._fmt_eur(tax_free)} | {correction_action}"
+                ),
+            )
+            rows.append(row)
+        return TaxYearsFilingClosureOverview(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            rows=rows,
+            ready_years=[row.year for row in rows if row.filing_status == "ready"],
+            conservative_ready_years=[row.year for row in rows if row.filing_status == "conservative_ready"],
+            review_years=[row.year for row in rows if row.filing_status == "review"],
+            blocked_years=[row.year for row in rows if row.filing_status == "blocked"],
+            amendment_review_years=[row.year for row in rows if row.amendment_review_recommended],
+            total_private_disposals_gain_loss_eur=sum(
+                (row.private_disposals_gain_loss_eur for row in rows), Decimal("0")
+            ),
+            total_rewards_mining_staking_income_eur=sum(
+                (row.rewards_mining_staking_income_eur for row in rows), Decimal("0")
+            ),
+            total_derivative_pnl_eur=sum((row.derivative_pnl_eur for row in rows), Decimal("0")),
+            total_tax_free_private_disposals_eur=sum(
+                (row.tax_free_private_disposals_eur for row in rows), Decimal("0")
+            ),
+            ascii_table=self._filing_closure_ascii_table(rows),
+            methodology=(
+                "Read-only Abschlussuebersicht aus Payment-Overview, Filing-Matrix "
+                "und Korrekturkarte. Sie schreibt keine FIFO-Lots, Preise, Imports "
+                "oder Review-Entscheidungen und ist keine Rechtsberatung."
+            ),
+        )
+
     def _year_correction_map_from_readiness_snapshot(self, year: int) -> TaxYearCorrectionMap | None:
         snapshot_map = self._correction_map_from_readiness_snapshot()
         if snapshot_map is None:
@@ -1584,6 +1702,31 @@ class TaxYearService:
                 ]
             )
             for item in maps
+        ]
+        return "\n".join([header, sep, *body])
+
+    def _filing_closure_ascii_table(self, rows: list[TaxYearFilingClosureRow]) -> str:
+        header = (
+            "Jahr | Status | Anlage SO | Rewards | Derivate | Steuerfrei | "
+            "Eintragen | Beilegen | Pruefen | Abschluss"
+        )
+        sep = "---|---|---|---|---|---|---|---|---|---"
+        body = [
+            " | ".join(
+                [
+                    str(row.year),
+                    row.filing_status,
+                    self._fmt_eur(row.private_disposals_gain_loss_eur),
+                    self._fmt_eur(row.rewards_mining_staking_income_eur),
+                    self._fmt_eur(row.derivative_pnl_eur),
+                    self._fmt_eur(row.tax_free_private_disposals_eur),
+                    str(row.eintragen_count),
+                    str(row.beilegen_count),
+                    str(row.pruefen_count),
+                    row.correction_action,
+                ]
+            )
+            for row in rows
         ]
         return "\n".join([header, sep, *body])
 

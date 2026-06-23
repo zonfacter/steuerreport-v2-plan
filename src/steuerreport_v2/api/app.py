@@ -227,6 +227,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearDriverReport,
     TaxYearEvidenceReport,
     TaxYearCorrectionMap,
+    TaxYearsFilingClosureOverview,
     TaxYearFilingMatrix,
     TaxYearFilingSummary,
     TaxYearTurnoverAudit,
@@ -1958,6 +1959,16 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 "tax-years:filing-matrix",
                 10,
                 lambda: TaxYearService(db).filing_matrix(),
+            )
+        )
+
+    @app.get("/api/v1/tax-years/filing-closure-overview")
+    def tax_years_filing_closure_overview() -> ApiResponse[TaxYearsFilingClosureOverview]:
+        return ApiResponse(
+            data=cached_response(
+                "tax-years:filing-closure-overview",
+                10,
+                lambda: TaxYearService(db).filing_closure_overview(),
             )
         )
 

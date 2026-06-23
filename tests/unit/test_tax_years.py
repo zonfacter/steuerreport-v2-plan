@@ -1079,6 +1079,54 @@ def test_tax_year_filing_matrix_marks_conservative_snapshot_ready(tmp_path):
     assert "conservative_ready" in matrix.ascii_table
 
 
+def test_tax_year_filing_closure_overview_combines_final_actions(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    snapshot_dir = tmp_path / "var" / "bmf_filing_readiness"
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "latest_bmf_filing_readiness_2021_2025.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-23T00:00:00+00:00",
+                "years": [
+                    {
+                        "year": 2024,
+                        "filing_status": "conservative_appendix",
+                        "status_label": "Konservativ belegbar",
+                        "bmf_ready": False,
+                        "can_file_with_conservative_appendix": True,
+                        "blocking_gap_codes": [],
+                        "review_gap_codes": ["asset_fifo_quote_attribution_documented"],
+                        "appendix_status": "ready",
+                        "appendix_items_count": 2,
+                        "appendix_manual_evidence_required_count": 0,
+                        "taxable_private_disposals_eur": "18490.21",
+                        "rewards_mining_staking_income_eur": "1097.06",
+                        "derivative_pnl_eur": "-71.91",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    overview = TaxYearService(store).filing_closure_overview(years=[2024])
+    row = overview.rows[0]
+
+    assert row.year == 2024
+    assert row.filing_status == "conservative_ready"
+    assert row.private_disposals_gain_loss_eur == Decimal("18490.21")
+    assert row.rewards_mining_staking_income_eur == Decimal("1097.06")
+    assert row.derivative_pnl_eur == Decimal("-71.91")
+    assert row.beilegen_count == 1
+    assert row.pruefen_count == 1
+    assert row.evidence_package_endpoint == "/api/v1/export/tax-years/2024/evidence-package.zip"
+    assert overview.conservative_ready_years == [2024]
+    assert overview.review_years == []
+    assert overview.blocked_years == []
+    assert overview.amendment_review_years == [2024]
+    assert "18490.21 EUR" in overview.ascii_table
+
+
 def test_tax_year_correction_map_guides_prior_year_review(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
@@ -1659,6 +1707,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/filing-matrix"
     )
+    filing_closure_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/filing-closure-overview"
+    )
     correction_map_summary_route = next(
         route
         for route in app.routes
@@ -1735,6 +1788,7 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert external_inflows_route.endpoint(2021).status == "ok"
     assert payment_overview_route.endpoint().status == "ok"
     assert filing_matrix_route.endpoint().status == "ok"
+    assert filing_closure_route.endpoint().status == "ok"
     assert correction_map_summary_route.endpoint().status == "ok"
     assert turnover_summary_route.endpoint().status == "ok"
     assert solana_program_summary_route.endpoint().status == "ok"

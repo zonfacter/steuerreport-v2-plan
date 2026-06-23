@@ -705,6 +705,21 @@ type Snapshot = {
     ascii_table: string;
     methodology: string;
   };
+  taxFilingClosureOverview?: {
+    generated_at: string;
+    rows: Array<Record<string, unknown>>;
+    ready_years: number[];
+    conservative_ready_years?: number[];
+    review_years: number[];
+    blocked_years: number[];
+    amendment_review_years: number[];
+    total_private_disposals_gain_loss_eur: string;
+    total_rewards_mining_staking_income_eur: string;
+    total_derivative_pnl_eur: string;
+    total_tax_free_private_disposals_eur: string;
+    ascii_table: string;
+    methodology: string;
+  };
   taxYearsCorrectionMap?: {
     generated_at: string;
     years: Array<Record<string, unknown>>;
@@ -1619,6 +1634,7 @@ function App() {
         taxYearsSummary: { key: "taxYearsSummary", label: "Steuerjahre", load: () => getApi<Snapshot["taxYearsSummary"]>("/api/v1/tax-years/summary") },
         taxPaymentOverview: { key: "taxPaymentOverview", label: "Steuer-Eingabezettel", load: () => getApi<Snapshot["taxPaymentOverview"]>("/api/v1/tax-years/payment-overview") },
         taxYearFilingMatrix: { key: "taxYearFilingMatrix", label: "Steuerjahr-Matrix", load: () => getApi<Snapshot["taxYearFilingMatrix"]>("/api/v1/tax-years/filing-matrix") },
+        taxFilingClosureOverview: { key: "taxFilingClosureOverview", label: "Finale Abgabeuebersicht", load: () => getApi<Snapshot["taxFilingClosureOverview"]>("/api/v1/tax-years/filing-closure-overview") },
         taxYearsCorrectionMap: { key: "taxYearsCorrectionMap", label: "Korrekturkarte Jahre", load: () => getApi<Snapshot["taxYearsCorrectionMap"]>("/api/v1/tax-years/correction-map") },
         taxMethodologySummary: { key: "taxMethodologySummary", label: "BMF-Methodik", load: () => getApi<Snapshot["taxMethodologySummary"]>(`/api/v1/tax-methodology/summary?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxBmfActionPlan: { key: "taxBmfActionPlan", label: "BMF-Aktionsliste", load: () => getApi<Snapshot["taxBmfActionPlan"]>(`/api/v1/tax-methodology/bmf-action-plan?year=${encodeURIComponent(selectedTaxYear)}`) },
@@ -1677,6 +1693,7 @@ function App() {
         "taxYearsSummary",
         "taxPaymentOverview",
         "taxYearFilingMatrix",
+        "taxFilingClosureOverview",
         "taxYearsCorrectionMap",
         "taxYearDetail",
         "taxDeclarationGuide",
@@ -3190,6 +3207,7 @@ function Content({
         taxYearsSummary={snapshot.taxYearsSummary}
         taxPaymentOverview={snapshot.taxPaymentOverview}
         taxYearFilingMatrix={snapshot.taxYearFilingMatrix}
+        taxFilingClosureOverview={snapshot.taxFilingClosureOverview}
         taxYearsCorrectionMap={snapshot.taxYearsCorrectionMap}
         taxMethodologySummary={snapshot.taxMethodologySummary}
         taxBmfActionPlan={snapshot.taxBmfActionPlan}
@@ -7517,6 +7535,7 @@ function TaxPanel({
   taxYearsSummary,
   taxPaymentOverview,
   taxYearFilingMatrix,
+  taxFilingClosureOverview,
   taxYearsCorrectionMap,
   taxMethodologySummary,
   taxBmfActionPlan,
@@ -7578,6 +7597,7 @@ function TaxPanel({
   taxYearsSummary: Snapshot["taxYearsSummary"];
   taxPaymentOverview: Snapshot["taxPaymentOverview"];
   taxYearFilingMatrix: Snapshot["taxYearFilingMatrix"];
+  taxFilingClosureOverview: Snapshot["taxFilingClosureOverview"];
   taxYearsCorrectionMap: Snapshot["taxYearsCorrectionMap"];
   taxMethodologySummary: Snapshot["taxMethodologySummary"];
   taxBmfActionPlan: Snapshot["taxBmfActionPlan"];
@@ -7702,6 +7722,7 @@ function TaxPanel({
   const proofLines = filingLines.filter((line) => ["appendix", "evidence", "review"].includes(String(line.topic)));
   const filingChecklist = taxYearFilingSummary?.checklist ?? [];
   const filingMatrixRows = taxYearFilingMatrix?.rows ?? [];
+  const filingClosureRows = taxFilingClosureOverview?.rows ?? [];
   const activeFilingMatrixRow = filingMatrixRows.find((row) => String(row.year) === activeYearValue);
   const groupedFilingChecklist = {
     eintragen: filingChecklist.filter((item) => String(item.category) === "eintragen"),
@@ -7813,6 +7834,72 @@ function TaxPanel({
           <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
         </div>
       </section>
+
+      {taxFilingClosureOverview ? (
+        <div className="panel declarationGuidePanel">
+          <div className="panelToolbar">
+            <strong>Finale Abgabeuebersicht 2021-2025</strong>
+            <span className={`statusPill ${(taxFilingClosureOverview.blocked_years ?? []).length > 0 ? "blocked" : (taxFilingClosureOverview.review_years ?? []).length > 0 ? "warning" : "ok"}`}>
+              {(taxFilingClosureOverview.conservative_ready_years ?? []).length} konservativ bereit
+            </span>
+          </div>
+          <div className="portfolioSummaryStrip">
+            <Metric title="Anlage SO G/V" value={`${formatCurrency(taxFilingClosureOverview.total_private_disposals_gain_loss_eur)} EUR`} />
+            <Metric title="Rewards/Mining" value={`${formatCurrency(taxFilingClosureOverview.total_rewards_mining_staking_income_eur)} EUR`} />
+            <Metric title="Derivate" value={`${formatCurrency(taxFilingClosureOverview.total_derivative_pnl_eur)} EUR`} />
+            <Metric title="Steuerfrei archivieren" value={`${formatCurrency(taxFilingClosureOverview.total_tax_free_private_disposals_eur)} EUR`} />
+          </div>
+          <TablePanel
+            title="Was je Steuerjahr zu tun ist"
+            rows={filingClosureRows.map((row) => ({
+              jahr: row.year,
+              status: filingActionStatusLabel(row.filing_status),
+              anlage_so_eur: formatCurrency(row.private_disposals_gain_loss_eur),
+              rewards_eur: formatCurrency(row.rewards_mining_staking_income_eur),
+              derivate_eur: formatCurrency(row.derivative_pnl_eur),
+              eintragen: row.eintragen_count ?? 0,
+              beilegen: row.beilegen_count ?? 0,
+              pruefen: row.pruefen_count ?? 0,
+              korrektur: row.correction_action,
+              naechster_schritt: row.next_action,
+              summary: row.filing_summary_endpoint,
+              checklist_csv: row.filing_checklist_csv_endpoint,
+              korrektur_json: row.correction_map_endpoint,
+              korrektur_csv: row.correction_map_csv_endpoint,
+              paket: row.evidence_package_endpoint
+            }))}
+            compact
+            rowActions={[
+              {
+                label: "Jahr oeffnen",
+                icon: <ReceiptText size={16} />,
+                onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
+              },
+              {
+                label: "Checkliste CSV",
+                icon: <FileDown size={16} />,
+                onClick: (row) => onDownload(String(row.checklist_csv ?? ""))
+              },
+              {
+                label: "Korrekturkarte CSV",
+                icon: <FileJson size={16} />,
+                onClick: (row) => onDownload(String(row.korrektur_csv ?? ""))
+              },
+              {
+                label: "Belegpaket",
+                icon: <PackageCheck size={16} />,
+                onClick: (row) => onDownload(String(row.paket ?? ""))
+              }
+            ]}
+            footer={taxFilingClosureOverview.methodology}
+          />
+          {taxFilingClosureOverview.ascii_table ? (
+            <pre className="asciiTable" aria-label="Kopierbare finale Abgabeuebersicht">
+              {taxFilingClosureOverview.ascii_table}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
 
       <section className="taxFilingActionGrid" aria-label="Jahresaktionen fuer die Steuererklaerung">
         {filingActionGroups.map((group) => (

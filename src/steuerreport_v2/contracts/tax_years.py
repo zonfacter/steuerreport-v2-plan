@@ -263,6 +263,49 @@ class TaxYearsCorrectionMap(BaseModel):
     methodology: str
 
 
+class TaxYearFilingClosureRow(BaseModel):
+    year: int
+    filing_status: TaxYearFilingActionStatus
+    filing_status_label: str
+    export_ready: bool
+    declaration_bucket: str
+    where_to_enter: str
+    private_disposals_gain_loss_eur: Decimal = Decimal("0")
+    rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    derivative_pnl_eur: Decimal = Decimal("0")
+    tax_free_private_disposals_eur: Decimal = Decimal("0")
+    eintragen_count: int = 0
+    beilegen_count: int = 0
+    pruefen_count: int = 0
+    archivieren_count: int = 0
+    amendment_review_recommended: bool = False
+    amendment_reason: str
+    next_action: str
+    correction_action: str
+    filing_summary_endpoint: str
+    filing_checklist_csv_endpoint: str
+    correction_map_endpoint: str
+    correction_map_csv_endpoint: str
+    evidence_package_endpoint: str
+    display_line: str
+
+
+class TaxYearsFilingClosureOverview(BaseModel):
+    generated_at: str
+    rows: list[TaxYearFilingClosureRow] = Field(default_factory=list)
+    ready_years: list[int] = Field(default_factory=list)
+    conservative_ready_years: list[int] = Field(default_factory=list)
+    review_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    amendment_review_years: list[int] = Field(default_factory=list)
+    total_private_disposals_gain_loss_eur: Decimal = Decimal("0")
+    total_rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    total_derivative_pnl_eur: Decimal = Decimal("0")
+    total_tax_free_private_disposals_eur: Decimal = Decimal("0")
+    ascii_table: str
+    methodology: str
+
+
 class TaxIncomeAssetBreakdown(BaseModel):
     asset: str
     event_type: str
