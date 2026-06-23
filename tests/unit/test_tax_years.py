@@ -1234,7 +1234,7 @@ def test_tax_payment_overview_summarizes_where_to_enter_values(tmp_path):
     assert "2021 | SO G/V -60.00 EUR | Rewards 15.00 EUR" in row.display_line
     assert row.tax_free_private_disposals_eur == Decimal("20.000000000000000000000000000000000000")
     assert {item.category for item in row.checklist} == {"eintragen", "beleg"}
-    assert any(item.label == "Rewards / Mining / Staking" for item in row.checklist)
+    assert any(item.label == "Einzutragende Rewards / Mining / Staking" for item in row.checklist)
     assert any(item.label == "Steuerfrei nach Haltefrist" for item in row.checklist)
     assert any(item.target == "Anlage SO: Gewinn/Verlust aus Kryptowerten" for item in row.checklist)
 
@@ -1301,7 +1301,7 @@ def test_tax_year_filing_summary_explains_entry_targets(tmp_path):
     assert by_topic["evidence"].evidence_ref == "/api/v1/export/evidence-package.zip"
     checklist_by_label = {item.label: item for item in report.checklist}
     assert checklist_by_label["Privates Veraeusserungsergebnis"].category == "eintragen"
-    assert checklist_by_label["Rewards / Mining / Staking"].category == "eintragen"
+    assert checklist_by_label["Einzutragende Rewards / Mining / Staking"].category == "eintragen"
     assert checklist_by_label["Steuerfreie Veraeusserungen > 365 Tage"].category == "archivieren"
     assert checklist_by_label["Belegpaket"].category == "archivieren"
     assert "Jahr" in report.checklist_ascii
@@ -1310,7 +1310,7 @@ def test_tax_year_filing_summary_explains_entry_targets(tmp_path):
     assert report.review_decisions[0].title == "HNT Preisbeleg 2021 akzeptiert"
     assert report.review_decisions[0].effect_summary == "Import: none | Ledger: none | FIFO: none | Tax-Lines: none"
     assert any(line.label == "Review-Entscheidungen mit Jahresbezug" for line in report.lines)
-    assert "Rewards / Mining / Staking" in report.ascii_table
+    assert "Einzutragende Rewards / Mining / Staking" in report.ascii_table
 
 
 def test_tax_year_filing_matrix_summarizes_year_actions(tmp_path):
@@ -1465,7 +1465,7 @@ def test_tax_year_correction_map_guides_prior_year_review(tmp_path):
     assert report.taxable_private_disposals_eur == Decimal("-60.000000000000000000000000000000000000")
     assert report.rewards_mining_staking_income_eur == Decimal("15.000000000000000000")
     assert by_label["Privates Veraeusserungsergebnis"].action_category == "korrigieren_pruefen"
-    assert by_label["Rewards / Mining / Staking"].action_category == "korrigieren_pruefen"
+    assert by_label["Einzutragende Rewards / Mining / Staking"].action_category == "korrigieren_pruefen"
     assert by_label["Belegpaket"].action_category == "archivieren"
     assert "Korrektur" in report.amendment_reason
     assert "2021 | korrigieren_pruefen | Privates Veraeusserungsergebnis" in report.ascii_table

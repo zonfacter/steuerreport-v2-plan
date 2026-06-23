@@ -549,11 +549,15 @@ class TaxYearService:
             entries.append(
                 TaxDeclarationGuideEntry(
                     section="Sonstige Einkuenfte",
-                    field_label="Rewards / Mining / Staking",
+                    field_label="Einzutragende Rewards / Mining / Staking",
                     amount_eur=status.rewards_income_eur,
                     sign="income",
-                    evidence_ref="/api/v1/tax-years/summary",
-                    note="Aus Income/Reward/Mining/Staking-Events aggregiert.",
+                    evidence_ref=f"/api/v1/tax-years/{year}/income-guide",
+                    note=(
+                        "Eng klassifizierte Reward-/Mining-/Staking-Einnahmen. "
+                        "Review-only Income-Kontexte stehen getrennt im Income Guide "
+                        "und werden hier nicht automatisch addiert."
+                    ),
                 )
             )
         if hnt is not None:
@@ -709,10 +713,13 @@ class TaxYearService:
             items.append(
                 TaxPaymentChecklistItem(
                     category="eintragen",
-                    label="Rewards / Mining / Staking",
+                    label="Einzutragende Rewards / Mining / Staking",
                     amount_eur=status.rewards_income_eur,
                     target="Sonstige Einkuenfte oder EÜR-nahe Einnahmen pruefen",
-                    detail="Mining-, Reward- und Staking-Zufluesse getrennt von privaten Veraeusserungen erfassen.",
+                    detail=(
+                        "Eng klassifizierte Mining-, Reward- und Staking-Zufluesse "
+                        "getrennt von privaten Veraeusserungen erfassen."
+                    ),
                     evidence_ref="/api/v1/export/tax-income-guide.csv",
                     severity="info",
                 )
@@ -936,12 +943,15 @@ class TaxYearService:
                 TaxYearFilingSummaryLine(
                     order=order,
                     topic="income",
-                    label="Rewards / Mining / Staking",
+                    label="Einzutragende Rewards / Mining / Staking",
                     amount_eur=status.rewards_income_eur,
                     tax_treatment="steuerpflichtige Einnahmen",
                     declaration_target="Sonstige Einkuenfte bzw. EÜR-nahe Einnahmen pruefen",
                     evidence_ref="/api/v1/export/tax-income-guide.csv",
-                    note="Mining-, Reward- und Staking-Zufluesse werden getrennt vom privaten FIFO-Saldo ausgewiesen.",
+                    note=(
+                        "Nur eng klassifizierte Reward-/Mining-/Staking-Zufluesse. "
+                        "Review-only Income-Kontexte sind im Income Guide separat markiert."
+                    ),
                 )
             )
             order += 1
@@ -4854,14 +4864,17 @@ class TaxYearService:
             TaxYearEvidenceItem(
                 evidence_id="tax-income-guide",
                 category="eintragen" if status.rewards_events_count else "beleg",
-                label="Mining / Rewards / Staking",
+                label="Einzutragende Rewards / Mining / Staking",
                 endpoint="/api/v1/export/tax-income-guide.csv",
                 file_format="csv",
                 record_count=status.rewards_events_count,
                 amount_eur=status.rewards_income_eur,
                 status=self._evidence_item_status(status.rewards_events_count),
                 required=bool(status.rewards_events_count),
-                note="Belegt Reward-/Mining-/Staking-Einkuenfte getrennt vom privaten Veraeusserungssaldo.",
+                note=(
+                    "Belegt einzutragende Reward-/Mining-/Staking-Einkuenfte. "
+                    "Review-only Income ist in derselben CSV getrennt markiert."
+                ),
             ),
             TaxYearEvidenceItem(
                 evidence_id="derivative-lines",

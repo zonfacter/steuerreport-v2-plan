@@ -7167,7 +7167,7 @@ function ReportCenterPanel({
               </div>
             </div>
             <Metric title="G/V" value={`${formatCurrency(year.realized_gain_loss_eur)} EUR`} />
-            <Metric title="Rewards" value={`${formatCurrency(year.rewards_mining_staking_income_eur)} EUR`} />
+            <Metric title="Rewards eintragen" value={`${formatCurrency(year.rewards_mining_staking_income_eur)} EUR`} />
             <Metric title="Steuerfrei" value={`${formatCurrency(year.tax_free_private_disposals_eur)} EUR`} />
             <Metric title="Tax-Lines" value={String(year.tax_lines_count ?? 0)} />
             <Metric title="Issues" value={String(year.review_issues_count ?? 0)} />
@@ -8003,7 +8003,7 @@ function TaxPanel({
         </div>
         <div className="taxFilingDecisionMetrics">
           <Metric title="Anlage SO G/V" value={`${formatCurrency(activePaymentRow?.private_disposals_gain_loss_eur ?? taxYearFilingSummary?.taxable_private_disposals_eur)} EUR`} />
-          <Metric title="Rewards/Mining" value={`${formatCurrency(activePaymentRow?.rewards_mining_staking_income_eur ?? taxYearFilingSummary?.rewards_mining_staking_income_eur)} EUR`} />
+          <Metric title="Rewards eintragen" value={`${formatCurrency(activePaymentRow?.rewards_mining_staking_income_eur ?? taxYearFilingSummary?.rewards_mining_staking_income_eur)} EUR`} />
           <Metric title="Derivate" value={`${formatCurrency(activePaymentRow?.derivative_pnl_eur ?? taxYearFilingSummary?.derivative_pnl_eur)} EUR`} />
           <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
         </div>
@@ -8019,7 +8019,7 @@ function TaxPanel({
           </div>
           <div className="portfolioSummaryStrip">
             <Metric title="Anlage SO G/V" value={`${formatCurrency(taxFilingClosureOverview.total_private_disposals_gain_loss_eur)} EUR`} />
-            <Metric title="Rewards/Mining" value={`${formatCurrency(taxFilingClosureOverview.total_rewards_mining_staking_income_eur)} EUR`} />
+            <Metric title="Rewards eintragen" value={`${formatCurrency(taxFilingClosureOverview.total_rewards_mining_staking_income_eur)} EUR`} />
             <Metric title="Derivate" value={`${formatCurrency(taxFilingClosureOverview.total_derivative_pnl_eur)} EUR`} />
             <Metric title="Steuerfrei archivieren" value={`${formatCurrency(taxFilingClosureOverview.total_tax_free_private_disposals_eur)} EUR`} />
           </div>
@@ -8173,7 +8173,7 @@ function TaxPanel({
         </p>
         <div className="portfolioSummaryStrip">
           <Metric title="Privat G/V" value={`${formatCurrency(activeCorrectionMap?.taxable_private_disposals_eur)} EUR`} />
-          <Metric title="Rewards/Mining" value={`${formatCurrency(activeCorrectionMap?.rewards_mining_staking_income_eur)} EUR`} />
+          <Metric title="Rewards eintragen" value={`${formatCurrency(activeCorrectionMap?.rewards_mining_staking_income_eur)} EUR`} />
           <Metric title="Derivate" value={`${formatCurrency(activeCorrectionMap?.derivative_pnl_eur)} EUR`} />
           <Metric title="Steuerfrei" value={`${formatCurrency(activeCorrectionMap?.tax_free_private_disposals_eur)} EUR`} />
           <Metric title="Jahre pruefen" value={String(taxYearsCorrectionMap?.amendment_review_years?.length ?? 0)} />
@@ -9579,7 +9579,7 @@ function TaxPanel({
         <p className="panelLead">{taxYearFilingSummary?.plain_language_summary ?? "Steuerjahr-Erklaerung wird geladen."}</p>
         <div className="portfolioSummaryStrip">
           <Metric title="Privat G/V" value={`${formatCurrency(taxYearFilingSummary?.taxable_private_disposals_eur)} EUR`} />
-          <Metric title="Rewards/Mining" value={`${formatCurrency(taxYearFilingSummary?.rewards_mining_staking_income_eur)} EUR`} />
+          <Metric title="Rewards eintragen" value={`${formatCurrency(taxYearFilingSummary?.rewards_mining_staking_income_eur)} EUR`} />
           <Metric title="Derivate" value={`${formatCurrency(taxYearFilingSummary?.derivative_pnl_eur)} EUR`} />
           <Metric title="Steuerfrei" value={`${formatCurrency(taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
           <Metric
@@ -9764,7 +9764,7 @@ function TaxPanel({
         </div>
         <div className="portfolioSummaryStrip">
           <Metric title="Anlage SO G/V" value={`${formatCurrency(activePaymentRow?.private_disposals_gain_loss_eur)} EUR`} />
-          <Metric title="Rewards/Mining" value={`${formatCurrency(activePaymentRow?.rewards_mining_staking_income_eur)} EUR`} />
+          <Metric title="Rewards eintragen" value={`${formatCurrency(activePaymentRow?.rewards_mining_staking_income_eur)} EUR`} />
           <Metric title="Derivate" value={`${formatCurrency(activePaymentRow?.derivative_pnl_eur)} EUR`} />
           <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur)} EUR`} />
         </div>
@@ -9931,7 +9931,7 @@ function TaxPanel({
             <StatusRow label="Anschaffungskosten" value={`${formatCurrency(selectedYear?.acquisition_cost_eur)} EUR`} />
             <StatusRow label="Steuerfrei >365 Tage" value={`${formatCurrency(selectedYear?.tax_free_gain_loss_eur)} EUR`} />
             <StatusRow label="Steuerfreie Zeilen" value={String(selectedYear?.tax_free_lines_count ?? 0)} />
-            <StatusRow label="Rewards/Einkuenfte" value={`${formatCurrency(selectedYear?.rewards_income_eur)} EUR`} />
+            <StatusRow label="Rewards eintragen" value={`${formatCurrency(selectedYear?.rewards_income_eur)} EUR`} />
             <StatusRow label="Derivate PnL" value={`${formatCurrency(selectedYear?.derivative_pnl_eur)} EUR`} />
             <StatusRow label="Fees" value={`${formatCurrency(selectedYear?.fees_eur)} EUR`} />
             <StatusRow label="Offene Issues" value={String(selectedYear?.review_issues_count ?? 0)} />
@@ -9964,7 +9964,7 @@ function TaxPanel({
             <Metric title="HNT G/V" value={`${formatCurrency(taxDeclarationGuide?.hnt_gain_loss_eur)} EUR`} />
             <Metric title="Steuerfrei" value={`${formatCurrency(taxDeclarationGuide?.tax_free_gain_loss_eur)} EUR`} />
             <Metric title="HNT Tax-Lines" value={String(taxDeclarationGuide?.hnt_tax_line_count ?? 0)} />
-            <Metric title="Rewards" value={`${formatCurrency(taxDeclarationGuide?.rewards_income_eur)} EUR`} />
+            <Metric title="Rewards eintragen" value={`${formatCurrency(taxDeclarationGuide?.rewards_income_eur)} EUR`} />
           </div>
           <TablePanel
             title="Eingabehilfe"
