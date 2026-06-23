@@ -2440,6 +2440,37 @@ class TaxYearService:
             "Raw-Object, quote_asset, quote_quantity und Event-Typ der betroffenen Seite pruefen.",
         )
 
+    def _gain_evidence_split_delta_by_disposal_event(
+        self,
+        year: int,
+        *,
+        limit: int = 200,
+    ) -> tuple[dict[str, Decimal], dict[str, int]]:
+        review = self.gain_evidence_review(year, limit=max(1, min(limit, 500)))
+        disposal_counts: dict[str, int] = defaultdict(int)
+        for line in review.lines:
+            if line.disposal_event_id:
+                disposal_counts[line.disposal_event_id] += 1
+        split_delta_by_event: dict[str, Decimal] = defaultdict(Decimal)
+        split_count_by_event: dict[str, int] = defaultdict(int)
+        for line in review.lines:
+            if not line.disposal_event_id:
+                continue
+            disposal_delta = line.disposal_proceeds_delta_eur or Decimal("0")
+            disposal_delta_pct = line.disposal_proceeds_delta_pct or Decimal("0")
+            diagnosis = self._gain_evidence_side_diagnosis(
+                delta_eur=disposal_delta,
+                delta_pct=disposal_delta_pct,
+                quote_asset=line.disposal_quote_asset,
+                quote_quantity=line.disposal_quote_quantity,
+                price_source=line.disposal_price_source,
+                event_split_count=disposal_counts.get(line.disposal_event_id, 0),
+            )
+            if diagnosis == "quote_allocation_or_split_line":
+                split_delta_by_event[line.disposal_event_id] += line.absolute_price_delta_eur
+                split_count_by_event[line.disposal_event_id] += 1
+        return split_delta_by_event, split_count_by_event
+
     def gain_evidence_price_delta_drilldown(
         self,
         year: int,
@@ -2461,11 +2492,18 @@ class TaxYearService:
                 acquisition_counts[line.acquisition_event_id] += 1
             if line.disposal_event_id:
                 disposal_counts[line.disposal_event_id] += 1
+        event_level_by_id = self._gain_evidence_event_delta_lines_by_id(
+            year,
+            limit=max(1, min(limit, 500)),
+        )
 
         rows: list[TaxYearGainEvidencePriceDeltaLine] = []
         root_counts: dict[str, int] = defaultdict(int)
         dominant_counts = {"acquisition": 0, "disposal": 0, "both": 0, "none": 0}
         split_line_review_count = 0
+        event_level_reconciled_count = 0
+        event_level_review_count = 0
+        event_level_unchecked_count = 0
         for line in selected:
             acquisition_delta = line.acquisition_cost_delta_eur or Decimal("0")
             disposal_delta = line.disposal_proceeds_delta_eur or Decimal("0")
@@ -2492,6 +2530,18 @@ class TaxYearService:
             dominant_side = self._gain_evidence_dominant_side(acquisition_delta, disposal_delta)
             root_cause = self._gain_evidence_root_cause(acquisition_diagnosis, disposal_diagnosis)
             explanation, action = self._gain_evidence_root_cause_text(root_cause)
+            event_level = event_level_by_id.get(line.disposal_event_id or "")
+            if event_level and event_level.status == "event_level_ok":
+                event_level_reconciled_count += 1
+                if root_cause == "quote_allocation_or_split_line":
+                    explanation = (
+                        "Event-Level ist plausibel; dieses Delta ist ein FIFO-Teilzeilen-/Quote-Allocation-Artefakt."
+                    )
+                    action = "Nicht als echten zusaetzlichen Gewinn werten; Event-Level-Beleg archivieren."
+            elif event_level and event_level.status == "event_level_review":
+                event_level_review_count += 1
+            else:
+                event_level_unchecked_count += 1
             root_counts[root_cause] += 1
             dominant_counts[dominant_side] += 1
             if root_cause == "quote_allocation_or_split_line":
@@ -2522,6 +2572,10 @@ class TaxYearService:
                     disposal_event_id=line.disposal_event_id,
                     disposal_event_split_count=disposal_split_count,
                     disposal_side_diagnosis=disposal_diagnosis,
+                    event_level_status=event_level.status if event_level else None,
+                    event_level_delta_eur=event_level.event_delta_eur if event_level else None,
+                    event_level_delta_pct=event_level.event_delta_pct if event_level else None,
+                    event_level_explanation=event_level.explanation if event_level else None,
                     root_cause=root_cause,
                     explanation=explanation,
                     recommended_action=action,
@@ -2543,6 +2597,9 @@ class TaxYearService:
             dominant_both_count=dominant_counts["both"],
             split_line_review_count=split_line_review_count,
             root_cause_counts=dict(sorted(root_counts.items())),
+            event_level_reconciled_count=event_level_reconciled_count,
+            event_level_review_count=event_level_review_count,
+            event_level_unchecked_count=event_level_unchecked_count,
             lines=rows,
             caveats=[
                 "Read-only Drilldown: erklaert Preisdelta-Ursachen, korrigiert aber keine Tax-Lines.",
@@ -2583,12 +2640,12 @@ class TaxYearService:
             "Normalizer-Mapping, Quote-Menge, Preisquelle und Rohbeleg des gesamten Events pruefen.",
         )
 
-    def gain_evidence_event_delta_review(
+    def _gain_evidence_event_delta_lines_by_id(
         self,
         year: int,
         *,
         limit: int = 200,
-    ) -> TaxYearGainEvidenceEventDeltaReview:
+    ) -> dict[str, TaxYearGainEvidenceEventDeltaLine]:
         with self.store.connect() as con:
             rows = con.execute(
                 """
@@ -2597,10 +2654,13 @@ class TaxYearService:
                     min(l.disposed_at) as disposed_at,
                     any_value(de.source) as source,
                     any_value(de.event_type) as event_type,
+                    any_value(de.asset) as event_asset,
+                    any_value(de.quantity) as event_quantity,
                     any_value(de.quote_asset) as quote_asset,
                     any_value(de.quote_quantity) as quote_quantity,
                     count(*)::integer as tax_line_count,
                     string_agg(distinct l.asset, ',') as assets,
+                    coalesce(sum(abs(l.quantity)), 0) as taxable_disposed_quantity,
                     coalesce(sum(l.disposal_proceeds_eur), 0) as actual_proceeds_eur
                 from tax_lines l
                 join canonical_events de on de.event_id = l.source_event_id
@@ -2616,15 +2676,10 @@ class TaxYearService:
                 [year, max(1, min(limit, 500))],
             ).fetchall()
 
-        drilldown = self.gain_evidence_price_delta_drilldown(year, limit=max(1, min(limit, 500)))
-        split_delta_by_event: dict[str, Decimal] = defaultdict(Decimal)
-        split_count_by_event: dict[str, int] = defaultdict(int)
-        for line in drilldown.lines:
-            if not line.disposal_event_id:
-                continue
-            split_delta_by_event[line.disposal_event_id] += line.absolute_delta_eur
-            if line.root_cause == "quote_allocation_or_split_line":
-                split_count_by_event[line.disposal_event_id] += 1
+        split_delta_by_event, split_count_by_event = self._gain_evidence_split_delta_by_disposal_event(
+            year,
+            limit=limit,
+        )
 
         price_lookup = HistoricalPriceLookup(self.store)
         lines: list[TaxYearGainEvidenceEventDeltaLine] = []
@@ -2633,12 +2688,29 @@ class TaxYearService:
             disposed_at,
             source,
             event_type,
+            event_asset,
+            event_quantity,
             quote_asset,
             quote_quantity,
             tax_line_count,
             assets,
+            taxable_disposed_quantity,
             actual_proceeds_eur,
         ) in rows:
+            event_asset_key = str(event_asset or "").upper()
+            quote_asset_key = str(quote_asset or "").upper()
+            asset_set = {asset.strip().upper() for asset in str(assets or "").split(",") if asset}
+            if event_asset_key in asset_set and event_quantity is not None and event_quantity < 0:
+                total_disposed_quantity = abs(event_quantity)
+            elif quote_asset_key in asset_set and quote_quantity is not None:
+                total_disposed_quantity = abs(quote_quantity)
+            else:
+                total_disposed_quantity = taxable_disposed_quantity or None
+            taxable_fraction = (
+                taxable_disposed_quantity / total_disposed_quantity
+                if total_disposed_quantity and taxable_disposed_quantity <= total_disposed_quantity
+                else Decimal("1")
+            )
             price = self._gain_evidence_price_check(
                 price_lookup=price_lookup,
                 quote_asset=quote_asset,
@@ -2648,9 +2720,10 @@ class TaxYearService:
                 event_time=disposed_at,
                 actual_value=actual_proceeds_eur or Decimal("0"),
             )
-            expected = price["expected_value"]
-            delta = price["delta_eur"]
-            delta_pct = price["delta_pct"]
+            event_total_expected = price["expected_value"]
+            expected = event_total_expected * taxable_fraction if isinstance(event_total_expected, Decimal) else None
+            delta = (actual_proceeds_eur or Decimal("0")) - expected if expected is not None else None
+            delta_pct = abs(delta) / expected * Decimal("100") if expected else None
             if price["price_source"] is None:
                 status: Literal["event_level_ok", "event_level_review", "missing_price_evidence"] = "missing_price_evidence"
             elif delta is not None and (abs(delta) < Decimal("0.01") or (delta_pct is not None and delta_pct <= Decimal("0.5"))):
@@ -2670,6 +2743,8 @@ class TaxYearService:
                     disposed_at=disposed_at.isoformat(),
                     source=source,
                     event_type=event_type,
+                    event_asset=event_asset,
+                    event_quantity=event_quantity,
                     quote_asset=quote_asset,
                     quote_quantity=quote_quantity,
                     price_asset=price["price_asset"],
@@ -2679,6 +2754,10 @@ class TaxYearService:
                     price_age_days=price["price_age_days"],
                     tax_line_count=int(tax_line_count or 0),
                     assets=sorted(str(assets or "").split(",")) if assets else [],
+                    taxable_disposed_quantity=taxable_disposed_quantity or Decimal("0"),
+                    total_event_disposed_quantity=total_disposed_quantity,
+                    taxable_event_fraction=taxable_fraction,
+                    event_total_proceeds_eur=event_total_expected,  # type: ignore[arg-type]
                     actual_proceeds_eur=actual_proceeds_eur or Decimal("0"),
                     expected_proceeds_eur=expected,  # type: ignore[arg-type]
                     event_delta_eur=delta,  # type: ignore[arg-type]
@@ -2690,6 +2769,15 @@ class TaxYearService:
                     recommended_action=action,
                 )
             )
+        return {line.disposal_event_id: line for line in lines}
+
+    def gain_evidence_event_delta_review(
+        self,
+        year: int,
+        *,
+        limit: int = 200,
+    ) -> TaxYearGainEvidenceEventDeltaReview:
+        lines = list(self._gain_evidence_event_delta_lines_by_id(year, limit=limit).values())
         lines.sort(
             key=lambda line: (
                 line.status != "event_level_review",

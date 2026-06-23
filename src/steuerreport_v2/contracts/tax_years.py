@@ -515,6 +515,10 @@ class TaxYearGainEvidencePriceDeltaLine(BaseModel):
     disposal_event_id: str | None = None
     disposal_event_split_count: int = 0
     disposal_side_diagnosis: str
+    event_level_status: str | None = None
+    event_level_delta_eur: Decimal | None = None
+    event_level_delta_pct: Decimal | None = None
+    event_level_explanation: str | None = None
     root_cause: str
     explanation: str
     recommended_action: str
@@ -535,6 +539,9 @@ class TaxYearGainEvidencePriceDeltaDrilldown(BaseModel):
     dominant_both_count: int = 0
     split_line_review_count: int = 0
     root_cause_counts: dict[str, int] = Field(default_factory=dict)
+    event_level_reconciled_count: int = 0
+    event_level_review_count: int = 0
+    event_level_unchecked_count: int = 0
     lines: list[TaxYearGainEvidencePriceDeltaLine] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
     methodology: str
@@ -546,6 +553,8 @@ class TaxYearGainEvidenceEventDeltaLine(BaseModel):
     disposed_at: str
     source: str | None = None
     event_type: str | None = None
+    event_asset: str | None = None
+    event_quantity: Decimal | None = None
     quote_asset: str | None = None
     quote_quantity: Decimal | None = None
     price_asset: str | None = None
@@ -555,6 +564,10 @@ class TaxYearGainEvidenceEventDeltaLine(BaseModel):
     price_age_days: int | None = None
     tax_line_count: int = 0
     assets: list[str] = Field(default_factory=list)
+    taxable_disposed_quantity: Decimal = Decimal("0")
+    total_event_disposed_quantity: Decimal | None = None
+    taxable_event_fraction: Decimal | None = None
+    event_total_proceeds_eur: Decimal | None = None
     actual_proceeds_eur: Decimal = Decimal("0")
     expected_proceeds_eur: Decimal | None = None
     event_delta_eur: Decimal | None = None

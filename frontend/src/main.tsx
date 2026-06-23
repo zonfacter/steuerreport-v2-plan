@@ -1220,6 +1220,9 @@ type Snapshot = {
     dominant_both_count: number;
     split_line_review_count: number;
     root_cause_counts: Record<string, number>;
+    event_level_reconciled_count: number;
+    event_level_review_count: number;
+    event_level_unchecked_count: number;
     lines: Array<Record<string, unknown>>;
     caveats: string[];
     methodology: string;
@@ -10135,6 +10138,8 @@ function TaxPanel({
           <div className="portfolioSummaryStrip">
             <Metric title="Delta-Drilldown" value={String(taxYearGainEvidencePriceDeltas?.lines_count ?? 0)} />
             <Metric title="Split-Line Review" value={String(taxYearGainEvidencePriceDeltas?.split_line_review_count ?? 0)} />
+            <Metric title="Event abgeglichen" value={String(taxYearGainEvidencePriceDeltas?.event_level_reconciled_count ?? 0)} />
+            <Metric title="Event Review" value={String(taxYearGainEvidencePriceDeltas?.event_level_review_count ?? 0)} />
             <Metric title="Erwerb dominiert" value={String(taxYearGainEvidencePriceDeltas?.dominant_acquisition_count ?? 0)} />
             <Metric title="Verkauf dominiert" value={String(taxYearGainEvidencePriceDeltas?.dominant_disposal_count ?? 0)} />
             <Metric title="Beide Seiten" value={String(taxYearGainEvidencePriceDeltas?.dominant_both_count ?? 0)} />
@@ -10164,6 +10169,8 @@ function TaxPanel({
               verkauf_pct: formatPercent(line.disposal_delta_pct),
               verkauf_split: line.disposal_event_split_count,
               verkauf_diag: line.disposal_side_diagnosis,
+              event_status: line.event_level_status ?? "-",
+              event_delta_eur: line.event_level_delta_eur === null || line.event_level_delta_eur === undefined ? "-" : formatCurrency(line.event_level_delta_eur),
               erklaerung: line.explanation,
               aktion: line.recommended_action,
               drilldown: line.asset_fifo_drilldown_endpoint
@@ -10187,7 +10194,11 @@ function TaxPanel({
               typ: line.event_type,
               assets: Array.isArray(line.assets) ? line.assets.join(", ") : line.assets,
               tax_lines: line.tax_line_count,
+              steuerpfl_menge: formatQuantity(line.taxable_disposed_quantity),
+              event_menge: line.total_event_disposed_quantity === null || line.total_event_disposed_quantity === undefined ? "-" : formatQuantity(line.total_event_disposed_quantity),
+              steuerpfl_anteil: line.taxable_event_fraction === null || line.taxable_event_fraction === undefined ? "-" : formatPercent(Number(line.taxable_event_fraction) * 100),
               quote: `${line.quote_quantity ?? "-"} ${line.quote_asset ?? ""}`.trim(),
+              event_gesamtwert: line.event_total_proceeds_eur === null || line.event_total_proceeds_eur === undefined ? "-" : formatCurrency(line.event_total_proceeds_eur),
               erloes_eur: formatCurrency(line.actual_proceeds_eur),
               erwartet_eur: line.expected_proceeds_eur === null || line.expected_proceeds_eur === undefined ? "-" : formatCurrency(line.expected_proceeds_eur),
               event_delta_eur: line.event_delta_eur === null || line.event_delta_eur === undefined ? "-" : formatCurrency(line.event_delta_eur),

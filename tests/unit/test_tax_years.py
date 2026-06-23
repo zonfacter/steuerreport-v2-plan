@@ -693,9 +693,15 @@ def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(t
     assert report.root_cause_counts == {"quote_allocation_or_split_line": 2}
     assert report.dominant_disposal_count == 2
     assert report.absolute_delta_eur == Decimal("30.000000000000000000")
+    assert report.event_level_reconciled_count == 2
+    assert report.event_level_review_count == 0
+    assert report.event_level_unchecked_count == 0
     assert all(line.disposal_event_split_count == 2 for line in report.lines)
     assert all(line.disposal_side_diagnosis == "quote_allocation_or_split_line" for line in report.lines)
     assert all(line.root_cause == "quote_allocation_or_split_line" for line in report.lines)
+    assert all(line.event_level_status == "event_level_ok" for line in report.lines)
+    assert all(line.event_level_delta_eur == Decimal("0E-18") for line in report.lines)
+    assert all("Event-Level ist plausibel" in line.explanation for line in report.lines)
 
     event_report = TaxYearService(store).gain_evidence_event_delta_review(2024)
     assert event_report.events_count == 1
