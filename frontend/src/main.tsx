@@ -684,6 +684,21 @@ type Snapshot = {
     lots: Array<Record<string, unknown>>;
     methodology: string;
   };
+  taxLossRealizationPlanner?: {
+    generated_at: string;
+    as_of: string;
+    min_loss_eur: string;
+    min_value_eur: string;
+    tax_relevant_loss_if_sold_now_eur: string;
+    expired_loss_not_tax_relevant_eur: string;
+    unrealized_gain_eur: string;
+    tax_relevant_lots_count: number;
+    expired_loss_lots_count: number;
+    rows: Array<Record<string, unknown>>;
+    caveats: string[];
+    ascii_table: string;
+    methodology: string;
+  };
   taxYearsSummary?: {
     years: Array<Record<string, unknown>>;
     available_years: number[];
@@ -1657,6 +1672,7 @@ function App() {
         taxLines: { key: "taxLines", label: "Tax-Lines", load: () => getApi<Array<Record<string, unknown>>>("/api/v1/tax/lines") },
         taxUnmatchedDisposals: { key: "taxUnmatchedDisposals", label: "Nicht zugeordnete FIFO-Abgaenge", load: () => getApi<Array<Record<string, unknown>>>("/api/v1/tax/unmatched-disposals") },
         taxHoldingPeriods: { key: "taxHoldingPeriods", label: "Haltefristen", load: () => getApi<Snapshot["taxHoldingPeriods"]>(`/api/v1/tax/holding-periods?min_value_eur=${encodeURIComponent(minHoldingValueEur || "1")}`) },
+        taxLossRealizationPlanner: { key: "taxLossRealizationPlanner", label: "Verlustplanung", load: () => getApi<Snapshot["taxLossRealizationPlanner"]>(`/api/v1/tax/loss-realization-planner?min_loss_eur=1&min_value_eur=${encodeURIComponent(minHoldingValueEur || "1")}&limit=120`) },
         taxSummary: { key: "taxSummary", label: "Tax-Summary", load: () => getApi<Record<string, unknown> | null>("/api/v1/tax/summary") },
         taxYearsSummary: { key: "taxYearsSummary", label: "Steuerjahre", load: () => getApi<Snapshot["taxYearsSummary"]>("/api/v1/tax-years/summary") },
         taxPaymentOverview: { key: "taxPaymentOverview", label: "Steuer-Eingabezettel", load: () => getApi<Snapshot["taxPaymentOverview"]>("/api/v1/tax-years/payment-overview") },
@@ -1736,6 +1752,7 @@ function App() {
         "taxSolanaStablecoinFxReview",
         "taxYearEvidence",
         "taxHoldingPeriods",
+        "taxLossRealizationPlanner",
         "taxSummary",
         "derivativeSummary",
         ...(taxViewMode !== "guided"
@@ -3235,6 +3252,7 @@ function Content({
       <TaxPanel
         taxSummary={snapshot.taxSummary}
         taxHoldingPeriods={snapshot.taxHoldingPeriods}
+        taxLossRealizationPlanner={snapshot.taxLossRealizationPlanner}
         taxYearsSummary={snapshot.taxYearsSummary}
         taxPaymentOverview={snapshot.taxPaymentOverview}
         taxYearFilingMatrix={snapshot.taxYearFilingMatrix}
@@ -7565,6 +7583,7 @@ function V1ReferenceForm({
 function TaxPanel({
   taxSummary,
   taxHoldingPeriods,
+  taxLossRealizationPlanner,
   taxYearsSummary,
   taxPaymentOverview,
   taxYearFilingMatrix,
@@ -7629,6 +7648,7 @@ function TaxPanel({
 }: {
   taxSummary: Record<string, unknown> | null | undefined;
   taxHoldingPeriods: Snapshot["taxHoldingPeriods"];
+  taxLossRealizationPlanner: Snapshot["taxLossRealizationPlanner"];
   taxYearsSummary: Snapshot["taxYearsSummary"];
   taxPaymentOverview: Snapshot["taxPaymentOverview"];
   taxYearFilingMatrix: Snapshot["taxYearFilingMatrix"];
@@ -9728,6 +9748,41 @@ function TaxPanel({
             account: lot.account
           }))}
           footer={taxHoldingPeriods?.methodology ?? "Read-only aus offenen FIFO-Lots."}
+        />
+      </div>
+
+      <div className="panel">
+        <div className="panelToolbar">
+          <strong>Verlustrealisierung planen</strong>
+          <span>{taxLossRealizationPlanner?.generated_at ? formatDateTime(taxLossRealizationPlanner.generated_at) : "wird geladen"}</span>
+        </div>
+        <div className="portfolioSummaryStrip">
+          <Metric title="Jetzt nutzbar" value={`${formatCurrency(taxLossRealizationPlanner?.tax_relevant_loss_if_sold_now_eur)} EUR`} />
+          <Metric title="Frist abgelaufen" value={`${formatCurrency(taxLossRealizationPlanner?.expired_loss_not_tax_relevant_eur)} EUR`} />
+          <Metric title="Lots nutzbar" value={String(taxLossRealizationPlanner?.tax_relevant_lots_count ?? 0)} />
+          <Metric title="Lots abgelaufen" value={String(taxLossRealizationPlanner?.expired_loss_lots_count ?? 0)} />
+        </div>
+        <TablePanel
+          title="FIFO-Lots mit Verlustfenster"
+          rows={(taxLossRealizationPlanner?.rows ?? []).slice(0, 80).map((lot) => ({
+            status: lot.status,
+            asset: lot.asset,
+            anschaffung: lot.acquired_at,
+            letzter_steuerrelevanter_tag: lot.last_tax_relevant_disposal_date,
+            tage_bis_steuerfrei: lot.days_until_tax_free,
+            menge: lot.quantity_remaining,
+            kosten_eur: formatCurrency(lot.cost_basis_eur_remaining),
+            wert_eur: formatCurrency(lot.current_value_eur),
+            unrealisiert_eur: formatCurrency(lot.unrealized_gain_loss_eur),
+            lot_id: lot.lot_id,
+            source_event_id: lot.source_event_id,
+            quelle: lot.source,
+            account: lot.account,
+            preisquelle: lot.price_source,
+            hinweis: lot.action_note
+          }))}
+          footer={(taxLossRealizationPlanner?.caveats ?? []).join(" ") || taxLossRealizationPlanner?.methodology || ""}
+          compact
         />
       </div>
 

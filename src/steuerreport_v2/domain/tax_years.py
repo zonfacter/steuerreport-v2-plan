@@ -4,7 +4,7 @@ from bisect import bisect_right
 from collections import defaultdict
 from decimal import Decimal
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -21,6 +21,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxPaymentChecklistItem,
     TaxPaymentOverview,
     TaxPaymentOverviewRow,
+    TaxLossRealizationLot,
+    TaxLossRealizationPlanner,
     TaxRewardTradingSeparationReport,
     TaxRewardTradingSeparationRow,
     TaxYearGainLossRealityAssetRow,
@@ -2052,6 +2054,42 @@ class TaxYearService:
 
         return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
 
+    def _loss_realization_ascii_table(self, rows: list[TaxLossRealizationLot]) -> str:
+        table_rows = [
+            [
+                "Status",
+                "Asset",
+                "Anschaffung",
+                "Letzter §23 Tag",
+                "Wert",
+                "Kosten",
+                "Unrealisiert",
+                "Quelle",
+            ]
+        ]
+        for row in rows:
+            table_rows.append(
+                [
+                    row.status,
+                    row.asset,
+                    row.acquired_at[:10],
+                    row.last_tax_relevant_disposal_date,
+                    self._fmt_eur(row.current_value_eur),
+                    self._fmt_eur(row.cost_basis_eur_remaining),
+                    self._fmt_eur(row.unrealized_gain_loss_eur),
+                    row.source or "-",
+                ]
+            )
+        if len(table_rows) == 1:
+            table_rows.append(["-", "-", "-", "-", self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), "-"])
+        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+        sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+
+        def fmt(row: list[str]) -> str:
+            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+
+        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+
     def _gain_loss_reality_summary(
         self,
         *,
@@ -2534,6 +2572,108 @@ class TaxYearService:
                 "Er trennt realisierte steuerpflichtige FIFO-Ergebnisse, steuerfreie Ergebnisse nach Haltefrist "
                 "und heute noch offene unrealisierte Gewinne/Verluste. Es werden keine Steuerdaten neu berechnet "
                 "oder geschrieben."
+            ),
+        )
+
+    def loss_realization_planner(
+        self,
+        *,
+        min_loss_eur: Decimal = Decimal("1"),
+        min_value_eur: Decimal = Decimal("1"),
+        limit: int = 100,
+    ) -> TaxLossRealizationPlanner:
+        holdings = TaxService(self.store).holding_period_report(min_value_eur=min_value_eur)
+        rows: list[TaxLossRealizationLot] = []
+        for lot in holdings.lots:
+            unrealized = lot.unrealized_gain_loss_eur
+            if abs(unrealized) < min_loss_eur and unrealized < 0:
+                continue
+            if unrealized < 0 and lot.days_until_tax_free > 0:
+                status = "tax_relevant_loss_if_sold_now"
+                action_note = (
+                    "Verlust waere bei Verkauf/Swap vor Ablauf der Jahresfrist grundsaetzlich "
+                    "als privater Veraeusserungsverlust nach FIFO nachweisbar."
+                )
+            elif unrealized < 0:
+                status = "loss_window_expired"
+                action_note = (
+                    "Der Lot ist bereits ausserhalb der privaten Jahresfrist. Ein heutiger Verkauf "
+                    "waere regelmaessig steuerfrei; der Verlust ist konservativ nicht als §23-Verlust geplant."
+                )
+            else:
+                status = "not_a_loss"
+                action_note = "Aktuell kein Verlust-Lot; nur zur Vollstaendigkeit bei materieller offener Position sichtbar."
+            if status == "not_a_loss" and lot.current_value_eur < min_value_eur:
+                continue
+            last_tax_relevant = (lot.tax_free_at - timedelta(days=1)).date().isoformat()
+            rows.append(
+                TaxLossRealizationLot(
+                    lot_id=lot.lot_id,
+                    asset=lot.asset,
+                    acquired_at=lot.acquired_at.isoformat(),
+                    tax_free_at=lot.tax_free_at.isoformat(),
+                    last_tax_relevant_disposal_date=last_tax_relevant,
+                    days_until_tax_free=lot.days_until_tax_free,
+                    bucket=lot.bucket,
+                    status=status,
+                    quantity_remaining=lot.quantity_remaining,
+                    cost_basis_eur_remaining=lot.cost_basis_eur_remaining,
+                    current_value_eur=lot.current_value_eur,
+                    unrealized_gain_loss_eur=unrealized,
+                    current_price_eur=lot.current_price_eur,
+                    price_source=lot.price_source,
+                    priced_at=lot.priced_at.isoformat(),
+                    source_event_id=lot.source_event_id,
+                    source=lot.source,
+                    account=lot.account,
+                    evidence_note=(
+                        "Belegpfad: offener FIFO-Lot, source_event_id, Importquelle/Account, "
+                        "aktuelle Preisquelle und spaetere Verkaufs-/Swap-Tax-Line gemeinsam archivieren."
+                    ),
+                    action_note=action_note,
+                )
+            )
+        status_order = {
+            "tax_relevant_loss_if_sold_now": 0,
+            "loss_window_expired": 1,
+            "not_a_loss": 2,
+        }
+        rows.sort(key=lambda row: (status_order[row.status], row.unrealized_gain_loss_eur, row.tax_free_at, row.asset))
+        rows = rows[: max(1, min(limit, 500))]
+        tax_relevant_loss = sum(
+            (row.unrealized_gain_loss_eur for row in rows if row.status == "tax_relevant_loss_if_sold_now"),
+            Decimal("0"),
+        )
+        expired_loss = sum(
+            (row.unrealized_gain_loss_eur for row in rows if row.status == "loss_window_expired"),
+            Decimal("0"),
+        )
+        unrealized_gain = sum(
+            (row.unrealized_gain_loss_eur for row in rows if row.unrealized_gain_loss_eur > 0),
+            Decimal("0"),
+        )
+        return TaxLossRealizationPlanner(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            as_of=holdings.as_of.isoformat(),
+            min_loss_eur=min_loss_eur,
+            min_value_eur=min_value_eur,
+            tax_relevant_loss_if_sold_now_eur=tax_relevant_loss,
+            expired_loss_not_tax_relevant_eur=expired_loss,
+            unrealized_gain_eur=unrealized_gain,
+            tax_relevant_lots_count=sum(1 for row in rows if row.status == "tax_relevant_loss_if_sold_now"),
+            expired_loss_lots_count=sum(1 for row in rows if row.status == "loss_window_expired"),
+            rows=rows,
+            caveats=[
+                "Read-only Planung: Es wird kein Verkauf ausgeloest und keine Steuerzeile geschrieben.",
+                "Ein Verlust wird erst durch Verkauf, Swap oder andere Veraeusserung realisiert.",
+                "Private §23-Verluste sind konservativ nur innerhalb der Jahresfrist geplant; nach Ablauf der Frist ist auch ein Verlust regelmaessig steuerlich unbeachtlich.",
+                "Vor Umsetzung steuerlich pruefen, besonders bei Reward-/Mining-Herkunft, Betriebsvermoegen oder gewerblicher Einordnung.",
+            ],
+            ascii_table=self._loss_realization_ascii_table(rows),
+            methodology=(
+                "Read-only Verlustrealisierungsplan aus offenen FIFO-Lots, aktueller Preisbewertung "
+                "und Haltefrist. Der Report zeigt, welche offenen Verluste bei sofortiger Veraeusserung "
+                "innerhalb der Jahresfrist nachweisbar waeren und welche Verlustfenster bereits abgelaufen sind."
             ),
         )
 

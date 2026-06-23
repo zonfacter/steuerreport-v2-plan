@@ -1,7 +1,7 @@
 import json
 from io import BytesIO
 from zipfile import ZipFile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -543,6 +543,53 @@ def test_gain_loss_reality_check_separates_realized_from_unrealized_losses(tmp_p
     assert jup.potential_loss_not_realized_eur == jup.open_unrealized_gain_loss_eur
     assert "nicht automatisch" in jup.note
     assert "Brutto-Umsatz" in report.plain_language_summary
+
+
+def test_loss_realization_planner_marks_usable_and_expired_loss_windows(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    fresh = (now.replace(tzinfo=timezone.utc) - timedelta(days=30)).isoformat().replace("+00:00", "Z")
+    expired = (now.replace(tzinfo=timezone.utc) - timedelta(days=500)).isoformat().replace("+00:00", "Z")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="loss-planner.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            f"{fresh},JUP,10,buy,EUR,100\n"
+            f"{expired},SOL,2,buy,EUR,200\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="JUP",
+            price_eur=Decimal("5"),
+            priced_at=now,
+            source="manual-test",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="SOL",
+            price_eur=Decimal("50"),
+            priced_at=now,
+            source="manual-test",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = TaxYearService(store).loss_realization_planner(min_loss_eur=Decimal("1"), min_value_eur=Decimal("1"))
+    jup = next(row for row in report.rows if row.asset == "JUP")
+    sol = next(row for row in report.rows if row.asset == "SOL")
+
+    assert jup.status == "tax_relevant_loss_if_sold_now"
+    assert jup.unrealized_gain_loss_eur == Decimal("-50.000000000000000000000000000000000000")
+    assert sol.status == "loss_window_expired"
+    assert sol.unrealized_gain_loss_eur == Decimal("-100.000000000000000000000000000000000000")
+    assert report.tax_relevant_lots_count == 1
+    assert report.expired_loss_lots_count == 1
+    assert "FIFO-Lot" in jup.evidence_note
+    assert "tax_relevant_loss_if_sold_now" in report.ascii_table
 
 
 def test_tax_year_asset_fifo_drilldown_links_tax_line_to_raw_evidence(tmp_path):
@@ -1791,6 +1838,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/reward-trading-separation"
     )
+    loss_realization_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax/loss-realization-planner"
+    )
     correction_map_summary_route = next(
         route
         for route in app.routes
@@ -1870,6 +1922,7 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert filing_matrix_route.endpoint().status == "ok"
     assert filing_closure_route.endpoint().status == "ok"
     assert reward_trading_route.endpoint().status == "ok"
+    assert loss_realization_route.endpoint().status == "ok"
     assert correction_map_summary_route.endpoint().status == "ok"
     assert turnover_summary_route.endpoint().status == "ok"
     assert solana_program_summary_route.endpoint().status == "ok"

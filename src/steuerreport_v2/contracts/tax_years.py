@@ -422,6 +422,45 @@ class TaxYearGainLossRealityCheck(BaseModel):
     methodology: str
 
 
+class TaxLossRealizationLot(BaseModel):
+    lot_id: str
+    asset: str
+    acquired_at: str
+    tax_free_at: str
+    last_tax_relevant_disposal_date: str
+    days_until_tax_free: int
+    bucket: str
+    status: Literal["tax_relevant_loss_if_sold_now", "loss_window_expired", "not_a_loss"]
+    quantity_remaining: Decimal = Decimal("0")
+    cost_basis_eur_remaining: Decimal = Decimal("0")
+    current_value_eur: Decimal = Decimal("0")
+    unrealized_gain_loss_eur: Decimal = Decimal("0")
+    current_price_eur: Decimal = Decimal("0")
+    price_source: str
+    priced_at: str
+    source_event_id: str
+    source: str | None = None
+    account: str | None = None
+    evidence_note: str
+    action_note: str
+
+
+class TaxLossRealizationPlanner(BaseModel):
+    generated_at: str
+    as_of: str
+    min_loss_eur: Decimal = Decimal("0")
+    min_value_eur: Decimal = Decimal("0")
+    tax_relevant_loss_if_sold_now_eur: Decimal = Decimal("0")
+    expired_loss_not_tax_relevant_eur: Decimal = Decimal("0")
+    unrealized_gain_eur: Decimal = Decimal("0")
+    tax_relevant_lots_count: int = 0
+    expired_loss_lots_count: int = 0
+    rows: list[TaxLossRealizationLot] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    ascii_table: str
+    methodology: str
+
+
 class TaxYearDriverLine(BaseModel):
     tax_line_id: str
     asset: str

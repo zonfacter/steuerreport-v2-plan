@@ -218,6 +218,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxDeclarationGuide,
     TaxExternalInflowReport,
     TaxIncomeReport,
+    TaxLossRealizationPlanner,
     TaxPaymentOverview,
     TaxRewardTradingSeparationReport,
     TaxYearGainLossRealityCheck,
@@ -1933,6 +1934,20 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax/holding-periods")
     def tax_holding_periods(min_value_eur: Decimal = Decimal("1")) -> ApiResponse[TaxHoldingPeriodReport]:
         return ApiResponse(data=TaxService(db).holding_period_report(min_value_eur=min_value_eur))
+
+    @app.get("/api/v1/tax/loss-realization-planner")
+    def tax_loss_realization_planner(
+        min_loss_eur: Decimal = Decimal("1"),
+        min_value_eur: Decimal = Decimal("1"),
+        limit: int = 100,
+    ) -> ApiResponse[TaxLossRealizationPlanner]:
+        return ApiResponse(
+            data=TaxYearService(db).loss_realization_planner(
+                min_loss_eur=min_loss_eur,
+                min_value_eur=min_value_eur,
+                limit=limit,
+            )
+        )
 
     @app.get("/api/v1/tax/summary")
     def tax_summary() -> ApiResponse[TaxRunSummary | None]:
