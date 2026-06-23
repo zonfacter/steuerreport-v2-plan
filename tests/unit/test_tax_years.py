@@ -697,6 +697,20 @@ def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(t
     assert all(line.disposal_side_diagnosis == "quote_allocation_or_split_line" for line in report.lines)
     assert all(line.root_cause == "quote_allocation_or_split_line" for line in report.lines)
 
+    event_report = TaxYearService(store).gain_evidence_event_delta_review(2024)
+    assert event_report.events_count == 1
+    assert event_report.event_level_ok_count == 1
+    assert event_report.event_level_review_count == 0
+    assert event_report.split_line_absolute_delta_eur == Decimal("30.000000000000000000")
+    event = event_report.lines[0]
+    assert event.tax_line_count == 2
+    assert event.actual_proceeds_eur == Decimal("30.000000000000000000")
+    assert event.expected_proceeds_eur == Decimal("30.000000000000000000")
+    assert event.event_delta_eur == Decimal("0E-18")
+    assert event.split_line_count == 2
+    assert event.status == "event_level_ok"
+    assert "aggregiert plausibel" in event.explanation
+
 
 def test_loss_realization_planner_marks_usable_and_expired_loss_windows(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")

@@ -540,6 +540,49 @@ class TaxYearGainEvidencePriceDeltaDrilldown(BaseModel):
     methodology: str
 
 
+class TaxYearGainEvidenceEventDeltaLine(BaseModel):
+    year: int
+    disposal_event_id: str
+    disposed_at: str
+    source: str | None = None
+    event_type: str | None = None
+    quote_asset: str | None = None
+    quote_quantity: Decimal | None = None
+    price_asset: str | None = None
+    price_eur: Decimal | None = None
+    price_source: str | None = None
+    priced_at: str | None = None
+    price_age_days: int | None = None
+    tax_line_count: int = 0
+    assets: list[str] = Field(default_factory=list)
+    actual_proceeds_eur: Decimal = Decimal("0")
+    expected_proceeds_eur: Decimal | None = None
+    event_delta_eur: Decimal | None = None
+    event_delta_pct: Decimal | None = None
+    split_line_absolute_delta_eur: Decimal = Decimal("0")
+    split_line_count: int = 0
+    status: Literal["event_level_ok", "event_level_review", "missing_price_evidence"]
+    explanation: str
+    recommended_action: str
+
+
+class TaxYearGainEvidenceEventDeltaReview(BaseModel):
+    year: int
+    generated_at: str
+    events_count: int = 0
+    event_level_ok_count: int = 0
+    event_level_review_count: int = 0
+    missing_price_count: int = 0
+    tax_line_count: int = 0
+    actual_proceeds_eur: Decimal = Decimal("0")
+    expected_proceeds_eur: Decimal = Decimal("0")
+    event_delta_eur: Decimal = Decimal("0")
+    split_line_absolute_delta_eur: Decimal = Decimal("0")
+    lines: list[TaxYearGainEvidenceEventDeltaLine] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    methodology: str
+
+
 class TaxYearGainEvidenceReview(BaseModel):
     year: int
     generated_at: str

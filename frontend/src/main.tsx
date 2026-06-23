@@ -1224,6 +1224,22 @@ type Snapshot = {
     caveats: string[];
     methodology: string;
   };
+  taxYearGainEvidenceEventDeltas?: {
+    year: number;
+    generated_at: string;
+    events_count: number;
+    event_level_ok_count: number;
+    event_level_review_count: number;
+    missing_price_count: number;
+    tax_line_count: number;
+    actual_proceeds_eur: string;
+    expected_proceeds_eur: string;
+    event_delta_eur: string;
+    split_line_absolute_delta_eur: string;
+    lines: Array<Record<string, unknown>>;
+    caveats: string[];
+    methodology: string;
+  };
   taxYearTurnoverAudit?: {
     year: number;
     generated_at: string;
@@ -1748,6 +1764,7 @@ function App() {
         taxYearGainLossRealityCheck: { key: "taxYearGainLossRealityCheck", label: "Realisiert vs gehalten", load: () => getApi<Snapshot["taxYearGainLossRealityCheck"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-loss-reality-check?limit=40`) },
         taxYearGainEvidenceReview: { key: "taxYearGainEvidenceReview", label: "Gewinn-Belegcheck", load: () => getApi<Snapshot["taxYearGainEvidenceReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-evidence-review?limit=80`) },
         taxYearGainEvidencePriceDeltas: { key: "taxYearGainEvidencePriceDeltas", label: "Preisdelta-Drilldown", load: () => getApi<Snapshot["taxYearGainEvidencePriceDeltas"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-evidence-price-deltas?limit=200`) },
+        taxYearGainEvidenceEventDeltas: { key: "taxYearGainEvidenceEventDeltas", label: "Event-Level Preisdelta", load: () => getApi<Snapshot["taxYearGainEvidenceEventDeltas"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-evidence-event-deltas?limit=200`) },
         taxYearTurnoverAudit: { key: "taxYearTurnoverAudit", label: "Umsatz-Plausibilitaet", load: () => getApi<Snapshot["taxYearTurnoverAudit"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/turnover-audit?limit=20`) },
         taxYearsTurnoverAuditSummary: { key: "taxYearsTurnoverAuditSummary", label: "Umsatz-Plausibilitaet alle Jahre", load: () => getApi<Snapshot["taxYearsTurnoverAuditSummary"]>("/api/v1/tax-years/turnover-audit-summary?limit=8") },
         taxSolanaProgramIncomeReview: { key: "taxSolanaProgramIncomeReview", label: "Solana Programm-Kontext", load: () => getApi<Snapshot["taxSolanaProgramIncomeReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/solana-program-income-review?limit=20`) },
@@ -1783,6 +1800,7 @@ function App() {
         "taxYearTurnoverAudit",
         "taxYearGainEvidenceReview",
         "taxYearGainEvidencePriceDeltas",
+        "taxYearGainEvidenceEventDeltas",
         "taxYearsTurnoverAuditSummary",
         "taxSolanaProgramIncomeReview",
         "taxStablecoinFifoReview",
@@ -3331,6 +3349,7 @@ function Content({
         taxYearGainLossRealityCheck={snapshot.taxYearGainLossRealityCheck}
         taxYearGainEvidenceReview={snapshot.taxYearGainEvidenceReview}
         taxYearGainEvidencePriceDeltas={snapshot.taxYearGainEvidencePriceDeltas}
+        taxYearGainEvidenceEventDeltas={snapshot.taxYearGainEvidenceEventDeltas}
         taxYearTurnoverAudit={snapshot.taxYearTurnoverAudit}
         taxYearsTurnoverAuditSummary={snapshot.taxYearsTurnoverAuditSummary}
         taxSolanaProgramIncomeReview={snapshot.taxSolanaProgramIncomeReview}
@@ -7664,6 +7683,7 @@ function TaxPanel({
   taxYearGainLossRealityCheck,
   taxYearGainEvidenceReview,
   taxYearGainEvidencePriceDeltas,
+  taxYearGainEvidenceEventDeltas,
   taxYearTurnoverAudit,
   taxYearsTurnoverAuditSummary,
   taxSolanaProgramIncomeReview,
@@ -7731,6 +7751,7 @@ function TaxPanel({
   taxYearGainLossRealityCheck: Snapshot["taxYearGainLossRealityCheck"];
   taxYearGainEvidenceReview: Snapshot["taxYearGainEvidenceReview"];
   taxYearGainEvidencePriceDeltas: Snapshot["taxYearGainEvidencePriceDeltas"];
+  taxYearGainEvidenceEventDeltas: Snapshot["taxYearGainEvidenceEventDeltas"];
   taxYearTurnoverAudit: Snapshot["taxYearTurnoverAudit"];
   taxYearsTurnoverAuditSummary: Snapshot["taxYearsTurnoverAuditSummary"];
   taxSolanaProgramIncomeReview: Snapshot["taxSolanaProgramIncomeReview"];
@@ -10148,6 +10169,36 @@ function TaxPanel({
               drilldown: line.asset_fifo_drilldown_endpoint
             }))}
             footer={(taxYearGainEvidencePriceDeltas?.caveats ?? []).join(" ")}
+            compact
+          />
+          <div className="portfolioSummaryStrip">
+            <Metric title="Event-Level OK" value={String(taxYearGainEvidenceEventDeltas?.event_level_ok_count ?? 0)} />
+            <Metric title="Event Review" value={String(taxYearGainEvidenceEventDeltas?.event_level_review_count ?? 0)} />
+            <Metric title="Preis fehlt" value={String(taxYearGainEvidenceEventDeltas?.missing_price_count ?? 0)} />
+            <Metric title="Event-Delta" value={`${formatCurrency(taxYearGainEvidenceEventDeltas?.event_delta_eur)} EUR`} />
+            <Metric title="Teilzeilen-Delta" value={`${formatCurrency(taxYearGainEvidenceEventDeltas?.split_line_absolute_delta_eur)} EUR`} />
+          </div>
+          <TablePanel
+            title="Event-Level Preisdelta-Plausibilisierung"
+            rows={(taxYearGainEvidenceEventDeltas?.lines ?? []).slice(0, 30).map((line) => ({
+              status: line.status,
+              zeit: formatDateTime(line.disposed_at),
+              quelle: line.source,
+              typ: line.event_type,
+              assets: Array.isArray(line.assets) ? line.assets.join(", ") : line.assets,
+              tax_lines: line.tax_line_count,
+              quote: `${line.quote_quantity ?? "-"} ${line.quote_asset ?? ""}`.trim(),
+              erloes_eur: formatCurrency(line.actual_proceeds_eur),
+              erwartet_eur: line.expected_proceeds_eur === null || line.expected_proceeds_eur === undefined ? "-" : formatCurrency(line.expected_proceeds_eur),
+              event_delta_eur: line.event_delta_eur === null || line.event_delta_eur === undefined ? "-" : formatCurrency(line.event_delta_eur),
+              event_delta_pct: line.event_delta_pct === null || line.event_delta_pct === undefined ? "-" : formatPercent(line.event_delta_pct),
+              teilzeilen_delta: formatCurrency(line.split_line_absolute_delta_eur),
+              split_zeilen: line.split_line_count,
+              preisquelle: line.price_source ?? "-",
+              erklaerung: line.explanation,
+              aktion: line.recommended_action
+            }))}
+            footer={(taxYearGainEvidenceEventDeltas?.caveats ?? []).join(" ") || taxYearGainEvidenceEventDeltas?.methodology || ""}
             compact
           />
           <TablePanel

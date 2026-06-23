@@ -28,6 +28,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearGainLossRealityAssetRow,
     TaxYearGainLossRealityCheck,
     TaxYearGainEvidenceDeltaGroup,
+    TaxYearGainEvidenceEventDeltaLine,
+    TaxYearGainEvidenceEventDeltaReview,
     TaxYearGainEvidencePriceDeltaDrilldown,
     TaxYearGainEvidencePriceDeltaLine,
     TaxYearGainEvidenceLine,
@@ -2551,6 +2553,173 @@ class TaxYearService:
                 "und diagnostiziert jede Seite separat. Grosse Deltas bei mehrfach genutzten Event-Quotes werden als "
                 "quote_allocation_or_split_line markiert, weil dort die wahrscheinlichste Ursache eine nicht anteilige "
                 "Quote-Bewertung pro FIFO-Teilzeile ist."
+            ),
+        )
+
+    @staticmethod
+    def _gain_evidence_event_delta_text(
+        *,
+        status: str,
+        split_line_absolute_delta_eur: Decimal,
+        event_delta_eur: Decimal | None,
+    ) -> tuple[str, str]:
+        if status == "missing_price_evidence":
+            return (
+                "Der Event kann nicht auf Event-Level bewertet werden, weil der historische Preis fehlt.",
+                "Historischen Preis fuer das Quote-Asset am UTC-Zeitpunkt nachziehen.",
+            )
+        if status == "event_level_ok" and split_line_absolute_delta_eur > Decimal("1"):
+            return (
+                "Das Event ist aggregiert plausibel; die hohen Teilzeilen-Deltas entstehen durch FIFO-Splits desselben Quote-Beins.",
+                "Teilzeilen-Deltas nicht als eigenstaendigen Steuerfehler werten; Event-Level-Beleg im Jahrespaket archivieren.",
+            )
+        if status == "event_level_ok":
+            return (
+                "Das Event ist aggregiert plausibel und die Teilzeilen-Deltas sind nicht materiell.",
+                "Kein Korrekturbedarf; Event-Beleg archivieren.",
+            )
+        return (
+            "Auch aggregiert weicht der Tax-Line-Erloes vom Event-Quote-Wert ab.",
+            "Normalizer-Mapping, Quote-Menge, Preisquelle und Rohbeleg des gesamten Events pruefen.",
+        )
+
+    def gain_evidence_event_delta_review(
+        self,
+        year: int,
+        *,
+        limit: int = 200,
+    ) -> TaxYearGainEvidenceEventDeltaReview:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select
+                    de.event_id,
+                    min(l.disposed_at) as disposed_at,
+                    any_value(de.source) as source,
+                    any_value(de.event_type) as event_type,
+                    any_value(de.quote_asset) as quote_asset,
+                    any_value(de.quote_quantity) as quote_quantity,
+                    count(*)::integer as tax_line_count,
+                    string_agg(distinct l.asset, ',') as assets,
+                    coalesce(sum(l.disposal_proceeds_eur), 0) as actual_proceeds_eur
+                from tax_lines l
+                join canonical_events de on de.event_id = l.source_event_id
+                where date_part('year', l.disposed_at)::integer = ?
+                  and l.holding_days <= 365
+                  and de.event_id is not null
+                  and de.quote_asset is not null
+                  and de.quote_quantity is not null
+                group by de.event_id
+                order by count(*) desc, abs(sum(l.disposal_proceeds_eur)) desc, de.event_id
+                limit ?
+                """,
+                [year, max(1, min(limit, 500))],
+            ).fetchall()
+
+        drilldown = self.gain_evidence_price_delta_drilldown(year, limit=max(1, min(limit, 500)))
+        split_delta_by_event: dict[str, Decimal] = defaultdict(Decimal)
+        split_count_by_event: dict[str, int] = defaultdict(int)
+        for line in drilldown.lines:
+            if not line.disposal_event_id:
+                continue
+            split_delta_by_event[line.disposal_event_id] += line.absolute_delta_eur
+            if line.root_cause == "quote_allocation_or_split_line":
+                split_count_by_event[line.disposal_event_id] += 1
+
+        price_lookup = HistoricalPriceLookup(self.store)
+        lines: list[TaxYearGainEvidenceEventDeltaLine] = []
+        for (
+            event_id,
+            disposed_at,
+            source,
+            event_type,
+            quote_asset,
+            quote_quantity,
+            tax_line_count,
+            assets,
+            actual_proceeds_eur,
+        ) in rows:
+            price = self._gain_evidence_price_check(
+                price_lookup=price_lookup,
+                quote_asset=quote_asset,
+                quote_quantity=quote_quantity,
+                fallback_asset=quote_asset,
+                fallback_quantity=abs(quote_quantity or Decimal("0")),
+                event_time=disposed_at,
+                actual_value=actual_proceeds_eur or Decimal("0"),
+            )
+            expected = price["expected_value"]
+            delta = price["delta_eur"]
+            delta_pct = price["delta_pct"]
+            if price["price_source"] is None:
+                status: Literal["event_level_ok", "event_level_review", "missing_price_evidence"] = "missing_price_evidence"
+            elif delta is not None and (abs(delta) < Decimal("0.01") or (delta_pct is not None and delta_pct <= Decimal("0.5"))):
+                status = "event_level_ok"
+            else:
+                status = "event_level_review"
+            split_delta = split_delta_by_event.get(event_id, Decimal("0"))
+            explanation, action = self._gain_evidence_event_delta_text(
+                status=status,
+                split_line_absolute_delta_eur=split_delta,
+                event_delta_eur=delta if isinstance(delta, Decimal) else None,
+            )
+            lines.append(
+                TaxYearGainEvidenceEventDeltaLine(
+                    year=year,
+                    disposal_event_id=event_id,
+                    disposed_at=disposed_at.isoformat(),
+                    source=source,
+                    event_type=event_type,
+                    quote_asset=quote_asset,
+                    quote_quantity=quote_quantity,
+                    price_asset=price["price_asset"],
+                    price_eur=price["price_eur"],
+                    price_source=price["price_source"],
+                    priced_at=price["priced_at"],
+                    price_age_days=price["price_age_days"],
+                    tax_line_count=int(tax_line_count or 0),
+                    assets=sorted(str(assets or "").split(",")) if assets else [],
+                    actual_proceeds_eur=actual_proceeds_eur or Decimal("0"),
+                    expected_proceeds_eur=expected,  # type: ignore[arg-type]
+                    event_delta_eur=delta,  # type: ignore[arg-type]
+                    event_delta_pct=delta_pct,  # type: ignore[arg-type]
+                    split_line_absolute_delta_eur=split_delta,
+                    split_line_count=split_count_by_event.get(event_id, 0),
+                    status=status,
+                    explanation=explanation,
+                    recommended_action=action,
+                )
+            )
+        lines.sort(
+            key=lambda line: (
+                line.status != "event_level_review",
+                -line.split_line_absolute_delta_eur,
+                -abs(line.event_delta_eur or Decimal("0")),
+            )
+        )
+        expected_total = sum((line.expected_proceeds_eur or Decimal("0") for line in lines), Decimal("0"))
+        actual_total = sum((line.actual_proceeds_eur for line in lines), Decimal("0"))
+        return TaxYearGainEvidenceEventDeltaReview(
+            year=year,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            events_count=len(lines),
+            event_level_ok_count=sum(1 for line in lines if line.status == "event_level_ok"),
+            event_level_review_count=sum(1 for line in lines if line.status == "event_level_review"),
+            missing_price_count=sum(1 for line in lines if line.status == "missing_price_evidence"),
+            tax_line_count=sum(line.tax_line_count for line in lines),
+            actual_proceeds_eur=actual_total,
+            expected_proceeds_eur=expected_total,
+            event_delta_eur=actual_total - expected_total,
+            split_line_absolute_delta_eur=sum((line.split_line_absolute_delta_eur for line in lines), Decimal("0")),
+            lines=lines,
+            caveats=[
+                "Read-only Event-Level-Plausibilisierung: keine Tax-Line-, Lot- oder FIFO-Aenderung.",
+                "Event-Level OK bedeutet nicht automatisch steuerlich final, aber es entkraeftet Teilzeilen-Deltas als isolierten Bewertungsfehler.",
+            ],
+            methodology=(
+                "Aggregiert steuerpflichtige Tax-Lines je Disposal-Event und vergleicht die Summe der Erloese "
+                "mit quote_quantity mal historischem EUR-Preis des Event-Quote-Assets. Dadurch werden FIFO-Split-Artefakte "
+                "von echten Event-Level-Bewertungsabweichungen getrennt."
             ),
         )
 
