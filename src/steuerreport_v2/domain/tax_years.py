@@ -2107,13 +2107,23 @@ class TaxYearService:
         price_lookup: HistoricalPriceLookup,
         quote_asset: str | None,
         quote_quantity: Decimal | None,
+        event_quantity: Decimal | None = None,
         fallback_asset: str,
         fallback_quantity: Decimal,
         event_time: datetime,
         actual_value: Decimal,
     ) -> dict[str, object]:
         price_asset = str(quote_asset or fallback_asset).upper()
-        price_quantity = abs(quote_quantity if quote_quantity is not None else fallback_quantity)
+        fallback_asset_normalized = str(fallback_asset).upper()
+        if quote_quantity is not None and price_asset != fallback_asset_normalized:
+            price_quantity = abs(quote_quantity)
+            if event_quantity:
+                event_abs = abs(event_quantity)
+                line_abs = abs(fallback_quantity)
+                if event_abs and line_abs and line_abs < event_abs:
+                    price_quantity = price_quantity * line_abs / event_abs
+        else:
+            price_quantity = abs(fallback_quantity)
         price_point = price_lookup.at_or_before(price_asset, event_time)
         if price_point is None:
             return {
@@ -3532,12 +3542,14 @@ class TaxYearService:
                     ae.event_id,
                     ae.source,
                     ae.event_type,
+                    ae.quantity,
                     ae.quote_asset,
                     ae.quote_quantity,
                     ae.raw_object_id,
                     de.event_id,
                     de.source,
                     de.event_type,
+                    de.quantity,
                     de.quote_asset,
                     de.quote_quantity,
                     de.raw_object_id
@@ -3571,8 +3583,9 @@ class TaxYearService:
             disposed_at = row[3]
             acquisition_price = self._gain_evidence_price_check(
                 price_lookup=price_lookup,
-                quote_asset=row[13],
-                quote_quantity=row[14],
+                quote_asset=row[14],
+                quote_quantity=row[15],
+                event_quantity=row[13],
                 fallback_asset=row[1],
                 fallback_quantity=row[5],
                 event_time=acquired_at,
@@ -3580,20 +3593,21 @@ class TaxYearService:
             )
             disposal_price = self._gain_evidence_price_check(
                 price_lookup=price_lookup,
-                quote_asset=row[19],
-                quote_quantity=row[20],
+                quote_asset=row[21],
+                quote_quantity=row[22],
+                event_quantity=row[20],
                 fallback_asset=row[1],
                 fallback_quantity=row[5],
                 event_time=disposed_at,
                 actual_value=proceeds,
             )
             reasons = self._gain_evidence_reasons(
-                acquisition_raw_object_id=row[15],
-                disposal_raw_object_id=row[21],
-                acquisition_quote_asset=row[13],
-                disposal_quote_asset=row[19],
+                acquisition_raw_object_id=row[16],
+                disposal_raw_object_id=row[23],
+                acquisition_quote_asset=row[14],
+                disposal_quote_asset=row[21],
                 acquisition_source=row[11],
-                disposal_source=row[17],
+                disposal_source=row[18],
                 gain_loss_ratio_pct=ratio,
                 acquisition_price_delta_pct=acquisition_price["delta_pct"],
                 disposal_price_delta_pct=disposal_price["delta_pct"],
@@ -3609,15 +3623,15 @@ class TaxYearService:
                 delta_explanation,
                 delta_recommended_action,
             ) = self._gain_evidence_delta_decision(
-                acquisition_quote_asset=row[13],
-                disposal_quote_asset=row[19],
+                acquisition_quote_asset=row[14],
+                disposal_quote_asset=row[21],
                 acquisition_source=row[11],
-                disposal_source=row[17],
+                disposal_source=row[18],
                 acquisition_price=acquisition_price,
                 disposal_price=disposal_price,
                 reasons=reasons,
             )
-            event_level = event_level_by_id.get(row[16] or "")
+            event_level = event_level_by_id.get(row[17] or "")
             event_level_reconciled = bool(event_level and event_level.status == "event_level_ok")
             acquisition_event_level = acquisition_event_level_by_id.get(row[10] or "")
             acquisition_event_level_reconciled = bool(
@@ -3676,10 +3690,10 @@ class TaxYearService:
                     acquisition_event_id=row[10],
                     acquisition_source=row[11],
                     acquisition_event_type=row[12],
-                    acquisition_quote_asset=row[13],
-                    acquisition_quote_quantity=row[14],
-                    acquisition_raw_object_id=row[15],
-                    acquisition_raw_evidence="present" if row[15] else "missing",
+                    acquisition_quote_asset=row[14],
+                    acquisition_quote_quantity=row[15],
+                    acquisition_raw_object_id=row[16],
+                    acquisition_raw_evidence="present" if row[16] else "missing",
                     acquisition_price_asset=acquisition_price["price_asset"],
                     acquisition_price_eur=acquisition_price["price_eur"],
                     acquisition_price_source=acquisition_price["price_source"],
@@ -3688,13 +3702,13 @@ class TaxYearService:
                     acquisition_expected_cost_eur=acquisition_price["expected_value"],
                     acquisition_cost_delta_eur=acquisition_price["delta_eur"],
                     acquisition_cost_delta_pct=acquisition_price["delta_pct"],
-                    disposal_event_id=row[16],
-                    disposal_source=row[17],
-                    disposal_event_type=row[18],
-                    disposal_quote_asset=row[19],
-                    disposal_quote_quantity=row[20],
-                    disposal_raw_object_id=row[21],
-                    disposal_raw_evidence="present" if row[21] else "missing",
+                    disposal_event_id=row[17],
+                    disposal_source=row[18],
+                    disposal_event_type=row[19],
+                    disposal_quote_asset=row[21],
+                    disposal_quote_quantity=row[22],
+                    disposal_raw_object_id=row[23],
+                    disposal_raw_evidence="present" if row[23] else "missing",
                     disposal_price_asset=disposal_price["price_asset"],
                     disposal_price_eur=disposal_price["price_eur"],
                     disposal_price_source=disposal_price["price_source"],
@@ -3723,7 +3737,7 @@ class TaxYearService:
                     ),
                     acquisition_event_level_reconciled=acquisition_event_level_reconciled,
                     acquisition_event_level_note=acquisition_event_level_note,
-                    valuation_path=self._gain_evidence_valuation_path(row[13], row[19]),
+                    valuation_path=self._gain_evidence_valuation_path(row[14], row[21]),
                     risk_level=risk,
                     review_reasons=reasons,
                     asset_fifo_drilldown_endpoint=f"/api/v1/tax-years/{year}/asset-fifo-drilldown?asset={row[1]}",

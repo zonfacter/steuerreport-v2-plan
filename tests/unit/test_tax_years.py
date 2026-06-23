@@ -657,7 +657,7 @@ def test_gain_evidence_review_groups_stablecoin_price_delta(tmp_path):
     assert group.open_delta_eur == Decimal("2.000000000000000000")
 
 
-def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(tmp_path):
+def test_gain_evidence_price_delta_drilldown_uses_proportional_quote_for_split_lines(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
         source="binance",
@@ -699,39 +699,33 @@ def test_gain_evidence_price_delta_drilldown_marks_split_line_quote_allocation(t
     report = TaxYearService(store).gain_evidence_price_delta_drilldown(2024)
     gain_report = TaxYearService(store).gain_evidence_review(2024)
 
-    assert report.lines_count == 2
-    assert report.split_line_review_count == 2
-    assert report.root_cause_counts == {"quote_allocation_or_split_line": 2}
-    assert report.dominant_disposal_count == 2
-    assert report.absolute_delta_eur == Decimal("30.000000000000000000")
-    assert report.event_level_reconciled_count == 2
+    assert report.lines_count == 0
+    assert report.split_line_review_count == 0
+    assert report.root_cause_counts == {}
+    assert report.absolute_delta_eur == Decimal("0")
+    assert report.event_level_reconciled_count == 0
     assert report.event_level_review_count == 0
     assert report.event_level_unchecked_count == 0
-    assert all(line.disposal_event_split_count == 2 for line in report.lines)
-    assert all(line.disposal_side_diagnosis == "quote_allocation_or_split_line" for line in report.lines)
-    assert all(line.root_cause == "quote_allocation_or_split_line" for line in report.lines)
-    assert all(line.event_level_status == "event_level_ok" for line in report.lines)
-    assert all(line.event_level_delta_eur == Decimal("0E-18") for line in report.lines)
-    assert all("Event-Level ist plausibel" in line.explanation for line in report.lines)
     assert gain_report.event_level_reconciled_lines_count == 2
     assert gain_report.acquisition_event_level_reconciled_lines_count == 2
-    assert gain_report.material_price_delta_eur == Decimal("30.000000000000000000")
+    assert gain_report.material_price_delta_eur == Decimal("0E-18")
     assert gain_report.open_price_delta_eur == Decimal("0")
     assert all(line.event_level_reconciled for line in gain_report.lines)
     assert all(line.acquisition_event_level_reconciled for line in gain_report.lines)
     assert all(line.open_price_delta_eur == Decimal("0") for line in gain_report.lines)
+    assert all(line.absolute_price_delta_eur == Decimal("0E-18") for line in gain_report.lines)
 
     event_report = TaxYearService(store).gain_evidence_event_delta_review(2024)
     assert event_report.events_count == 1
     assert event_report.event_level_ok_count == 1
     assert event_report.event_level_review_count == 0
-    assert event_report.split_line_absolute_delta_eur == Decimal("30.000000000000000000")
+    assert event_report.split_line_absolute_delta_eur == Decimal("0")
     event = event_report.lines[0]
     assert event.tax_line_count == 2
     assert event.actual_proceeds_eur == Decimal("30.000000000000000000")
     assert event.expected_proceeds_eur == Decimal("30.000000000000000000")
     assert event.event_delta_eur == Decimal("0E-18")
-    assert event.split_line_count == 2
+    assert event.split_line_count == 0
     assert event.status == "event_level_ok"
     assert "aggregiert plausibel" in event.explanation
 

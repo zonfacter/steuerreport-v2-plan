@@ -47,7 +47,6 @@ def test_tax_methodology_report_marks_clean_year_as_bmf_ready_with_evidence_over
     assert [gap.code for gap in report.gaps] == [
         "wallet_fifo_evidence_overlay_ok",
         "asset_fifo_quote_attribution_documented",
-        "gain_evidence_event_level_reconciled",
     ]
     assert all(gap.blocks_bmf_ready is False for gap in report.gaps)
     assert any(metric.key == "asset_fifo_correction_candidates" for metric in report.metrics)
