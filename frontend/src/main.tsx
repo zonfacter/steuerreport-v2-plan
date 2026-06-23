@@ -10077,6 +10077,12 @@ function TaxPanel({
               erwerb_roh: line.acquisition_raw_evidence,
               verkauf_roh: line.disposal_raw_evidence,
               bewertung: line.valuation_path,
+              erwerb_preisquelle: line.acquisition_price_source ?? "-",
+              erwerb_preisalter_tage: line.acquisition_price_age_days ?? "-",
+              erwerb_delta_pct: line.acquisition_cost_delta_pct === null || line.acquisition_cost_delta_pct === undefined ? "-" : formatPercent(line.acquisition_cost_delta_pct),
+              verkauf_preisquelle: line.disposal_price_source ?? "-",
+              verkauf_preisalter_tage: line.disposal_price_age_days ?? "-",
+              verkauf_delta_pct: line.disposal_proceeds_delta_pct === null || line.disposal_proceeds_delta_pct === undefined ? "-" : formatPercent(line.disposal_proceeds_delta_pct),
               gruende: Array.isArray(line.review_reasons) ? line.review_reasons.join(", ") : line.review_reasons,
               drilldown: line.asset_fifo_drilldown_endpoint
             }))}

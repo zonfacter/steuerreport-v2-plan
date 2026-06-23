@@ -438,14 +438,32 @@ class TaxYearGainEvidenceLine(BaseModel):
     acquisition_source: str | None = None
     acquisition_event_type: str | None = None
     acquisition_quote_asset: str | None = None
+    acquisition_quote_quantity: Decimal | None = None
     acquisition_raw_object_id: str | None = None
     acquisition_raw_evidence: str
+    acquisition_price_asset: str | None = None
+    acquisition_price_eur: Decimal | None = None
+    acquisition_price_source: str | None = None
+    acquisition_priced_at: str | None = None
+    acquisition_price_age_days: int | None = None
+    acquisition_expected_cost_eur: Decimal | None = None
+    acquisition_cost_delta_eur: Decimal | None = None
+    acquisition_cost_delta_pct: Decimal | None = None
     disposal_event_id: str | None = None
     disposal_source: str | None = None
     disposal_event_type: str | None = None
     disposal_quote_asset: str | None = None
+    disposal_quote_quantity: Decimal | None = None
     disposal_raw_object_id: str | None = None
     disposal_raw_evidence: str
+    disposal_price_asset: str | None = None
+    disposal_price_eur: Decimal | None = None
+    disposal_price_source: str | None = None
+    disposal_priced_at: str | None = None
+    disposal_price_age_days: int | None = None
+    disposal_expected_proceeds_eur: Decimal | None = None
+    disposal_proceeds_delta_eur: Decimal | None = None
+    disposal_proceeds_delta_pct: Decimal | None = None
     valuation_path: str
     risk_level: Literal["ok", "review", "high"]
     review_reasons: list[str] = Field(default_factory=list)

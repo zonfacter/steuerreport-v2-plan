@@ -583,6 +583,12 @@ def test_gain_evidence_review_flags_missing_raw_and_non_eur_quote(tmp_path):
     assert "non_eur_quote_or_stablecoin_valuation" in line.review_reasons
     assert line.acquisition_raw_evidence == "present"
     assert line.disposal_raw_evidence == "present"
+    assert line.acquisition_price_source == "manual-test"
+    assert line.disposal_price_source == "manual-test"
+    assert line.acquisition_expected_cost_eur == Decimal("10.000000000000000000")
+    assert line.disposal_expected_proceeds_eur == Decimal("30.000000000000000000")
+    assert line.acquisition_cost_delta_eur == Decimal("0E-18")
+    assert line.disposal_proceeds_delta_eur == Decimal("0E-18")
     assert "disp_quote=USDT" in line.valuation_path
     assert "Risiko" in report.ascii_table
 

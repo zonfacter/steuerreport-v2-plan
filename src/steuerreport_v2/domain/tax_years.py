@@ -2094,6 +2094,51 @@ class TaxYearService:
             parts.append("disp_price_lookup")
         return " | ".join(parts)
 
+    def _gain_evidence_price_check(
+        self,
+        *,
+        price_lookup: HistoricalPriceLookup,
+        quote_asset: str | None,
+        quote_quantity: Decimal | None,
+        fallback_asset: str,
+        fallback_quantity: Decimal,
+        event_time: datetime,
+        actual_value: Decimal,
+    ) -> dict[str, object]:
+        price_asset = str(quote_asset or fallback_asset).upper()
+        price_quantity = abs(quote_quantity if quote_quantity is not None else fallback_quantity)
+        price_point = price_lookup.at_or_before(price_asset, event_time)
+        if price_point is None:
+            return {
+                "price_asset": price_asset,
+                "price_eur": None,
+                "price_source": None,
+                "priced_at": None,
+                "price_age_days": None,
+                "expected_value": None,
+                "delta_eur": None,
+                "delta_pct": None,
+            }
+        expected_value = price_quantity * price_point.price_eur
+        delta_eur = actual_value - expected_value
+        delta_pct = abs(delta_eur) / expected_value * Decimal("100") if expected_value else None
+        normalized_event_time = event_time if event_time.tzinfo is not None else event_time.replace(tzinfo=timezone.utc)
+        normalized_price_time = (
+            price_point.priced_at
+            if price_point.priced_at.tzinfo is not None
+            else price_point.priced_at.replace(tzinfo=timezone.utc)
+        )
+        return {
+            "price_asset": price_asset,
+            "price_eur": price_point.price_eur,
+            "price_source": price_point.source,
+            "priced_at": price_point.priced_at.isoformat(),
+            "price_age_days": max((normalized_event_time.date() - normalized_price_time.date()).days, 0),
+            "expected_value": expected_value,
+            "delta_eur": delta_eur,
+            "delta_pct": delta_pct,
+        }
+
     @staticmethod
     def _gain_evidence_reasons(
         *,
@@ -2104,12 +2149,22 @@ class TaxYearService:
         acquisition_source: str | None,
         disposal_source: str | None,
         gain_loss_ratio_pct: Decimal,
+        acquisition_price_delta_pct: Decimal | None,
+        disposal_price_delta_pct: Decimal | None,
+        acquisition_price_age_days: int | None,
+        disposal_price_age_days: int | None,
+        acquisition_price_source: str | None,
+        disposal_price_source: str | None,
     ) -> list[str]:
         reasons: list[str] = []
         if not acquisition_raw_object_id:
             reasons.append("acquisition_raw_missing")
         if not disposal_raw_object_id:
             reasons.append("disposal_raw_missing")
+        if not acquisition_price_source:
+            reasons.append("acquisition_price_missing")
+        if not disposal_price_source:
+            reasons.append("disposal_price_missing")
         quote_assets = {str(item).upper() for item in (acquisition_quote_asset, disposal_quote_asset) if item}
         if quote_assets and not quote_assets.issubset({"EUR"}):
             reasons.append("non_eur_quote_or_stablecoin_valuation")
@@ -2117,11 +2172,23 @@ class TaxYearService:
             reasons.append("large_gain_loss_ratio")
         if acquisition_source and disposal_source and acquisition_source != disposal_source:
             reasons.append("cross_source_fifo")
+        if acquisition_price_delta_pct is not None and acquisition_price_delta_pct > Decimal("0.5"):
+            reasons.append("acquisition_price_delta_review")
+        if disposal_price_delta_pct is not None and disposal_price_delta_pct > Decimal("0.5"):
+            reasons.append("disposal_price_delta_review")
+        if acquisition_price_age_days is not None and acquisition_price_age_days > 7:
+            reasons.append("acquisition_stale_price")
+        if disposal_price_age_days is not None and disposal_price_age_days > 7:
+            reasons.append("disposal_stale_price")
+        if acquisition_price_source and HistoricalPriceLookup.is_derived_source(acquisition_price_source):
+            reasons.append("acquisition_derived_price")
+        if disposal_price_source and HistoricalPriceLookup.is_derived_source(disposal_price_source):
+            reasons.append("disposal_derived_price")
         return reasons or ["evidence_path_present"]
 
     @staticmethod
     def _gain_evidence_risk(reasons: list[str]) -> Literal["ok", "review", "high"]:
-        high = {"acquisition_raw_missing", "disposal_raw_missing"}
+        high = {"acquisition_raw_missing", "disposal_raw_missing", "acquisition_price_missing", "disposal_price_missing"}
         if any(reason in high for reason in reasons):
             return "high"
         review = {"non_eur_quote_or_stablecoin_valuation", "large_gain_loss_ratio", "cross_source_fifo"}
@@ -2669,11 +2736,13 @@ class TaxYearService:
                     ae.source,
                     ae.event_type,
                     ae.quote_asset,
+                    ae.quote_quantity,
                     ae.raw_object_id,
                     de.event_id,
                     de.source,
                     de.event_type,
                     de.quote_asset,
+                    de.quote_quantity,
                     de.raw_object_id
                 from tax_lines l
                 join tax_lots lot on lot.lot_id = l.lot_id
@@ -2687,26 +2756,53 @@ class TaxYearService:
                 [year, max(1, min(limit, 500))],
             ).fetchall()
         lines: list[TaxYearGainEvidenceLine] = []
+        price_lookup = HistoricalPriceLookup(self.store)
         for row in rows:
             gain_loss = row[8] or Decimal("0")
             proceeds = row[7] or Decimal("0")
             ratio = (gain_loss / proceeds * Decimal("100")) if proceeds else Decimal("0")
+            acquired_at = row[2]
+            disposed_at = row[3]
+            acquisition_price = self._gain_evidence_price_check(
+                price_lookup=price_lookup,
+                quote_asset=row[13],
+                quote_quantity=row[14],
+                fallback_asset=row[1],
+                fallback_quantity=row[5],
+                event_time=acquired_at,
+                actual_value=row[6],
+            )
+            disposal_price = self._gain_evidence_price_check(
+                price_lookup=price_lookup,
+                quote_asset=row[19],
+                quote_quantity=row[20],
+                fallback_asset=row[1],
+                fallback_quantity=row[5],
+                event_time=disposed_at,
+                actual_value=proceeds,
+            )
             reasons = self._gain_evidence_reasons(
-                acquisition_raw_object_id=row[14],
-                disposal_raw_object_id=row[19],
+                acquisition_raw_object_id=row[15],
+                disposal_raw_object_id=row[21],
                 acquisition_quote_asset=row[13],
-                disposal_quote_asset=row[18],
+                disposal_quote_asset=row[19],
                 acquisition_source=row[11],
                 disposal_source=row[16],
                 gain_loss_ratio_pct=ratio,
+                acquisition_price_delta_pct=acquisition_price["delta_pct"],
+                disposal_price_delta_pct=disposal_price["delta_pct"],
+                acquisition_price_age_days=acquisition_price["price_age_days"],
+                disposal_price_age_days=disposal_price["price_age_days"],
+                acquisition_price_source=acquisition_price["price_source"],
+                disposal_price_source=disposal_price["price_source"],
             )
             risk = self._gain_evidence_risk(reasons)
             lines.append(
                 TaxYearGainEvidenceLine(
                     tax_line_id=row[0],
                     asset=row[1],
-                    acquired_at=row[2].isoformat(),
-                    disposed_at=row[3].isoformat(),
+                    acquired_at=acquired_at.isoformat(),
+                    disposed_at=disposed_at.isoformat(),
                     holding_days=int(row[4] or 0),
                     quantity=row[5],
                     acquisition_cost_eur=row[6],
@@ -2718,15 +2814,33 @@ class TaxYearService:
                     acquisition_source=row[11],
                     acquisition_event_type=row[12],
                     acquisition_quote_asset=row[13],
-                    acquisition_raw_object_id=row[14],
-                    acquisition_raw_evidence="present" if row[14] else "missing",
-                    disposal_event_id=row[15],
-                    disposal_source=row[16],
-                    disposal_event_type=row[17],
-                    disposal_quote_asset=row[18],
-                    disposal_raw_object_id=row[19],
-                    disposal_raw_evidence="present" if row[19] else "missing",
-                    valuation_path=self._gain_evidence_valuation_path(row[13], row[18]),
+                    acquisition_quote_quantity=row[14],
+                    acquisition_raw_object_id=row[15],
+                    acquisition_raw_evidence="present" if row[15] else "missing",
+                    acquisition_price_asset=acquisition_price["price_asset"],
+                    acquisition_price_eur=acquisition_price["price_eur"],
+                    acquisition_price_source=acquisition_price["price_source"],
+                    acquisition_priced_at=acquisition_price["priced_at"],
+                    acquisition_price_age_days=acquisition_price["price_age_days"],
+                    acquisition_expected_cost_eur=acquisition_price["expected_value"],
+                    acquisition_cost_delta_eur=acquisition_price["delta_eur"],
+                    acquisition_cost_delta_pct=acquisition_price["delta_pct"],
+                    disposal_event_id=row[16],
+                    disposal_source=row[17],
+                    disposal_event_type=row[18],
+                    disposal_quote_asset=row[19],
+                    disposal_quote_quantity=row[20],
+                    disposal_raw_object_id=row[21],
+                    disposal_raw_evidence="present" if row[21] else "missing",
+                    disposal_price_asset=disposal_price["price_asset"],
+                    disposal_price_eur=disposal_price["price_eur"],
+                    disposal_price_source=disposal_price["price_source"],
+                    disposal_priced_at=disposal_price["priced_at"],
+                    disposal_price_age_days=disposal_price["price_age_days"],
+                    disposal_expected_proceeds_eur=disposal_price["expected_value"],
+                    disposal_proceeds_delta_eur=disposal_price["delta_eur"],
+                    disposal_proceeds_delta_pct=disposal_price["delta_pct"],
+                    valuation_path=self._gain_evidence_valuation_path(row[13], row[19]),
                     risk_level=risk,
                     review_reasons=reasons,
                     asset_fifo_drilldown_endpoint=f"/api/v1/tax-years/{year}/asset-fifo-drilldown?asset={row[1]}",
