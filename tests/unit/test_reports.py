@@ -538,6 +538,48 @@ def test_tax_income_and_external_inflow_csv_downloads(tmp_path):
     assert "unmatched_external_inflow" in inflows_text
 
 
+def test_tax_income_csv_export_can_filter_single_year(tmp_path):
+    from steuerreport_v2.api.app import create_app
+    from steuerreport_v2.contracts.events import CanonicalEventCreate
+
+    store = _store_with_priced_deposit(tmp_path)
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                event_type="income",
+                asset="JUP",
+                quantity=Decimal("10"),
+                account="wallet-1",
+                tx_id="airdrop-1",
+            )
+        ]
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="JUP",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    route = next(
+        route
+        for route in create_app(store).routes
+        if getattr(route, "path", None) == "/api/v1/export/tax-income-guide.csv"
+        and "GET" in getattr(route, "methods", set())
+    )
+
+    response = route.endpoint(year=2024)
+    text = response.body.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "filename=tax-income-guide-2024.csv" in response.headers["content-disposition"]
+    assert "2024,JUP" in text
+    assert "2021,USDT" not in text
+
+
 def test_evidence_package_download_endpoint_contains_required_files(tmp_path):
     from steuerreport_v2.api.app import create_app
 

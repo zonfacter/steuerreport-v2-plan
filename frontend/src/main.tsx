@@ -1141,6 +1141,10 @@ type Snapshot = {
     total_income_eur: string;
     reward_income_eur: string;
     generic_income_eur: string;
+    declaration_income_eur: string;
+    review_only_income_eur: string;
+    taxable_reward_events_count: number;
+    review_only_events_count: number;
     events_count: number;
     valued_events_count: number;
     missing_value_count: number;
@@ -7876,6 +7880,16 @@ function TaxPanel({
   const activeRewardTradingRows = (taxRewardTradingSeparation?.rows ?? []).filter(
     (row) => String(row.year) === activeYearValue
   );
+  const incomeAssets = taxIncomeGuide?.assets ?? [];
+  const declarationIncomeAssets = incomeAssets.filter(
+    (row) => String(row.classification ?? "") === "reward_income_candidate"
+  );
+  const reviewOnlyIncomeAssets = incomeAssets.filter(
+    (row) => String(row.classification ?? "") !== "reward_income_candidate"
+  );
+  const reviewOnlyIncomeEvents = (taxIncomeGuide?.events ?? []).filter(
+    (row) => String(row.classification ?? "") !== "reward_income_candidate"
+  );
   const activeRewardTradingTotals = activeRewardTradingRows.reduce(
     (totals: { reward: number; taxableTrade: number; taxFreeTrade: number }, row) => ({
       reward: totals.reward + Number(row.reward_income_eur ?? 0),
@@ -10016,16 +10030,23 @@ function TaxPanel({
             <span>{formatDateTime(taxIncomeGuide?.generated_at)}</span>
           </div>
           <div className="portfolioSummaryStrip">
-            <Metric title="Reward/EÜR nah" value={`${formatCurrency(taxIncomeGuide?.reward_income_eur)} EUR`} />
-            <Metric title="Generisches Income" value={`${formatCurrency(taxIncomeGuide?.generic_income_eur)} EUR`} />
-            <Metric title="Events" value={String(taxIncomeGuide?.events_count ?? 0)} />
+            <Metric title="Eintragen" value={`${formatCurrency(taxIncomeGuide?.declaration_income_eur ?? taxIncomeGuide?.reward_income_eur)} EUR`} />
+            <Metric title="Nur pruefen" value={`${formatCurrency(taxIncomeGuide?.review_only_income_eur ?? taxIncomeGuide?.generic_income_eur)} EUR`} />
+            <Metric title="Reward-Events" value={String(taxIncomeGuide?.taxable_reward_events_count ?? 0)} />
+            <Metric title="Review-Events" value={String(taxIncomeGuide?.review_only_events_count ?? 0)} />
             <Metric title="Ohne Preis" value={String(taxIncomeGuide?.missing_value_count ?? 0)} />
             <Metric title="Ignoriert <=0" value={String(taxIncomeGuide?.ignored_non_positive_count ?? 0)} />
           </div>
           <TablePanel
-            title="Income nach Asset und Typ"
-            rows={taxIncomeGuide?.assets ?? []}
-            footer={`Fehlende Assets: ${(taxIncomeGuide?.missing_assets ?? []).join(", ") || "keine"} | ${taxIncomeGuide?.methodology ?? ""}`}
+            title="Einzutragende Rewards / Mining"
+            rows={declarationIncomeAssets}
+            footer="Diese Summe fliesst in Rewards/Mining/Staking der Eingabehilfe. Aktuell eng auf HNT/IOT/MOBILE Reward-/Mining-Events begrenzt."
+            compact
+          />
+          <TablePanel
+            title="Nur pruefen, nicht automatisch eintragen"
+            rows={reviewOnlyIncomeAssets.slice(0, 30)}
+            footer={`Diese Werte sind Review-Kontext und werden nicht blind zur Reward-Summe addiert. Fehlende Assets: ${(taxIncomeGuide?.missing_assets ?? []).join(", ") || "keine"} | ${taxIncomeGuide?.methodology ?? ""}`}
             compact
           />
           <TablePanel
@@ -10066,9 +10087,9 @@ function TaxPanel({
           />
         </div>
         <TablePanel
-          title="Income Event Preview"
-          rows={taxIncomeGuide?.events ?? []}
-          footer="Maximal 200 Ereignisse; volle Nachweise bleiben in den Canonical Events und Exporten."
+          title="Review-only Income Event Preview"
+          rows={reviewOnlyIncomeEvents.slice(0, 80)}
+          footer="Diese Ereignisse sind nicht automatisch als steuerpflichtige Reward-/Mining-Summe eingetragen. Volle Nachweise bleiben in Canonical Events und Exporten."
         />
       </section>
 

@@ -338,6 +338,10 @@ class TaxIncomeReport(BaseModel):
     total_income_eur: Decimal = Decimal("0")
     reward_income_eur: Decimal = Decimal("0")
     generic_income_eur: Decimal = Decimal("0")
+    declaration_income_eur: Decimal = Decimal("0")
+    review_only_income_eur: Decimal = Decimal("0")
+    taxable_reward_events_count: int = 0
+    review_only_events_count: int = 0
     events_count: int = 0
     valued_events_count: int = 0
     missing_value_count: int = 0

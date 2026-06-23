@@ -5641,6 +5641,8 @@ class TaxYearService:
                 "total": Decimal("0"),
                 "reward_total": Decimal("0"),
                 "generic_total": Decimal("0"),
+                "reward_events": 0,
+                "review_only_events": 0,
                 "events": 0,
                 "valued": 0,
                 "missing": 0,
@@ -5704,6 +5706,16 @@ class TaxYearService:
             )
             classifications = bucket["classifications"]  # type: ignore[assignment]
             classifications[classification] += 1  # type: ignore[index]
+            if quantity > 0:
+                if self._is_taxable_reward_income(
+                    event_type=event_type,
+                    source=source,
+                    asset=asset,
+                    quantity=quantity,
+                ):
+                    bucket["reward_events"] = int(bucket["reward_events"]) + 1
+                else:
+                    bucket["review_only_events"] = int(bucket["review_only_events"]) + 1
             asset_key = f"{asset.upper()}::{event_type}::{classification}"
             assets = bucket["assets"]  # type: ignore[assignment]
             item = assets.setdefault(  # type: ignore[union-attr]
@@ -5770,6 +5782,10 @@ class TaxYearService:
                 total_income_eur=bucket["total"],  # type: ignore[arg-type]
                 reward_income_eur=bucket["reward_total"],  # type: ignore[arg-type]
                 generic_income_eur=bucket["generic_total"],  # type: ignore[arg-type]
+                declaration_income_eur=bucket["reward_total"],  # type: ignore[arg-type]
+                review_only_income_eur=bucket["generic_total"],  # type: ignore[arg-type]
+                taxable_reward_events_count=int(bucket["reward_events"]),
+                review_only_events_count=int(bucket["review_only_events"]),
                 events_count=int(bucket["events"]),
                 valued_events_count=int(bucket["valued"]),
                 missing_value_count=int(bucket["missing"]),

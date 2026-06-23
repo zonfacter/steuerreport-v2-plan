@@ -3595,6 +3595,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 "Events",
                 "Menge",
                 "Wert_EUR",
+                "Steuerliche_Behandlung",
                 "Fehlende_Bewertungen",
                 "Quellen",
             ],
@@ -3616,6 +3617,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         "Events": row.events_count,
                         "Menge": row.quantity,
                         "Wert_EUR": row.income_eur,
+                        "Steuerliche_Behandlung": (
+                            "eintragen_reward_mining"
+                            if row.classification == "reward_income_candidate"
+                            else "review_only_nicht_automatisch_eintragen"
+                        ),
                         "Fehlende_Bewertungen": row.missing_value_count,
                         "Quellen": ", ".join(row.sources),
                     }
@@ -3623,11 +3629,16 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return output.getvalue()
 
     @app.get("/api/v1/export/tax-income-guide.csv")
-    def download_tax_income_guide_csv() -> Response:
+    def download_tax_income_guide_csv(year: int | None = None) -> Response:
+        filename = (
+            f"tax-income-guide-{year}.csv"
+            if year is not None
+            else "tax-income-guide.csv"
+        )
         return Response(
-            content=render_tax_income_guide_csv(),
+            content=render_tax_income_guide_csv(years=[year] if year is not None else None),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=tax-income-guide.csv"},
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
     def render_tax_external_inflows_csv(

@@ -110,6 +110,10 @@ def test_income_guide_values_rewards_with_historical_asset_price(tmp_path):
     assert report.total_income_eur == Decimal("28.000000000000000000")
     assert report.reward_income_eur == Decimal("23.000000000000000000")
     assert report.generic_income_eur == Decimal("5.000000000000000000")
+    assert report.declaration_income_eur == report.reward_income_eur
+    assert report.review_only_income_eur == report.generic_income_eur
+    assert report.taxable_reward_events_count == 3
+    assert report.review_only_events_count == 1
     assert report.valued_events_count == 3
     assert report.missing_value_count == 1
     assert report.ignored_non_positive_count == 1
@@ -275,6 +279,10 @@ def test_tax_year_rewards_exclude_exchange_earn_and_wrapper_candidates(tmp_path)
     assert year.rewards_events_count == 1
     assert report.reward_income_eur == Decimal("1.000000000000000000")
     assert report.generic_income_eur == Decimal("205.000000000000000000")
+    assert report.declaration_income_eur == Decimal("1.000000000000000000")
+    assert report.review_only_income_eur == Decimal("205.000000000000000000")
+    assert report.taxable_reward_events_count == 1
+    assert report.review_only_events_count == 2
     assert report.classification_counts["reward_income_candidate"] == 1
     assert report.classification_counts["exchange_earn_or_wrapper_review"] == 2
 
