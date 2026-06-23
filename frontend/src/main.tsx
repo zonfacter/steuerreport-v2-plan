@@ -1136,6 +1136,17 @@ type Snapshot = {
     events: Array<Record<string, unknown>>;
     methodology: string;
   };
+  taxRewardTradingSeparation?: {
+    generated_at: string;
+    years: number[];
+    assets: string[];
+    total_reward_income_eur: string;
+    total_trade_taxable_gain_loss_eur: string;
+    total_trade_tax_free_gain_loss_eur: string;
+    rows: Array<Record<string, unknown>>;
+    ascii_table: string;
+    methodology: string;
+  };
   taxYearDrivers?: {
     year: number;
     generated_at: string;
@@ -1665,6 +1676,7 @@ function App() {
         taxYearWalletFifoSolanaOrigin: { key: "taxYearWalletFifoSolanaOrigin", label: "Solana-Herkunft", load: () => getApi<Snapshot["taxYearWalletFifoSolanaOrigin"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-origin?asset=JUP&pool_id=binance%3ASpot&limit=5`) },
         taxLegacyHeliumOverview: { key: "taxLegacyHeliumOverview", label: "Legacy HNT", load: () => getApi<Snapshot["taxLegacyHeliumOverview"]>("/api/v1/tax/legacy-helium-overview?limit=20") },
         taxIncomeGuide: { key: "taxIncomeGuide", label: "Mining/Rewards", load: () => getApi<Snapshot["taxIncomeGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/income-guide`) },
+        taxRewardTradingSeparation: { key: "taxRewardTradingSeparation", label: "Reward vs Handel", load: () => getApi<Snapshot["taxRewardTradingSeparation"]>("/api/v1/tax-years/reward-trading-separation") },
         taxYearDrivers: { key: "taxYearDrivers", label: "Gewinntreiber", load: () => getApi<Snapshot["taxYearDrivers"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/drivers?limit=80`) },
         taxYearTurnoverAudit: { key: "taxYearTurnoverAudit", label: "Umsatz-Plausibilitaet", load: () => getApi<Snapshot["taxYearTurnoverAudit"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/turnover-audit?limit=20`) },
         taxYearsTurnoverAuditSummary: { key: "taxYearsTurnoverAuditSummary", label: "Umsatz-Plausibilitaet alle Jahre", load: () => getApi<Snapshot["taxYearsTurnoverAuditSummary"]>("/api/v1/tax-years/turnover-audit-summary?limit=8") },
@@ -1725,6 +1737,7 @@ function App() {
               "taxYearWalletFifoSolanaOrigin",
               "taxLegacyHeliumOverview",
               "taxIncomeGuide",
+              "taxRewardTradingSeparation",
               "taxYearDrivers",
               "taxExternalInflows",
               "taxUnmatchedDisposals"
@@ -3238,6 +3251,7 @@ function Content({
         taxYearWalletFifoSolanaOrigin={snapshot.taxYearWalletFifoSolanaOrigin}
         taxLegacyHeliumOverview={snapshot.taxLegacyHeliumOverview}
         taxIncomeGuide={snapshot.taxIncomeGuide}
+        taxRewardTradingSeparation={snapshot.taxRewardTradingSeparation}
         taxYearDrivers={snapshot.taxYearDrivers}
         taxYearTurnoverAudit={snapshot.taxYearTurnoverAudit}
         taxYearsTurnoverAuditSummary={snapshot.taxYearsTurnoverAuditSummary}
@@ -7566,6 +7580,7 @@ function TaxPanel({
   taxYearWalletFifoSolanaOrigin,
   taxLegacyHeliumOverview,
   taxIncomeGuide,
+  taxRewardTradingSeparation,
   taxYearDrivers,
   taxYearTurnoverAudit,
   taxYearsTurnoverAuditSummary,
@@ -7628,6 +7643,7 @@ function TaxPanel({
   taxYearWalletFifoSolanaOrigin: Snapshot["taxYearWalletFifoSolanaOrigin"];
   taxLegacyHeliumOverview: Snapshot["taxLegacyHeliumOverview"];
   taxIncomeGuide: Snapshot["taxIncomeGuide"];
+  taxRewardTradingSeparation: Snapshot["taxRewardTradingSeparation"];
   taxYearDrivers: Snapshot["taxYearDrivers"];
   taxYearTurnoverAudit: Snapshot["taxYearTurnoverAudit"];
   taxYearsTurnoverAuditSummary: Snapshot["taxYearsTurnoverAuditSummary"];
@@ -7724,6 +7740,17 @@ function TaxPanel({
   const filingMatrixRows = taxYearFilingMatrix?.rows ?? [];
   const filingClosureRows = taxFilingClosureOverview?.rows ?? [];
   const activeFilingMatrixRow = filingMatrixRows.find((row) => String(row.year) === activeYearValue);
+  const activeRewardTradingRows = (taxRewardTradingSeparation?.rows ?? []).filter(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeRewardTradingTotals = activeRewardTradingRows.reduce(
+    (totals: { reward: number; taxableTrade: number; taxFreeTrade: number }, row) => ({
+      reward: totals.reward + Number(row.reward_income_eur ?? 0),
+      taxableTrade: totals.taxableTrade + Number(row.trade_taxable_gain_loss_eur ?? 0),
+      taxFreeTrade: totals.taxFreeTrade + Number(row.trade_tax_free_gain_loss_eur ?? 0)
+    }),
+    { reward: 0, taxableTrade: 0, taxFreeTrade: 0 }
+  );
   const groupedFilingChecklist = {
     eintragen: filingChecklist.filter((item) => String(item.category) === "eintragen"),
     beilegen: filingChecklist.filter((item) => String(item.category) === "beilegen"),
@@ -9809,6 +9836,33 @@ function TaxPanel({
               count
             }))}
             footer="Review-Kategorien fuer generische Income-Zufluesse."
+            compact
+          />
+        </div>
+        <div className="panel">
+          <div className="panelToolbar">
+            <strong>Reward vs Handel HNT / IOT / MOBILE</strong>
+            <span>{formatDateTime(taxRewardTradingSeparation?.generated_at)}</span>
+          </div>
+          <div className="portfolioSummaryStrip">
+            <Metric title="Reward Einnahme" value={`${formatCurrency(activeRewardTradingTotals.reward)} EUR`} />
+            <Metric title="Handel steuerpfl." value={`${formatCurrency(activeRewardTradingTotals.taxableTrade)} EUR`} />
+            <Metric title="Handel steuerfrei" value={`${formatCurrency(activeRewardTradingTotals.taxFreeTrade)} EUR`} />
+            <Metric title="Assets" value={String(activeRewardTradingRows.length)} />
+          </div>
+          <TablePanel
+            title={`BMF-Trennung ${activeYearValue}`}
+            rows={activeRewardTradingRows.map((row) => ({
+              asset: row.asset,
+              reward_einnahme_eur: formatCurrency(row.reward_income_eur),
+              reward_menge: row.reward_quantity,
+              reward_events: row.reward_events_count,
+              handel_steuerpflichtig_eur: formatCurrency(row.trade_taxable_gain_loss_eur),
+              handel_steuerfrei_eur: formatCurrency(row.trade_tax_free_gain_loss_eur),
+              fifo_zeilen: Number(row.trade_taxable_lines_count ?? 0) + Number(row.trade_tax_free_lines_count ?? 0),
+              einordnung: row.tax_note
+            }))}
+            footer={taxRewardTradingSeparation?.methodology ?? "Reward-/Handels-Trennung wird geladen."}
             compact
           />
         </div>

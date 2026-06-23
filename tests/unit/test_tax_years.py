@@ -123,6 +123,39 @@ def test_income_guide_values_rewards_with_historical_asset_price(tmp_path):
     assert any(item.classification == "reward_income_candidate" for item in report.assets)
 
 
+def test_reward_trading_separation_splits_helium_rewards_from_fifo_trading(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="helium",
+        filename="reward-trading.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2024-01-01T00:00:00Z,HNT,10,mining,EUR,20\n"
+            "2024-06-01T00:00:00Z,HNT,-5,sell,EUR,15\n"
+            "2024-07-01T00:00:00Z,IOT,100,reward,EUR,4\n"
+            "2025-08-01T00:00:00Z,IOT,-100,sell,EUR,1\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    TaxService(store).rebuild_fifo()
+
+    report = TaxYearService(store).reward_trading_separation(years=[2024, 2025])
+    hnt = next(row for row in report.rows if row.year == 2024 and row.asset == "HNT")
+    iot_2024 = next(row for row in report.rows if row.year == 2024 and row.asset == "IOT")
+    iot_2025 = next(row for row in report.rows if row.year == 2025 and row.asset == "IOT")
+
+    assert hnt.reward_income_eur == Decimal("20.000000000000000000")
+    assert hnt.trade_taxable_gain_loss_eur == Decimal("5.000000000000000000000000000000000000")
+    assert hnt.trade_taxable_lines_count == 1
+    assert hnt.trade_tax_free_lines_count == 0
+    assert iot_2024.reward_income_eur == Decimal("4.000000000000000000")
+    assert iot_2025.reward_income_eur == Decimal("0")
+    assert iot_2025.trade_tax_free_gain_loss_eur == Decimal("-3.000000000000000000000000000000000000")
+    assert iot_2025.trade_tax_free_lines_count == 1
+    assert "Reward/Mining ist der Einnahmevorgang" in hnt.tax_note
+    assert "Handel steuerpfl." in report.ascii_table
+
+
 def test_income_guide_uses_solana_transaction_context_for_income_review(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_canonical_events(
@@ -1712,6 +1745,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/filing-closure-overview"
     )
+    reward_trading_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/reward-trading-separation"
+    )
     correction_map_summary_route = next(
         route
         for route in app.routes
@@ -1789,6 +1827,7 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert payment_overview_route.endpoint().status == "ok"
     assert filing_matrix_route.endpoint().status == "ok"
     assert filing_closure_route.endpoint().status == "ok"
+    assert reward_trading_route.endpoint().status == "ok"
     assert correction_map_summary_route.endpoint().status == "ok"
     assert turnover_summary_route.endpoint().status == "ok"
     assert solana_program_summary_route.endpoint().status == "ok"

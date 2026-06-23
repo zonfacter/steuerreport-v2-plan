@@ -219,6 +219,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxExternalInflowReport,
     TaxIncomeReport,
     TaxPaymentOverview,
+    TaxRewardTradingSeparationReport,
     TaxYearBmfClosureAppendix,
     TaxYearAssetFifoCorrectionReviewReport,
     TaxYearAssetFifoDrilldown,
@@ -1969,6 +1970,16 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 "tax-years:filing-closure-overview",
                 10,
                 lambda: TaxYearService(db).filing_closure_overview(),
+            )
+        )
+
+    @app.get("/api/v1/tax-years/reward-trading-separation")
+    def tax_years_reward_trading_separation() -> ApiResponse[TaxRewardTradingSeparationReport]:
+        return ApiResponse(
+            data=cached_response(
+                "tax-years:reward-trading-separation",
+                10,
+                lambda: TaxYearService(db).reward_trading_separation(),
             )
         )
 

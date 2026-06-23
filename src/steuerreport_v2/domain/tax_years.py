@@ -21,6 +21,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxPaymentChecklistItem,
     TaxPaymentOverview,
     TaxPaymentOverviewRow,
+    TaxRewardTradingSeparationReport,
+    TaxRewardTradingSeparationRow,
     TaxYearCorrectionMap,
     TaxYearCorrectionMapLine,
     TaxYearFilingChecklistItem,
@@ -82,6 +84,7 @@ from steuerreport_v2.domain.valuation import PriceCoverageService
 
 INCOME_EVENT_TYPES = {"income", "reward", "staking", "mining"}
 STABLECOIN_LIKE_ASSETS = {"USDC", "USDT", "DAI", "BUSD", "FDUSD", "TUSD", "EURC", "EURS"}
+HELIUM_REWARD_ASSETS = ("HNT", "IOT", "MOBILE")
 
 
 class TaxYearService:
@@ -1967,6 +1970,52 @@ class TaxYearService:
 
         return "\n".join([sep, fmt(rows[0]), sep, *(fmt(row) for row in rows[1:]), sep])
 
+    def _reward_trading_separation_ascii_table(
+        self, rows: list[TaxRewardTradingSeparationRow]
+    ) -> str:
+        table_rows = [
+            [
+                "Jahr",
+                "Asset",
+                "Reward/Einnahme",
+                "Reward Events",
+                "Handel steuerpfl.",
+                "Handel steuerfrei",
+                "FIFO Zeilen",
+            ]
+        ]
+        for row in rows:
+            table_rows.append(
+                [
+                    str(row.year),
+                    row.asset,
+                    self._fmt_eur(row.reward_income_eur),
+                    str(row.reward_events_count),
+                    self._fmt_eur(row.trade_taxable_gain_loss_eur),
+                    self._fmt_eur(row.trade_tax_free_gain_loss_eur),
+                    str(row.trade_taxable_lines_count + row.trade_tax_free_lines_count),
+                ]
+            )
+        if len(table_rows) == 1:
+            table_rows.append(
+                [
+                    "-",
+                    "-",
+                    self._fmt_eur(Decimal("0")),
+                    "0",
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    "0",
+                ]
+            )
+        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+        sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+
+        def fmt(row: list[str]) -> str:
+            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+
+        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+
     def _filing_checklist(
         self, lines: list[TaxYearFilingSummaryLine]
     ) -> list[TaxYearFilingChecklistItem]:
@@ -2067,6 +2116,107 @@ class TaxYearService:
                     "direkt aus EUR-Quote oder ersatzweise aus historischem "
                     "Asset/EUR-Preis am Ereigniszeitpunkt bewertet."
                 ),
+            ),
+        )
+
+    def reward_trading_separation(
+        self,
+        *,
+        years: list[int] | None = None,
+        assets: tuple[str, ...] = HELIUM_REWARD_ASSETS,
+    ) -> TaxRewardTradingSeparationReport:
+        selected_years = years if years is not None else [year for year in self._available_years() if 2021 <= year <= 2025]
+        asset_keys = tuple(asset.upper() for asset in assets)
+        rows: list[TaxRewardTradingSeparationRow] = []
+        for year in selected_years:
+            income = self.income_report(year)
+            income_by_asset: dict[str, dict[str, object]] = {
+                asset: {
+                    "income": Decimal("0"),
+                    "quantity": Decimal("0"),
+                    "events": 0,
+                    "event_types": set(),
+                    "sources": set(),
+                }
+                for asset in asset_keys
+            }
+            for item in income.assets:
+                asset = item.asset.upper()
+                if asset not in income_by_asset:
+                    continue
+                if not self._is_taxable_reward_income(
+                    event_type=item.event_type,
+                    source=",".join(item.sources),
+                    asset=item.asset,
+                    quantity=item.quantity,
+                ):
+                    continue
+                bucket = income_by_asset[asset]
+                bucket["income"] = bucket["income"] + item.income_eur  # type: ignore[operator]
+                bucket["quantity"] = bucket["quantity"] + item.quantity  # type: ignore[operator]
+                bucket["events"] = int(bucket["events"]) + item.events_count
+                bucket["event_types"].add(item.event_type)  # type: ignore[union-attr]
+                bucket["sources"].update(item.sources)  # type: ignore[union-attr]
+
+            lines_by_asset: dict[str, list[object]] = {asset: [] for asset in asset_keys}
+            for line in self._tax_lines():
+                asset = str(getattr(line, "asset", "") or "").upper()
+                if asset in lines_by_asset and getattr(line, "disposed_at").year == year:
+                    lines_by_asset[asset].append(line)
+
+            for asset in asset_keys:
+                reward = income_by_asset[asset]
+                tax_lines = lines_by_asset[asset]
+                taxable_lines = [line for line in tax_lines if self._is_taxable_private_disposal(line)]
+                tax_free_lines = [line for line in tax_lines if not self._is_taxable_private_disposal(line)]
+                if not int(reward["events"]) and not tax_lines:
+                    continue
+                rows.append(
+                    TaxRewardTradingSeparationRow(
+                        year=year,
+                        asset=asset,
+                        reward_income_eur=reward["income"],  # type: ignore[arg-type]
+                        reward_quantity=reward["quantity"],  # type: ignore[arg-type]
+                        reward_events_count=int(reward["events"]),
+                        reward_event_types=sorted(reward["event_types"]),  # type: ignore[arg-type]
+                        reward_sources=sorted(reward["sources"]),  # type: ignore[arg-type]
+                        trade_taxable_gain_loss_eur=sum((line.gain_loss_eur for line in taxable_lines), Decimal("0")),
+                        trade_taxable_proceeds_eur=sum((line.disposal_proceeds_eur for line in taxable_lines), Decimal("0")),
+                        trade_taxable_acquisition_cost_eur=sum(
+                            (line.acquisition_cost_eur for line in taxable_lines), Decimal("0")
+                        ),
+                        trade_taxable_lines_count=len(taxable_lines),
+                        trade_tax_free_gain_loss_eur=sum((line.gain_loss_eur for line in tax_free_lines), Decimal("0")),
+                        trade_tax_free_proceeds_eur=sum((line.disposal_proceeds_eur for line in tax_free_lines), Decimal("0")),
+                        trade_tax_free_acquisition_cost_eur=sum(
+                            (line.acquisition_cost_eur for line in tax_free_lines), Decimal("0")
+                        ),
+                        trade_tax_free_lines_count=len(tax_free_lines),
+                        total_trade_gain_loss_eur=sum((line.gain_loss_eur for line in tax_lines), Decimal("0")),
+                        tax_note=(
+                            "Reward/Mining ist der Einnahmevorgang zum Zuflusswert. "
+                            "Der spaetere Handel wird separat als private FIFO-Veraeusserung ausgewiesen; "
+                            "bei Haltedauer ueber 365 Tagen nur nachrichtlich steuerfrei."
+                        ),
+                        income_guide_endpoint=f"/api/v1/tax-years/{year}/income-guide",
+                        asset_fifo_drilldown_endpoint=f"/api/v1/tax-years/{year}/asset-fifo-drilldown?asset={asset}",
+                    )
+                )
+        rows.sort(key=lambda item: (item.year, item.asset))
+        return TaxRewardTradingSeparationReport(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            years=selected_years,
+            assets=list(asset_keys),
+            total_reward_income_eur=sum((row.reward_income_eur for row in rows), Decimal("0")),
+            total_trade_taxable_gain_loss_eur=sum((row.trade_taxable_gain_loss_eur for row in rows), Decimal("0")),
+            total_trade_tax_free_gain_loss_eur=sum((row.trade_tax_free_gain_loss_eur for row in rows), Decimal("0")),
+            rows=rows,
+            ascii_table=self._reward_trading_separation_ascii_table(rows),
+            methodology=(
+                "Read-only BMF-nahe Trennung fuer HNT/IOT/MOBILE. Helium-Reward-/Mining-Zufluesse "
+                "werden als eigener Einnahmeblock zum Zuflusswert gezeigt. Spaetere Verkaeufe, Swaps "
+                "oder Quote-Bein-Verwertungen bleiben getrennte FIFO-Veraeusserungen nach Haltefrist. "
+                "Der Report schreibt keine Lots, Tax-Lines oder Preise und ersetzt keine steuerliche Beratung."
             ),
         )
 

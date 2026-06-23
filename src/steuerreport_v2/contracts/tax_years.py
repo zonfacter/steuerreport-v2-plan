@@ -349,6 +349,40 @@ class TaxIncomeReport(BaseModel):
     methodology: str
 
 
+class TaxRewardTradingSeparationRow(BaseModel):
+    year: int
+    asset: str
+    reward_income_eur: Decimal = Decimal("0")
+    reward_quantity: Decimal = Decimal("0")
+    reward_events_count: int = 0
+    reward_event_types: list[str] = Field(default_factory=list)
+    reward_sources: list[str] = Field(default_factory=list)
+    trade_taxable_gain_loss_eur: Decimal = Decimal("0")
+    trade_taxable_proceeds_eur: Decimal = Decimal("0")
+    trade_taxable_acquisition_cost_eur: Decimal = Decimal("0")
+    trade_taxable_lines_count: int = 0
+    trade_tax_free_gain_loss_eur: Decimal = Decimal("0")
+    trade_tax_free_proceeds_eur: Decimal = Decimal("0")
+    trade_tax_free_acquisition_cost_eur: Decimal = Decimal("0")
+    trade_tax_free_lines_count: int = 0
+    total_trade_gain_loss_eur: Decimal = Decimal("0")
+    tax_note: str
+    income_guide_endpoint: str
+    asset_fifo_drilldown_endpoint: str
+
+
+class TaxRewardTradingSeparationReport(BaseModel):
+    generated_at: str
+    years: list[int] = Field(default_factory=list)
+    assets: list[str] = Field(default_factory=list)
+    total_reward_income_eur: Decimal = Decimal("0")
+    total_trade_taxable_gain_loss_eur: Decimal = Decimal("0")
+    total_trade_tax_free_gain_loss_eur: Decimal = Decimal("0")
+    rows: list[TaxRewardTradingSeparationRow] = Field(default_factory=list)
+    ascii_table: str
+    methodology: str
+
+
 class TaxYearDriverLine(BaseModel):
     tax_line_id: str
     asset: str
