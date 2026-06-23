@@ -1158,6 +1158,22 @@ type Snapshot = {
     top_tax_free_lines: Array<Record<string, unknown>>;
     methodology: string;
   };
+  taxYearGainLossRealityCheck?: {
+    year: number;
+    generated_at: string;
+    taxable_gain_loss_eur: string;
+    tax_free_gain_loss_eur: string;
+    gross_disposal_proceeds_eur: string;
+    open_current_value_eur: string;
+    open_cost_basis_eur: string;
+    open_unrealized_gain_loss_eur: string;
+    potential_loss_not_realized_eur: string;
+    rows: Array<Record<string, unknown>>;
+    plain_language_summary: string;
+    caveats: string[];
+    ascii_table: string;
+    methodology: string;
+  };
   taxYearTurnoverAudit?: {
     year: number;
     generated_at: string;
@@ -1678,6 +1694,7 @@ function App() {
         taxIncomeGuide: { key: "taxIncomeGuide", label: "Mining/Rewards", load: () => getApi<Snapshot["taxIncomeGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/income-guide`) },
         taxRewardTradingSeparation: { key: "taxRewardTradingSeparation", label: "Reward vs Handel", load: () => getApi<Snapshot["taxRewardTradingSeparation"]>("/api/v1/tax-years/reward-trading-separation") },
         taxYearDrivers: { key: "taxYearDrivers", label: "Gewinntreiber", load: () => getApi<Snapshot["taxYearDrivers"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/drivers?limit=80`) },
+        taxYearGainLossRealityCheck: { key: "taxYearGainLossRealityCheck", label: "Realisiert vs gehalten", load: () => getApi<Snapshot["taxYearGainLossRealityCheck"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-loss-reality-check?limit=40`) },
         taxYearTurnoverAudit: { key: "taxYearTurnoverAudit", label: "Umsatz-Plausibilitaet", load: () => getApi<Snapshot["taxYearTurnoverAudit"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/turnover-audit?limit=20`) },
         taxYearsTurnoverAuditSummary: { key: "taxYearsTurnoverAuditSummary", label: "Umsatz-Plausibilitaet alle Jahre", load: () => getApi<Snapshot["taxYearsTurnoverAuditSummary"]>("/api/v1/tax-years/turnover-audit-summary?limit=8") },
         taxSolanaProgramIncomeReview: { key: "taxSolanaProgramIncomeReview", label: "Solana Programm-Kontext", load: () => getApi<Snapshot["taxSolanaProgramIncomeReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/solana-program-income-review?limit=20`) },
@@ -1739,6 +1756,7 @@ function App() {
               "taxIncomeGuide",
               "taxRewardTradingSeparation",
               "taxYearDrivers",
+              "taxYearGainLossRealityCheck",
               "taxExternalInflows",
               "taxUnmatchedDisposals"
             ]
@@ -3253,6 +3271,7 @@ function Content({
         taxIncomeGuide={snapshot.taxIncomeGuide}
         taxRewardTradingSeparation={snapshot.taxRewardTradingSeparation}
         taxYearDrivers={snapshot.taxYearDrivers}
+        taxYearGainLossRealityCheck={snapshot.taxYearGainLossRealityCheck}
         taxYearTurnoverAudit={snapshot.taxYearTurnoverAudit}
         taxYearsTurnoverAuditSummary={snapshot.taxYearsTurnoverAuditSummary}
         taxSolanaProgramIncomeReview={snapshot.taxSolanaProgramIncomeReview}
@@ -7582,6 +7601,7 @@ function TaxPanel({
   taxIncomeGuide,
   taxRewardTradingSeparation,
   taxYearDrivers,
+  taxYearGainLossRealityCheck,
   taxYearTurnoverAudit,
   taxYearsTurnoverAuditSummary,
   taxSolanaProgramIncomeReview,
@@ -7645,6 +7665,7 @@ function TaxPanel({
   taxIncomeGuide: Snapshot["taxIncomeGuide"];
   taxRewardTradingSeparation: Snapshot["taxRewardTradingSeparation"];
   taxYearDrivers: Snapshot["taxYearDrivers"];
+  taxYearGainLossRealityCheck: Snapshot["taxYearGainLossRealityCheck"];
   taxYearTurnoverAudit: Snapshot["taxYearTurnoverAudit"];
   taxYearsTurnoverAuditSummary: Snapshot["taxYearsTurnoverAuditSummary"];
   taxSolanaProgramIncomeReview: Snapshot["taxSolanaProgramIncomeReview"];
@@ -8130,6 +8151,37 @@ function TaxPanel({
             zeilen: row.tax_line_count
           }))}
           footer="Brutto-Umsatz ist die EUR-Bewertung der Disposals/Swaps, nicht automatisch eingezahltes oder ausgezahltes EUR."
+          compact
+        />
+      </div>
+
+      <div className="panel">
+        <div className="panelToolbar">
+          <strong>Realisiert vs gehalten {activeYearValue}</strong>
+          <span>{taxYearGainLossRealityCheck?.generated_at ? formatDateTime(taxYearGainLossRealityCheck.generated_at) : "wird geladen"}</span>
+        </div>
+        <div className="portfolioSummaryStrip">
+          <Metric title="Realisiert steuerpfl." value={`${formatCurrency(taxYearGainLossRealityCheck?.taxable_gain_loss_eur)} EUR`} />
+          <Metric title="Heute offen" value={`${formatCurrency(taxYearGainLossRealityCheck?.open_current_value_eur)} EUR`} />
+          <Metric title="Heute unrealisiert" value={`${formatCurrency(taxYearGainLossRealityCheck?.open_unrealized_gain_loss_eur)} EUR`} />
+          <Metric title="Verlust nicht geltend" value={`${formatCurrency(taxYearGainLossRealityCheck?.potential_loss_not_realized_eur)} EUR`} />
+        </div>
+        <p className="reportYearSummary">
+          {taxYearGainLossRealityCheck?.plain_language_summary ?? "Realisiert-vs-gehalten-Check wird geladen."}
+        </p>
+        <TablePanel
+          title="Asset-Bruecke: Gewinn gegen heutige offene Position"
+          rows={(taxYearGainLossRealityCheck?.rows ?? []).slice(0, 12).map((row) => ({
+            asset: row.asset,
+            realisiert_steuerpflichtig_eur: formatCurrency(row.realized_taxable_gain_loss_eur),
+            steuerfrei_eur: formatCurrency(row.realized_tax_free_gain_loss_eur),
+            heute_offen_eur: formatCurrency(row.open_current_value_eur),
+            offene_kosten_eur: formatCurrency(row.open_cost_basis_eur),
+            heute_unrealisiert_eur: formatCurrency(row.open_unrealized_gain_loss_eur),
+            verlust_nicht_geltend_eur: formatCurrency(row.potential_loss_not_realized_eur),
+            hinweis: row.note
+          }))}
+          footer={(taxYearGainLossRealityCheck?.caveats ?? []).join(" ") || taxYearGainLossRealityCheck?.methodology || ""}
           compact
         />
       </div>

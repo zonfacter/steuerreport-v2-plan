@@ -23,6 +23,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxPaymentOverviewRow,
     TaxRewardTradingSeparationReport,
     TaxRewardTradingSeparationRow,
+    TaxYearGainLossRealityAssetRow,
+    TaxYearGainLossRealityCheck,
     TaxYearCorrectionMap,
     TaxYearCorrectionMapLine,
     TaxYearFilingChecklistItem,
@@ -2016,6 +2018,79 @@ class TaxYearService:
 
         return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
 
+    def _gain_loss_reality_ascii_table(self, rows: list[TaxYearGainLossRealityAssetRow]) -> str:
+        table_rows = [
+            [
+                "Asset",
+                "Realisiert steuerpfl.",
+                "Steuerfrei",
+                "Heute offen",
+                "Offene Kosten",
+                "Unrealisiert",
+                "Nicht geltend",
+            ]
+        ]
+        for row in rows:
+            table_rows.append(
+                [
+                    row.asset,
+                    self._fmt_eur(row.realized_taxable_gain_loss_eur),
+                    self._fmt_eur(row.realized_tax_free_gain_loss_eur),
+                    self._fmt_eur(row.open_current_value_eur),
+                    self._fmt_eur(row.open_cost_basis_eur),
+                    self._fmt_eur(row.open_unrealized_gain_loss_eur),
+                    self._fmt_eur(row.potential_loss_not_realized_eur),
+                ]
+            )
+        if len(table_rows) == 1:
+            table_rows.append(["-", self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0"))])
+        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+        sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
+
+        def fmt(row: list[str]) -> str:
+            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+
+        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+
+    def _gain_loss_reality_summary(
+        self,
+        *,
+        year: int,
+        gross_proceeds: Decimal,
+        taxable_gain: Decimal,
+        tax_free_gain: Decimal,
+        open_value: Decimal,
+        open_unrealized: Decimal,
+        potential_loss: Decimal,
+    ) -> str:
+        return (
+            f"{year}: Brutto-Umsatz {self._fmt_eur(gross_proceeds)} ist Handels-/Swap-Volumen, "
+            f"nicht eingesetztes EUR-Kapital. Steuerpflichtig realisiert: {self._fmt_eur(taxable_gain)}. "
+            f"Nach Haltefrist steuerfrei realisiert: {self._fmt_eur(tax_free_gain)}. "
+            f"Heute offene Positionen im Report: {self._fmt_eur(open_value)} mit unrealisiertem "
+            f"G/V {self._fmt_eur(open_unrealized)}. Davon waeren Verluste erst bei Veraeusserung "
+            f"realisierbar: {self._fmt_eur(potential_loss)}."
+        )
+
+    @staticmethod
+    def _gain_loss_reality_note(
+        *,
+        taxable_gain: Decimal,
+        open_value: Decimal,
+        open_unrealized: Decimal,
+    ) -> str:
+        if taxable_gain > 0 and open_unrealized < 0:
+            return "Realisierter Gewinn im Steuerjahr; heutiger Verlust ist offen/unrealisiert und daher nicht automatisch geltend gemacht."
+        if taxable_gain > 0 and open_value == 0:
+            return "Gewinn wurde im Steuerjahr realisiert; heute ist keine offene Position dieses Assets sichtbar."
+        if taxable_gain < 0:
+            return "Realisierter steuerpflichtiger Verlust ist bereits in den Tax-Lines enthalten."
+        if open_unrealized < 0:
+            return "Heute gehaltener Verlust ist offen/unrealisiert; steuerlich erst bei Veraeusserung relevant."
+        if open_value > 0:
+            return "Heute offene Position vorhanden; aktueller G/V ist nur nachrichtlich unrealisiert."
+        return "Keine materielle offene Position; Wirkung stammt aus realisierten Tax-Lines."
+
     def _filing_checklist(
         self, lines: list[TaxYearFilingSummaryLine]
     ) -> list[TaxYearFilingChecklistItem]:
@@ -2324,6 +2399,141 @@ class TaxYearService:
                 "Read-only Plausibilitaetsbericht aus bestehenden Tax-Lines. "
                 "Top-Zeilen sind nach absolutem Gewinn/Verlust sortiert; "
                 "steuerpflichtig bedeutet holding_days <= 365."
+            ),
+        )
+
+    def gain_loss_reality_check(self, year: int, *, limit: int = 40) -> TaxYearGainLossRealityCheck:
+        lines = [line for line in self._tax_lines() if line.disposed_at.year == year]
+        taxable = [line for line in lines if self._is_taxable_private_disposal(line)]
+        tax_free = [line for line in lines if not self._is_taxable_private_disposal(line)]
+        grouped: dict[str, dict[str, object]] = defaultdict(
+            lambda: {
+                "taxable_gain": Decimal("0"),
+                "taxable_proceeds": Decimal("0"),
+                "taxable_cost": Decimal("0"),
+                "taxable_lines": 0,
+                "tax_free_gain": Decimal("0"),
+                "tax_free_lines": 0,
+                "open_quantity": Decimal("0"),
+                "open_value": Decimal("0"),
+                "open_cost": Decimal("0"),
+                "open_unrealized": Decimal("0"),
+                "open_lots": 0,
+                "open_tax_free_now_value": Decimal("0"),
+                "open_not_yet_tax_free_value": Decimal("0"),
+                "price_sources": set(),
+            }
+        )
+        for line in taxable:
+            item = grouped[line.asset.upper()]
+            item["taxable_gain"] = item["taxable_gain"] + line.gain_loss_eur  # type: ignore[operator]
+            item["taxable_proceeds"] = item["taxable_proceeds"] + line.disposal_proceeds_eur  # type: ignore[operator]
+            item["taxable_cost"] = item["taxable_cost"] + line.acquisition_cost_eur  # type: ignore[operator]
+            item["taxable_lines"] = int(item["taxable_lines"]) + 1
+        for line in tax_free:
+            item = grouped[line.asset.upper()]
+            item["tax_free_gain"] = item["tax_free_gain"] + line.gain_loss_eur  # type: ignore[operator]
+            item["tax_free_lines"] = int(item["tax_free_lines"]) + 1
+
+        holdings = TaxService(self.store).holding_period_report(min_value_eur=Decimal("0"))
+        for lot in holdings.lots:
+            item = grouped[lot.asset.upper()]
+            item["open_quantity"] = item["open_quantity"] + lot.quantity_remaining  # type: ignore[operator]
+            item["open_value"] = item["open_value"] + lot.current_value_eur  # type: ignore[operator]
+            item["open_cost"] = item["open_cost"] + lot.cost_basis_eur_remaining  # type: ignore[operator]
+            item["open_unrealized"] = item["open_unrealized"] + lot.unrealized_gain_loss_eur  # type: ignore[operator]
+            item["open_lots"] = int(item["open_lots"]) + 1
+            if lot.bucket == "tax_free_now":
+                item["open_tax_free_now_value"] = item["open_tax_free_now_value"] + lot.current_value_eur  # type: ignore[operator]
+            else:
+                item["open_not_yet_tax_free_value"] = item["open_not_yet_tax_free_value"] + lot.current_value_eur  # type: ignore[operator]
+            item["price_sources"].add(lot.price_source)  # type: ignore[union-attr]
+
+        rows: list[TaxYearGainLossRealityAssetRow] = []
+        for asset, item in grouped.items():
+            taxable_gain = item["taxable_gain"]
+            tax_free_gain = item["tax_free_gain"]
+            open_value = item["open_value"]
+            open_unrealized = item["open_unrealized"]
+            if not any((taxable_gain, tax_free_gain, open_value, open_unrealized)):
+                continue
+            price_sources = sorted(source for source in item["price_sources"] if source)  # type: ignore[union-attr]
+            rows.append(
+                TaxYearGainLossRealityAssetRow(
+                    year=year,
+                    asset=asset,
+                    realized_taxable_gain_loss_eur=taxable_gain,  # type: ignore[arg-type]
+                    realized_taxable_proceeds_eur=item["taxable_proceeds"],  # type: ignore[arg-type]
+                    realized_taxable_acquisition_cost_eur=item["taxable_cost"],  # type: ignore[arg-type]
+                    realized_taxable_lines_count=int(item["taxable_lines"]),
+                    realized_tax_free_gain_loss_eur=tax_free_gain,  # type: ignore[arg-type]
+                    realized_tax_free_lines_count=int(item["tax_free_lines"]),
+                    open_quantity=item["open_quantity"],  # type: ignore[arg-type]
+                    open_current_value_eur=open_value,  # type: ignore[arg-type]
+                    open_cost_basis_eur=item["open_cost"],  # type: ignore[arg-type]
+                    open_unrealized_gain_loss_eur=open_unrealized,  # type: ignore[arg-type]
+                    open_lots_count=int(item["open_lots"]),
+                    open_tax_free_now_value_eur=item["open_tax_free_now_value"],  # type: ignore[arg-type]
+                    open_not_yet_tax_free_value_eur=item["open_not_yet_tax_free_value"],  # type: ignore[arg-type]
+                    potential_loss_not_realized_eur=(
+                        open_unrealized if open_unrealized < 0 else Decimal("0")  # type: ignore[operator]
+                    ),
+                    current_price_source=", ".join(price_sources[:3]) if price_sources else None,
+                    note=self._gain_loss_reality_note(
+                        taxable_gain=taxable_gain,  # type: ignore[arg-type]
+                        open_value=open_value,  # type: ignore[arg-type]
+                        open_unrealized=open_unrealized,  # type: ignore[arg-type]
+                    ),
+                    asset_fifo_drilldown_endpoint=f"/api/v1/tax-years/{year}/asset-fifo-drilldown?asset={asset}",
+                )
+            )
+        rows.sort(
+            key=lambda row: (
+                abs(row.realized_taxable_gain_loss_eur)
+                + abs(row.open_unrealized_gain_loss_eur)
+                + abs(row.realized_tax_free_gain_loss_eur)
+            ),
+            reverse=True,
+        )
+        rows = rows[: max(1, min(limit, 200))]
+        taxable_gain_total = sum((line.gain_loss_eur for line in taxable), Decimal("0"))
+        tax_free_gain_total = sum((line.gain_loss_eur for line in tax_free), Decimal("0"))
+        gross_proceeds = sum((line.disposal_proceeds_eur for line in lines), Decimal("0"))
+        open_value_total = sum((row.open_current_value_eur for row in rows), Decimal("0"))
+        open_cost_total = sum((row.open_cost_basis_eur for row in rows), Decimal("0"))
+        open_unrealized_total = sum((row.open_unrealized_gain_loss_eur for row in rows), Decimal("0"))
+        potential_loss_total = sum((row.potential_loss_not_realized_eur for row in rows), Decimal("0"))
+        return TaxYearGainLossRealityCheck(
+            year=year,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            taxable_gain_loss_eur=taxable_gain_total,
+            tax_free_gain_loss_eur=tax_free_gain_total,
+            gross_disposal_proceeds_eur=gross_proceeds,
+            open_current_value_eur=open_value_total,
+            open_cost_basis_eur=open_cost_total,
+            open_unrealized_gain_loss_eur=open_unrealized_total,
+            potential_loss_not_realized_eur=potential_loss_total,
+            rows=rows,
+            plain_language_summary=self._gain_loss_reality_summary(
+                year=year,
+                gross_proceeds=gross_proceeds,
+                taxable_gain=taxable_gain_total,
+                tax_free_gain=tax_free_gain_total,
+                open_value=open_value_total,
+                open_unrealized=open_unrealized_total,
+                potential_loss=potential_loss_total,
+            ),
+            caveats=[
+                "Realisierter Gewinn/Verlust entsteht nur bei Verkauf, Swap oder anderer Veraeusserung in den Tax-Lines.",
+                "Heute noch gehaltene Token zeigen nur unrealisierten Gewinn/Verlust; dieser ist nicht automatisch steuerlich geltend gemacht.",
+                "Brutto-Umsatz ist Handels-/Swap-Volumen und kein Nachweis fuer eingezahltes oder ausgezahltes EUR-Kapital.",
+            ],
+            ascii_table=self._gain_loss_reality_ascii_table(rows),
+            methodology=(
+                "Read-only Realitaetscheck aus bestehenden Tax-Lines und offenen Holding-Period-Lots. "
+                "Er trennt realisierte steuerpflichtige FIFO-Ergebnisse, steuerfreie Ergebnisse nach Haltefrist "
+                "und heute noch offene unrealisierte Gewinne/Verluste. Es werden keine Steuerdaten neu berechnet "
+                "oder geschrieben."
             ),
         )
 

@@ -220,6 +220,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxIncomeReport,
     TaxPaymentOverview,
     TaxRewardTradingSeparationReport,
+    TaxYearGainLossRealityCheck,
     TaxYearBmfClosureAppendix,
     TaxYearAssetFifoCorrectionReviewReport,
     TaxYearAssetFifoDrilldown,
@@ -2827,6 +2828,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-years/{year}/drivers")
     def tax_year_drivers(year: int, limit: int = 50) -> ApiResponse[TaxYearDriverReport]:
         return ApiResponse(data=TaxYearService(db).driver_report(year, limit=limit))
+
+    @app.get("/api/v1/tax-years/{year}/gain-loss-reality-check")
+    def tax_year_gain_loss_reality_check(year: int, limit: int = 40) -> ApiResponse[TaxYearGainLossRealityCheck]:
+        return ApiResponse(data=TaxYearService(db).gain_loss_reality_check(year, limit=limit))
 
     @app.get("/api/v1/tax-years/{year}/asset-fifo-drilldown")
     def tax_year_asset_fifo_drilldown(

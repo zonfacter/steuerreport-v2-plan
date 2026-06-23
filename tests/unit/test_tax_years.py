@@ -509,6 +509,42 @@ def test_tax_year_drivers_split_taxable_and_tax_free_lines(tmp_path):
     assert report.top_tax_free_lines[0].taxable is False
 
 
+def test_gain_loss_reality_check_separates_realized_from_unrealized_losses(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="reality-check.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2024-01-01T00:00:00Z,JUP,10,buy,EUR,10\n"
+            "2024-02-01T00:00:00Z,JUP,-5,sell,EUR,20\n"
+            "2025-01-01T00:00:00Z,JUP,10,buy,EUR,100\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="JUP",
+            price_eur=Decimal("2"),
+            priced_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = TaxYearService(store).gain_loss_reality_check(2024)
+    jup = next(row for row in report.rows if row.asset == "JUP")
+
+    assert report.taxable_gain_loss_eur == Decimal("15.000000000000000000000000000000000000")
+    assert jup.realized_taxable_gain_loss_eur == Decimal("15.000000000000000000000000000000000000")
+    assert jup.open_current_value_eur == Decimal("30.00000000000000000000000000")
+    assert jup.open_cost_basis_eur == Decimal("105.000000000000000000000000000000000000")
+    assert jup.open_unrealized_gain_loss_eur == Decimal("-75.00000000000000000000000000000000000000")
+    assert jup.potential_loss_not_realized_eur == jup.open_unrealized_gain_loss_eur
+    assert "nicht automatisch" in jup.note
+    assert "Brutto-Umsatz" in report.plain_language_summary
+
+
 def test_tax_year_asset_fifo_drilldown_links_tax_line_to_raw_evidence(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
@@ -1700,6 +1736,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/{year}/drivers"
     )
+    gain_loss_reality_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/gain-loss-reality-check"
+    )
     asset_fifo_route = next(
         route
         for route in app.routes
@@ -1818,6 +1859,7 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert correction_map_route.endpoint(2021).status == "ok"
     assert income_route.endpoint(2021).status == "ok"
     assert drivers_route.endpoint(2021).status == "ok"
+    assert gain_loss_reality_route.endpoint(2021).status == "ok"
     assert asset_fifo_route.endpoint(2021, "BTC").status == "ok"
     assert asset_fifo_plausibility_route.endpoint(2021).status == "ok"
     assert asset_fifo_correction_route.endpoint(2021).status == "ok"

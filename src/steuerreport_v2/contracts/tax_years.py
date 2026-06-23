@@ -383,6 +383,45 @@ class TaxRewardTradingSeparationReport(BaseModel):
     methodology: str
 
 
+class TaxYearGainLossRealityAssetRow(BaseModel):
+    year: int
+    asset: str
+    realized_taxable_gain_loss_eur: Decimal = Decimal("0")
+    realized_taxable_proceeds_eur: Decimal = Decimal("0")
+    realized_taxable_acquisition_cost_eur: Decimal = Decimal("0")
+    realized_taxable_lines_count: int = 0
+    realized_tax_free_gain_loss_eur: Decimal = Decimal("0")
+    realized_tax_free_lines_count: int = 0
+    open_quantity: Decimal = Decimal("0")
+    open_current_value_eur: Decimal = Decimal("0")
+    open_cost_basis_eur: Decimal = Decimal("0")
+    open_unrealized_gain_loss_eur: Decimal = Decimal("0")
+    open_lots_count: int = 0
+    open_tax_free_now_value_eur: Decimal = Decimal("0")
+    open_not_yet_tax_free_value_eur: Decimal = Decimal("0")
+    potential_loss_not_realized_eur: Decimal = Decimal("0")
+    current_price_source: str | None = None
+    note: str
+    asset_fifo_drilldown_endpoint: str
+
+
+class TaxYearGainLossRealityCheck(BaseModel):
+    year: int
+    generated_at: str
+    taxable_gain_loss_eur: Decimal = Decimal("0")
+    tax_free_gain_loss_eur: Decimal = Decimal("0")
+    gross_disposal_proceeds_eur: Decimal = Decimal("0")
+    open_current_value_eur: Decimal = Decimal("0")
+    open_cost_basis_eur: Decimal = Decimal("0")
+    open_unrealized_gain_loss_eur: Decimal = Decimal("0")
+    potential_loss_not_realized_eur: Decimal = Decimal("0")
+    rows: list[TaxYearGainLossRealityAssetRow] = Field(default_factory=list)
+    plain_language_summary: str
+    caveats: list[str] = Field(default_factory=list)
+    ascii_table: str
+    methodology: str
+
+
 class TaxYearDriverLine(BaseModel):
     tax_line_id: str
     asset: str
