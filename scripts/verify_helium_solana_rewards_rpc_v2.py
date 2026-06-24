@@ -199,7 +199,7 @@ def verify_rewards(
             "wallet": wallet,
             "from_time": from_time.isoformat(),
             "to_time": to_time.isoformat(),
-            "rpc_urls": rpc_urls,
+            "rpc_urls": [_redact_rpc_url(url) for url in rpc_urls],
             "rpc_requests": rpc_stats["requests"],
             "rpc_rate_limited": rpc_stats["rate_limited"],
             "rpc_failed": rpc_stats["failed"],
@@ -235,6 +235,14 @@ def token_deltas_for_wallet(tx: dict[str, Any], wallet: str) -> dict[str, Decima
             continue
         result[symbol] = post.get(mint, Decimal("0")) - pre.get(mint, Decimal("0"))
     return result
+
+
+def _redact_rpc_url(url: str) -> str:
+    if "alchemy.com/v2/" in url:
+        return re.sub(r"(/v2/)[^/?#]+", r"\1<redacted>", url)
+    if "api-key=" in url:
+        return re.sub(r"(api-key=)[^&#]+", r"\1<redacted>", url)
+    return url
 
 
 def reward_instruction_logs(logs: list[str]) -> list[str]:
