@@ -10040,7 +10040,7 @@ function TaxPanel({
           <TablePanel
             title="Einzutragende Rewards / Mining"
             rows={declarationIncomeAssets}
-            footer="Diese Summe fliesst in Rewards/Mining/Staking der Eingabehilfe. Aktuell eng auf HNT/IOT/MOBILE Reward-/Mining-Events begrenzt."
+            footer="Diese Summe fliesst als einzutragende Rewards/Mining/Staking in die Eingabehilfe. Aktuell eng auf HNT/IOT/MOBILE Reward-/Mining-Events begrenzt."
             compact
           />
           <TablePanel

@@ -652,7 +652,7 @@ class TaxYearService:
         if status.realized_gain_loss_eur:
             targets.append("Private Veraeusserungsgeschaefte mit Kryptowerten: Gewinn/Verlust, Erloese, Anschaffungskosten")
         if status.rewards_income_eur:
-            targets.append("Rewards/Mining/Staking als sonstige Einkuenfte bzw. EÜR-nahe Einnahmen pruefen")
+            targets.append("Einzutragende Rewards/Mining/Staking als sonstige Einkuenfte bzw. EÜR-nahe Einnahmen pruefen")
         if status.derivative_pnl_eur:
             targets.append("Derivate/Termingeschaefte separat pruefen")
         if status.tax_free_lines_count:
@@ -1149,7 +1149,7 @@ class TaxYearService:
         elif status.realized_gain_loss_eur > 0:
             parts.append(f"privater Gewinn {self._fmt_eur(status.realized_gain_loss_eur)}")
         if status.rewards_income_eur:
-            parts.append(f"Rewards/Mining/Staking {self._fmt_eur(status.rewards_income_eur)}")
+            parts.append(f"einzutragende Rewards/Mining/Staking {self._fmt_eur(status.rewards_income_eur)}")
         if status.derivative_pnl_eur:
             parts.append(f"Derivate {self._fmt_eur(status.derivative_pnl_eur)}")
         if status.tax_free_lines_count:
@@ -4289,14 +4289,14 @@ class TaxYearService:
         review_unmatched_value = external.review_value_eur + external.unmatched_value_eur
         caveats: list[str] = [
             (
-                "Brutto-Veraeusserungserloese sind EUR-Bewertungen von Verkaeufen und "
-                "Crypto-zu-Crypto-Tauschvorgaengen. Sie sind kein Nachweis, dass dieser "
+                "Handels-/Swap-Volumen ist die EUR-Bewertung von Verkaeufen und "
+                "Crypto-zu-Crypto-Tauschvorgaengen. Es ist kein Nachweis, dass dieser "
                 "Betrag als EUR eingezahlt oder ausgezahlt wurde."
             )
         ]
         if stablecoin_proceeds:
             caveats.append(
-                "Stablecoin-Umsaetze koennen hohe Bruttoerloese erzeugen, obwohl der "
+                "Stablecoin-Handelsvolumen kann hoch sein, obwohl der "
                 "Gewinn/Verlust nahe null liegt; relevant fuer die Steuer ist die "
                 "FIFO-Differenz aus Erloes minus Anschaffungskosten."
             )
@@ -4353,7 +4353,7 @@ class TaxYearService:
             methodology=(
                 "Read-only Jahresumsatz-Audit aus bestehenden Tax-Lines und Canonical Events. "
                 "Berechnet keine FIFO-Werte neu, sondern erklaert die bereits vorhandenen "
-                "Bruttoerloese, steuerpflichtigen Ergebnisse, steuerfreien Ergebnisse und "
+                "Handels-/Swap-Volumen, steuerpflichtigen Ergebnisse, steuerfreien Ergebnisse und "
                 "Stablecoin-/Quellen-Treiber."
             ),
         )
@@ -4371,7 +4371,7 @@ class TaxYearService:
             ok_years_count=sum(1 for row in rows if row.risk_level == "ok"),
             methodology=(
                 "Read-only Sammelaudit ueber alle verfuegbaren Steuerjahre. "
-                "Bewertet Brutto-Umsaetze, steuerpflichtige Ergebnisse, steuerfreie "
+                "Bewertet Handels-/Swap-Volumen, steuerpflichtige Ergebnisse, steuerfreie "
                 "Ergebnisse, Stablecoin-FIFO-Ergebnis und externe Solana-Zufluesse. "
                 "Schreibt keine Steuerdaten und ersetzt keine Einzelbelegpruefung."
             ),

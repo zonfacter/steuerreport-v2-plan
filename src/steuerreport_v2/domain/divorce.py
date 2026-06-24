@@ -261,7 +261,7 @@ class DivorceEqualizationService:
                 ),
                 (
                     "BMF-relevante Steuerlogik bleibt in den Steuerjahr-Endpunkten: "
-                    "Tax-Lines, Rewards/Mining/Staking, Derivate, externe Zufluesse, "
+                    "Tax-Lines, einzutragende Rewards/Mining/Staking, Derivate, externe Zufluesse, "
                     "FIFO-Methodik und Belegpakete."
                 ),
                 (

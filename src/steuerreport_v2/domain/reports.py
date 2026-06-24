@@ -489,7 +489,7 @@ class ReportCenterService:
             "/api/v1/export/tax-payment-overview.json": "Zahlungsuebersicht",
             "/api/v1/export/evidence-package.zip": "Gesamt-Belegpaket",
             "/api/v1/export/tax-lines.csv": "FIFO Tax-Lines",
-            "/api/v1/export/tax-income-guide.csv": "Rewards/Mining/Staking",
+            "/api/v1/export/tax-income-guide.csv": "Einzutragende Rewards/Mining/Staking",
             "/api/v1/export/derivative-lines.csv": "Derivate",
             "/api/v1/export/tax-external-inflows.csv": "Externe Zufluesse",
             "/api/v1/export/hnt-provenance-events.csv": "HNT Events",
@@ -553,7 +553,7 @@ class ReportCenterService:
         elif gain_loss > 0:
             parts.append(f"privater Gewinn {self._fmt_eur(gain_loss)}")
         if rewards_income:
-            parts.append(f"Rewards/Mining/Staking {self._fmt_eur(rewards_income)}")
+            parts.append(f"einzutragende Rewards/Mining/Staking {self._fmt_eur(rewards_income)}")
         if derivative_pnl:
             parts.append(f"Derivate {self._fmt_eur(derivative_pnl)}")
         if tax_free_lines_count:
