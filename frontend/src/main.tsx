@@ -8232,14 +8232,14 @@ function TaxPanel({
 
       <div className="panel">
         <div className="panelToolbar">
-          <strong>Umsatz-Plausibilitaet</strong>
+          <strong>Handelsvolumen-Plausibilitaet</strong>
           <span>{taxYearTurnoverAudit?.generated_at ? formatDateTime(taxYearTurnoverAudit.generated_at) : "wird geladen"}</span>
         </div>
         <div className="portfolioSummaryStrip">
-          <Metric title="Brutto-Umsatz" value={`${formatCurrency(taxYearTurnoverAudit?.gross_disposal_proceeds_eur)} EUR`} />
+          <Metric title="Handelsvolumen" value={`${formatCurrency(taxYearTurnoverAudit?.gross_disposal_proceeds_eur)} EUR`} />
           <Metric title="Steuerpflichtig G/V" value={`${formatCurrency(taxYearTurnoverAudit?.taxable_gain_loss_eur)} EUR`} />
           <Metric title="Steuerfrei G/V" value={`${formatCurrency(taxYearTurnoverAudit?.tax_free_gain_loss_eur)} EUR`} />
-          <Metric title="Stablecoin-Umsatz" value={`${formatCurrency(taxYearTurnoverAudit?.stablecoin_gross_disposal_proceeds_eur)} EUR`} />
+          <Metric title="Stablecoin-Handel" value={`${formatCurrency(taxYearTurnoverAudit?.stablecoin_gross_disposal_proceeds_eur)} EUR`} />
           <Metric title="Stablecoin G/V" value={`${formatCurrency(taxYearTurnoverAudit?.stablecoin_gain_loss_eur)} EUR`} />
           <Metric title="Offene Zufluesse" value={`${formatCurrency(taxYearTurnoverAudit?.external_inflows_review_unmatched_value_eur)} EUR`} />
         </div>
@@ -8252,10 +8252,10 @@ function TaxPanel({
           </div>
         ) : null}
         <TablePanel
-          title="Top-Umsatztreiber nach Asset"
+          title="Top-Handelsvolumen nach Asset"
           rows={(taxYearTurnoverAudit?.top_assets_by_proceeds ?? []).slice(0, 8).map((row) => ({
             asset: row.asset,
-            brutto_erloes_eur: formatCurrency(row.gross_disposal_proceeds_eur),
+            handelsvolumen_eur: formatCurrency(row.gross_disposal_proceeds_eur),
             anschaffung_eur: formatCurrency(row.acquisition_cost_eur),
             gewinn_verlust_eur: formatCurrency(row.gain_loss_eur),
             steuerpflichtig_eur: formatCurrency(row.taxable_gain_loss_eur),
@@ -8266,17 +8266,17 @@ function TaxPanel({
           compact
         />
         <TablePanel
-          title="Top-Quellen nach Brutto-Umsatz"
+          title="Top-Quellen nach Handelsvolumen"
           rows={(taxYearTurnoverAudit?.top_sources_by_proceeds ?? []).slice(0, 8).map((row) => ({
             quelle: row.source,
             typ: row.event_type,
             asset: row.asset,
             quote: row.quote_asset ?? "-",
-            brutto_erloes_eur: formatCurrency(row.gross_disposal_proceeds_eur),
+            handelsvolumen_eur: formatCurrency(row.gross_disposal_proceeds_eur),
             gewinn_verlust_eur: formatCurrency(row.gain_loss_eur),
             zeilen: row.tax_line_count
           }))}
-          footer="Brutto-Umsatz ist die EUR-Bewertung der Disposals/Swaps, nicht automatisch eingezahltes oder ausgezahltes EUR."
+          footer="Handelsvolumen ist die EUR-Bewertung der Disposals/Swaps. Es ist kein eingezahltes Kapital, kein ausgezahltes EUR und kein steuerpflichtiger Gewinn."
           compact
         />
       </div>
@@ -8313,14 +8313,14 @@ function TaxPanel({
       </div>
 
       <TablePanel
-        title="Umsatz-/Stablecoin-Plausibilitaet alle Steuerjahre"
+        title="Handelsvolumen-/Stablecoin-Plausibilitaet alle Steuerjahre"
         rows={(taxYearsTurnoverAuditSummary?.years ?? []).map((row) => ({
           jahr: row.year,
           risiko: row.risk_level,
-          brutto_erloes_eur: formatCurrency(row.gross_disposal_proceeds_eur),
+          handelsvolumen_eur: formatCurrency(row.gross_disposal_proceeds_eur),
           steuerpflichtig_eur: formatCurrency(row.taxable_gain_loss_eur),
           steuerfrei_eur: formatCurrency(row.tax_free_gain_loss_eur),
-          stablecoin_brutto_eur: formatCurrency(row.stablecoin_gross_disposal_proceeds_eur),
+          stablecoin_handel_eur: formatCurrency(row.stablecoin_gross_disposal_proceeds_eur),
           stablecoin_gv_eur: formatCurrency(row.stablecoin_gain_loss_eur),
           stablecoin_ratio_pct: formatPercent(row.stablecoin_gain_ratio_pct),
           offene_zufluesse_eur: formatCurrency(row.external_inflows_review_unmatched_value_eur),
@@ -10161,8 +10161,8 @@ function TaxPanel({
             <Metric title="Preisdelta-Zeilen" value={String(taxYearGainEvidenceReview?.price_delta_lines_count ?? 0)} />
             <Metric title="Event abgeglichen" value={String(taxYearGainEvidenceReview?.event_level_reconciled_lines_count ?? 0)} />
             <Metric title="Erwerb abgeglichen" value={String(taxYearGainEvidenceReview?.acquisition_event_level_reconciled_lines_count ?? 0)} />
-            <Metric title="Preisdelta brutto" value={`${formatCurrency(taxYearGainEvidenceReview?.material_price_delta_eur)} EUR`} />
-            <Metric title="Preisdelta offen" value={`${formatCurrency(taxYearGainEvidenceReview?.open_price_delta_eur)} EUR`} />
+            <Metric title="Delta-Artefakt" value={`${formatCurrency(taxYearGainEvidenceReview?.material_price_delta_eur)} EUR`} />
+            <Metric title="Delta offen" value={`${formatCurrency(taxYearGainEvidenceReview?.open_price_delta_eur)} EUR`} />
           </div>
           <TablePanel
             title="Preisdelta-Gruppen"

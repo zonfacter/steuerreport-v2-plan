@@ -550,7 +550,7 @@ def test_gain_loss_reality_check_separates_realized_from_unrealized_losses(tmp_p
     assert jup.open_unrealized_gain_loss_eur == Decimal("-75.00000000000000000000000000000000000000")
     assert jup.potential_loss_not_realized_eur == jup.open_unrealized_gain_loss_eur
     assert "nicht automatisch" in jup.note
-    assert "Brutto-Umsatz" in report.plain_language_summary
+    assert "Handels-/Swap-Volumen" in report.plain_language_summary
 
 
 def test_gain_evidence_review_flags_missing_raw_and_non_eur_quote(tmp_path):
@@ -977,7 +977,7 @@ def test_tax_year_turnover_audit_separates_gross_volume_from_taxable_gain(tmp_pa
     assert by_asset["USDC"].gross_disposal_proceeds_eur == Decimal(
         "10000.000000000000000000000000000000000000"
     )
-    assert "nicht eingesetztes oder ausgezahltes EUR-Kapital" in report.plain_language_summary
+    assert "kein eingesetztes oder ausgezahltes EUR-Kapital" in report.plain_language_summary
     assert any(item.source == "binance" and item.asset == "USDC" for item in report.top_sources_by_proceeds)
 
 

@@ -3061,8 +3061,8 @@ class TaxYearService:
         potential_loss: Decimal,
     ) -> str:
         return (
-            f"{year}: Brutto-Umsatz {self._fmt_eur(gross_proceeds)} ist Handels-/Swap-Volumen, "
-            f"nicht eingesetztes EUR-Kapital. Steuerpflichtig realisiert: {self._fmt_eur(taxable_gain)}. "
+            f"{year}: Handels-/Swap-Volumen {self._fmt_eur(gross_proceeds)} ist kein eingesetztes "
+            f"oder ausgezahltes EUR-Kapital. Steuerpflichtig realisiert: {self._fmt_eur(taxable_gain)}. "
             f"Nach Haltefrist steuerfrei realisiert: {self._fmt_eur(tax_free_gain)}. "
             f"Heute offene Positionen im Report: {self._fmt_eur(open_value)} mit unrealisiertem "
             f"G/V {self._fmt_eur(open_unrealized)}. Davon waeren Verluste erst bei Veraeusserung "
@@ -3523,7 +3523,7 @@ class TaxYearService:
             caveats=[
                 "Realisierter Gewinn/Verlust entsteht nur bei Verkauf, Swap oder anderer Veraeusserung in den Tax-Lines.",
                 "Heute noch gehaltene Token zeigen nur unrealisierten Gewinn/Verlust; dieser ist nicht automatisch steuerlich geltend gemacht.",
-                "Brutto-Umsatz ist Handels-/Swap-Volumen und kein Nachweis fuer eingezahltes oder ausgezahltes EUR-Kapital.",
+                "Handels-/Swap-Volumen ist kein Nachweis fuer eingezahltes oder ausgezahltes EUR-Kapital.",
             ],
             ascii_table=self._gain_loss_reality_ascii_table(rows),
             methodology=(
@@ -6242,11 +6242,11 @@ class TaxYearService:
         external_value: Decimal,
     ) -> str:
         return (
-            f"{year}: Brutto-Veraeusserungserloese {gross_proceeds:.2f} EUR sind "
-            f"Handels-/Swap-Umsatz, nicht eingesetztes oder ausgezahltes EUR-Kapital. "
+            f"{year}: Handels-/Swap-Volumen {gross_proceeds:.2f} EUR ist "
+            f"kein eingesetztes oder ausgezahltes EUR-Kapital. "
             f"Steuerpflichtiger privater Gewinn/Verlust: {taxable_gain:.2f} EUR; "
             f"steuerfreier Gewinn/Verlust nach Haltefrist: {tax_free_gain:.2f} EUR. "
-            f"Stablecoin-Bruttoumsatz: {stablecoin_proceeds:.2f} EUR bei "
+            f"Stablecoin-Handelsvolumen: {stablecoin_proceeds:.2f} EUR bei "
             f"{stablecoin_gain:.2f} EUR FIFO-Ergebnis. "
             f"Offene externe Zufluesse zur Belegpruefung: {external_value:.2f} EUR."
         )
