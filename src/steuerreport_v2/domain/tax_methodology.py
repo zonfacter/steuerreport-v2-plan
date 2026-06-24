@@ -302,6 +302,13 @@ class TaxMethodologyService:
             snapshot_exists=True,
             artifact_path=str(path),
             report=report,
+            years_count=len(report.years),
+            available_years=list(report.available_years),
+            ready_years=list(report.ready_years),
+            conservative_appendix_years=list(report.conservative_appendix_years),
+            review_years=list(report.review_years),
+            blocked_years=list(report.blocked_years),
+            empty_years=list(report.empty_years),
             status="available",
             note="Read-only Snapshot aus var/bmf_filing_readiness; API berechnet dabei keine Methodology neu.",
         )

@@ -168,6 +168,13 @@ class TaxBmfFilingReadinessSnapshot(BaseModel):
     snapshot_exists: bool = False
     artifact_path: str
     report: TaxBmfFilingReadinessReport | None = None
+    years_count: int = 0
+    available_years: list[int] = Field(default_factory=list)
+    ready_years: list[int] = Field(default_factory=list)
+    conservative_appendix_years: list[int] = Field(default_factory=list)
+    review_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    empty_years: list[int] = Field(default_factory=list)
     status: Literal["available", "missing", "invalid"] = "missing"
     note: str
 

@@ -265,6 +265,11 @@ def test_bmf_filing_readiness_snapshot_roundtrip(tmp_path):
     assert snapshot.status == "available"
     assert snapshot.snapshot_exists is True
     assert snapshot.report is not None
+    assert snapshot.years_count == 0
+    assert snapshot.available_years == [2021, 2022, 2023, 2024, 2025]
+    assert snapshot.blocked_years == [2021, 2022, 2023]
+    assert snapshot.review_years == [2025]
+    assert snapshot.conservative_appendix_years == [2024]
     assert snapshot.report.conservative_appendix_years == [2024]
 
 
