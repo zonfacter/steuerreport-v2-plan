@@ -5668,6 +5668,7 @@ class TaxYearService:
         )
         rows = self._income_event_rows(event_types=tuple(sorted(INCOME_EVENT_TYPES)))
         tx_context = self._income_tx_context()
+        reward_tx_ids = self._taxable_reward_tx_ids_by_asset()
         income_price_lookup = self._income_price_lookup(
             sorted({str(row[5]).upper() for row in rows if row[6] > 0 and str(row[5]).upper() != "EUR"})
         )
@@ -5684,6 +5685,14 @@ class TaxYearService:
                 quote_quantity,
                 tx_id,
             ) = row
+            if self._is_duplicate_review_income_for_reward_tx(
+                event_type=event_type,
+                asset=asset,
+                quantity=quantity,
+                tx_id=tx_id,
+                reward_tx_ids=reward_tx_ids,
+            ):
+                continue
             price_eur = None
             price_source = None
             priced_at = None
@@ -5900,8 +5909,40 @@ class TaxYearService:
                 list(event_types),
             ).fetchall()
 
+    def _taxable_reward_tx_ids_by_asset(self) -> dict[str, set[str]]:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select upper(asset) as asset, tx_id
+                from canonical_events
+                where tx_id is not null
+                  and quantity > 0
+                  and event_type in ('reward', 'mining')
+                  and upper(asset) in ('HNT', 'IOT', 'MOBILE')
+                """
+            ).fetchall()
+        grouped: dict[str, set[str]] = defaultdict(set)
+        for asset, tx_id in rows:
+            if tx_id:
+                grouped[str(asset).upper()].add(str(tx_id))
+        return grouped
+
+    @staticmethod
+    def _is_duplicate_review_income_for_reward_tx(
+        *,
+        event_type: str,
+        asset: str,
+        quantity: Decimal,
+        tx_id: str | None,
+        reward_tx_ids: dict[str, set[str]],
+    ) -> bool:
+        if quantity <= 0 or event_type != "income" or not tx_id:
+            return False
+        return str(tx_id) in reward_tx_ids.get(asset.upper(), set())
+
     def _external_solana_income_rows(self, year: int) -> list[tuple[object, ...]]:
         tx_context = self._income_tx_context()
+        reward_tx_ids = self._taxable_reward_tx_ids_by_asset()
         with self.store.connect() as con:
             rows = con.execute(
                 """
@@ -5928,17 +5969,27 @@ class TaxYearService:
         return [
             row for row in rows
             if self._is_strict_external_solana_income_context(tx_context.get(row[8] or ""))
+            and not self._is_duplicate_review_income_for_reward_tx(
+                event_type="income",
+                asset=str(row[4]),
+                quantity=row[5],
+                tx_id=row[8],
+                reward_tx_ids=reward_tx_ids,
+            )
         ]
 
     def _external_solana_inflow_count(self, year: int) -> int:
         if self._external_solana_inflow_counts_cache is None:
             tx_context = self._income_tx_context()
+            reward_tx_ids = self._taxable_reward_tx_ids_by_asset()
             counts: dict[int, int] = defaultdict(int)
             with self.store.connect() as con:
                 rows = con.execute(
                     """
                     select
                         date_part('year', event_time)::integer as year,
+                        asset,
+                        quantity,
                         tx_id
                     from canonical_events
                     where source = 'solana_rpc'
@@ -5948,8 +5999,17 @@ class TaxYearService:
                     order by event_time, event_id
                     """
                 ).fetchall()
-            for item_year, tx_id in rows:
-                if self._is_strict_external_solana_income_context(tx_context.get(tx_id or "")):
+            for item_year, asset, quantity, tx_id in rows:
+                if (
+                    self._is_strict_external_solana_income_context(tx_context.get(tx_id or ""))
+                    and not self._is_duplicate_review_income_for_reward_tx(
+                        event_type="income",
+                        asset=str(asset),
+                        quantity=quantity,
+                        tx_id=tx_id,
+                        reward_tx_ids=reward_tx_ids,
+                    )
+                ):
                     counts[int(item_year)] += 1
             self._external_solana_inflow_counts_cache = dict(counts)
         return self._external_solana_inflow_counts_cache.get(year, 0)

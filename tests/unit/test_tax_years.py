@@ -460,6 +460,48 @@ def test_external_inflow_report_excludes_multi_event_solana_program_income(tmp_p
     assert stablecoin.rows[0].review_reason == "stablecoin_lot_from_solana_program_context"
 
 
+def test_income_report_excludes_duplicate_solana_income_when_reward_tx_is_verified(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2026, 5, 7, 14, 53, 43, tzinfo=timezone.utc),
+                event_type="income",
+                asset="HNT",
+                quantity=Decimal("1.70084235"),
+                account="wallet-1",
+                tx_id="reward-tx-1",
+            ),
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2026, 5, 7, 14, 53, 43, tzinfo=timezone.utc),
+                event_type="reward",
+                asset="HNT",
+                quantity=Decimal("1.70084235"),
+                account="wallet-1",
+                tx_id="reward-tx-1",
+            ),
+        ]
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="HNT",
+            price_eur=Decimal("0.80"),
+            priced_at=datetime(2026, 5, 7, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+
+    income = TaxYearService(store).income_report(2026)
+    external = TaxYearService(store).external_inflow_report(2026)
+
+    assert income.reward_income_eur == Decimal("1.36067388000000000000")
+    assert income.generic_income_eur == Decimal("0")
+    assert income.classification_counts == {"reward_income_candidate": 1}
+    assert external.inflows_count == 0
+
+
 def test_declaration_guide_flags_external_solana_inflows(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_canonical_events(
