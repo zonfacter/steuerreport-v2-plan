@@ -1287,10 +1287,25 @@ def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
     assert report.assets[0].swap_context_events_count == 1
     assert report.assets[0].swap_context_quantity == Decimal("25.000000000000000000")
 
+    evidence_review = TaxYearService(store).helium_swap_evidence_review(2024)
+    assert evidence_review.tx_count == 1
+    assert evidence_review.raw_evidence_ready_count == 1
+    assert evidence_review.raw_evidence_missing_count == 0
+    assert evidence_review.total_context_value_eur == Decimal("50.00000000000000000000000000")
+    assert evidence_review.rows[0].tx_id == "hnt-swap-tx"
+    assert evidence_review.rows[0].assets == "HNT, USDC"
+    assert evidence_review.rows[0].raw_evidence_count == 2
+    assert evidence_review.rows[0].raw_filenames == ["solana-hnt-swap.json"]
+    assert evidence_review.rows[0].evidence_status == "raw_evidence_ready"
+    assert evidence_review.rows[0].tax_treatment == "trading_fifo_not_reward"
+    assert evidence_review.rows[0].fifo_drilldown_endpoint == "/api/v1/tax-years/2024/asset-fifo-drilldown?asset=HNT"
+
     evidence = TaxYearService(store).evidence_report(2024)
     evidence_by_id = {item.evidence_id: item for item in evidence.items}
     assert evidence_by_id["tax-helium-swap-context"].record_count == 1
     assert evidence_by_id["tax-helium-swap-context"].amount_eur == Decimal("0")
+    assert evidence_by_id["tax-helium-swap-evidence-review"].record_count == 1
+    assert evidence_by_id["tax-helium-swap-evidence-review"].status == "available"
 
     app = create_app(store)
     api_route = next(
@@ -1301,6 +1316,15 @@ def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
     api_response = api_route.endpoint(2024)
     assert api_response.data.events_count == 1
     assert api_response.data.rows[0].tax_treatment == "trading_fifo_not_reward"
+
+    evidence_api_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/helium-swap-evidence-review"
+    )
+    evidence_api_response = evidence_api_route.endpoint(2024)
+    assert evidence_api_response.data.tx_count == 1
+    assert evidence_api_response.data.rows[0].evidence_status == "raw_evidence_ready"
 
     csv_route = next(
         route
@@ -1315,6 +1339,19 @@ def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
     assert "trading_fifo_not_reward" in csv_text
     assert "helium_asset_normalized_as_solana_trade" in csv_text
 
+    evidence_csv_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/export/tax-helium-swap-evidence-review.csv"
+    )
+    evidence_csv_response = evidence_csv_route.endpoint(year=2024)
+    evidence_csv_text = evidence_csv_response.body.decode("utf-8")
+    assert "filename=tax-year-2024-helium-swap-evidence-review.csv" in evidence_csv_response.headers["content-disposition"]
+    assert "Raw_Belege" in evidence_csv_text
+    assert "hnt-swap-tx" in evidence_csv_text
+    assert "raw_evidence_ready" in evidence_csv_text
+    assert "solana-hnt-swap.json" in evidence_csv_text
+
     year_package_route = next(
         route
         for route in app.routes
@@ -1324,9 +1361,11 @@ def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
     with ZipFile(BytesIO(package_response.body)) as package:
         names = set(package.namelist())
         assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-context.csv" in names
+        assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-evidence-review.csv" in names
         manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
     manifest_paths = {file["path"] for file in manifest["files"]}
     assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-context.csv" in manifest_paths
+    assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-evidence-review.csv" in manifest_paths
 
 
 def test_tax_declaration_guide_highlights_losses_and_hnt(tmp_path):

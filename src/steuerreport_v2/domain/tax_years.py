@@ -69,6 +69,8 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearTurnoverSourceBreakdown,
     TaxSolanaProgramIncomeAssetSummary,
     TaxHeliumSwapContextAssetSummary,
+    TaxHeliumSwapEvidenceReview,
+    TaxHeliumSwapEvidenceRow,
     TaxHeliumSwapContextReview,
     TaxHeliumSwapContextRow,
     TaxHeliumSwapContextYearSummary,
@@ -4553,6 +4555,109 @@ class TaxYearService:
             ),
         )
 
+    def helium_swap_evidence_review(
+        self,
+        year: int | None = None,
+        *,
+        limit: int = 50,
+    ) -> TaxHeliumSwapEvidenceReview:
+        context = self.helium_swap_context_review(year=year, limit=100_000)
+        grouped: dict[str, dict[str, object]] = {}
+        for row in context.rows:
+            if not row.tx_id:
+                continue
+            item = grouped.setdefault(
+                row.tx_id,
+                {
+                    "tx_id": row.tx_id,
+                    "year": row.year,
+                    "first_event_time": row.event_time,
+                    "account": row.account,
+                    "assets": set(),
+                    "events_count": 0,
+                    "positive_events_count": 0,
+                    "negative_events_count": 0,
+                    "context_value_eur": Decimal("0"),
+                    "max_event_value_eur": Decimal("0"),
+                    "review_reasons": set(),
+                },
+            )
+            if row.event_time < str(item["first_event_time"]):
+                item["first_event_time"] = row.event_time
+            item["year"] = min(int(item["year"]), row.year)
+            if not item.get("account") and row.account:
+                item["account"] = row.account
+            assets = item["assets"]
+            if isinstance(assets, set):
+                assets.add(row.asset.upper())
+                for asset in (row.tx_assets or "").split(","):
+                    normalized = asset.strip().upper()
+                    if normalized:
+                        assets.add(normalized)
+            item["events_count"] = int(item["events_count"]) + 1
+            item["positive_events_count"] = int(item["positive_events_count"]) + row.tx_positive_count
+            item["negative_events_count"] = int(item["negative_events_count"]) + row.tx_negative_count
+            value = row.value_eur or Decimal("0")
+            item["context_value_eur"] = item["context_value_eur"] + value  # type: ignore[operator]
+            item["max_event_value_eur"] = max(  # type: ignore[assignment]
+                item["max_event_value_eur"],
+                abs(value),
+            )
+            reasons = item["review_reasons"]
+            if isinstance(reasons, set):
+                reasons.add(row.review_reason)
+
+        raw_by_tx = self._raw_evidence_summary_by_tx(set(grouped))
+        rows: list[TaxHeliumSwapEvidenceRow] = []
+        for tx_id, item in grouped.items():
+            raw = raw_by_tx.get(tx_id, {})
+            raw_count = int(raw.get("raw_evidence_count", 0) or 0)
+            raw_filenames = [str(value) for value in raw.get("raw_filenames", []) if str(value or "").strip()]
+            raw_sources = [str(value) for value in raw.get("raw_sources", []) if str(value or "").strip()]
+            assets = item.get("assets", set())
+            review_reasons = item.get("review_reasons", set())
+            row_year = int(item["year"])
+            main_asset = self._primary_helium_asset_from_set(assets if isinstance(assets, set) else set())
+            rows.append(
+                TaxHeliumSwapEvidenceRow(
+                    tx_id=tx_id,
+                    year=row_year,
+                    first_event_time=str(item["first_event_time"]),
+                    account=str(item["account"]) if item.get("account") else None,
+                    assets=", ".join(sorted(assets)) if isinstance(assets, set) else "",
+                    events_count=int(item["events_count"]),
+                    positive_events_count=int(item["positive_events_count"]),
+                    negative_events_count=int(item["negative_events_count"]),
+                    context_value_eur=item["context_value_eur"],  # type: ignore[arg-type]
+                    max_event_value_eur=item["max_event_value_eur"],  # type: ignore[arg-type]
+                    raw_evidence_count=raw_count,
+                    raw_filenames=raw_filenames,
+                    raw_sources=raw_sources,
+                    evidence_status="raw_evidence_ready" if raw_count else "missing_raw_evidence",
+                    review_reason=", ".join(sorted(review_reasons)) if isinstance(review_reasons, set) else "",
+                    context_endpoint=f"/api/v1/tax-years/{row_year}/helium-swap-context",
+                    fifo_drilldown_endpoint=f"/api/v1/tax-years/{row_year}/asset-fifo-drilldown?asset={main_asset}",
+                )
+            )
+        rows.sort(key=lambda item: (item.evidence_status != "missing_raw_evidence", -abs(item.max_event_value_eur), item.tx_id))
+        limited_rows = rows[:limit]
+        return TaxHeliumSwapEvidenceReview(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            year=year,
+            tx_count=len(rows),
+            raw_evidence_ready_count=sum(1 for row in rows if row.raw_evidence_count > 0),
+            raw_evidence_missing_count=sum(1 for row in rows if row.raw_evidence_count == 0),
+            total_context_value_eur=sum((row.context_value_eur for row in rows), Decimal("0")),
+            rows=limited_rows,
+            methodology=(
+                "Read-only Top-TxID-Belegmatrix fuer HNT/IOT/MOBILE-Swap-/Trading-Kontexte. "
+                "Die Auswertung gruppiert vorhandene Helium-Swap-Kontext-Events je tx_id "
+                "und prueft lokal, ob kanonische Events mit Raw-Object-/Import-Batch-Belegen "
+                "vorhanden sind. Es werden keine externen APIs abgefragt und keine Steuer-, "
+                "Lot- oder Importdaten geschrieben."
+            ),
+        )
+
     def stablecoin_fifo_review(
         self,
         year: int | None = None,
@@ -4943,6 +5048,7 @@ class TaxYearService:
         external = self.external_inflow_report(year, limit=0)
         solana_swaps = self.solana_stablecoin_swap_context_review(year, limit=10_000)
         helium_swaps = self.helium_swap_context_review(year, limit=10_000)
+        helium_swap_evidence = self.helium_swap_evidence_review(year, limit=10_000)
         wallet_fifo_service = WalletFifoPreviewService(self.store)
         bmf_closure = self.bmf_closure_appendix(year)
         cex_outflow = wallet_fifo_service.cex_exchange_outflow_evidence(
@@ -5078,6 +5184,29 @@ class TaxYearService:
                     "Trennt HNT/IOT/MOBILE-Solana-Swap-/Trading-Kontexte von "
                     "Reward-/Mining-Einnahmen und verweist auf die bestehenden "
                     "FIFO-Drilldowns."
+                ),
+            ),
+            TaxYearEvidenceItem(
+                evidence_id="tax-helium-swap-evidence-review",
+                category=(
+                    "beleg"
+                    if helium_swap_evidence.tx_count and helium_swap_evidence.raw_evidence_missing_count == 0
+                    else "pruefen"
+                ),
+                label="Helium Swap-TxID Belegmatrix",
+                endpoint="/api/v1/export/tax-helium-swap-evidence-review.csv",
+                file_format="csv",
+                record_count=helium_swap_evidence.tx_count,
+                amount_eur=helium_swap_evidence.total_context_value_eur,
+                status=(
+                    "available"
+                    if helium_swap_evidence.tx_count and helium_swap_evidence.raw_evidence_missing_count == 0
+                    else self._evidence_item_status(helium_swap_evidence.tx_count)
+                ),
+                required=bool(helium_swap_evidence.tx_count),
+                note=(
+                    "Gruppiert HNT/IOT/MOBILE-Swap-Kontexte je TxID und zeigt, "
+                    "ob lokale Raw-/Import-Belege fuer die Transaktion vorhanden sind."
                 ),
             ),
             TaxYearEvidenceItem(
@@ -6648,6 +6777,74 @@ class TaxYearService:
                 )
             )
         return results
+
+    @staticmethod
+    def _primary_helium_asset_from_set(assets: set[object]) -> str:
+        normalized = {str(asset).upper() for asset in assets}
+        for asset in HELIUM_REWARD_ASSETS:
+            if asset in normalized:
+                return asset
+        return "HNT"
+
+    def _raw_evidence_summary_by_tx(self, tx_ids: set[str]) -> dict[str, dict[str, object]]:
+        if not tx_ids:
+            return {}
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select
+                    e.tx_id,
+                    e.event_id,
+                    e.raw_object_id,
+                    b.source,
+                    b.filename
+                from canonical_events e
+                left join raw_objects r on r.raw_object_id = e.raw_object_id
+                left join raw_import_batches b on b.batch_id = r.batch_id
+                where e.tx_id in (select unnest(?))
+                order by e.tx_id, e.event_time, e.event_id
+                """,
+                [list(tx_ids)],
+            ).fetchall()
+        result: dict[str, dict[str, object]] = {}
+        for tx_id, _event_id, raw_object_id, source, filename in rows:
+            if not tx_id:
+                continue
+            item = result.setdefault(
+                str(tx_id),
+                {
+                    "raw_object_ids": set(),
+                    "raw_filenames": set(),
+                    "raw_sources": set(),
+                },
+            )
+            raw_ids = item["raw_object_ids"]
+            raw_filenames = item["raw_filenames"]
+            raw_sources = item["raw_sources"]
+            if raw_object_id and isinstance(raw_ids, set):
+                raw_ids.add(str(raw_object_id))
+            if filename and isinstance(raw_filenames, set):
+                raw_filenames.add(self._safe_evidence_filename(filename))
+            if source and isinstance(raw_sources, set):
+                raw_sources.add(str(source))
+        return {
+            tx_id: {
+                "raw_evidence_count": len(item["raw_object_ids"]) if isinstance(item["raw_object_ids"], set) else 0,
+                "raw_filenames": sorted(item["raw_filenames"]) if isinstance(item["raw_filenames"], set) else [],
+                "raw_sources": sorted(item["raw_sources"]) if isinstance(item["raw_sources"], set) else [],
+            }
+            for tx_id, item in result.items()
+        }
+
+    @staticmethod
+    def _safe_evidence_filename(value: object) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        basename = text.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or text
+        if basename == "steuerreport_ai_readonly.tmp.sqlite":
+            return "read-only-sqlite-evidence"
+        return basename
 
     def _helium_trade_tax_line_summary_by_year_asset(self) -> dict[tuple[int, str], dict[str, Decimal | int]]:
         result: dict[tuple[int, str], dict[str, Decimal | int]] = {}

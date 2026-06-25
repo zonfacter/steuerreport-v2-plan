@@ -1322,6 +1322,16 @@ type Snapshot = {
     rows: Array<Record<string, unknown>>;
     methodology: string;
   };
+  taxHeliumSwapEvidenceReview?: {
+    generated_at: string;
+    year?: number | null;
+    tx_count: number;
+    raw_evidence_ready_count: number;
+    raw_evidence_missing_count: number;
+    total_context_value_eur: string;
+    rows: Array<Record<string, unknown>>;
+    methodology: string;
+  };
   taxStablecoinFifoReview?: {
     generated_at: string;
     year?: number | null;
@@ -1809,6 +1819,7 @@ function App() {
         taxYearsTurnoverAuditSummary: { key: "taxYearsTurnoverAuditSummary", label: "Umsatz-Plausibilitaet alle Jahre", load: () => getApi<Snapshot["taxYearsTurnoverAuditSummary"]>("/api/v1/tax-years/turnover-audit-summary?limit=8") },
         taxSolanaProgramIncomeReview: { key: "taxSolanaProgramIncomeReview", label: "Solana Programm-Kontext", load: () => getApi<Snapshot["taxSolanaProgramIncomeReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/solana-program-income-review?limit=20`) },
         taxHeliumSwapContext: { key: "taxHeliumSwapContext", label: "Helium Swap-Kontext", load: () => getApi<Snapshot["taxHeliumSwapContext"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/helium-swap-context?limit=20`) },
+        taxHeliumSwapEvidenceReview: { key: "taxHeliumSwapEvidenceReview", label: "Helium TxID-Belege", load: () => getApi<Snapshot["taxHeliumSwapEvidenceReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/helium-swap-evidence-review?limit=20`) },
         taxStablecoinFifoReview: { key: "taxStablecoinFifoReview", label: "Stablecoin FIFO", load: () => getApi<Snapshot["taxStablecoinFifoReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/stablecoin-fifo-review?limit=20`) },
         taxStablecoinQuoteLegReview: { key: "taxStablecoinQuoteLegReview", label: "Stablecoin Quote-Beine", load: () => getApi<Snapshot["taxStablecoinQuoteLegReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/stablecoin-quote-leg-review?limit=20`) },
         taxSolanaStablecoinSwapContext: { key: "taxSolanaStablecoinSwapContext", label: "Solana Stablecoin-Swaps", load: () => getApi<Snapshot["taxSolanaStablecoinSwapContext"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/solana-stablecoin-swap-context?limit=20`) },
@@ -1846,6 +1857,7 @@ function App() {
         "taxYearsTurnoverAuditSummary",
         "taxSolanaProgramIncomeReview",
         "taxHeliumSwapContext",
+        "taxHeliumSwapEvidenceReview",
         "taxStablecoinFifoReview",
         "taxStablecoinQuoteLegReview",
         "taxSolanaStablecoinSwapContext",
@@ -3398,6 +3410,7 @@ function Content({
         taxYearsTurnoverAuditSummary={snapshot.taxYearsTurnoverAuditSummary}
         taxSolanaProgramIncomeReview={snapshot.taxSolanaProgramIncomeReview}
         taxHeliumSwapContext={snapshot.taxHeliumSwapContext}
+        taxHeliumSwapEvidenceReview={snapshot.taxHeliumSwapEvidenceReview}
         taxStablecoinFifoReview={snapshot.taxStablecoinFifoReview}
         taxStablecoinQuoteLegReview={snapshot.taxStablecoinQuoteLegReview}
         taxSolanaStablecoinSwapContext={snapshot.taxSolanaStablecoinSwapContext}
@@ -7734,6 +7747,7 @@ function TaxPanel({
   taxYearsTurnoverAuditSummary,
   taxSolanaProgramIncomeReview,
   taxHeliumSwapContext,
+  taxHeliumSwapEvidenceReview,
   taxStablecoinFifoReview,
   taxStablecoinQuoteLegReview,
   taxSolanaStablecoinSwapContext,
@@ -7804,6 +7818,7 @@ function TaxPanel({
   taxYearsTurnoverAuditSummary: Snapshot["taxYearsTurnoverAuditSummary"];
   taxSolanaProgramIncomeReview: Snapshot["taxSolanaProgramIncomeReview"];
   taxHeliumSwapContext: Snapshot["taxHeliumSwapContext"];
+  taxHeliumSwapEvidenceReview: Snapshot["taxHeliumSwapEvidenceReview"];
   taxStablecoinFifoReview: Snapshot["taxStablecoinFifoReview"];
   taxStablecoinQuoteLegReview: Snapshot["taxStablecoinQuoteLegReview"];
   taxSolanaStablecoinSwapContext: Snapshot["taxSolanaStablecoinSwapContext"];
@@ -8405,6 +8420,12 @@ function TaxPanel({
           <Metric title="Rewards getrennt" value={`${formatCurrency(taxHeliumSwapContext?.total_reward_income_eur)} EUR`} />
           <Metric title="Events" value={String(taxHeliumSwapContext?.events_count ?? 0)} />
         </div>
+        <div className="portfolioSummaryStrip">
+          <Metric title="TxIDs" value={String(taxHeliumSwapEvidenceReview?.tx_count ?? 0)} />
+          <Metric title="lokal belegt" value={String(taxHeliumSwapEvidenceReview?.raw_evidence_ready_count ?? 0)} />
+          <Metric title="Raw offen" value={String(taxHeliumSwapEvidenceReview?.raw_evidence_missing_count ?? 0)} />
+          <Metric title="TxID-Kontext" value={`${formatCurrency(taxHeliumSwapEvidenceReview?.total_context_value_eur)} EUR`} />
+        </div>
         <TablePanel
           title="HNT/IOT/MOBILE: Reward vs Swap/FIFO"
           rows={(taxHeliumSwapContext?.assets ?? []).slice(0, 10).map((row) => ({
@@ -8435,6 +8456,23 @@ function TaxPanel({
             fifo: row.fifo_drilldown_endpoint
           }))}
           footer={taxHeliumSwapContext?.methodology ?? "Helium-Swap-Kontext wird geladen."}
+          compact
+        />
+        <TablePanel
+          title="Top Helium-TxIDs: lokale Belege"
+          rows={(taxHeliumSwapEvidenceReview?.rows ?? []).slice(0, 12).map((row) => ({
+            zeit: row.first_event_time,
+            status: row.evidence_status,
+            raw_belege: row.raw_evidence_count,
+            assets: row.assets,
+            wert_eur: formatCurrency(row.context_value_eur),
+            dateien: Array.isArray(row.raw_filenames) ? row.raw_filenames.join(" | ") : row.raw_filenames,
+            behandlung: row.tax_treatment,
+            grund: row.review_reason,
+            tx: row.tx_id,
+            fifo: row.fifo_drilldown_endpoint
+          }))}
+          footer={taxHeliumSwapEvidenceReview?.methodology ?? "Helium-TxID-Belege werden geladen."}
           compact
         />
       </div>

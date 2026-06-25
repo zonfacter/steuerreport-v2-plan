@@ -1057,6 +1057,38 @@ class TaxHeliumSwapContextReview(BaseModel):
     methodology: str
 
 
+class TaxHeliumSwapEvidenceRow(BaseModel):
+    tx_id: str
+    year: int
+    first_event_time: str
+    account: str | None = None
+    assets: str = ""
+    events_count: int = 0
+    positive_events_count: int = 0
+    negative_events_count: int = 0
+    context_value_eur: Decimal = Decimal("0")
+    max_event_value_eur: Decimal = Decimal("0")
+    raw_evidence_count: int = 0
+    raw_filenames: list[str] = Field(default_factory=list)
+    raw_sources: list[str] = Field(default_factory=list)
+    evidence_status: str = "missing_raw_evidence"
+    tax_treatment: str = "trading_fifo_not_reward"
+    review_reason: str
+    context_endpoint: str
+    fifo_drilldown_endpoint: str
+
+
+class TaxHeliumSwapEvidenceReview(BaseModel):
+    generated_at: str
+    year: int | None = None
+    tx_count: int = 0
+    raw_evidence_ready_count: int = 0
+    raw_evidence_missing_count: int = 0
+    total_context_value_eur: Decimal = Decimal("0")
+    rows: list[TaxHeliumSwapEvidenceRow] = Field(default_factory=list)
+    methodology: str
+
+
 class TaxStablecoinFifoAssetSummary(BaseModel):
     year: int
     asset: str

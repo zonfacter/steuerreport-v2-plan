@@ -222,6 +222,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxPaymentOverview,
     TaxRewardTradingSeparationReport,
     TaxHeliumSwapContextReview,
+    TaxHeliumSwapEvidenceReview,
     TaxYearGainLossRealityCheck,
     TaxYearGainEvidenceAcquisitionEventDeltaReview,
     TaxYearGainEvidenceEventDeltaReview,
@@ -2020,6 +2021,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def tax_years_helium_swap_context(limit: int = 200) -> ApiResponse[TaxHeliumSwapContextReview]:
         return ApiResponse(data=TaxYearService(db).helium_swap_context_review(limit=limit))
 
+    @app.get("/api/v1/tax-years/helium-swap-evidence-review")
+    def tax_years_helium_swap_evidence_review(limit: int = 50) -> ApiResponse[TaxHeliumSwapEvidenceReview]:
+        return ApiResponse(data=TaxYearService(db).helium_swap_evidence_review(limit=limit))
+
     @app.get("/api/v1/tax-years/stablecoin-fifo-review")
     def tax_years_stablecoin_fifo_review(limit: int = 200) -> ApiResponse[TaxStablecoinFifoReview]:
         return ApiResponse(data=TaxYearService(db).stablecoin_fifo_review(limit=limit))
@@ -2850,6 +2855,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-years/{year}/helium-swap-context")
     def tax_year_helium_swap_context(year: int, limit: int = 200) -> ApiResponse[TaxHeliumSwapContextReview]:
         return ApiResponse(data=TaxYearService(db).helium_swap_context_review(year=year, limit=limit))
+
+    @app.get("/api/v1/tax-years/{year}/helium-swap-evidence-review")
+    def tax_year_helium_swap_evidence_review(year: int, limit: int = 50) -> ApiResponse[TaxHeliumSwapEvidenceReview]:
+        return ApiResponse(data=TaxYearService(db).helium_swap_evidence_review(year=year, limit=limit))
 
     @app.get("/api/v1/tax-years/{year}/stablecoin-fifo-review")
     def tax_year_stablecoin_fifo_review(year: int, limit: int = 200) -> ApiResponse[TaxStablecoinFifoReview]:
@@ -4017,6 +4026,79 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
+    def render_tax_helium_swap_evidence_review_csv(
+        *,
+        years: list[int] | None = None,
+        service: TaxYearService | None = None,
+        limit: int = 100_000,
+    ) -> str:
+        service = service or TaxYearService(db)
+        selected_years = years if years is not None else service.summary().available_years
+        output = io.StringIO()
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "Jahr",
+                "Erste_Zeit_UTC",
+                "TX_ID",
+                "Konto",
+                "Assets",
+                "Events",
+                "Positive_Events",
+                "Negative_Events",
+                "Kontextwert_EUR",
+                "Max_Eventwert_EUR",
+                "Raw_Belege",
+                "Raw_Dateien",
+                "Raw_Quellen",
+                "Belegstatus",
+                "Steuerliche_Behandlung",
+                "Review_Grund",
+                "Kontext_Endpoint",
+                "FIFO_Drilldown",
+            ],
+        )
+        writer.writeheader()
+        for selected_year in selected_years:
+            report = service.helium_swap_evidence_review(year=selected_year, limit=limit)
+            for row in report.rows:
+                writer.writerow(
+                    {
+                        "Jahr": row.year,
+                        "Erste_Zeit_UTC": row.first_event_time,
+                        "TX_ID": row.tx_id,
+                        "Konto": row.account,
+                        "Assets": row.assets,
+                        "Events": row.events_count,
+                        "Positive_Events": row.positive_events_count,
+                        "Negative_Events": row.negative_events_count,
+                        "Kontextwert_EUR": row.context_value_eur,
+                        "Max_Eventwert_EUR": row.max_event_value_eur,
+                        "Raw_Belege": row.raw_evidence_count,
+                        "Raw_Dateien": " | ".join(evidence_filename(item) for item in row.raw_filenames),
+                        "Raw_Quellen": " | ".join(row.raw_sources),
+                        "Belegstatus": row.evidence_status,
+                        "Steuerliche_Behandlung": row.tax_treatment,
+                        "Review_Grund": row.review_reason,
+                        "Kontext_Endpoint": row.context_endpoint,
+                        "FIFO_Drilldown": row.fifo_drilldown_endpoint,
+                    }
+                )
+        return output.getvalue()
+
+    @app.get("/api/v1/export/tax-helium-swap-evidence-review.csv")
+    def download_tax_helium_swap_evidence_review_csv(year: int | None = None) -> Response:
+        filename = (
+            f"tax-year-{year}-helium-swap-evidence-review.csv"
+            if year is not None
+            else "tax-helium-swap-evidence-review.csv"
+        )
+        return Response(
+            content=render_tax_helium_swap_evidence_review_csv(years=[year] if year is not None else None),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
     @app.get("/api/v1/export/evidence-package.zip")
     def download_evidence_package_zip() -> Response:
         report_service = ReportCenterService(db)
@@ -4090,6 +4172,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 "tax-helium-swap-context": (
                     "tax-helium-swap-context.csv",
                     download_tax_helium_swap_context_csv,
+                ),
+                "tax-helium-swap-evidence-review": (
+                    "tax-helium-swap-evidence-review.csv",
+                    download_tax_helium_swap_evidence_review_csv,
                 ),
             }
             if file_id == "hnt-fairspot-timeline":
@@ -4235,6 +4321,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         helium_swap_context = tax_year_service.helium_swap_context_review(year, limit=1)
         if helium_swap_context.events_count:
             required_refs.add("/api/v1/export/tax-helium-swap-context.csv")
+            required_refs.add("/api/v1/export/tax-helium-swap-evidence-review.csv")
         buffer = io.BytesIO()
 
         def response_body(response: Response) -> bytes:
@@ -4391,6 +4478,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             "/api/v1/export/tax-helium-swap-context.csv": (
                 f"06_Solana_FIFO_Belege/tax-year-{year}-helium-swap-context.csv",
                 lambda: render_tax_helium_swap_context_csv(
+                    years=[year],
+                    service=tax_year_service,
+                ).encode("utf-8"),
+            ),
+            "/api/v1/export/tax-helium-swap-evidence-review.csv": (
+                f"06_Solana_FIFO_Belege/tax-year-{year}-helium-swap-evidence-review.csv",
+                lambda: render_tax_helium_swap_evidence_review_csv(
                     years=[year],
                     service=tax_year_service,
                 ).encode("utf-8"),
