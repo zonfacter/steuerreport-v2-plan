@@ -333,6 +333,12 @@ ALL_TRANSACTION_EVIDENCE_MATRIX_PATH = (
     / "all_transaction_evidence_matrices"
     / "latest_all_transaction_evidence_matrix.json"
 )
+ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH = (
+    Path("/workspace/steuerreport-v2-plan")
+    / "var"
+    / "all_transaction_evidence_closures"
+    / "latest_all_transaction_evidence_closure.json"
+)
 
 
 def build_health_payload(db: DuckDbStore) -> dict:
@@ -3898,6 +3904,38 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
         }
 
+    def all_transaction_evidence_closure_payload() -> dict[str, object]:
+        if ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH.exists():
+            try:
+                payload = json.loads(ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+            except Exception as exc:
+                return {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "invalid_artifact",
+                    "artifact_path": str(ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH),
+                    "error": type(exc).__name__,
+                    "methodology": (
+                        "Fallback fuer Gesamt-Transaktions-Abschlussreport: Artefakt konnte "
+                        "nicht gelesen werden. Keine Steuerdaten wurden veraendert."
+                    ),
+                }
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "missing_artifact",
+            "artifact_path": str(ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH),
+            "tx_count": 0,
+            "evidence_path_assigned_count": 0,
+            "needs_review_count": 0,
+            "tax_impact_review_count": 0,
+            "open_rows": [],
+            "methodology": (
+                "Fallback fuer Gesamt-Transaktions-Abschlussreport: Noch kein lokales "
+                "read-only Abschlussartefakt vorhanden."
+            ),
+        }
+
     @app.get("/api/v1/export/solana-tx-alchemy-audit.json")
     def download_solana_tx_alchemy_audit_json() -> Response:
         return Response(
@@ -3920,6 +3958,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             content=json.dumps(all_transaction_evidence_matrix_payload(), indent=2, ensure_ascii=False),
             media_type="application/json",
             headers={"Content-Disposition": "attachment; filename=all-transaction-evidence-matrix.json"},
+        )
+
+    @app.get("/api/v1/export/all-transaction-evidence-closure.json")
+    def download_all_transaction_evidence_closure_json() -> Response:
+        return Response(
+            content=json.dumps(all_transaction_evidence_closure_payload(), indent=2, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=all-transaction-evidence-closure.json"},
         )
 
     def helium_swap_alchemy_audit_summary(year: int | None = None, limit: int = 20) -> dict[str, object]:
@@ -4410,6 +4456,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "all-transaction-evidence-matrix.json",
                     json.dumps(
                         all_transaction_evidence_matrix_payload(),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                )
+            if file_id == "all-transaction-evidence-closure":
+                return (
+                    "all-transaction-evidence-closure.json",
+                    json.dumps(
+                        all_transaction_evidence_closure_payload(),
                         indent=2,
                         ensure_ascii=False,
                     ).encode("utf-8"),

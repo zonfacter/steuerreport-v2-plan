@@ -62,6 +62,7 @@ class ReportCenterService:
         "solana-tx-alchemy-audit": "solana-tx-alchemy-audit.json",
         "solana-failed-tx-tax-impact": "solana-failed-tx-tax-impact.json",
         "all-transaction-evidence-matrix": "all-transaction-evidence-matrix.json",
+        "all-transaction-evidence-closure": "all-transaction-evidence-closure.json",
     }
     EVIDENCE_GROUPS = {
         "audit-json": ("structure", "Struktur und Audit"),
@@ -91,6 +92,7 @@ class ReportCenterService:
         "solana-tx-alchemy-audit": ("solana_fifo", "Solana FIFO-Belege"),
         "solana-failed-tx-tax-impact": ("solana_fifo", "Solana FIFO-Belege"),
         "all-transaction-evidence-matrix": ("solana_fifo", "Solana FIFO-Belege"),
+        "all-transaction-evidence-closure": ("solana_fifo", "Solana FIFO-Belege"),
     }
     CSV_EXPORTS = [
         ("review-decisions", "Review-Decisions CSV", "/api/v1/export/review-decisions.csv"),
@@ -154,6 +156,11 @@ class ReportCenterService:
             "all-transaction-evidence-matrix",
             "Gesamt-Transaktions-Belegmatrix JSON",
             "/api/v1/export/all-transaction-evidence-matrix.json",
+        ),
+        (
+            "all-transaction-evidence-closure",
+            "Gesamt-Transaktions-Abschlussreport JSON",
+            "/api/v1/export/all-transaction-evidence-closure.json",
         ),
     ]
 
