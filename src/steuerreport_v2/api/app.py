@@ -315,6 +315,12 @@ HELIUM_SWAP_ALCHEMY_AUDIT_PATH = (
     / "helium_swap_alchemy_audits"
     / "latest_all_years_helium_swap_alchemy_audit.json"
 )
+SOLANA_TX_ALCHEMY_AUDIT_PATH = (
+    Path("/workspace/steuerreport-v2-plan")
+    / "var"
+    / "solana_tx_alchemy_audits"
+    / "latest_solana_rpc_tx_alchemy_audit.json"
+)
 
 
 def build_health_payload(db: DuckDbStore) -> dict:
@@ -3783,6 +3789,47 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
         }
 
+    def solana_tx_alchemy_audit_payload() -> dict[str, object]:
+        if SOLANA_TX_ALCHEMY_AUDIT_PATH.exists():
+            try:
+                payload = json.loads(SOLANA_TX_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+            except Exception as exc:
+                return {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "invalid_artifact",
+                    "artifact_path": str(SOLANA_TX_ALCHEMY_AUDIT_PATH),
+                    "error": type(exc).__name__,
+                    "methodology": (
+                        "Fallback fuer Solana-TxID-Alchemy-Audit: Artefakt konnte "
+                        "nicht gelesen werden. Keine Steuerdaten wurden veraendert."
+                    ),
+                }
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "missing_artifact",
+            "artifact_path": str(SOLANA_TX_ALCHEMY_AUDIT_PATH),
+            "tx_count": 0,
+            "alchemy_found_count": 0,
+            "confirmed_count": 0,
+            "alchemy_failed_count": 0,
+            "review_status_counts": {},
+            "rows": [],
+            "methodology": (
+                "Fallback fuer Solana-TxID-Alchemy-Audit: Noch kein lokales "
+                "read-only Alchemy-Audit-Artefakt vorhanden."
+            ),
+        }
+
+    @app.get("/api/v1/export/solana-tx-alchemy-audit.json")
+    def download_solana_tx_alchemy_audit_json() -> Response:
+        return Response(
+            content=json.dumps(solana_tx_alchemy_audit_payload(), indent=2, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=solana-tx-alchemy-audit.json"},
+        )
+
     def helium_swap_alchemy_audit_summary(year: int | None = None, limit: int = 20) -> dict[str, object]:
         payload = helium_swap_alchemy_audit_payload()
         rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
@@ -4244,6 +4291,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "tax-helium-swap-alchemy-audit.json",
                     json.dumps(
                         helium_swap_alchemy_audit_payload(),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                )
+            if file_id == "solana-tx-alchemy-audit":
+                return (
+                    "solana-tx-alchemy-audit.json",
+                    json.dumps(
+                        solana_tx_alchemy_audit_payload(),
                         indent=2,
                         ensure_ascii=False,
                     ).encode("utf-8"),
