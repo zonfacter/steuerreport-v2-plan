@@ -1306,6 +1306,8 @@ def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
     assert evidence_by_id["tax-helium-swap-context"].amount_eur == Decimal("0")
     assert evidence_by_id["tax-helium-swap-evidence-review"].record_count == 1
     assert evidence_by_id["tax-helium-swap-evidence-review"].status == "available"
+    assert evidence_by_id["tax-helium-swap-alchemy-audit"].endpoint == "/api/v1/export/tax-helium-swap-alchemy-audit.json"
+    assert evidence_by_id["tax-helium-swap-alchemy-audit"].required is True
 
     app = create_app(store)
     api_route = next(
@@ -1325,6 +1327,15 @@ def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
     evidence_api_response = evidence_api_route.endpoint(2024)
     assert evidence_api_response.data.tx_count == 1
     assert evidence_api_response.data.rows[0].evidence_status == "raw_evidence_ready"
+
+    alchemy_api_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/helium-swap-alchemy-audit"
+    )
+    alchemy_api_response = alchemy_api_route.endpoint(2024)
+    assert "tx_count" in alchemy_api_response.data
+    assert "rows" in alchemy_api_response.data
 
     csv_route = next(
         route

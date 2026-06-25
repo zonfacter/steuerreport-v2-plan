@@ -3783,6 +3783,48 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
         }
 
+    def helium_swap_alchemy_audit_summary(year: int | None = None, limit: int = 20) -> dict[str, object]:
+        payload = helium_swap_alchemy_audit_payload()
+        rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
+        filtered_rows = [
+            row for row in rows
+            if isinstance(row, dict) and (year is None or int(row.get("year") or 0) == year)
+        ]
+        limited_rows = filtered_rows[: max(0, limit)]
+        review_counts: dict[str, int] = {}
+        alchemy_counts: dict[str, int] = {}
+        for row in filtered_rows:
+            review_status = str(row.get("review_status") or "unknown")
+            alchemy_status = str(row.get("alchemy_status") or "unknown")
+            review_counts[review_status] = review_counts.get(review_status, 0) + 1
+            alchemy_counts[alchemy_status] = alchemy_counts.get(alchemy_status, 0) + 1
+        return {
+            "generated_at": payload.get("generated_at"),
+            "year": year,
+            "provider": payload.get("provider", "alchemy"),
+            "rpc_url": payload.get("rpc_url"),
+            "tx_count": len(filtered_rows),
+            "alchemy_found_count": sum(1 for row in filtered_rows if row.get("alchemy_status") == "alchemy_found"),
+            "confirmed_count": sum(1 for row in filtered_rows if row.get("review_status") == "alchemy_confirmed"),
+            "alchemy_failed_count": sum(
+                1
+                for row in filtered_rows
+                if str(row.get("alchemy_status") or "") in {"alchemy_failed", "alchemy_not_found", "alchemy_http_error"}
+            ),
+            "review_status_counts": review_counts,
+            "alchemy_status_counts": alchemy_counts,
+            "rows": limited_rows,
+            "methodology": payload.get("methodology"),
+        }
+
+    @app.get("/api/v1/tax-years/helium-swap-alchemy-audit")
+    def tax_years_helium_swap_alchemy_audit(limit: int = 20) -> ApiResponse[dict[str, object]]:
+        return ApiResponse(data=helium_swap_alchemy_audit_summary(limit=limit))
+
+    @app.get("/api/v1/tax-years/{year}/helium-swap-alchemy-audit")
+    def tax_year_helium_swap_alchemy_audit(year: int, limit: int = 20) -> ApiResponse[dict[str, object]]:
+        return ApiResponse(data=helium_swap_alchemy_audit_summary(year=year, limit=limit))
+
     @app.get("/api/v1/export/tax-helium-swap-alchemy-audit.json")
     def download_tax_helium_swap_alchemy_audit_json() -> Response:
         return Response(

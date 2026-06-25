@@ -104,6 +104,12 @@ from steuerreport_v2.domain.valuation import PriceCoverageService
 INCOME_EVENT_TYPES = {"income", "reward", "staking", "mining"}
 STABLECOIN_LIKE_ASSETS = {"USDC", "USDT", "DAI", "BUSD", "FDUSD", "TUSD", "EURC", "EURS"}
 HELIUM_REWARD_ASSETS = ("HNT", "IOT", "MOBILE")
+HELIUM_SWAP_ALCHEMY_AUDIT_PATH = (
+    Path("/workspace/steuerreport-v2-plan")
+    / "var"
+    / "helium_swap_alchemy_audits"
+    / "latest_all_years_helium_swap_alchemy_audit.json"
+)
 
 
 class TaxYearService:
@@ -5049,6 +5055,9 @@ class TaxYearService:
         solana_swaps = self.solana_stablecoin_swap_context_review(year, limit=10_000)
         helium_swaps = self.helium_swap_context_review(year, limit=10_000)
         helium_swap_evidence = self.helium_swap_evidence_review(year, limit=10_000)
+        helium_swap_alchemy = self._helium_swap_alchemy_audit_match_summary(
+            {row.tx_id for row in helium_swap_evidence.rows if row.tx_id}
+        )
         wallet_fifo_service = WalletFifoPreviewService(self.store)
         bmf_closure = self.bmf_closure_appendix(year)
         cex_outflow = wallet_fifo_service.cex_exchange_outflow_evidence(
@@ -5207,6 +5216,36 @@ class TaxYearService:
                 note=(
                     "Gruppiert HNT/IOT/MOBILE-Swap-Kontexte je TxID und zeigt, "
                     "ob lokale Raw-/Import-Belege fuer die Transaktion vorhanden sind."
+                ),
+            ),
+            TaxYearEvidenceItem(
+                evidence_id="tax-helium-swap-alchemy-audit",
+                category=(
+                    "beleg"
+                    if helium_swap_alchemy["expected_count"]
+                    and helium_swap_alchemy["missing_count"] == 0
+                    and helium_swap_alchemy["confirmed_count"] == helium_swap_alchemy["expected_count"]
+                    else "pruefen"
+                ),
+                label="Helium Swap Alchemy Onchain-Audit",
+                endpoint="/api/v1/export/tax-helium-swap-alchemy-audit.json",
+                file_format="json",
+                record_count=int(helium_swap_alchemy["confirmed_count"]),
+                amount_eur=helium_swap_evidence.total_context_value_eur,
+                status=(
+                    "available"
+                    if helium_swap_alchemy["expected_count"]
+                    and helium_swap_alchemy["missing_count"] == 0
+                    and helium_swap_alchemy["confirmed_count"] == helium_swap_alchemy["expected_count"]
+                    else "review"
+                    if helium_swap_alchemy["expected_count"]
+                    else "empty"
+                ),
+                required=bool(helium_swap_alchemy["expected_count"]),
+                note=(
+                    f"Alchemy-Gegenpruefung fuer Helium-Swap-TxIDs: "
+                    f"{helium_swap_alchemy['confirmed_count']}/{helium_swap_alchemy['expected_count']} "
+                    f"TxIDs bestaetigt, {helium_swap_alchemy['missing_count']} fehlen im Audit-Artefakt."
                 ),
             ),
             TaxYearEvidenceItem(
@@ -6845,6 +6884,52 @@ class TaxYearService:
         if basename == "steuerreport_ai_readonly.tmp.sqlite":
             return "read-only-sqlite-evidence"
         return basename
+
+    def _helium_swap_alchemy_audit_match_summary(self, expected_tx_ids: set[str]) -> dict[str, int | str]:
+        if not expected_tx_ids:
+            return {
+                "status": "empty",
+                "expected_count": 0,
+                "artifact_tx_count": 0,
+                "confirmed_count": 0,
+                "missing_count": 0,
+            }
+        if not HELIUM_SWAP_ALCHEMY_AUDIT_PATH.exists():
+            return {
+                "status": "missing_artifact",
+                "expected_count": len(expected_tx_ids),
+                "artifact_tx_count": 0,
+                "confirmed_count": 0,
+                "missing_count": len(expected_tx_ids),
+            }
+        try:
+            payload = json.loads(HELIUM_SWAP_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return {
+                "status": "invalid_artifact",
+                "expected_count": len(expected_tx_ids),
+                "artifact_tx_count": 0,
+                "confirmed_count": 0,
+                "missing_count": len(expected_tx_ids),
+            }
+        rows = payload.get("rows") if isinstance(payload, dict) else []
+        if not isinstance(rows, list):
+            rows = []
+        confirmed = {
+            str(row.get("tx_id"))
+            for row in rows
+            if isinstance(row, dict)
+            and row.get("tx_id")
+            and row.get("review_status") == "alchemy_confirmed"
+        }
+        missing = expected_tx_ids - confirmed
+        return {
+            "status": "complete" if not missing else "partial",
+            "expected_count": len(expected_tx_ids),
+            "artifact_tx_count": len(rows),
+            "confirmed_count": len(expected_tx_ids & confirmed),
+            "missing_count": len(missing),
+        }
 
     def _helium_trade_tax_line_summary_by_year_asset(self) -> dict[tuple[int, str], dict[str, Decimal | int]]:
         result: dict[tuple[int, str], dict[str, Decimal | int]] = {}
