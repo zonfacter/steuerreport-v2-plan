@@ -339,6 +339,12 @@ ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH = (
     / "all_transaction_evidence_closures"
     / "latest_all_transaction_evidence_closure.json"
 )
+ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH = (
+    Path("/workspace/steuerreport-v2-plan")
+    / "var"
+    / "all_transaction_open_detail_reviews"
+    / "latest_all_transaction_open_detail_review.json"
+)
 
 
 def build_health_payload(db: DuckDbStore) -> dict:
@@ -3936,6 +3942,37 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
         }
 
+    def all_transaction_open_detail_review_payload() -> dict[str, object]:
+        if ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH.exists():
+            try:
+                payload = json.loads(ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+            except Exception as exc:
+                return {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "invalid_artifact",
+                    "artifact_path": str(ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH),
+                    "error": type(exc).__name__,
+                    "methodology": (
+                        "Fallback fuer offenen Transaktions-Detailreview: Artefakt konnte "
+                        "nicht gelesen werden. Keine Steuerdaten wurden veraendert."
+                    ),
+                }
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "missing_artifact",
+            "artifact_path": str(ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH),
+            "open_tx_count": 0,
+            "tax_impact_open_count": 0,
+            "classification_counts": {},
+            "rows": [],
+            "methodology": (
+                "Fallback fuer offenen Transaktions-Detailreview: Noch kein lokales "
+                "read-only Detailartefakt vorhanden."
+            ),
+        }
+
     @app.get("/api/v1/export/solana-tx-alchemy-audit.json")
     def download_solana_tx_alchemy_audit_json() -> Response:
         return Response(
@@ -3966,6 +4003,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             content=json.dumps(all_transaction_evidence_closure_payload(), indent=2, ensure_ascii=False),
             media_type="application/json",
             headers={"Content-Disposition": "attachment; filename=all-transaction-evidence-closure.json"},
+        )
+
+    @app.get("/api/v1/export/all-transaction-open-detail-review.json")
+    def download_all_transaction_open_detail_review_json() -> Response:
+        return Response(
+            content=json.dumps(all_transaction_open_detail_review_payload(), indent=2, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=all-transaction-open-detail-review.json"},
         )
 
     def helium_swap_alchemy_audit_summary(year: int | None = None, limit: int = 20) -> dict[str, object]:
@@ -4465,6 +4510,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "all-transaction-evidence-closure.json",
                     json.dumps(
                         all_transaction_evidence_closure_payload(),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                )
+            if file_id == "all-transaction-open-detail-review":
+                return (
+                    "all-transaction-open-detail-review.json",
+                    json.dumps(
+                        all_transaction_open_detail_review_payload(),
                         indent=2,
                         ensure_ascii=False,
                     ).encode("utf-8"),
