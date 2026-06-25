@@ -55,6 +55,7 @@ class ReportCenterService:
         "tax-solana-stablecoin-swap-fifo-lines": "tax-solana-stablecoin-swap-fifo-lines.csv",
         "tax-helium-swap-context": "tax-helium-swap-context.csv",
         "tax-helium-swap-evidence-review": "tax-helium-swap-evidence-review.csv",
+        "tax-helium-swap-alchemy-audit": "tax-helium-swap-alchemy-audit.json",
         "tax-payment-overview": "tax-payment-overview.json",
         "solscan-evidence-trace": "solscan-evidence-trace.json",
         "helium-solana-reward-rpc-evidence": "helium-solana-reward-rpc-evidence.json",
@@ -80,6 +81,7 @@ class ReportCenterService:
         "tax-solana-stablecoin-swap-fifo-lines": ("solana_fifo", "Solana FIFO-Belege"),
         "tax-helium-swap-context": ("solana_fifo", "Solana FIFO-Belege"),
         "tax-helium-swap-evidence-review": ("solana_fifo", "Solana FIFO-Belege"),
+        "tax-helium-swap-alchemy-audit": ("solana_fifo", "Solana FIFO-Belege"),
         "tax-payment-overview": ("tax", "Steuerliche CSVs"),
         "solscan-evidence-trace": ("solana_fifo", "Solana FIFO-Belege"),
         "helium-solana-reward-rpc-evidence": ("solana_fifo", "Solana FIFO-Belege"),
@@ -126,6 +128,11 @@ class ReportCenterService:
             "tax-helium-swap-evidence-review",
             "Helium Swap-TxID Belegmatrix CSV",
             "/api/v1/export/tax-helium-swap-evidence-review.csv",
+        ),
+        (
+            "tax-helium-swap-alchemy-audit",
+            "Helium Swap Alchemy Onchain-Audit JSON",
+            "/api/v1/export/tax-helium-swap-alchemy-audit.json",
         ),
     ]
 

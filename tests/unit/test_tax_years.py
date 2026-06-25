@@ -1352,6 +1352,17 @@ def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
     assert "raw_evidence_ready" in evidence_csv_text
     assert "solana-hnt-swap.json" in evidence_csv_text
 
+    alchemy_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/export/tax-helium-swap-alchemy-audit.json"
+    )
+    alchemy_response = alchemy_route.endpoint()
+    alchemy_payload = json.loads(alchemy_response.body.decode("utf-8"))
+    assert "filename=tax-helium-swap-alchemy-audit.json" in alchemy_response.headers["content-disposition"]
+    assert "methodology" in alchemy_payload
+    assert str(alchemy_payload.get("rpc_url", "")).find("secret") == -1
+
     year_package_route = next(
         route
         for route in app.routes
@@ -1362,10 +1373,12 @@ def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
         names = set(package.namelist())
         assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-context.csv" in names
         assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-evidence-review.csv" in names
+        assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-alchemy-audit.json" in names
         manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
     manifest_paths = {file["path"] for file in manifest["files"]}
     assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-context.csv" in manifest_paths
     assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-evidence-review.csv" in manifest_paths
+    assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-alchemy-audit.json" in manifest_paths
 
 
 def test_tax_declaration_guide_highlights_losses_and_hnt(tmp_path):

@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+from pathlib import Path
 from threading import RLock
 from time import monotonic
 import zipfile
@@ -307,6 +308,13 @@ from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 from steuerreport_v2.importers.source_profiles import list_profiles
 from steuerreport_v2.importers.wiso_reference_importer import WisoReferenceImporter
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
+
+HELIUM_SWAP_ALCHEMY_AUDIT_PATH = (
+    Path("/workspace/steuerreport-v2-plan")
+    / "var"
+    / "helium_swap_alchemy_audits"
+    / "latest_all_years_helium_swap_alchemy_audit.json"
+)
 
 
 def build_health_payload(db: DuckDbStore) -> dict:
@@ -3742,6 +3750,47 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             return "read-only-sqlite-evidence"
         return basename
 
+    def helium_swap_alchemy_audit_payload() -> dict[str, object]:
+        if HELIUM_SWAP_ALCHEMY_AUDIT_PATH.exists():
+            try:
+                payload = json.loads(HELIUM_SWAP_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+            except Exception as exc:
+                return {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "invalid_artifact",
+                    "artifact_path": str(HELIUM_SWAP_ALCHEMY_AUDIT_PATH),
+                    "error": type(exc).__name__,
+                    "methodology": (
+                        "Fallback fuer Helium-Swap-Alchemy-Audit: Artefakt konnte "
+                        "nicht gelesen werden. Keine Steuerdaten wurden veraendert."
+                    ),
+                }
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "missing_artifact",
+            "artifact_path": str(HELIUM_SWAP_ALCHEMY_AUDIT_PATH),
+            "tx_count": 0,
+            "alchemy_found_count": 0,
+            "confirmed_count": 0,
+            "alchemy_failed_count": 0,
+            "review_status_counts": {},
+            "rows": [],
+            "methodology": (
+                "Fallback fuer Helium-Swap-Alchemy-Audit: Noch kein lokales "
+                "read-only Alchemy-Audit-Artefakt vorhanden."
+            ),
+        }
+
+    @app.get("/api/v1/export/tax-helium-swap-alchemy-audit.json")
+    def download_tax_helium_swap_alchemy_audit_json() -> Response:
+        return Response(
+            content=json.dumps(helium_swap_alchemy_audit_payload(), indent=2, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=tax-helium-swap-alchemy-audit.json"},
+        )
+
     def render_tax_solana_stablecoin_swap_evidence_csv(
         *,
         years: list[int] | None = None,
@@ -4148,6 +4197,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         ensure_ascii=False,
                     ).encode("utf-8"),
                 )
+            if file_id == "tax-helium-swap-alchemy-audit":
+                return (
+                    "tax-helium-swap-alchemy-audit.json",
+                    json.dumps(
+                        helium_swap_alchemy_audit_payload(),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                )
             csv_responses = {
                 "review-decisions": ("review-decisions.csv", download_review_decisions_csv),
                 "token-risk-documentation": ("token-risk-documentation.csv", download_token_risk_documentation_csv),
@@ -4322,6 +4380,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         if helium_swap_context.events_count:
             required_refs.add("/api/v1/export/tax-helium-swap-context.csv")
             required_refs.add("/api/v1/export/tax-helium-swap-evidence-review.csv")
+            required_refs.add("/api/v1/export/tax-helium-swap-alchemy-audit.json")
         buffer = io.BytesIO()
 
         def response_body(response: Response) -> bytes:
@@ -4487,6 +4546,21 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 lambda: render_tax_helium_swap_evidence_review_csv(
                     years=[year],
                     service=tax_year_service,
+                ).encode("utf-8"),
+            ),
+            "/api/v1/export/tax-helium-swap-alchemy-audit.json": (
+                f"06_Solana_FIFO_Belege/tax-year-{year}-helium-swap-alchemy-audit.json",
+                lambda: json.dumps(
+                    {
+                        **helium_swap_alchemy_audit_payload(),
+                        "package_year": year,
+                        "package_note": (
+                            "Gesamtartefakt fuer alle lokal geprueften Helium-Swap-TxIDs; "
+                            "im Jahrespaket als externer Onchain-Gegenbeleg beigelegt."
+                        ),
+                    },
+                    indent=2,
+                    ensure_ascii=False,
                 ).encode("utf-8"),
             ),
             "/api/v1/export/hnt-provenance-events.csv": (
