@@ -994,6 +994,69 @@ class TaxSolanaProgramIncomeReview(BaseModel):
     methodology: str
 
 
+class TaxHeliumSwapContextAssetSummary(BaseModel):
+    year: int
+    asset: str
+    swap_context_events_count: int = 0
+    swap_context_quantity: Decimal = Decimal("0")
+    swap_context_value_eur: Decimal = Decimal("0")
+    taxable_trade_gain_loss_eur: Decimal = Decimal("0")
+    tax_free_trade_gain_loss_eur: Decimal = Decimal("0")
+    total_trade_gain_loss_eur: Decimal = Decimal("0")
+    taxable_trade_lines_count: int = 0
+    tax_free_trade_lines_count: int = 0
+    reward_income_eur: Decimal = Decimal("0")
+    reward_quantity: Decimal = Decimal("0")
+    reward_events_count: int = 0
+    classification: str = "helium_swap_trading_context"
+
+
+class TaxHeliumSwapContextYearSummary(BaseModel):
+    year: int
+    swap_context_events_count: int = 0
+    swap_context_value_eur: Decimal = Decimal("0")
+    taxable_trade_gain_loss_eur: Decimal = Decimal("0")
+    tax_free_trade_gain_loss_eur: Decimal = Decimal("0")
+    total_trade_gain_loss_eur: Decimal = Decimal("0")
+    reward_income_eur: Decimal = Decimal("0")
+    assets_count: int = 0
+
+
+class TaxHeliumSwapContextRow(BaseModel):
+    event_id: str
+    event_time: str
+    year: int
+    source: str
+    account: str | None = None
+    asset: str
+    quantity: Decimal
+    value_eur: Decimal | None = None
+    tx_id: str | None = None
+    tx_total_count: int = 0
+    tx_positive_count: int = 0
+    tx_negative_count: int = 0
+    tx_assets: str = ""
+    classification: str = "helium_swap_trading_context"
+    tax_treatment: str = "trading_fifo_not_reward"
+    review_reason: str
+    fifo_drilldown_endpoint: str
+
+
+class TaxHeliumSwapContextReview(BaseModel):
+    generated_at: str
+    year: int | None = None
+    events_count: int = 0
+    total_context_value_eur: Decimal = Decimal("0")
+    total_taxable_trade_gain_loss_eur: Decimal = Decimal("0")
+    total_tax_free_trade_gain_loss_eur: Decimal = Decimal("0")
+    total_trade_gain_loss_eur: Decimal = Decimal("0")
+    total_reward_income_eur: Decimal = Decimal("0")
+    years: list[TaxHeliumSwapContextYearSummary] = Field(default_factory=list)
+    assets: list[TaxHeliumSwapContextAssetSummary] = Field(default_factory=list)
+    rows: list[TaxHeliumSwapContextRow] = Field(default_factory=list)
+    methodology: str
+
+
 class TaxStablecoinFifoAssetSummary(BaseModel):
     year: int
     asset: str

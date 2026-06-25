@@ -53,6 +53,7 @@ class ReportCenterService:
         "tax-external-inflows": "tax-external-inflows.csv",
         "tax-solana-stablecoin-swap-evidence": "tax-solana-stablecoin-swap-evidence.csv",
         "tax-solana-stablecoin-swap-fifo-lines": "tax-solana-stablecoin-swap-fifo-lines.csv",
+        "tax-helium-swap-context": "tax-helium-swap-context.csv",
         "tax-payment-overview": "tax-payment-overview.json",
         "solscan-evidence-trace": "solscan-evidence-trace.json",
         "helium-solana-reward-rpc-evidence": "helium-solana-reward-rpc-evidence.json",
@@ -76,6 +77,7 @@ class ReportCenterService:
         "tax-external-inflows": ("tax", "Steuerliche CSVs"),
         "tax-solana-stablecoin-swap-evidence": ("solana_fifo", "Solana FIFO-Belege"),
         "tax-solana-stablecoin-swap-fifo-lines": ("solana_fifo", "Solana FIFO-Belege"),
+        "tax-helium-swap-context": ("solana_fifo", "Solana FIFO-Belege"),
         "tax-payment-overview": ("tax", "Steuerliche CSVs"),
         "solscan-evidence-trace": ("solana_fifo", "Solana FIFO-Belege"),
         "helium-solana-reward-rpc-evidence": ("solana_fifo", "Solana FIFO-Belege"),
@@ -112,6 +114,11 @@ class ReportCenterService:
             "tax-solana-stablecoin-swap-fifo-lines",
             "Solana Stablecoin Swap FIFO-Splits CSV",
             "/api/v1/export/tax-solana-stablecoin-swap-fifo-lines.csv",
+        ),
+        (
+            "tax-helium-swap-context",
+            "Helium Swap-/Trading-Kontext CSV",
+            "/api/v1/export/tax-helium-swap-context.csv",
         ),
     ]
 

@@ -1224,6 +1224,111 @@ def test_solana_stablecoin_swap_context_classifies_rpc_quote_leg(tmp_path):
     assert "06_Solana_FIFO_Belege/tax-year-2024-solana-stablecoin-swap-fifo-lines.csv" in manifest_paths
 
 
+def test_helium_swap_context_separates_solana_swap_from_rewards(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    opening = CsvRawImporter(store).import_text(
+        source="manual-csv",
+        filename="opening.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2024-01-01T00:00:00Z,USDC,100,buy,EUR,92\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(opening.batch_id)
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="solana-hnt-swap.json",
+        file_hash="solana-hnt-swap",
+        rows=[
+            {
+                "timestamp_utc": "2024-02-01T00:00:00+00:00",
+                "event_type": "token_transfer",
+                "asset": "USDC",
+                "quantity": "100",
+                "side": "out",
+                "tx_id": "hnt-swap-tx",
+                "wallet_address": "wallet-1",
+            },
+            {
+                "timestamp_utc": "2024-02-01T00:00:00+00:00",
+                "event_type": "token_transfer",
+                "asset": "HNT",
+                "quantity": "25",
+                "side": "in",
+                "tx_id": "hnt-swap-tx",
+                "wallet_address": "wallet-1",
+            },
+        ],
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="HNT",
+            price_eur=Decimal("2"),
+            priced_at=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            source="unit",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    income = TaxYearService(store).income_report(2024)
+    report = TaxYearService(store).helium_swap_context_review(2024)
+
+    assert income.reward_income_eur == Decimal("0")
+    assert report.events_count == 1
+    assert report.total_context_value_eur == Decimal("50.00000000000000000000000000")
+    assert report.total_reward_income_eur == Decimal("0")
+    assert report.rows[0].asset == "HNT"
+    assert report.rows[0].classification == "helium_swap_trading_context"
+    assert report.rows[0].tax_treatment == "trading_fifo_not_reward"
+    assert report.rows[0].review_reason == "helium_asset_normalized_as_solana_trade"
+    assert report.rows[0].fifo_drilldown_endpoint == "/api/v1/tax-years/2024/asset-fifo-drilldown?asset=HNT"
+    assert report.assets[0].asset == "HNT"
+    assert report.assets[0].swap_context_events_count == 1
+    assert report.assets[0].swap_context_quantity == Decimal("25.000000000000000000")
+
+    evidence = TaxYearService(store).evidence_report(2024)
+    evidence_by_id = {item.evidence_id: item for item in evidence.items}
+    assert evidence_by_id["tax-helium-swap-context"].record_count == 1
+    assert evidence_by_id["tax-helium-swap-context"].amount_eur == Decimal("0")
+
+    app = create_app(store)
+    api_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/helium-swap-context"
+    )
+    api_response = api_route.endpoint(2024)
+    assert api_response.data.events_count == 1
+    assert api_response.data.rows[0].tax_treatment == "trading_fifo_not_reward"
+
+    csv_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/export/tax-helium-swap-context.csv"
+    )
+    csv_response = csv_route.endpoint(year=2024)
+    csv_text = csv_response.body.decode("utf-8")
+    assert "filename=tax-year-2024-helium-swap-context.csv" in csv_response.headers["content-disposition"]
+    assert "TX_ID" in csv_text
+    assert "hnt-swap-tx" in csv_text
+    assert "trading_fifo_not_reward" in csv_text
+    assert "helium_asset_normalized_as_solana_trade" in csv_text
+
+    year_package_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/export/tax-years/{year}/evidence-package.zip"
+    )
+    package_response = year_package_route.endpoint(2024)
+    with ZipFile(BytesIO(package_response.body)) as package:
+        names = set(package.namelist())
+        assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-context.csv" in names
+        manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
+    manifest_paths = {file["path"] for file in manifest["files"]}
+    assert "06_Solana_FIFO_Belege/tax-year-2024-helium-swap-context.csv" in manifest_paths
+
+
 def test_tax_declaration_guide_highlights_losses_and_hnt(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(

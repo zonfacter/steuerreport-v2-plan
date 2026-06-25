@@ -68,6 +68,10 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearTurnoverAuditSummaryRow,
     TaxYearTurnoverSourceBreakdown,
     TaxSolanaProgramIncomeAssetSummary,
+    TaxHeliumSwapContextAssetSummary,
+    TaxHeliumSwapContextReview,
+    TaxHeliumSwapContextRow,
+    TaxHeliumSwapContextYearSummary,
     TaxSolanaProgramIncomeReview,
     TaxSolanaProgramIncomeRow,
     TaxSolanaProgramIncomeYearSummary,
@@ -4425,6 +4429,130 @@ class TaxYearService:
             ),
         )
 
+    def helium_swap_context_review(
+        self,
+        year: int | None = None,
+        *,
+        limit: int = 200,
+    ) -> TaxHeliumSwapContextReview:
+        program_rows = [
+            row
+            for row in self._solana_program_income_rows(
+                year=year,
+                classifications={
+                    "solana_program_or_swap_income_review",
+                    "solana_swap_or_transfer_with_outgoing_review",
+                },
+            )
+            if row.asset.upper() in HELIUM_REWARD_ASSETS
+        ]
+        program_rows.extend(self._helium_solana_trade_context_rows(year=year))
+        reward_report = self.reward_trading_separation(
+            years=[year] if year is not None else [item for item in self._available_years() if 2021 <= item <= 2026],
+            assets=HELIUM_REWARD_ASSETS,
+        )
+        reward_by_year_asset = {
+            (row.year, row.asset.upper()): row
+            for row in reward_report.rows
+        }
+        trade_by_year_asset = self._helium_trade_tax_line_summary_by_year_asset()
+
+        asset_groups: dict[tuple[int, str], TaxHeliumSwapContextAssetSummary] = {}
+        row_items: list[TaxHeliumSwapContextRow] = []
+        for row in program_rows:
+            row_year = datetime.fromisoformat(row.event_time).year
+            asset = row.asset.upper()
+            key = (row_year, asset)
+            asset_item = asset_groups.setdefault(
+                key,
+                TaxHeliumSwapContextAssetSummary(year=row_year, asset=asset),
+            )
+            asset_item.swap_context_events_count += 1
+            asset_item.swap_context_quantity += row.quantity
+            asset_item.swap_context_value_eur += row.value_eur or Decimal("0")
+            row_items.append(
+                TaxHeliumSwapContextRow(
+                    event_id=row.event_id,
+                    event_time=row.event_time,
+                    year=row_year,
+                    source=row.source,
+                    account=row.account,
+                    asset=asset,
+                    quantity=row.quantity,
+                    value_eur=row.value_eur,
+                    tx_id=row.tx_id,
+                    tx_total_count=row.tx_total_count,
+                    tx_positive_count=row.tx_positive_count,
+                    tx_negative_count=row.tx_negative_count,
+                    tx_assets=row.tx_assets,
+                    review_reason=self._helium_swap_context_reason(row),
+                    fifo_drilldown_endpoint=f"/api/v1/tax-years/{row_year}/asset-fifo-drilldown?asset={asset}",
+                )
+            )
+
+        for key in set(asset_groups) | set(reward_by_year_asset) | set(trade_by_year_asset):
+            row_year, asset = key
+            if year is not None and row_year != year:
+                continue
+            asset_item = asset_groups.setdefault(
+                key,
+                TaxHeliumSwapContextAssetSummary(year=row_year, asset=asset),
+            )
+            reward = reward_by_year_asset.get(key)
+            if reward is not None:
+                asset_item.reward_income_eur = reward.reward_income_eur
+                asset_item.reward_quantity = reward.reward_quantity
+                asset_item.reward_events_count = reward.reward_events_count
+            trade = trade_by_year_asset.get(key, {})
+            asset_item.taxable_trade_gain_loss_eur = trade.get("taxable_gain_loss_eur", Decimal("0"))
+            asset_item.tax_free_trade_gain_loss_eur = trade.get("tax_free_gain_loss_eur", Decimal("0"))
+            asset_item.total_trade_gain_loss_eur = (
+                asset_item.taxable_trade_gain_loss_eur + asset_item.tax_free_trade_gain_loss_eur
+            )
+            asset_item.taxable_trade_lines_count = int(trade.get("taxable_lines_count", 0))
+            asset_item.tax_free_trade_lines_count = int(trade.get("tax_free_lines_count", 0))
+
+        year_groups: dict[int, TaxHeliumSwapContextYearSummary] = {}
+        for item in asset_groups.values():
+            summary = year_groups.setdefault(item.year, TaxHeliumSwapContextYearSummary(year=item.year))
+            summary.swap_context_events_count += item.swap_context_events_count
+            summary.swap_context_value_eur += item.swap_context_value_eur
+            summary.taxable_trade_gain_loss_eur += item.taxable_trade_gain_loss_eur
+            summary.tax_free_trade_gain_loss_eur += item.tax_free_trade_gain_loss_eur
+            summary.total_trade_gain_loss_eur += item.total_trade_gain_loss_eur
+            summary.reward_income_eur += item.reward_income_eur
+            summary.assets_count += 1
+
+        assets = sorted(
+            asset_groups.values(),
+            key=lambda item: (
+                item.year,
+                -abs(item.swap_context_value_eur),
+                item.asset,
+            ),
+        )
+        row_items.sort(key=lambda item: (item.year, -abs(item.value_eur or Decimal("0")), item.event_time))
+        return TaxHeliumSwapContextReview(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            year=year,
+            events_count=len(program_rows),
+            total_context_value_eur=sum((row.value_eur or Decimal("0") for row in row_items), Decimal("0")),
+            total_taxable_trade_gain_loss_eur=sum((item.taxable_trade_gain_loss_eur for item in assets), Decimal("0")),
+            total_tax_free_trade_gain_loss_eur=sum((item.tax_free_trade_gain_loss_eur for item in assets), Decimal("0")),
+            total_trade_gain_loss_eur=sum((item.total_trade_gain_loss_eur for item in assets), Decimal("0")),
+            total_reward_income_eur=sum((item.reward_income_eur for item in assets), Decimal("0")),
+            years=sorted(year_groups.values(), key=lambda item: item.year),
+            assets=assets[:limit],
+            rows=row_items[:limit],
+            methodology=(
+                "Read-only Helium-Solana-Swap-Bruecke fuer HNT/IOT/MOBILE. "
+                "Solana-Programm-/Swap-Kontexte werden ausdruecklich nicht als "
+                "Reward/Mining deklariert, sondern neben vorhandenen FIFO-Tax-Lines "
+                "als Trading-/Swap-Kontext ausgewiesen. Der Report schreibt keine "
+                "Events, Lots, Preise oder Steuerzeilen."
+            ),
+        )
+
     def stablecoin_fifo_review(
         self,
         year: int | None = None,
@@ -4814,6 +4942,7 @@ class TaxYearService:
         guide = self.declaration_guide(year)
         external = self.external_inflow_report(year, limit=0)
         solana_swaps = self.solana_stablecoin_swap_context_review(year, limit=10_000)
+        helium_swaps = self.helium_swap_context_review(year, limit=10_000)
         wallet_fifo_service = WalletFifoPreviewService(self.store)
         bmf_closure = self.bmf_closure_appendix(year)
         cex_outflow = wallet_fifo_service.cex_exchange_outflow_evidence(
@@ -4933,6 +5062,22 @@ class TaxYearService:
                     "Verknuepft jede Stablecoin-Swap-Signatur mit den konkreten "
                     "FIFO-Tax-Line-Splits inklusive Lot-, Acquisition- und "
                     "Disposal-Belegreferenzen."
+                ),
+            ),
+            TaxYearEvidenceItem(
+                evidence_id="tax-helium-swap-context",
+                category="beleg" if helium_swaps.events_count else "pruefen",
+                label="Helium Swap-/Trading-Kontext",
+                endpoint="/api/v1/export/tax-helium-swap-context.csv",
+                file_format="csv",
+                record_count=helium_swaps.events_count,
+                amount_eur=helium_swaps.total_trade_gain_loss_eur,
+                status=self._evidence_item_status(helium_swaps.events_count),
+                required=bool(helium_swaps.events_count),
+                note=(
+                    "Trennt HNT/IOT/MOBILE-Solana-Swap-/Trading-Kontexte von "
+                    "Reward-/Mining-Einnahmen und verweist auf die bestehenden "
+                    "FIFO-Drilldowns."
                 ),
             ),
             TaxYearEvidenceItem(
@@ -6352,12 +6497,18 @@ class TaxYearService:
             audit_endpoint=f"/api/v1/tax-years/{audit.year}/turnover-audit",
         )
 
-    def _solana_program_income_rows(self, year: int | None) -> list[TaxSolanaProgramIncomeRow]:
+    def _solana_program_income_rows(
+        self,
+        year: int | None,
+        *,
+        classifications: set[str] | None = None,
+    ) -> list[TaxSolanaProgramIncomeRow]:
         rows = self._income_event_rows(event_types=("income",))
         tx_context = self._income_tx_context()
         assets = sorted({str(row[5]).upper() for row in rows if row[6] > 0 and str(row[5]).upper() != "EUR"})
         price_lookup = self._income_price_lookup(assets)
         results: list[TaxSolanaProgramIncomeRow] = []
+        accepted_classifications = classifications or {"solana_program_or_swap_income_review"}
         for (
             event_id,
             event_time,
@@ -6382,7 +6533,7 @@ class TaxYearService:
                 tx_id=tx_id,
                 tx_context=tx_context,
             )
-            if classification != "solana_program_or_swap_income_review":
+            if classification not in accepted_classifications:
                 continue
             price_eur = None
             if quantity > 0 and asset.upper() != "EUR":
@@ -6412,6 +6563,7 @@ class TaxYearService:
                     tx_negative_count=int(context.get("negative_count", 0) or 0),
                     tx_zero_count=int(context.get("zero_count", 0) or 0),
                     tx_assets=str(context.get("assets", "") or ""),
+                    classification=classification,
                     review_reason=self._solana_program_income_reason(context),
                 )
             )
@@ -6429,6 +6581,98 @@ class TaxYearService:
         if total > 1:
             return "same_tx_has_additional_positive_program_context"
         return "non_isolated_solana_income_context"
+
+    @staticmethod
+    def _helium_swap_context_reason(row: TaxSolanaProgramIncomeRow) -> str:
+        if row.classification == "solana_helium_trade_context":
+            return "helium_asset_normalized_as_solana_trade"
+        if row.tx_negative_count > 0:
+            return "helium_asset_received_in_same_tx_with_outgoing_leg"
+        if row.tx_total_count > 1:
+            return "helium_asset_received_in_multi_leg_solana_program_context"
+        return "helium_asset_program_context_not_reward"
+
+    def _helium_solana_trade_context_rows(self, year: int | None) -> list[TaxSolanaProgramIncomeRow]:
+        rows = self._income_event_rows(event_types=("trade",))
+        tx_context = self._income_tx_context()
+        assets = sorted({str(row[5]).upper() for row in rows if row[6] > 0 and str(row[5]).upper() != "EUR"})
+        price_lookup = self._income_price_lookup(assets)
+        results: list[TaxSolanaProgramIncomeRow] = []
+        for (
+            event_id,
+            event_time,
+            _event_type,
+            source,
+            account,
+            asset,
+            quantity,
+            quote_asset,
+            quote_quantity,
+            tx_id,
+        ) in rows:
+            if year is not None and event_time.year != year:
+                continue
+            asset_key = str(asset).upper()
+            if source != "solana_rpc" or asset_key not in HELIUM_REWARD_ASSETS or quantity <= 0:
+                continue
+            price_eur = None
+            if asset_key != "EUR":
+                price = self._income_price_at(asset, event_time, price_lookup)
+                if price is not None:
+                    price_eur = price[0]
+            value_eur = self._income_row_value(
+                asset=asset,
+                quantity=quantity,
+                quote_asset=quote_asset,
+                quote_quantity=quote_quantity,
+                price_eur=price_eur,
+            )
+            context = tx_context.get(tx_id or "", {})
+            results.append(
+                TaxSolanaProgramIncomeRow(
+                    event_id=event_id,
+                    event_time=event_time.isoformat(),
+                    source=source,
+                    account=account,
+                    asset=asset_key,
+                    quantity=quantity,
+                    value_eur=value_eur,
+                    tx_id=tx_id,
+                    tx_total_count=int(context.get("total_count", 0) or 0),
+                    tx_positive_count=int(context.get("positive_count", 0) or 0),
+                    tx_negative_count=int(context.get("negative_count", 0) or 0),
+                    tx_zero_count=int(context.get("zero_count", 0) or 0),
+                    tx_assets=str(context.get("assets", "") or ""),
+                    classification="solana_helium_trade_context",
+                    review_reason="helium_asset_normalized_as_solana_trade",
+                )
+            )
+        return results
+
+    def _helium_trade_tax_line_summary_by_year_asset(self) -> dict[tuple[int, str], dict[str, Decimal | int]]:
+        result: dict[tuple[int, str], dict[str, Decimal | int]] = {}
+        for line in self._tax_lines():
+            asset = str(getattr(line, "asset", "") or "").upper()
+            if asset not in HELIUM_REWARD_ASSETS:
+                continue
+            year = getattr(line, "disposed_at").year
+            key = (year, asset)
+            item = result.setdefault(
+                key,
+                {
+                    "taxable_gain_loss_eur": Decimal("0"),
+                    "tax_free_gain_loss_eur": Decimal("0"),
+                    "taxable_lines_count": 0,
+                    "tax_free_lines_count": 0,
+                },
+            )
+            if self._is_taxable_private_disposal(line):
+                item["taxable_gain_loss_eur"] = item["taxable_gain_loss_eur"] + line.gain_loss_eur  # type: ignore[operator]
+                item["taxable_lines_count"] = int(item["taxable_lines_count"]) + 1
+            else:
+                item["tax_free_gain_loss_eur"] = item["tax_free_gain_loss_eur"] + line.gain_loss_eur  # type: ignore[operator]
+                item["tax_free_lines_count"] = int(item["tax_free_lines_count"]) + 1
+        return result
 
     def _stablecoin_fifo_lines(self, year: int | None) -> list[TaxStablecoinFifoLine]:
         params: list[object] = [list(STABLECOIN_LIKE_ASSETS)]
