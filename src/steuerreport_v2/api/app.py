@@ -327,6 +327,12 @@ SOLANA_FAILED_TX_TAX_IMPACT_PATH = (
     / "solana_failed_tx_tax_impacts"
     / "latest_solana_failed_tx_tax_impact.json"
 )
+ALL_TRANSACTION_EVIDENCE_MATRIX_PATH = (
+    Path("/workspace/steuerreport-v2-plan")
+    / "var"
+    / "all_transaction_evidence_matrices"
+    / "latest_all_transaction_evidence_matrix.json"
+)
 
 
 def build_health_payload(db: DuckDbStore) -> dict:
@@ -3860,6 +3866,38 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
         }
 
+    def all_transaction_evidence_matrix_payload() -> dict[str, object]:
+        if ALL_TRANSACTION_EVIDENCE_MATRIX_PATH.exists():
+            try:
+                payload = json.loads(ALL_TRANSACTION_EVIDENCE_MATRIX_PATH.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+            except Exception as exc:
+                return {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "invalid_artifact",
+                    "artifact_path": str(ALL_TRANSACTION_EVIDENCE_MATRIX_PATH),
+                    "error": type(exc).__name__,
+                    "methodology": (
+                        "Fallback fuer Gesamt-Transaktions-Belegmatrix: Artefakt konnte "
+                        "nicht gelesen werden. Keine Steuerdaten wurden veraendert."
+                    ),
+                }
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "missing_artifact",
+            "artifact_path": str(ALL_TRANSACTION_EVIDENCE_MATRIX_PATH),
+            "tx_count": 0,
+            "solana_signature_count": 0,
+            "non_solana_txid_count": 0,
+            "review_status_counts": {},
+            "rows": [],
+            "methodology": (
+                "Fallback fuer Gesamt-Transaktions-Belegmatrix: Noch kein lokales "
+                "read-only Matrixartefakt vorhanden."
+            ),
+        }
+
     @app.get("/api/v1/export/solana-tx-alchemy-audit.json")
     def download_solana_tx_alchemy_audit_json() -> Response:
         return Response(
@@ -3874,6 +3912,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             content=json.dumps(solana_failed_tx_tax_impact_payload(), indent=2, ensure_ascii=False),
             media_type="application/json",
             headers={"Content-Disposition": "attachment; filename=solana-failed-tx-tax-impact.json"},
+        )
+
+    @app.get("/api/v1/export/all-transaction-evidence-matrix.json")
+    def download_all_transaction_evidence_matrix_json() -> Response:
+        return Response(
+            content=json.dumps(all_transaction_evidence_matrix_payload(), indent=2, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=all-transaction-evidence-matrix.json"},
         )
 
     def helium_swap_alchemy_audit_summary(year: int | None = None, limit: int = 20) -> dict[str, object]:
@@ -4355,6 +4401,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "solana-failed-tx-tax-impact.json",
                     json.dumps(
                         solana_failed_tx_tax_impact_payload(),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                )
+            if file_id == "all-transaction-evidence-matrix":
+                return (
+                    "all-transaction-evidence-matrix.json",
+                    json.dumps(
+                        all_transaction_evidence_matrix_payload(),
                         indent=2,
                         ensure_ascii=False,
                     ).encode("utf-8"),

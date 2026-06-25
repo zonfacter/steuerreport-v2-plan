@@ -47,3 +47,11 @@ def test_solana_tx_audit_redacts_alchemy_url():
         MODULE._redacted_rpc_url("https://solana-mainnet.g.alchemy.com/v2/secret-key")
         == "https://solana-mainnet.g.alchemy.com/v2/<redacted>"
     )
+
+
+def test_solana_tx_audit_detects_plausible_solana_signatures():
+    assert MODULE._is_plausible_solana_signature(
+        "37cPEEVnEs3CDcXEMLvEbsd3yR4LkiLNoJcZWyL15MsswqGDkjVGUz7jzLpKN9s3zXUWg2DBMVMszJRrVGUk2ano"
+    )
+    assert not MODULE._is_plausible_solana_signature("OF7148144106824448000202")
+    assert not MODULE._is_plausible_solana_signature("manual-opening:binance-btc-deposit-2023-06-09")

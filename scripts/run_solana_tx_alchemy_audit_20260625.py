@@ -19,6 +19,7 @@ PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "solana_tx_alchemy_audits"
 FAILED_STATUSES = {"alchemy_failed", "alchemy_not_found", "alchemy_http_error"}
+SOLANA_BASE58_ALPHABET = set("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 
 
 def _log(message: str) -> None:
@@ -34,6 +35,11 @@ def _redacted_rpc_url(url: str) -> str:
     if marker in url:
         return url.split(marker, 1)[0] + marker + "<redacted>"
     return url
+
+
+def _is_plausible_solana_signature(value: object) -> bool:
+    text = str(value or "")
+    return 64 <= len(text) <= 90 and all(char in SOLANA_BASE58_ALPHABET for char in text)
 
 
 def _parse_dt(value: object) -> datetime | None:
@@ -150,7 +156,13 @@ def _fetch_alchemy_transaction(client: httpx.Client, rpc_url: str, tx_id: str) -
     return "alchemy_found", result, None
 
 
-def _load_local_transactions(store: DuckDbStore, *, source: str, limit: int) -> list[dict[str, Any]]:
+def _load_local_transactions(
+    store: DuckDbStore,
+    *,
+    source: str,
+    limit: int,
+    solana_signature_only: bool = False,
+) -> list[dict[str, Any]]:
     source_filter = "" if source == "all" else "and lower(source) = lower(?)"
     params: list[object] = []
     if source != "all":
@@ -178,7 +190,7 @@ def _load_local_transactions(store: DuckDbStore, *, source: str, limit: int) -> 
             """,
             params,
         ).fetchall()
-    return [
+    rows_payload = [
         {
             "tx_id": str(row[0]),
             "first_event_time": row[1],
@@ -191,6 +203,9 @@ def _load_local_transactions(store: DuckDbStore, *, source: str, limit: int) -> 
         }
         for row in rows
     ]
+    if solana_signature_only:
+        rows_payload = [row for row in rows_payload if _is_plausible_solana_signature(row["tx_id"])]
+    return rows_payload[:max(1, int(limit))]
 
 
 def _audit_row(local: dict[str, Any], status: str, raw: dict[str, Any] | None, error: str | None) -> dict[str, Any]:
@@ -294,6 +309,8 @@ def main() -> int:
     parser.add_argument("--delay-seconds", type=float, default=0.05)
     parser.add_argument("--timeout-seconds", type=float, default=20)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--solana-signature-only", action="store_true")
+    parser.add_argument("--cache-from", action="append", default=[])
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     args = parser.parse_args()
 
@@ -319,8 +336,25 @@ def main() -> int:
             }
         except Exception:
             cached = {}
+    for cache_path in args.cache_from:
+        try:
+            previous = json.loads(Path(cache_path).read_text(encoding="utf-8"))
+            cached.update(
+                {
+                    str(row["tx_id"]): row
+                    for row in previous.get("rows", [])
+                    if row.get("tx_id") and row.get("alchemy_status") == "alchemy_found"
+                }
+            )
+        except Exception:
+            pass
 
-    local_rows = _load_local_transactions(store, source=source_label, limit=max(1, int(args.limit)))
+    local_rows = _load_local_transactions(
+        store,
+        source=source_label,
+        limit=max(1, int(args.limit)),
+        solana_signature_only=bool(args.solana_signature_only),
+    )
     audited: list[dict[str, Any]] = []
     _log(f"start source={source_label} tx_count={len(local_rows)} resume_cached={len(cached)}")
     with httpx.Client(timeout=max(3.0, min(float(args.timeout_seconds), 60.0))) as client:
