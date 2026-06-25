@@ -321,6 +321,12 @@ SOLANA_TX_ALCHEMY_AUDIT_PATH = (
     / "solana_tx_alchemy_audits"
     / "latest_solana_rpc_tx_alchemy_audit.json"
 )
+SOLANA_FAILED_TX_TAX_IMPACT_PATH = (
+    Path("/workspace/steuerreport-v2-plan")
+    / "var"
+    / "solana_failed_tx_tax_impacts"
+    / "latest_solana_failed_tx_tax_impact.json"
+)
 
 
 def build_health_payload(db: DuckDbStore) -> dict:
@@ -3822,12 +3828,52 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
         }
 
+    def solana_failed_tx_tax_impact_payload() -> dict[str, object]:
+        if SOLANA_FAILED_TX_TAX_IMPACT_PATH.exists():
+            try:
+                payload = json.loads(SOLANA_FAILED_TX_TAX_IMPACT_PATH.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+            except Exception as exc:
+                return {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "invalid_artifact",
+                    "artifact_path": str(SOLANA_FAILED_TX_TAX_IMPACT_PATH),
+                    "error": type(exc).__name__,
+                    "methodology": (
+                        "Fallback fuer Solana-Failed-Tx-Steuerwirkungspruefung: Artefakt konnte "
+                        "nicht gelesen werden. Keine Steuerdaten wurden veraendert."
+                    ),
+                }
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "missing_artifact",
+            "artifact_path": str(SOLANA_FAILED_TX_TAX_IMPACT_PATH),
+            "failed_tx_count": 0,
+            "tax_lines_count": 0,
+            "tax_lots_count": 0,
+            "unmatched_disposals_count": 0,
+            "tax_impact_status": "artifact_missing",
+            "methodology": (
+                "Fallback fuer Solana-Failed-Tx-Steuerwirkungspruefung: Noch kein lokales "
+                "read-only Steuerwirkungsartefakt vorhanden."
+            ),
+        }
+
     @app.get("/api/v1/export/solana-tx-alchemy-audit.json")
     def download_solana_tx_alchemy_audit_json() -> Response:
         return Response(
             content=json.dumps(solana_tx_alchemy_audit_payload(), indent=2, ensure_ascii=False),
             media_type="application/json",
             headers={"Content-Disposition": "attachment; filename=solana-tx-alchemy-audit.json"},
+        )
+
+    @app.get("/api/v1/export/solana-failed-tx-tax-impact.json")
+    def download_solana_failed_tx_tax_impact_json() -> Response:
+        return Response(
+            content=json.dumps(solana_failed_tx_tax_impact_payload(), indent=2, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=solana-failed-tx-tax-impact.json"},
         )
 
     def helium_swap_alchemy_audit_summary(year: int | None = None, limit: int = 20) -> dict[str, object]:
@@ -4300,6 +4346,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "solana-tx-alchemy-audit.json",
                     json.dumps(
                         solana_tx_alchemy_audit_payload(),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                )
+            if file_id == "solana-failed-tx-tax-impact":
+                return (
+                    "solana-failed-tx-tax-impact.json",
+                    json.dumps(
+                        solana_failed_tx_tax_impact_payload(),
                         indent=2,
                         ensure_ascii=False,
                     ).encode("utf-8"),

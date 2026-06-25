@@ -60,6 +60,7 @@ class ReportCenterService:
         "solscan-evidence-trace": "solscan-evidence-trace.json",
         "helium-solana-reward-rpc-evidence": "helium-solana-reward-rpc-evidence.json",
         "solana-tx-alchemy-audit": "solana-tx-alchemy-audit.json",
+        "solana-failed-tx-tax-impact": "solana-failed-tx-tax-impact.json",
     }
     EVIDENCE_GROUPS = {
         "audit-json": ("structure", "Struktur und Audit"),
@@ -87,6 +88,7 @@ class ReportCenterService:
         "solscan-evidence-trace": ("solana_fifo", "Solana FIFO-Belege"),
         "helium-solana-reward-rpc-evidence": ("solana_fifo", "Solana FIFO-Belege"),
         "solana-tx-alchemy-audit": ("solana_fifo", "Solana FIFO-Belege"),
+        "solana-failed-tx-tax-impact": ("solana_fifo", "Solana FIFO-Belege"),
     }
     CSV_EXPORTS = [
         ("review-decisions", "Review-Decisions CSV", "/api/v1/export/review-decisions.csv"),
@@ -140,6 +142,11 @@ class ReportCenterService:
             "solana-tx-alchemy-audit",
             "Solana RPC TxID Alchemy-Audit JSON",
             "/api/v1/export/solana-tx-alchemy-audit.json",
+        ),
+        (
+            "solana-failed-tx-tax-impact",
+            "Solana Failed-Tx Steuerwirkungspruefung JSON",
+            "/api/v1/export/solana-failed-tx-tax-impact.json",
         ),
     ]
 
