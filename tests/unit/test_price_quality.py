@@ -385,6 +385,90 @@ def test_price_quality_stablecoin_fx_replacement_preview_marks_missing_replaceme
     assert "Stablecoin-EUR-Preisanker" in day["recommended_action"]
 
 
+def test_price_quality_stablecoin_fx_replacement_impact_marks_ready_rows(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    event_time = datetime(2024, 3, 9, 12, tzinfo=timezone.utc)
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="binance",
+            source_ref="usdt-2024-trade",
+            event_time=event_time,
+            event_type="trade",
+            asset="USDT",
+            quantity=Decimal("10"),
+            quote_asset="SOL",
+            quote_quantity=Decimal("0.1"),
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.94"),
+            priced_at=event_time,
+            source="derived:event_quote",
+            confidence=Decimal("0.85"),
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.92"),
+            priced_at=datetime(2024, 3, 9, tzinfo=timezone.utc),
+            source="v1_fx_cache:coingecko_history:usd_eur:ecb",
+            confidence=Decimal("1.0"),
+        )
+    )
+    _add_tax_line(store, asset="USDT", disposed_at=datetime(2024, 4, 1, tzinfo=timezone.utc))
+    client = TestClient(create_app(store))
+
+    response = client.get(
+        "/api/v1/prices/quality/stablecoin-fx-replacement-impact",
+        params={"asset": "USDT", "year": 2024},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["asset"] == "USDT"
+    assert data["derived_price_rows"] == 1
+    assert data["replacement_ready_rows"] == 1
+    assert data["missing_replacement_rows"] == 0
+    assert data["all_replacement_ready"] is True
+    assert data["tax_lines_count"] == 1
+    row = data["rows"][0]
+    assert row["replacement_status"] == "ready"
+    assert row["replacement_price_eur"] == "0.920000000000000000"
+    assert row["abs_delta_eur"] == "0.020000000000000000"
+    assert row["sample_event_refs"] == ["usdt-2024-trade"]
+
+
+def test_price_quality_stablecoin_fx_replacement_impact_marks_missing_rows(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_price_point(
+        PricePointCreate(
+            asset="BUSD",
+            price_eur=Decimal("0.70"),
+            priced_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            source="derived:event_quote",
+            confidence=Decimal("0.85"),
+        )
+    )
+    client = TestClient(create_app(store))
+
+    response = client.get(
+        "/api/v1/prices/quality/stablecoin-fx-replacement-impact",
+        params={"asset": "BUSD", "year": 2023},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["derived_price_rows"] == 1
+    assert data["replacement_ready_rows"] == 0
+    assert data["missing_replacement_rows"] == 1
+    assert data["all_replacement_ready"] is False
+    assert data["rows"][0]["replacement_status"] == "missing_replacement"
+    assert data["rows"][0]["replacement_price_eur"] is None
+
+
 def test_price_quality_solscan_signature_review_separates_signature_refs(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     signature = "3YTtgWxaXt8hf9N2ja69r1rpvfozBK7vyrkmZDy8EvtBCSg3YcCrujEFJc4mDQW1pnCTLFaWLHaofD3zdaZGdcQ"

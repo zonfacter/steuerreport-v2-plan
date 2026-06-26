@@ -290,6 +290,40 @@ class PriceQualityStablecoinFxReplacementReport(BaseModel):
     methodology: str
 
 
+class PriceQualityStablecoinFxReplacementImpactRow(BaseModel):
+    price_id: str
+    asset: str
+    year: int
+    priced_at: datetime
+    derived_price_eur: Decimal
+    derived_source: str
+    replacement_status: Literal["ready", "missing_replacement"]
+    replacement_price_eur: Decimal | None = None
+    replacement_source: str | None = None
+    replacement_priced_at: datetime | None = None
+    abs_delta_eur: Decimal | None = None
+    abs_delta_pct: Decimal | None = None
+    sample_event_refs: list[str] = Field(default_factory=list)
+    recommended_action: str
+
+
+class PriceQualityStablecoinFxReplacementImpactReport(BaseModel):
+    generated_at: datetime
+    asset: str
+    year: int
+    source: str
+    derived_price_rows: int
+    replacement_ready_rows: int
+    missing_replacement_rows: int
+    all_replacement_ready: bool
+    tax_lines_count: int
+    tax_quantity: Decimal
+    max_abs_delta_pct: Decimal | None = None
+    avg_abs_delta_pct: Decimal | None = None
+    rows: list[PriceQualityStablecoinFxReplacementImpactRow] = Field(default_factory=list)
+    methodology: str
+
+
 class PriceQualitySolscanSignatureItem(BaseModel):
     scope: str
     asset: str

@@ -265,6 +265,7 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityReport,
     PriceQualitySolscanSignatureReport,
     PriceQualityStablecoinFxReport,
+    PriceQualityStablecoinFxReplacementImpactReport,
     PriceQualityStablecoinFxReplacementReport,
     PriceRequirementReport,
 )
@@ -1288,6 +1289,22 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             data=PriceQualityService(db).stablecoin_fx_replacement_preview(
                 limit=limit,
                 days_per_group=days_per_group,
+            )
+        )
+
+    @app.get("/api/v1/prices/quality/stablecoin-fx-replacement-impact")
+    def price_quality_stablecoin_fx_replacement_impact(
+        asset: str,
+        year: int,
+        source: str = "derived:event_quote",
+        limit: int = 200,
+    ) -> ApiResponse[PriceQualityStablecoinFxReplacementImpactReport]:
+        return ApiResponse(
+            data=PriceQualityService(db).stablecoin_fx_replacement_impact(
+                asset=asset,
+                year=year,
+                source=source,
+                limit=limit,
             )
         )
 

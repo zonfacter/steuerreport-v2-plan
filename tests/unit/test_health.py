@@ -94,6 +94,7 @@ def test_vertical_slice_routes_are_registered(tmp_path):
     assert "/api/v1/prices/quality/manual-review" in paths
     assert "/api/v1/prices/quality/stablecoin-fx-review" in paths
     assert "/api/v1/prices/quality/stablecoin-fx-replacement-preview" in paths
+    assert "/api/v1/prices/quality/stablecoin-fx-replacement-impact" in paths
     assert "/api/v1/prices/quality/solscan-signature-review" in paths
     assert "/api/v1/prices/quality/binance-normalizer-review" in paths
     assert "/api/v1/prices/quality/event-quote-evidence-review" in paths

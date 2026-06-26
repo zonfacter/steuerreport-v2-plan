@@ -30,6 +30,8 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityStablecoinFxReport,
     PriceQualityStablecoinFxReplacementDay,
     PriceQualityStablecoinFxReplacementGroup,
+    PriceQualityStablecoinFxReplacementImpactReport,
+    PriceQualityStablecoinFxReplacementImpactRow,
     PriceQualityStablecoinFxReplacementReport,
     PriceQualitySolscanSignatureItem,
     PriceQualitySolscanSignatureReport,
@@ -714,6 +716,176 @@ class PriceQualityService:
                 "Asset/Jahr/Tag, ob eine gleichdatierte FX-/ECB-/USD_EUR-Quelle oder "
                 "sonstige Marktpreisquelle existiert. Sie schreibt keine Preise, "
                 "keine Review-Decisions und aendert keine FIFO-/Steuerdaten."
+            ),
+        )
+
+    def stablecoin_fx_replacement_impact(
+        self,
+        *,
+        asset: str,
+        year: int,
+        source: str = "derived:event_quote",
+        limit: int = 200,
+    ) -> PriceQualityStablecoinFxReplacementImpactReport:
+        normalized_asset = asset.upper()
+        with self.store.connect() as con:
+            tax_row = con.execute(
+                """
+                select count(*)::integer, coalesce(sum(abs(quantity)), 0)
+                from tax_lines
+                where upper(asset) = ?
+                  and date_part('year', disposed_at)::integer = ?
+                """,
+                [normalized_asset, year],
+            ).fetchone()
+            rows = con.execute(
+                """
+                with alternatives as (
+                    select
+                        price_id,
+                        upper(asset) as asset,
+                        price_eur,
+                        priced_at,
+                        source,
+                        case
+                          when lower(source) like '%usd_eur%'
+                            or lower(source) like '%fx%'
+                            or lower(source) like '%ecb%'
+                          then 1 else 0
+                        end as is_fx_backed,
+                        case
+                          when lower(source) like '%coingecko%'
+                            or lower(source) like '%market%'
+                            or lower(source) like '%manual%'
+                          then 1 else 0
+                        end as is_market
+                    from price_ledger
+                    where upper(asset) = ?
+                      and date_part('year', priced_at)::integer = ?
+                      and source <> ?
+                      and price_eur > 0
+                ),
+                selected_alternative as (
+                    select *
+                    from (
+                        select
+                            asset,
+                            cast(priced_at as date) as price_date,
+                            price_id,
+                            price_eur,
+                            source,
+                            priced_at,
+                            row_number() over (
+                                partition by asset, cast(priced_at as date)
+                                order by is_fx_backed desc, is_market desc, priced_at desc, source, price_id
+                            ) as rn
+                        from alternatives
+                    )
+                    where rn = 1
+                ),
+                refs as (
+                    select
+                        upper(asset) as asset,
+                        cast(event_time as date) as price_date,
+                        list(source_ref order by event_time, event_id) as source_refs
+                    from canonical_events
+                    where upper(asset) = ?
+                      and date_part('year', event_time)::integer = ?
+                      and source_ref is not null
+                    group by upper(asset), cast(event_time as date)
+                )
+                select
+                    p.price_id,
+                    upper(p.asset) as asset,
+                    date_part('year', p.priced_at)::integer as year,
+                    p.priced_at,
+                    p.price_eur,
+                    p.source,
+                    s.price_eur as replacement_price_eur,
+                    s.source as replacement_source,
+                    s.priced_at as replacement_priced_at,
+                    coalesce(r.source_refs, []) as source_refs
+                from price_ledger p
+                left join selected_alternative s
+                  on s.asset = upper(p.asset)
+                 and s.price_date = cast(p.priced_at as date)
+                left join refs r
+                  on r.asset = upper(p.asset)
+                 and r.price_date = cast(p.priced_at as date)
+                where upper(p.asset) = ?
+                  and date_part('year', p.priced_at)::integer = ?
+                  and p.source = ?
+                order by
+                    case when s.price_id is null then 0 else 1 end,
+                    p.priced_at,
+                    p.price_id
+                limit ?
+                """,
+                [
+                    normalized_asset,
+                    year,
+                    source,
+                    normalized_asset,
+                    year,
+                    normalized_asset,
+                    year,
+                    source,
+                    max(1, limit),
+                ],
+            ).fetchall()
+
+        impact_rows: list[PriceQualityStablecoinFxReplacementImpactRow] = []
+        deltas: list[Decimal] = []
+        for row in rows:
+            derived_price = row[4]
+            replacement_price = row[6]
+            abs_delta_eur: Decimal | None = None
+            abs_delta_pct: Decimal | None = None
+            if replacement_price is not None:
+                abs_delta_eur = abs(derived_price - replacement_price)
+                if replacement_price > 0:
+                    abs_delta_pct = abs_delta_eur / replacement_price * Decimal("100")
+                    deltas.append(abs_delta_pct)
+            status = "ready" if replacement_price is not None else "missing_replacement"
+            impact_rows.append(
+                PriceQualityStablecoinFxReplacementImpactRow(
+                    price_id=row[0],
+                    asset=row[1],
+                    year=row[2],
+                    priced_at=row[3],
+                    derived_price_eur=derived_price,
+                    derived_source=row[5],
+                    replacement_status=status,
+                    replacement_price_eur=replacement_price,
+                    replacement_source=row[7],
+                    replacement_priced_at=row[8],
+                    abs_delta_eur=abs_delta_eur,
+                    abs_delta_pct=abs_delta_pct,
+                    sample_event_refs=list(row[9] or [])[:5],
+                    recommended_action=self._stablecoin_fx_replacement_impact_action(status),
+                )
+            )
+
+        missing = sum(1 for row in impact_rows if row.replacement_status == "missing_replacement")
+        return PriceQualityStablecoinFxReplacementImpactReport(
+            generated_at=datetime.now(timezone.utc),
+            asset=normalized_asset,
+            year=year,
+            source=source,
+            derived_price_rows=len(impact_rows),
+            replacement_ready_rows=len(impact_rows) - missing,
+            missing_replacement_rows=missing,
+            all_replacement_ready=bool(impact_rows) and missing == 0,
+            tax_lines_count=int(tax_row[0] or 0),
+            tax_quantity=tax_row[1] or Decimal("0"),
+            max_abs_delta_pct=max(deltas) if deltas else None,
+            avg_abs_delta_pct=(sum(deltas, Decimal("0")) / Decimal(len(deltas))) if deltas else None,
+            rows=impact_rows,
+            methodology=(
+                "Read-only Impact-Vorschau fuer Stablecoin-FX-Replacement. "
+                "Pro Derived-Preiszeile wird der beste gleichdatierte Ersatzpreis "
+                "aus vorhandenen Preiszeilen ausgewaehlt, bevorzugt FX-/USD_EUR-/ECB-"
+                "Quellen. Der Endpunkt schreibt keine Preise und baut FIFO nicht neu."
             ),
         )
 
@@ -1938,6 +2110,12 @@ class PriceQualityService:
         if days_needing_replacement == 0 and market_days > 0:
             return "Alle angezeigten Tage haben Marktpreis-Ersatz; FX-Beleglage fuer Stablecoin sauber dokumentieren."
         return "Offene Tage benoetigen Stablecoin-FX-Replacement; vor Review-Closure keine automatische Akzeptanz der Event-Quotes."
+
+    @staticmethod
+    def _stablecoin_fx_replacement_impact_action(status: str) -> str:
+        if status == "ready":
+            return "Replacement-Kandidat vorhanden; Delta pruefen und danach kontrolliert anwenden oder als Review-Evidenz dokumentieren."
+        return "Kein gleichdatierter Replacement-Preis vorhanden; vor Anwendung Tages-FX-/Stablecoin-EUR-Preisanker beschaffen."
 
     @staticmethod
     def _count_dict(values: object) -> dict[str, int]:
