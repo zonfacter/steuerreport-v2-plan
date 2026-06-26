@@ -417,6 +417,15 @@ class PriceQualityStablecoinFxAnchorPreviewLatest(BaseModel):
     methodology: str
 
 
+class PriceQualityStablecoinFxAnchorPreviewDecisionCreate(BaseModel):
+    asset: str = Field(min_length=1)
+    year: int
+    source: str = "derived:event_quote"
+    action: StablecoinFxReplacementDecisionAction
+    rationale: str
+    evidence_ref: str | None = None
+
+
 class PriceQualitySolscanSignatureItem(BaseModel):
     scope: str
     asset: str

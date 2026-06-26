@@ -37,6 +37,7 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityStablecoinFxReplacementImpactReport,
     PriceQualityStablecoinFxReplacementImpactRow,
     PriceQualityStablecoinFxReplacementReport,
+    PriceQualityStablecoinFxAnchorPreviewDecisionCreate,
     PriceQualityStablecoinFxAnchorPreviewGroup,
     PriceQualityStablecoinFxAnchorPreviewLatest,
     PriceQualityStablecoinFxTaxImpactDecisionCreate,
@@ -1146,6 +1147,80 @@ class PriceQualityService:
                 "Der Endpunkt liest nur JSON und Review-Decisions. Er schreibt keine Preise, "
                 "keine FIFO-Lots und keine Tax-Lines."
             ),
+        )
+
+    def add_stablecoin_fx_anchor_preview_decision(
+        self,
+        payload: PriceQualityStablecoinFxAnchorPreviewDecisionCreate,
+    ) -> PriceQualityStablecoinFxTaxImpactDecisionResult:
+        if payload.action == "apply_replacement":
+            raise ValueError("stablecoin_fx_anchor_preview_apply_not_supported")
+        path = self.ANCHOR_PREVIEW_ARTIFACT_DIR / "latest_stablecoin_fx_anchor_preview.json"
+        if not path.exists():
+            raise ValueError("stablecoin_fx_anchor_preview_artifact_missing")
+        artifact = json.loads(path.read_text(encoding="utf-8"))
+        normalized_asset = payload.asset.upper()
+        impact = self._stablecoin_fx_anchor_impact_for_group(
+            artifact.get("tax_impact"),
+            asset=normalized_asset,
+            year=payload.year,
+            source=payload.source,
+        )
+        if impact is None:
+            raise ValueError("stablecoin_fx_anchor_preview_group_missing")
+        scope = self.stablecoin_fx_tax_impact_scope(
+            asset=normalized_asset,
+            year=payload.year,
+            source=payload.source,
+        )
+        delta = impact.get("delta") if isinstance(impact.get("delta"), dict) else {}
+        decision = self.store.add_review_decision(
+            ReviewDecisionCreate(
+                decision_type="stablecoin_fx_replacement_tax_impact",
+                scope=scope,
+                title=self._stablecoin_fx_anchor_decision_title(
+                    asset=normalized_asset,
+                    year=payload.year,
+                    action=payload.action,
+                ),
+                rationale=payload.rationale,
+                evidence_ref=payload.evidence_ref or str(path),
+                actor="user",
+                source="api:/api/v1/prices/quality/stablecoin-fx-anchor-preview-decisions",
+                payload={
+                    "action": payload.action,
+                    "asset": normalized_asset,
+                    "year": payload.year,
+                    "price_source": payload.source,
+                    "artifact_path": str(path),
+                    "conclusion": impact.get("conclusion"),
+                    "taxable_gain_loss_delta_eur": (
+                        str(delta.get("taxable_gain_loss_eur"))
+                        if isinstance(delta, dict) and delta.get("taxable_gain_loss_eur") is not None
+                        else None
+                    ),
+                    "stablecoin_gain_loss_delta_eur": (
+                        str(delta.get("stablecoin_gain_loss_eur"))
+                        if isinstance(delta, dict) and delta.get("stablecoin_gain_loss_eur") is not None
+                        else None
+                    ),
+                    "anchor_days": impact.get("anchor_days"),
+                    "applied_replacements_in_preview": impact.get("applied_replacements"),
+                    "import_effect": "none",
+                    "ledger_effect": "none",
+                    "fifo_effect": "none",
+                    "tax_lines_effect": "none",
+                    "price_write_effect": "none",
+                },
+            )
+        )
+        return PriceQualityStablecoinFxTaxImpactDecisionResult(
+            decision_id=decision.decision_id,
+            scope=scope,
+            action=payload.action,
+            writes_prices=False,
+            writes_fifo=False,
+            writes_tax_lines=False,
         )
 
     def solscan_signature_review(self, limit: int = 120) -> PriceQualitySolscanSignatureReport:
@@ -2420,6 +2495,40 @@ class PriceQualityService:
             "groups_incomplete": incomplete,
             "taxable_gain_loss_delta_eur": str(total),
         }
+
+    @staticmethod
+    def _stablecoin_fx_anchor_impact_for_group(
+        rows: object,
+        *,
+        asset: str,
+        year: int,
+        source: str,
+    ) -> dict[str, object] | None:
+        if not isinstance(rows, list):
+            return None
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if (
+                str(row.get("asset", "")).upper() == asset.upper()
+                and int(row.get("year") or 0) == year
+                and str(row.get("source") or "derived:event_quote") == source
+            ):
+                return row
+        return None
+
+    @staticmethod
+    def _stablecoin_fx_anchor_decision_title(
+        *,
+        asset: str,
+        year: int,
+        action: str,
+    ) -> str:
+        if action == "document_delta_only":
+            return f"{asset} {year} Stablecoin-FX-Anker nur dokumentiert"
+        if action == "keep_existing":
+            return f"{asset} {year} Stablecoin-FX-Anker verworfen"
+        return f"{asset} {year} Stablecoin-FX-Anker Review-Decision"
 
     @classmethod
     def _stablecoin_fx_tax_impact_artifact_path(cls, *, asset: str, year: int) -> Path:

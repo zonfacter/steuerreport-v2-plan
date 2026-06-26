@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.contracts.events import CanonicalEventCreate
-from steuerreport_v2.contracts.review import ReviewDecisionCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.valuation import PriceQualityService
 
@@ -647,8 +646,21 @@ def test_price_quality_stablecoin_fx_anchor_preview_latest_reads_artifact_and_de
     assert data["anchors"][0]["price_date"] == "2025-01-20"
     assert data["tax_impact"][0]["delta"]["taxable_gain_loss_eur"] == "3866.01"
 
+    apply_attempt = client.post(
+        "/api/v1/prices/quality/stablecoin-fx-anchor-preview-decisions",
+        json={
+            "asset": "USDT",
+            "year": 2025,
+            "action": "apply_replacement",
+            "rationale": "Anchor-Delta wird dokumentiert; kein Live-Apply.",
+        },
+    )
+
+    assert apply_attempt.status_code == 409
+    assert apply_attempt.json()["detail"] == "stablecoin_fx_anchor_preview_apply_not_supported"
+
     decision = client.post(
-        "/api/v1/prices/quality/stablecoin-fx-tax-impact-decisions",
+        "/api/v1/prices/quality/stablecoin-fx-anchor-preview-decisions",
         json={
             "asset": "USDT",
             "year": 2025,
@@ -657,19 +669,8 @@ def test_price_quality_stablecoin_fx_anchor_preview_latest_reads_artifact_and_de
         },
     )
 
-    assert decision.status_code == 409
-    store.add_review_decision(
-        ReviewDecisionCreate(
-            decision_type="stablecoin_fx_replacement_tax_impact",
-            scope="stablecoin_fx_replacement:asset:USDT:year:2025:source:derived:event_quote",
-            title="USDT 2025 Anchor dokumentiert",
-            rationale="Anchor-Delta wird dokumentiert; kein Live-Apply.",
-            evidence_ref="unit-test",
-            actor="tester",
-            source="unit-test",
-            payload={"action": "document_delta_only"},
-        )
-    )
+    assert decision.status_code == 200
+    assert decision.json()["data"]["writes_prices"] is False
 
     response = client.get("/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest")
 
