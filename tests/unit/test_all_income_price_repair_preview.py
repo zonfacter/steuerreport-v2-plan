@@ -24,6 +24,7 @@ def test_load_coin_ids_maps_symbols_aliases_and_store_keys(tmp_path):
                     {
                         "symbol": "HNT",
                         "coingecko_id": "helium",
+                        "coinmarketcap_id": "5665",
                         "aliases": ["hntyMint"],
                         "store_keys": ["HNTYVP"],
                     }
@@ -38,6 +39,10 @@ def test_load_coin_ids_maps_symbols_aliases_and_store_keys(tmp_path):
     assert coin_ids["HNT"] == "helium"
     assert coin_ids["HNTYMINT"] == "helium"
     assert coin_ids["HNTYVP"] == "helium"
+
+    config = MODULE.load_price_config(config)
+    assert config["HNT"].coingecko_id == "helium"
+    assert config["HNT"].coinmarketcap_id == "5665"
 
 
 def test_group_status_requires_zero_failures_and_importable_days():

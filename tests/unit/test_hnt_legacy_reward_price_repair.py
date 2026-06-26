@@ -194,3 +194,37 @@ def test_fetch_cached_eur_price_uses_asset_usd_and_usd_eur_fx_cache(tmp_path):
     assert price.usd_eur == Decimal("0.88")
     assert price.price_eur == Decimal("26.40")
     assert price.source == "test_source:asset_usd_v1_fx_cache"
+
+
+def test_fetch_stablecoin_eur_price_uses_usd_eur_fx_cache(tmp_path):
+    fx_db = tmp_path / "steuerreport.db"
+    with sqlite3.connect(fx_db) as con:
+        con.execute(
+            """
+            create table fx_cache (
+                rate_date text not null,
+                base_ccy text not null,
+                quote_ccy text not null,
+                rate text not null,
+                source text not null,
+                source_rate_date text,
+                updated_at_utc text not null
+            )
+            """
+        )
+        con.execute(
+            "insert into fx_cache values (?, ?, ?, ?, ?, ?, ?)",
+            ("2024-03-09", "USD", "EUR", "0.9142", "frankfurter", "2024-03-09", "2026-01-01T00:00:00Z"),
+        )
+
+    price = MODULE.fetch_stablecoin_eur_price(
+        asset="USDT",
+        price_date=date(2024, 3, 9),
+        v1_fx_db_path=fx_db,
+        source_label="test_source",
+    )
+
+    assert price is not None
+    assert price.price_usd == Decimal("1")
+    assert price.price_eur == Decimal("0.9142")
+    assert price.source == "test_source:stable_usd_fx"

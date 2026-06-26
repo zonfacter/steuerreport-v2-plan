@@ -43,6 +43,12 @@ class CandidateGroup:
     missing_primary_days: int
 
 
+@dataclass(frozen=True)
+class PriceAssetConfig:
+    coingecko_id: str
+    coinmarketcap_id: str | None = None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -63,7 +69,7 @@ def main() -> None:
     args = parser.parse_args()
 
     db_path = Path(args.db)
-    config = load_coin_ids(Path(args.config))
+    config = load_price_config(Path(args.config))
     candidates = load_candidate_groups(
         db_path=db_path,
         assets=args.assets,
@@ -76,12 +82,15 @@ def main() -> None:
     total_external_days = 0
     with httpx.Client(timeout=args.timeout_seconds, headers={"user-agent": "steuerreport-v2/0.1"}) as client:
         for candidate in candidates:
-            coin_id = config.get(candidate.asset)
+            asset_config = config.get(candidate.asset)
+            coin_id = asset_config.coingecko_id if asset_config is not None else None
+            cmc_id = asset_config.coinmarketcap_id if asset_config is not None else None
             row = {
                 "asset": candidate.asset,
                 "source": candidate.source,
                 "year": candidate.year,
                 "coin_id": coin_id,
+                "cmc_id": cmc_id,
                 "day_count": candidate.day_count,
                 "event_count": candidate.event_count,
                 "quantity": str(candidate.quantity),
@@ -121,6 +130,7 @@ def main() -> None:
                         client=client,
                         asset=candidate.asset,
                         coin_id=coin_id,
+                        cmc_id=cmc_id,
                         price_date=reward_day.price_date,
                         v1_fx_db_path=Path(args.v1_fx_db),
                         source_label=REPAIR.repair_source_label(
@@ -165,8 +175,9 @@ def main() -> None:
         "methodology": (
             "Read-only all-asset scan of taxable income/reward/staking/mining event days. "
             "Groups are selected when at least one event day has no non-derived same-day "
-            "price anchor. External previews use DefiLlama historical coingecko prices and "
-            "local V1 USD/EUR FX cache. No price_ledger, FIFO or import data is changed."
+            "price anchor. External previews prefer stable-USD FX pricing, local V1 asset/USD "
+            "and USD/EUR cache values, CoinMarketCap public historical closes, and then "
+            "DefiLlama CoinGecko history. No price_ledger, FIFO or import data is changed."
         ),
         "summary": {
             "candidate_groups": len(candidates),
@@ -192,17 +203,29 @@ def main() -> None:
 
 
 def load_coin_ids(path: Path) -> dict[str, str]:
+    return {
+        key: item.coingecko_id
+        for key, item in load_price_config(path).items()
+    }
+
+
+def load_price_config(path: Path) -> dict[str, PriceAssetConfig]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    result: dict[str, str] = {}
+    result: dict[str, PriceAssetConfig] = {}
     for item in payload.get("assets", []):
         symbol = str(item.get("symbol", "")).upper().strip()
         coin_id = str(item.get("coingecko_id", "")).strip()
+        cmc_id_raw = str(item.get("coinmarketcap_id", "")).strip()
+        asset_config = PriceAssetConfig(
+            coingecko_id=coin_id,
+            coinmarketcap_id=cmc_id_raw or None,
+        )
         if symbol and coin_id:
-            result[symbol] = coin_id
+            result[symbol] = asset_config
             for value in [*item.get("aliases", []), *item.get("store_keys", [])]:
                 alias = str(value).upper().strip()
                 if alias:
-                    result[alias] = coin_id
+                    result[alias] = asset_config
     return result
 
 

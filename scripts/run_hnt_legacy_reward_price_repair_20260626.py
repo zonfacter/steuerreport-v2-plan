@@ -7,7 +7,7 @@ import shutil
 import sqlite3
 import sys
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -28,6 +28,8 @@ DEFAULT_V1_FX_DB = Path("/root/.local/share/steuerreport/steuerreport.db")
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "hnt_legacy_reward_price_repairs"
 SOURCE_LABEL = "defillama_coingecko_history:usd_eur:v1_fx_cache:hnt_legacy_reward_repair_20260626"
 DEFILLAMA_BASE_URL = "https://coins.llama.fi"
+COINMARKETCAP_HISTORICAL_URL = "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/historical"
+STABLE_USD_ASSETS = {"USD", "USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI"}
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,7 @@ def main() -> None:
     parser.add_argument("--asset", default="HNT")
     parser.add_argument("--source", default="helium")
     parser.add_argument("--coin-id", default="helium")
+    parser.add_argument("--cmc-id", default=None)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
@@ -93,6 +96,7 @@ def main() -> None:
                     client=client,
                     asset=args.asset,
                     coin_id=args.coin_id,
+                    cmc_id=args.cmc_id,
                     price_date=reward_day.price_date,
                     v1_fx_db_path=Path(args.v1_fx_db),
                     source_label=source_label,
@@ -218,11 +222,20 @@ def fetch_defillama_eur_price(
     client: httpx.Client,
     asset: str | None = None,
     coin_id: str,
+    cmc_id: str | None = None,
     price_date: date,
     v1_fx_db_path: Path,
     source_label: str = SOURCE_LABEL,
 ) -> ExternalPrice:
     if asset:
+        stable = fetch_stablecoin_eur_price(
+            asset=asset,
+            price_date=price_date,
+            v1_fx_db_path=v1_fx_db_path,
+            source_label=source_label,
+        )
+        if stable is not None:
+            return stable
         cached = fetch_cached_eur_price(
             asset=asset,
             price_date=price_date,
@@ -231,6 +244,15 @@ def fetch_defillama_eur_price(
         )
         if cached is not None:
             return cached
+    if cmc_id:
+        cmc = fetch_coinmarketcap_eur_price(
+            cmc_id=cmc_id,
+            price_date=price_date,
+            v1_fx_db_path=v1_fx_db_path,
+            source_label=source_label,
+        )
+        if cmc is not None:
+            return cmc
     timestamp = int(datetime.combine(price_date, time.min, tzinfo=UTC).timestamp())
     token_id = f"coingecko:{coin_id}"
     response = client.get(
@@ -255,6 +277,28 @@ def fetch_defillama_eur_price(
         price_eur=price_usd * usd_eur,
         provider_timestamp=int(coin["timestamp"]) if coin.get("timestamp") is not None else None,
         source=source_label,
+    )
+
+
+def fetch_stablecoin_eur_price(
+    *,
+    asset: str,
+    price_date: date,
+    v1_fx_db_path: Path,
+    source_label: str,
+) -> ExternalPrice | None:
+    if asset.upper() not in STABLE_USD_ASSETS:
+        return None
+    usd_eur = usd_eur_rate(v1_fx_db_path, price_date)
+    if usd_eur <= 0:
+        return None
+    return ExternalPrice(
+        price_date=price_date,
+        price_usd=Decimal("1"),
+        usd_eur=usd_eur,
+        price_eur=usd_eur,
+        provider_timestamp=None,
+        source=f"{source_label}:stable_usd_fx",
     )
 
 
@@ -298,6 +342,65 @@ def asset_usd_rate(db_path: Path, asset: str, rate_date: date) -> Decimal:
     if row is None:
         return Decimal("0")
     return decimal_value(row[0])
+
+
+def fetch_coinmarketcap_eur_price(
+    *,
+    cmc_id: str,
+    price_date: date,
+    v1_fx_db_path: Path,
+    source_label: str,
+) -> ExternalPrice | None:
+    price_usd = coinmarketcap_usd_price(cmc_id=cmc_id, price_date=price_date)
+    if price_usd <= 0:
+        return None
+    usd_eur = usd_eur_rate(v1_fx_db_path, price_date)
+    if usd_eur <= 0:
+        return None
+    return ExternalPrice(
+        price_date=price_date,
+        price_usd=price_usd,
+        usd_eur=usd_eur,
+        price_eur=price_usd * usd_eur,
+        provider_timestamp=None,
+        source=f"{source_label}:coinmarketcap_public_historical:{cmc_id}",
+    )
+
+
+def coinmarketcap_usd_price(*, cmc_id: str, price_date: date) -> Decimal:
+    import requests
+
+    start_dt = datetime.combine(price_date, time.min, tzinfo=UTC)
+    end_dt = start_dt + timedelta(days=1)
+    response = requests.get(
+        COINMARKETCAP_HISTORICAL_URL,
+        params={
+            "id": cmc_id,
+            "convertId": "2781",
+            "timeStart": int(start_dt.timestamp()),
+            "timeEnd": int(end_dt.timestamp()),
+        },
+        headers={"accept": "application/json", "user-agent": "steuerreport-v2/0.1"},
+        timeout=30,
+    )
+    if response.status_code in {401, 403, 404, 429}:
+        return Decimal("0")
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data") if isinstance(payload, dict) else None
+    quotes = data.get("quotes") if isinstance(data, dict) else None
+    if not isinstance(quotes, list):
+        return Decimal("0")
+    for item in quotes:
+        if not isinstance(item, dict):
+            continue
+        quote = item.get("quote")
+        if not isinstance(quote, dict):
+            continue
+        close = decimal_value(quote.get("close"))
+        if close > 0:
+            return close
+    return Decimal("0")
 
 
 def repair_source_label(*, asset: str, source: str, year: int) -> str:
@@ -408,10 +511,11 @@ def build_report(
         "asset": asset,
         "source": source,
         "methodology": (
-            "Read-only preview unless --execute is used. For Legacy-HNT reward/mining days, "
-            "the script fetches DefiLlama historical coingecko:helium USD prices, converts them "
-            "with the local V1 USD/EUR FX cache, and adds primary daily HNT price anchors only "
-            "where no non-derived same-day HNT price exists. Existing price_ledger rows are kept."
+            "Read-only preview unless --execute is used. For taxable reward/mining/staking/income "
+            "days, the script prefers stable-USD FX pricing and the local V1 asset/USD plus USD/EUR "
+            "FX cache, can use CoinMarketCap public historical closes, and falls back to DefiLlama "
+            "CoinGecko history. It adds primary daily price anchors only where no non-derived "
+            "same-day price exists. Existing price_ledger rows are kept."
         ),
         "summary": {
             "reward_days": len(reward_days),

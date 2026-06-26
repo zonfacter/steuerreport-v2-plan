@@ -4,6 +4,7 @@
     {
       "symbol": "BTC",
       "coingecko_id": "bitcoin",
+      "coinmarketcap_id": "1",
       "yahoo_ticker": "BTC-USD",
       "store_keys": ["BTC"],
       "aliases": ["BTC"]
@@ -18,6 +19,7 @@
     {
       "symbol": "USDT",
       "coingecko_id": "tether",
+      "coinmarketcap_id": "825",
       "yahoo_ticker": "USDT-USD",
       "store_keys": ["USDT", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"],
       "aliases": ["USDT", "TETHER", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]
@@ -25,6 +27,7 @@
     {
       "symbol": "USDC",
       "coingecko_id": "usd-coin",
+      "coinmarketcap_id": "3408",
       "yahoo_ticker": "USDC-USD",
       "store_keys": ["USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
       "aliases": ["USDC", "USD COIN", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]
@@ -32,6 +35,7 @@
     {
       "symbol": "BUSD",
       "coingecko_id": "binance-usd",
+      "coinmarketcap_id": "4687",
       "yahoo_ticker": "BUSD-USD",
       "store_keys": ["BUSD"],
       "aliases": ["BUSD", "BINANCE USD"]
@@ -39,6 +43,7 @@
     {
       "symbol": "BNB",
       "coingecko_id": "binancecoin",
+      "coinmarketcap_id": "1839",
       "yahoo_ticker": "BNB-USD",
       "store_keys": ["BNB"],
       "aliases": ["BNB"]
@@ -46,6 +51,7 @@
     {
       "symbol": "DOGE",
       "coingecko_id": "dogecoin",
+      "coinmarketcap_id": "74",
       "yahoo_ticker": "DOGE-USD",
       "store_keys": ["DOGE"],
       "aliases": ["DOGE"]
@@ -53,6 +59,7 @@
     {
       "symbol": "ADA",
       "coingecko_id": "cardano",
+      "coinmarketcap_id": "2010",
       "yahoo_ticker": "ADA-USD",
       "store_keys": ["ADA"],
       "aliases": ["ADA"]
@@ -95,6 +102,7 @@
     {
       "symbol": "PEPE",
       "coingecko_id": "pepe",
+      "coinmarketcap_id": "24478",
       "yahoo_ticker": "PEPE-USD",
       "store_keys": ["PEPE"],
       "aliases": ["PEPE"]
@@ -116,6 +124,7 @@
     {
       "symbol": "TRUMP",
       "coingecko_id": "official-trump",
+      "coinmarketcap_id": "35336",
       "yahoo_ticker": "TRUMP-USD",
       "store_keys": ["TRUMP"],
       "aliases": ["TRUMP", "OFFICIAL TRUMP"]
@@ -144,6 +153,7 @@
     {
       "symbol": "SOL",
       "coingecko_id": "solana",
+      "coinmarketcap_id": "5426",
       "yahoo_ticker": "SOL-USD",
       "store_keys": ["SOL", "So11111111111111111111111111111111111111112"],
       "aliases": ["SOL", "So11111111111111111111111111111111111111112"]
@@ -177,6 +187,7 @@
     {
       "symbol": "BTTC",
       "coingecko_id": "bittorrent",
+      "coinmarketcap_id": "16086",
       "store_keys": ["BTTC", "BTT"],
       "aliases": ["BTTC", "BTT", "BITTORRENT"]
     },
@@ -189,12 +200,14 @@
     {
       "symbol": "VTHO",
       "coingecko_id": "vethor-token",
+      "coinmarketcap_id": "3012",
       "store_keys": ["VTHO"],
       "aliases": ["VTHO", "VETHOR"]
     },
     {
       "symbol": "JUP",
       "coingecko_id": "jupiter-exchange-solana",
+      "coinmarketcap_id": "29210",
       "store_keys": ["JUP", "JUPYIWRYJFSKUPIHA7HKER8VUTAEFOSYBKEDZNSDVCN"],
       "aliases": ["JUP", "JUPYIWRYJFSKUPIHA7HKER8VUTAEFOSYBKEDZNSDVCN"]
     },
@@ -251,6 +264,27 @@
       "coingecko_id": "catwifhat",
       "store_keys": ["CWIF", "7ATgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"],
       "aliases": ["CWIF", "CATWIFHAT", "7ATgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"]
+    },
+    {
+      "symbol": "VET",
+      "coingecko_id": "vechain",
+      "coinmarketcap_id": "3077",
+      "store_keys": ["VET"],
+      "aliases": ["VET", "VECHAIN"]
+    },
+    {
+      "symbol": "WIN",
+      "coingecko_id": "wink",
+      "coinmarketcap_id": "4206",
+      "store_keys": ["WIN"],
+      "aliases": ["WIN", "WINK", "WINKLINK"]
+    },
+    {
+      "symbol": "BNSOL",
+      "coingecko_id": "binance-staked-sol",
+      "coinmarketcap_id": "32882",
+      "store_keys": ["BNSOL"],
+      "aliases": ["BNSOL", "BINANCE STAKED SOL"]
     }
   ]
 }
