@@ -248,6 +248,7 @@ def test_evidence_manifest_does_not_build_full_report_center(tmp_path, monkeypat
         "all-transaction-evidence-matrix",
         "all-transaction-evidence-closure",
         "all-transaction-open-detail-review",
+        "all-transaction-decision-candidates",
         "tax-payment-overview",
         "solscan-evidence-trace",
         "helium-solana-reward-rpc-evidence",
@@ -261,7 +262,7 @@ def test_evidence_package_index_maps_manifest_files_to_zip_paths(tmp_path):
     paths_by_id = {file.file_id: file.path for file in package_index.files}
 
     assert package_index.label == "steuerreport-v2-evidence-package-index"
-    assert package_index.files_count == 30
+    assert package_index.files_count == 31
     assert paths_by_id["evidence-manifest"] == "00_Manifest/evidence-manifest.json"
     assert paths_by_id["token-risk-documentation"] == "03_Review_Entscheidungen/token-risk-documentation.csv"
     assert paths_by_id["tax-payment-overview"] == "02_Steuerliche_CSVs/tax-payment-overview.json"
@@ -278,6 +279,7 @@ def test_evidence_package_index_maps_manifest_files_to_zip_paths(tmp_path):
     assert paths_by_id["all-transaction-evidence-matrix"] == "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json"
     assert paths_by_id["all-transaction-evidence-closure"] == "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json"
     assert paths_by_id["all-transaction-open-detail-review"] == "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json"
+    assert paths_by_id["all-transaction-decision-candidates"] == "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json"
     assert paths_by_id["hnt-fairspot-events"] == "05_HNT_Fairspot/hnt-fairspot-events.csv"
     assert paths_by_id["solscan-evidence-trace"] == "06_Solana_FIFO_Belege/solscan-evidence-trace.json"
     assert paths_by_id["helium-solana-reward-rpc-evidence"] == "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json"
@@ -486,7 +488,7 @@ def test_evidence_package_index_download_endpoint(tmp_path):
     assert response.status_code == 200
     assert "filename=evidence-package-index.json" in response.headers["content-disposition"]
     payload = json.loads(response.body.decode("utf-8"))
-    assert payload["files_count"] == 30
+    assert payload["files_count"] == 31
     assert any(file["path"] == "03_Review_Entscheidungen/token-risk-documentation.csv" for file in payload["files"])
     assert any(file["path"] == "02_Steuerliche_CSVs/tax-payment-overview.json" for file in payload["files"])
     assert any(file["path"] == "05_HNT_Fairspot/hnt-fairspot-events.csv" for file in payload["files"])
@@ -500,6 +502,7 @@ def test_evidence_package_index_download_endpoint(tmp_path):
     assert any(file["path"] == "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json" for file in payload["files"])
     assert any(file["path"] == "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json" for file in payload["files"])
     assert any(file["path"] == "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json" for file in payload["files"])
+    assert any(file["path"] == "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json" for file in payload["files"])
     assert any(file["path"] == "06_Solana_FIFO_Belege/solscan-evidence-trace.json" for file in payload["files"])
     assert any(file["path"] == "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json" for file in payload["files"])
     assert any(group["folder"] == "02_Steuerliche_CSVs" for group in payload["groups"])
@@ -642,13 +645,14 @@ def test_evidence_package_download_endpoint_contains_required_files(tmp_path):
             "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json",
             "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json",
             "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json",
+            "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json",
             "06_Solana_FIFO_Belege/solscan-evidence-trace.json",
             "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json",
         } <= names
-        assert len(names) == 32
+        assert len(names) == 33
         package_index = json.loads(package.read("00_Manifest/package-index.json").decode("utf-8"))
         assert package_index["label"] == "steuerreport-v2-evidence-package-index"
-        assert package_index["files_count"] == 30
+        assert package_index["files_count"] == 31
         indexed_files = {file["path"]: file for file in package_index["files"]}
         indexed_paths = set(indexed_files)
         assert "02_Steuerliche_CSVs/tax-payment-overview.json" in indexed_paths
@@ -663,6 +667,7 @@ def test_evidence_package_download_endpoint_contains_required_files(tmp_path):
         assert "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json" in indexed_paths
         assert "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json" in indexed_paths
         assert "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json" in indexed_paths
+        assert "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json" in indexed_paths
         assert "06_Solana_FIFO_Belege/solscan-evidence-trace.json" in indexed_paths
         assert "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json" in indexed_paths
         payment_overview = json.loads(package.read("02_Steuerliche_CSVs/tax-payment-overview.json").decode("utf-8"))

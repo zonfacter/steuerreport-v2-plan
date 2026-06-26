@@ -64,6 +64,7 @@ class ReportCenterService:
         "all-transaction-evidence-matrix": "all-transaction-evidence-matrix.json",
         "all-transaction-evidence-closure": "all-transaction-evidence-closure.json",
         "all-transaction-open-detail-review": "all-transaction-open-detail-review.json",
+        "all-transaction-decision-candidates": "all-transaction-decision-candidates.json",
     }
     EVIDENCE_GROUPS = {
         "audit-json": ("structure", "Struktur und Audit"),
@@ -95,6 +96,7 @@ class ReportCenterService:
         "all-transaction-evidence-matrix": ("solana_fifo", "Solana FIFO-Belege"),
         "all-transaction-evidence-closure": ("solana_fifo", "Solana FIFO-Belege"),
         "all-transaction-open-detail-review": ("solana_fifo", "Solana FIFO-Belege"),
+        "all-transaction-decision-candidates": ("solana_fifo", "Solana FIFO-Belege"),
     }
     CSV_EXPORTS = [
         ("review-decisions", "Review-Decisions CSV", "/api/v1/export/review-decisions.csv"),
@@ -168,6 +170,11 @@ class ReportCenterService:
             "all-transaction-open-detail-review",
             "Offene Transaktionen Detailreview JSON",
             "/api/v1/export/all-transaction-open-detail-review.json",
+        ),
+        (
+            "all-transaction-decision-candidates",
+            "Offene Transaktionen Entscheidungskandidaten JSON",
+            "/api/v1/export/all-transaction-decision-candidates.json",
         ),
     ]
 
