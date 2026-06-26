@@ -21,6 +21,12 @@ PriceQualityDecisionStatus = Literal[
     "external_price_required",
     "manual_review_required",
 ]
+PriceQualityClosureClass = Literal[
+    "accepted_event_quote_candidate",
+    "stablecoin_fx_replacement_candidate",
+    "external_price_required_candidate",
+    "manual_review_required",
+]
 
 
 class MissingPriceCoverageItem(BaseModel):
@@ -332,6 +338,39 @@ class PriceQualityEventQuoteEvidenceReport(BaseModel):
     missing_sample_ref_groups_count: int
     assets: list[str] = Field(default_factory=list)
     groups: list[PriceQualityEventQuoteEvidenceItem] = Field(default_factory=list)
+    methodology: str
+
+
+class PriceQualityClosureCandidate(BaseModel):
+    scope: str
+    asset: str
+    year: int
+    source: str
+    review_bucket: str
+    closure_class: PriceQualityClosureClass
+    recommended_decision_status: PriceQualityDecisionStatus
+    can_auto_close_with_evidence: bool = False
+    price_count: int
+    tax_lines_count: int
+    tax_quantity: Decimal
+    event_sources: dict[str, int] = Field(default_factory=dict)
+    quote_assets: dict[str, int] = Field(default_factory=dict)
+    sample_event_refs: list[str] = Field(default_factory=list)
+    reason: str
+    evidence_ref: str
+    recommended_action: str
+
+
+class PriceQualityClosureCandidateReport(BaseModel):
+    generated_at: datetime
+    groups_count: int
+    tax_relevant_groups_count: int
+    auto_close_candidates_count: int
+    stablecoin_fx_replacement_candidates_count: int
+    external_price_required_candidates_count: int
+    manual_review_required_count: int
+    total_tax_lines_count: int
+    groups: list[PriceQualityClosureCandidate] = Field(default_factory=list)
     methodology: str
 
 

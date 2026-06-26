@@ -419,3 +419,100 @@ def test_price_quality_event_quote_evidence_review_classifies_stable_quotes(tmp_
     assert data["groups"][0]["evidence_class"] == "stable_quote_sample"
     assert data["groups"][0]["stable_quote_evidence"] is True
     assert "fachlich akzeptiert" in data["groups"][0]["recommended_action"]
+
+
+def test_price_quality_closure_candidates_marks_stable_quote_as_auto_close(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="pionex",
+            source_ref="trade-1",
+            event_time=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            event_type="trade",
+            asset="DOGE",
+            quantity=Decimal("10"),
+            quote_asset="USDT",
+            quote_quantity=Decimal("1"),
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="DOGE",
+            price_eur=Decimal("0.1"),
+            priced_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            source="derived:event_quote",
+            confidence=Decimal("0.85"),
+        )
+    )
+    _add_tax_line(store, asset="DOGE", disposed_at=datetime(2023, 2, 1, tzinfo=timezone.utc))
+    client = TestClient(create_app(store))
+    client.post(
+        "/api/v1/prices/quality/decisions",
+        json={
+            "asset": "DOGE",
+            "year": 2023,
+            "source": "derived:event_quote",
+            "decision_status": "manual_review_required",
+            "title": "DOGE Event-Quote pruefen",
+            "rationale": "Stabile Quote muss belegt werden.",
+            "evidence_ref": "unit-test",
+        },
+    )
+
+    response = client.get("/api/v1/prices/quality/closure-candidates")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["groups_count"] == 1
+    assert data["auto_close_candidates_count"] == 1
+    assert data["groups"][0]["closure_class"] == "accepted_event_quote_candidate"
+    assert data["groups"][0]["recommended_decision_status"] == "accepted_event_quote"
+    assert data["groups"][0]["can_auto_close_with_evidence"] is True
+
+
+def test_price_quality_closure_candidates_keeps_stablecoin_fx_as_replacement(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="binance",
+            event_time=datetime(2022, 1, 1, tzinfo=timezone.utc),
+            event_type="unknown",
+            asset="USDT",
+            quantity=Decimal("0"),
+            quote_asset="HNT",
+            quote_quantity=Decimal("2"),
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.92"),
+            priced_at=datetime(2022, 1, 1, tzinfo=timezone.utc),
+            source="derived:event_quote",
+            confidence=Decimal("0.85"),
+        )
+    )
+    _add_tax_line(store, asset="USDT", disposed_at=datetime(2022, 2, 1, tzinfo=timezone.utc))
+    client = TestClient(create_app(store))
+    client.post(
+        "/api/v1/prices/quality/decisions",
+        json={
+            "asset": "USDT",
+            "year": 2022,
+            "source": "derived:event_quote",
+            "decision_status": "manual_review_required",
+            "title": "USDT FX pruefen",
+            "rationale": "Stablecoin braucht FX-Evidenz.",
+            "evidence_ref": "unit-test",
+        },
+    )
+
+    response = client.get("/api/v1/prices/quality/closure-candidates")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["auto_close_candidates_count"] == 0
+    assert data["stablecoin_fx_replacement_candidates_count"] == 1
+    assert data["groups"][0]["closure_class"] == "stablecoin_fx_replacement_candidate"
+    assert data["groups"][0]["recommended_decision_status"] == "external_price_required"
+    assert data["groups"][0]["can_auto_close_with_evidence"] is False

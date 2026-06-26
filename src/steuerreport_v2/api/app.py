@@ -254,6 +254,7 @@ from steuerreport_v2.contracts.transfers import TransferCandidateReport
 from steuerreport_v2.contracts.valuation import (
     PriceCoverageReport,
     PriceQualityBinanceNormalizerReport,
+    PriceQualityClosureCandidateReport,
     PriceGapDecisionCreate,
     PriceGapDecisionResult,
     PriceQualityDecisionCreate,
@@ -1288,6 +1289,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/prices/quality/event-quote-evidence-review")
     def price_quality_event_quote_evidence_review(limit: int = 120) -> ApiResponse[PriceQualityEventQuoteEvidenceReport]:
         return ApiResponse(data=PriceQualityService(db).event_quote_evidence_review(limit=limit))
+
+    @app.get("/api/v1/prices/quality/closure-candidates")
+    def price_quality_closure_candidates(limit: int = 120) -> ApiResponse[PriceQualityClosureCandidateReport]:
+        return ApiResponse(data=PriceQualityService(db).closure_candidates(limit=limit))
 
     @app.post("/api/v1/prices/quality/decisions")
     def add_price_quality_decision(

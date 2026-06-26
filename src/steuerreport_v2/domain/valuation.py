@@ -14,6 +14,9 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityGroupDetail,
     PriceQualityBinanceNormalizerItem,
     PriceQualityBinanceNormalizerReport,
+    PriceQualityClosureCandidate,
+    PriceQualityClosureCandidateReport,
+    PriceQualityClosureClass,
     PriceQualityDecisionStatus,
     PriceQualityEventQuoteEvidenceItem,
     PriceQualityEventQuoteEvidenceReport,
@@ -814,6 +817,71 @@ class PriceQualityService:
             ),
         )
 
+    def closure_candidates(self, limit: int = 120) -> PriceQualityClosureCandidateReport:
+        manual = self.manual_review_report(limit=10_000)
+        groups = sorted(
+            manual.groups,
+            key=lambda group: (
+                not self._closure_candidate_can_auto_close(group)[2],
+                -group.tax_lines_count,
+                group.review_bucket,
+                group.asset,
+                group.year,
+                group.source,
+            ),
+        )
+        items: list[PriceQualityClosureCandidate] = []
+        for group in groups[: max(1, limit)]:
+            closure_class, decision_status, can_auto_close, recommended_action = (
+                self._closure_candidate_can_auto_close(group)
+            )
+            items.append(
+                PriceQualityClosureCandidate(
+                    scope=group.scope,
+                    asset=group.asset,
+                    year=group.year,
+                    source=group.source,
+                    review_bucket=group.review_bucket,
+                    closure_class=closure_class,
+                    recommended_decision_status=decision_status,
+                    can_auto_close_with_evidence=can_auto_close,
+                    price_count=group.price_count,
+                    tax_lines_count=group.tax_lines_count,
+                    tax_quantity=group.tax_quantity,
+                    event_sources=group.event_sources,
+                    quote_assets=group.quote_assets,
+                    sample_event_refs=group.sample_event_refs,
+                    reason=group.reason,
+                    evidence_ref=group.evidence_ref,
+                    recommended_action=recommended_action,
+                )
+            )
+        all_classified = [self._closure_candidate_can_auto_close(group) for group in manual.groups]
+        return PriceQualityClosureCandidateReport(
+            generated_at=datetime.now(timezone.utc),
+            groups_count=len(manual.groups),
+            tax_relevant_groups_count=sum(1 for group in manual.groups if group.tax_lines_count > 0),
+            auto_close_candidates_count=sum(1 for item in all_classified if item[2]),
+            stablecoin_fx_replacement_candidates_count=sum(
+                1 for item in all_classified if item[0] == "stablecoin_fx_replacement_candidate"
+            ),
+            external_price_required_candidates_count=sum(
+                1 for item in all_classified if item[0] == "external_price_required_candidate"
+            ),
+            manual_review_required_count=sum(
+                1 for item in all_classified if item[0] == "manual_review_required"
+            ),
+            total_tax_lines_count=sum(group.tax_lines_count for group in manual.groups),
+            groups=items,
+            methodology=(
+                "Read-only Closure-Kandidatenliste fuer PriceQuality-Manual-Gruppen. "
+                "Sie schreibt keine Review-Decisions und aendert keine Preis-, FIFO- "
+                "oder Steuerdaten. Auto-Close-Kandidaten sind nur Gruppen mit klarer "
+                "stabiler Event-Quote-Evidenz; Stablecoin-FX-Gruppen werden als "
+                "FX-Replacement-Kandidaten markiert, nicht als akzeptierte Event-Quote."
+            ),
+        )
+
     def _manual_review_sample_contexts(
         self,
         groups: list[PriceQualityGroup],
@@ -1517,6 +1585,63 @@ class PriceQualityService:
         if evidence_class == "non_stable_quote_sample":
             return "Nicht-stabile Quote gegen externe historische Preisquelle pruefen; Event-Quote nicht automatisch akzeptieren."
         return "Keine Quote-/Ref-Evidenz im Sample; externe Preisquelle oder Raw-Drilldown benoetigt."
+
+    @classmethod
+    def _closure_candidate_can_auto_close(
+        cls,
+        group: PriceQualityManualReviewItem,
+    ) -> tuple[PriceQualityClosureClass, PriceQualityDecisionStatus, bool, str]:
+        if group.review_bucket == "stablecoin_fx_review":
+            if group.asset == "EUR" and group.tax_lines_count == 0:
+                return (
+                    "accepted_event_quote_candidate",
+                    "accepted_event_quote",
+                    True,
+                    "EUR-Fiat-Identitaet als nicht steuerrelevante Preisqualitaetsgruppe dokumentieren.",
+                )
+            return (
+                "stablecoin_fx_replacement_candidate",
+                "external_price_required",
+                False,
+                "Stablecoin-Event-Quote nicht akzeptieren; historische USD/EUR-FX-Preisanker oder FX-Belege verwenden.",
+            )
+        if group.review_bucket == "event_quote_evidence_review":
+            if cls._has_stable_quote_evidence(group) and group.sample_event_refs:
+                return (
+                    "accepted_event_quote_candidate",
+                    "accepted_event_quote",
+                    True,
+                    "Stabile Quote-Samples und Source-Refs vorhanden; Event-Quote kann nach Belegablage akzeptiert werden.",
+                )
+            if cls._event_quote_evidence_class(group) == "blockpit_solana_derived_quote":
+                return (
+                    "external_price_required_candidate",
+                    "external_price_required",
+                    False,
+                    "Blockpit-Solana-Quote-Ableitung gegen Originalexport oder externe Tagespreise absichern.",
+                )
+        if group.review_bucket == "solscan_signature_review":
+            signature_refs, _other = cls._split_signature_refs(group.sample_event_refs)
+            if signature_refs and cls._has_stable_quote_evidence(group):
+                return (
+                    "accepted_event_quote_candidate",
+                    "accepted_event_quote",
+                    True,
+                    "Onchain-Signaturen und stabile Quote vorhanden; nach Solscan-Belegablage als Event-Quote akzeptierbar.",
+                )
+        if group.review_bucket in {"binance_normalizer_review", "mixed_quote_source_review"}:
+            return (
+                "manual_review_required",
+                "manual_review_required",
+                False,
+                "Normalizer-/Quote-Mix bleibt manuell zu pruefen; keine automatische Closure.",
+            )
+        return (
+            "manual_review_required",
+            "manual_review_required",
+            False,
+            "Manuelle Detailpruefung oder externe Preisquelle erforderlich.",
+        )
 
     @staticmethod
     def _count_dict(values: object) -> dict[str, int]:
