@@ -273,6 +273,118 @@ def test_price_quality_stablecoin_fx_review_groups_fx_work(tmp_path):
     assert "FX-Evidenz" in data["groups"][0]["recommended_action"]
 
 
+def test_price_quality_stablecoin_fx_replacement_preview_marks_fx_backed_day(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    event_time = datetime(2022, 1, 1, 12, tzinfo=timezone.utc)
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="binance",
+            source_ref="stable-trade-1",
+            event_time=event_time,
+            event_type="unknown",
+            asset="USDT",
+            quantity=Decimal("0"),
+            quote_asset="HNT",
+            quote_quantity=Decimal("2"),
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.50"),
+            priced_at=event_time,
+            source="derived:event_quote",
+            confidence=Decimal("0.85"),
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.91"),
+            priced_at=datetime(2022, 1, 1, tzinfo=timezone.utc),
+            source="v1_fx_cache:coingecko_history:usd_eur:ecb",
+            confidence=Decimal("1.0"),
+        )
+    )
+    _add_tax_line(store, asset="USDT", disposed_at=datetime(2022, 2, 1, tzinfo=timezone.utc))
+    client = TestClient(create_app(store))
+    client.post(
+        "/api/v1/prices/quality/decisions",
+        json={
+            "asset": "USDT",
+            "year": 2022,
+            "source": "derived:event_quote",
+            "decision_status": "manual_review_required",
+            "title": "USDT FX pruefen",
+            "rationale": "Stablecoin braucht FX-Evidenz.",
+            "evidence_ref": "unit-test",
+        },
+    )
+
+    response = client.get("/api/v1/prices/quality/stablecoin-fx-replacement-preview")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["groups_count"] == 1
+    assert data["days_count"] == 1
+    assert data["days_needing_replacement"] == 0
+    assert data["fx_backed_days_count"] == 1
+    day = data["groups"][0]["days"][0]
+    assert day["replacement_status"] == "fx_backed_available"
+    assert day["selected_alternative_price_eur"] == "0.910000000000000000"
+    assert day["sample_event_refs"] == ["stable-trade-1"]
+
+
+def test_price_quality_stablecoin_fx_replacement_preview_marks_missing_replacement(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="binance",
+            event_time=datetime(2024, 5, 1, tzinfo=timezone.utc),
+            event_type="unknown",
+            asset="BUSD",
+            quantity=Decimal("0"),
+            quote_asset="BNB",
+            quote_quantity=Decimal("1"),
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="BUSD",
+            price_eur=Decimal("0.70"),
+            priced_at=datetime(2024, 5, 1, tzinfo=timezone.utc),
+            source="derived:event_quote",
+            confidence=Decimal("0.85"),
+        )
+    )
+    _add_tax_line(store, asset="BUSD", disposed_at=datetime(2024, 6, 1, tzinfo=timezone.utc))
+    client = TestClient(create_app(store))
+    client.post(
+        "/api/v1/prices/quality/decisions",
+        json={
+            "asset": "BUSD",
+            "year": 2024,
+            "source": "derived:event_quote",
+            "decision_status": "manual_review_required",
+            "title": "BUSD FX pruefen",
+            "rationale": "Stablecoin braucht FX-Evidenz.",
+            "evidence_ref": "unit-test",
+        },
+    )
+
+    response = client.get("/api/v1/prices/quality/stablecoin-fx-replacement-preview")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["groups_count"] == 1
+    assert data["days_needing_replacement"] == 1
+    assert data["fx_backed_days_count"] == 0
+    day = data["groups"][0]["days"][0]
+    assert day["replacement_status"] == "replacement_needed"
+    assert day["selected_alternative_source"] is None
+    assert "Stablecoin-EUR-Preisanker" in day["recommended_action"]
+
+
 def test_price_quality_solscan_signature_review_separates_signature_refs(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     signature = "3YTtgWxaXt8hf9N2ja69r1rpvfozBK7vyrkmZDy8EvtBCSg3YcCrujEFJc4mDQW1pnCTLFaWLHaofD3zdaZGdcQ"

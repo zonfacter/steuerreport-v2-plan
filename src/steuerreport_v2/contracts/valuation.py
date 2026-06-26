@@ -236,6 +236,60 @@ class PriceQualityStablecoinFxReport(BaseModel):
     methodology: str
 
 
+class PriceQualityStablecoinFxReplacementDay(BaseModel):
+    asset: str
+    year: int
+    price_date: date
+    source: str
+    derived_price_count: int
+    min_derived_price_eur: Decimal
+    max_derived_price_eur: Decimal
+    replacement_status: Literal[
+        "fx_backed_available",
+        "market_price_available",
+        "replacement_needed",
+    ]
+    same_day_alternative_count: int = 0
+    fx_backed_alternative_count: int = 0
+    market_alternative_count: int = 0
+    selected_alternative_price_eur: Decimal | None = None
+    selected_alternative_source: str | None = None
+    selected_alternative_priced_at: datetime | None = None
+    tax_lines_count: int = 0
+    tax_quantity: Decimal = Decimal("0")
+    sample_event_refs: list[str] = Field(default_factory=list)
+    recommended_action: str
+
+
+class PriceQualityStablecoinFxReplacementGroup(BaseModel):
+    scope: str
+    asset: str
+    year: int
+    source: str
+    tax_lines_count: int
+    tax_quantity: Decimal
+    days_count: int
+    days_needing_replacement: int
+    fx_backed_days_count: int
+    market_price_days_count: int
+    days: list[PriceQualityStablecoinFxReplacementDay] = Field(default_factory=list)
+    recommended_action: str
+
+
+class PriceQualityStablecoinFxReplacementReport(BaseModel):
+    generated_at: datetime
+    groups_count: int
+    tax_relevant_groups_count: int
+    days_count: int
+    days_needing_replacement: int
+    fx_backed_days_count: int
+    market_price_days_count: int
+    total_tax_lines_count: int
+    assets: list[str] = Field(default_factory=list)
+    groups: list[PriceQualityStablecoinFxReplacementGroup] = Field(default_factory=list)
+    methodology: str
+
+
 class PriceQualitySolscanSignatureItem(BaseModel):
     scope: str
     asset: str

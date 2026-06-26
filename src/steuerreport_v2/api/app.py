@@ -265,6 +265,7 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityReport,
     PriceQualitySolscanSignatureReport,
     PriceQualityStablecoinFxReport,
+    PriceQualityStablecoinFxReplacementReport,
     PriceRequirementReport,
 )
 from steuerreport_v2.contracts.wallet_monthly import WalletMonthlyPreflightReport
@@ -1277,6 +1278,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/prices/quality/stablecoin-fx-review")
     def price_quality_stablecoin_fx_review(limit: int = 120) -> ApiResponse[PriceQualityStablecoinFxReport]:
         return ApiResponse(data=PriceQualityService(db).stablecoin_fx_review(limit=limit))
+
+    @app.get("/api/v1/prices/quality/stablecoin-fx-replacement-preview")
+    def price_quality_stablecoin_fx_replacement_preview(
+        limit: int = 120,
+        days_per_group: int = 20,
+    ) -> ApiResponse[PriceQualityStablecoinFxReplacementReport]:
+        return ApiResponse(
+            data=PriceQualityService(db).stablecoin_fx_replacement_preview(
+                limit=limit,
+                days_per_group=days_per_group,
+            )
+        )
 
     @app.get("/api/v1/prices/quality/solscan-signature-review")
     def price_quality_solscan_signature_review(limit: int = 120) -> ApiResponse[PriceQualitySolscanSignatureReport]:

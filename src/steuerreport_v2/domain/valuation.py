@@ -28,6 +28,9 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualitySourceSummary,
     PriceQualityStablecoinFxItem,
     PriceQualityStablecoinFxReport,
+    PriceQualityStablecoinFxReplacementDay,
+    PriceQualityStablecoinFxReplacementGroup,
+    PriceQualityStablecoinFxReplacementReport,
     PriceQualitySolscanSignatureItem,
     PriceQualitySolscanSignatureReport,
     PriceQualityTaxSample,
@@ -634,6 +637,86 @@ class PriceQualityService:
             ),
         )
 
+    def stablecoin_fx_replacement_preview(
+        self,
+        limit: int = 120,
+        days_per_group: int = 20,
+    ) -> PriceQualityStablecoinFxReplacementReport:
+        manual = self.manual_review_report(limit=10_000)
+        groups = [
+            group
+            for group in manual.groups
+            if group.review_bucket == "stablecoin_fx_review"
+            and group.asset in {"USDT", "USDC", "BUSD"}
+            and group.source == "derived:event_quote"
+        ]
+        groups.sort(
+            key=lambda group: (
+                -group.tax_lines_count,
+                group.asset,
+                group.year,
+                group.source,
+            )
+        )
+
+        items: list[PriceQualityStablecoinFxReplacementGroup] = []
+        all_days: list[PriceQualityStablecoinFxReplacementDay] = []
+        for group in groups[: max(1, limit)]:
+            days = self._stablecoin_fx_replacement_days(
+                group,
+                limit=max(1, days_per_group),
+            )
+            all_days.extend(days)
+            days_needing_replacement = sum(
+                1 for day in days if day.replacement_status == "replacement_needed"
+            )
+            fx_backed_days = sum(
+                1 for day in days if day.replacement_status == "fx_backed_available"
+            )
+            market_days = sum(
+                1 for day in days if day.replacement_status == "market_price_available"
+            )
+            items.append(
+                PriceQualityStablecoinFxReplacementGroup(
+                    scope=group.scope,
+                    asset=group.asset,
+                    year=group.year,
+                    source=group.source,
+                    tax_lines_count=group.tax_lines_count,
+                    tax_quantity=group.tax_quantity,
+                    days_count=len(days),
+                    days_needing_replacement=days_needing_replacement,
+                    fx_backed_days_count=fx_backed_days,
+                    market_price_days_count=market_days,
+                    days=days,
+                    recommended_action=self._stablecoin_fx_replacement_group_action(
+                        days_needing_replacement=days_needing_replacement,
+                        fx_backed_days=fx_backed_days,
+                        market_days=market_days,
+                    ),
+                )
+            )
+
+        return PriceQualityStablecoinFxReplacementReport(
+            generated_at=datetime.now(timezone.utc),
+            groups_count=len(groups),
+            tax_relevant_groups_count=sum(1 for group in groups if group.tax_lines_count > 0),
+            days_count=sum(group.days_count for group in items),
+            days_needing_replacement=sum(group.days_needing_replacement for group in items),
+            fx_backed_days_count=sum(group.fx_backed_days_count for group in items),
+            market_price_days_count=sum(group.market_price_days_count for group in items),
+            total_tax_lines_count=sum(group.tax_lines_count for group in groups),
+            assets=sorted({group.asset for group in groups}),
+            groups=items,
+            methodology=(
+                "Read-only Stablecoin-FX-Replacement-Preview fuer USDT/USDC/BUSD "
+                "PriceQuality-Gruppen mit derived:event_quote. Die Matrix zeigt pro "
+                "Asset/Jahr/Tag, ob eine gleichdatierte FX-/ECB-/USD_EUR-Quelle oder "
+                "sonstige Marktpreisquelle existiert. Sie schreibt keine Preise, "
+                "keine Review-Decisions und aendert keine FIFO-/Steuerdaten."
+            ),
+        )
+
     def solscan_signature_review(self, limit: int = 120) -> PriceQualitySolscanSignatureReport:
         manual = self.manual_review_report(limit=10_000)
         groups = [
@@ -881,6 +964,185 @@ class PriceQualityService:
                 "FX-Replacement-Kandidaten markiert, nicht als akzeptierte Event-Quote."
             ),
         )
+
+    def _stablecoin_fx_replacement_days(
+        self,
+        group: PriceQualityManualReviewItem,
+        *,
+        limit: int,
+    ) -> list[PriceQualityStablecoinFxReplacementDay]:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                with derived_days as (
+                    select
+                        upper(asset) as asset,
+                        date_part('year', priced_at)::integer as year,
+                        cast(priced_at as date) as price_date,
+                        source,
+                        count(*)::integer as derived_price_count,
+                        min(price_eur) as min_derived_price_eur,
+                        max(price_eur) as max_derived_price_eur
+                    from price_ledger
+                    where upper(asset) = ?
+                      and date_part('year', priced_at)::integer = ?
+                      and source = ?
+                    group by upper(asset), date_part('year', priced_at), cast(priced_at as date), source
+                ),
+                alternatives as (
+                    select
+                        upper(asset) as asset,
+                        cast(priced_at as date) as price_date,
+                        source,
+                        price_eur,
+                        priced_at,
+                        case
+                          when lower(source) like '%usd_eur%'
+                            or lower(source) like '%fx%'
+                            or lower(source) like '%ecb%'
+                          then 1 else 0
+                        end as is_fx_backed,
+                        case
+                          when lower(source) like '%coingecko%'
+                            or lower(source) like '%market%'
+                            or lower(source) like '%manual%'
+                          then 1 else 0
+                        end as is_market
+                    from price_ledger
+                    where upper(asset) = ?
+                      and date_part('year', priced_at)::integer = ?
+                      and source <> ?
+                      and price_eur > 0
+                ),
+                alternative_summary as (
+                    select
+                        asset,
+                        price_date,
+                        count(*)::integer as same_day_alternative_count,
+                        sum(is_fx_backed)::integer as fx_backed_alternative_count,
+                        sum(is_market)::integer as market_alternative_count
+                    from alternatives
+                    group by asset, price_date
+                ),
+                selected_alternative as (
+                    select *
+                    from (
+                        select
+                            asset,
+                            price_date,
+                            price_eur,
+                            source,
+                            priced_at,
+                            row_number() over (
+                                partition by asset, price_date
+                                order by is_fx_backed desc, is_market desc, priced_at desc, source
+                            ) as rn
+                        from alternatives
+                    )
+                    where rn = 1
+                ),
+                tax_by_year as (
+                    select
+                        upper(asset) as asset,
+                        date_part('year', disposed_at)::integer as year,
+                        count(*)::integer as tax_lines_count,
+                        sum(abs(quantity)) as tax_quantity
+                    from tax_lines
+                    where upper(asset) = ?
+                      and date_part('year', disposed_at)::integer = ?
+                    group by upper(asset), date_part('year', disposed_at)
+                ),
+                refs as (
+                    select
+                        upper(asset) as asset,
+                        cast(event_time as date) as price_date,
+                        list(source_ref order by event_time, event_id) as source_refs
+                    from canonical_events
+                    where upper(asset) = ?
+                      and date_part('year', event_time)::integer = ?
+                      and source_ref is not null
+                    group by upper(asset), cast(event_time as date)
+                )
+                select
+                    d.asset,
+                    d.year,
+                    d.price_date,
+                    d.source,
+                    d.derived_price_count,
+                    d.min_derived_price_eur,
+                    d.max_derived_price_eur,
+                    coalesce(a.same_day_alternative_count, 0) as same_day_alternative_count,
+                    coalesce(a.fx_backed_alternative_count, 0) as fx_backed_alternative_count,
+                    coalesce(a.market_alternative_count, 0) as market_alternative_count,
+                    s.price_eur as selected_price_eur,
+                    s.source as selected_source,
+                    s.priced_at as selected_priced_at,
+                    coalesce(t.tax_lines_count, 0) as tax_lines_count,
+                    coalesce(t.tax_quantity, 0) as tax_quantity,
+                    coalesce(r.source_refs, []) as source_refs
+                from derived_days d
+                left join alternative_summary a
+                  on a.asset = d.asset and a.price_date = d.price_date
+                left join selected_alternative s
+                  on s.asset = d.asset and s.price_date = d.price_date
+                left join tax_by_year t
+                  on t.asset = d.asset and t.year = d.year
+                left join refs r
+                  on r.asset = d.asset and r.price_date = d.price_date
+                order by
+                    case when coalesce(a.fx_backed_alternative_count, 0) > 0 then 2
+                         when coalesce(a.same_day_alternative_count, 0) > 0 then 1
+                         else 0
+                    end,
+                    d.price_date,
+                    d.asset
+                limit ?
+                """,
+                [
+                    group.asset,
+                    group.year,
+                    group.source,
+                    group.asset,
+                    group.year,
+                    group.source,
+                    group.asset,
+                    group.year,
+                    group.asset,
+                    group.year,
+                    limit,
+                ],
+            ).fetchall()
+
+        days: list[PriceQualityStablecoinFxReplacementDay] = []
+        for row in rows:
+            replacement_status = self._stablecoin_fx_replacement_status(
+                fx_backed_count=int(row[8] or 0),
+                market_count=int(row[9] or 0),
+                alternative_count=int(row[7] or 0),
+            )
+            days.append(
+                PriceQualityStablecoinFxReplacementDay(
+                    asset=row[0],
+                    year=row[1],
+                    price_date=row[2],
+                    source=row[3],
+                    derived_price_count=row[4],
+                    min_derived_price_eur=row[5],
+                    max_derived_price_eur=row[6],
+                    replacement_status=replacement_status,
+                    same_day_alternative_count=row[7],
+                    fx_backed_alternative_count=row[8],
+                    market_alternative_count=row[9],
+                    selected_alternative_price_eur=row[10],
+                    selected_alternative_source=row[11],
+                    selected_alternative_priced_at=row[12],
+                    tax_lines_count=row[13],
+                    tax_quantity=row[14],
+                    sample_event_refs=list(row[15] or [])[:5],
+                    recommended_action=self._stablecoin_fx_replacement_day_action(replacement_status),
+                )
+            )
+        return days
 
     def _manual_review_sample_contexts(
         self,
@@ -1642,6 +1904,40 @@ class PriceQualityService:
             False,
             "Manuelle Detailpruefung oder externe Preisquelle erforderlich.",
         )
+
+    @staticmethod
+    def _stablecoin_fx_replacement_status(
+        *,
+        fx_backed_count: int,
+        market_count: int,
+        alternative_count: int,
+    ) -> str:
+        if fx_backed_count > 0:
+            return "fx_backed_available"
+        if market_count > 0 or alternative_count > 0:
+            return "market_price_available"
+        return "replacement_needed"
+
+    @staticmethod
+    def _stablecoin_fx_replacement_day_action(status: str) -> str:
+        if status == "fx_backed_available":
+            return "Gleichdatierte FX-/USD_EUR-/ECB-Quelle vorhanden; Replacement fachlich pruefbar."
+        if status == "market_price_available":
+            return "Gleichdatierte Marktpreisquelle vorhanden; fuer Finanzamt FX-/Preisbeleg archivieren."
+        return "Kein gleichdatierter Ersatzpreis vorhanden; USD/EUR-FX- oder belastbaren Stablecoin-EUR-Preisanker beschaffen."
+
+    @staticmethod
+    def _stablecoin_fx_replacement_group_action(
+        *,
+        days_needing_replacement: int,
+        fx_backed_days: int,
+        market_days: int,
+    ) -> str:
+        if days_needing_replacement == 0 and fx_backed_days > 0:
+            return "Alle angezeigten Tage haben FX-Ersatz; nach Belegpruefung koennen Derived-Event-Quotes ersetzt werden."
+        if days_needing_replacement == 0 and market_days > 0:
+            return "Alle angezeigten Tage haben Marktpreis-Ersatz; FX-Beleglage fuer Stablecoin sauber dokumentieren."
+        return "Offene Tage benoetigen Stablecoin-FX-Replacement; vor Review-Closure keine automatische Akzeptanz der Event-Quotes."
 
     @staticmethod
     def _count_dict(values: object) -> dict[str, int]:
