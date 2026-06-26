@@ -27,6 +27,11 @@ PriceQualityClosureClass = Literal[
     "external_price_required_candidate",
     "manual_review_required",
 ]
+StablecoinFxReplacementDecisionAction = Literal[
+    "apply_replacement",
+    "document_delta_only",
+    "keep_existing",
+]
 
 
 class MissingPriceCoverageItem(BaseModel):
@@ -322,6 +327,63 @@ class PriceQualityStablecoinFxReplacementImpactReport(BaseModel):
     avg_abs_delta_pct: Decimal | None = None
     rows: list[PriceQualityStablecoinFxReplacementImpactRow] = Field(default_factory=list)
     methodology: str
+
+
+class PriceQualityStablecoinFxTaxImpactDecisionOption(BaseModel):
+    action: StablecoinFxReplacementDecisionAction
+    label: str
+    writes_prices: bool = False
+    writes_fifo: bool = False
+    recommended: bool = False
+    rationale: str
+
+
+class PriceQualityStablecoinFxTaxImpactLatestReport(BaseModel):
+    generated_at: datetime
+    asset: str
+    year: int
+    source: str
+    artifact_path: str | None = None
+    artifact_found: bool = False
+    artifact_generated_at: datetime | None = None
+    conclusion: str | None = None
+    replacement_rows_count: int = 0
+    replacement_ready_rows: int = 0
+    replacement_missing_rows: int = 0
+    applied_rows: int = 0
+    baseline_taxable_gain_loss_eur: Decimal | None = None
+    patched_taxable_gain_loss_eur: Decimal | None = None
+    taxable_gain_loss_delta_eur: Decimal | None = None
+    baseline_stablecoin_gain_loss_eur: Decimal | None = None
+    patched_stablecoin_gain_loss_eur: Decimal | None = None
+    stablecoin_gain_loss_delta_eur: Decimal | None = None
+    unmatched_disposals_delta: int | None = None
+    existing_decisions_count: int = 0
+    latest_decision_id: str | None = None
+    latest_decision_action: StablecoinFxReplacementDecisionAction | None = None
+    latest_decision_title: str | None = None
+    decision_scope: str
+    decision_options: list[PriceQualityStablecoinFxTaxImpactDecisionOption] = Field(default_factory=list)
+    recommended_next_action: str
+    methodology: str
+
+
+class PriceQualityStablecoinFxTaxImpactDecisionCreate(BaseModel):
+    asset: str = Field(min_length=1)
+    year: int
+    source: str = "derived:event_quote"
+    action: StablecoinFxReplacementDecisionAction
+    rationale: str
+    evidence_ref: str | None = None
+
+
+class PriceQualityStablecoinFxTaxImpactDecisionResult(BaseModel):
+    decision_id: str
+    scope: str
+    action: StablecoinFxReplacementDecisionAction
+    writes_prices: bool = False
+    writes_fifo: bool = False
+    writes_tax_lines: bool = False
 
 
 class PriceQualitySolscanSignatureItem(BaseModel):

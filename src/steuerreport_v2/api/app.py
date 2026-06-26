@@ -11,7 +11,7 @@ import zipfile
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
@@ -267,6 +267,9 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityStablecoinFxReport,
     PriceQualityStablecoinFxReplacementImpactReport,
     PriceQualityStablecoinFxReplacementReport,
+    PriceQualityStablecoinFxTaxImpactDecisionCreate,
+    PriceQualityStablecoinFxTaxImpactDecisionResult,
+    PriceQualityStablecoinFxTaxImpactLatestReport,
     PriceRequirementReport,
 )
 from steuerreport_v2.contracts.wallet_monthly import WalletMonthlyPreflightReport
@@ -1307,6 +1310,30 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 limit=limit,
             )
         )
+
+    @app.get("/api/v1/prices/quality/stablecoin-fx-tax-impact-latest")
+    def price_quality_stablecoin_fx_tax_impact_latest(
+        asset: str = "USDT",
+        year: int = 2024,
+        source: str = "derived:event_quote",
+    ) -> ApiResponse[PriceQualityStablecoinFxTaxImpactLatestReport]:
+        return ApiResponse(
+            data=PriceQualityService(db).stablecoin_fx_tax_impact_latest(
+                asset=asset,
+                year=year,
+                source=source,
+            )
+        )
+
+    @app.post("/api/v1/prices/quality/stablecoin-fx-tax-impact-decisions")
+    def add_price_quality_stablecoin_fx_tax_impact_decision(
+        payload: PriceQualityStablecoinFxTaxImpactDecisionCreate,
+    ) -> ApiResponse[PriceQualityStablecoinFxTaxImpactDecisionResult]:
+        try:
+            result = PriceQualityService(db).add_stablecoin_fx_tax_impact_decision(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return ApiResponse(data=result)
 
     @app.get("/api/v1/prices/quality/solscan-signature-review")
     def price_quality_solscan_signature_review(limit: int = 120) -> ApiResponse[PriceQualitySolscanSignatureReport]:

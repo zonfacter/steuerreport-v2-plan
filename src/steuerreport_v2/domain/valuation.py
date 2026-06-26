@@ -4,8 +4,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+import json
+from pathlib import Path
 
 from steuerreport_v2.contracts.events import CanonicalEvent
+from steuerreport_v2.contracts.review import ReviewDecisionCreate
 from steuerreport_v2.contracts.valuation import (
     MissingPriceCoverageItem,
     PriceGapDecisionStatus,
@@ -33,6 +36,10 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityStablecoinFxReplacementImpactReport,
     PriceQualityStablecoinFxReplacementImpactRow,
     PriceQualityStablecoinFxReplacementReport,
+    PriceQualityStablecoinFxTaxImpactDecisionCreate,
+    PriceQualityStablecoinFxTaxImpactDecisionOption,
+    PriceQualityStablecoinFxTaxImpactDecisionResult,
+    PriceQualityStablecoinFxTaxImpactLatestReport,
     PriceQualitySolscanSignatureItem,
     PriceQualitySolscanSignatureReport,
     PriceQualityTaxSample,
@@ -444,6 +451,8 @@ class PriceCoverageService:
 
 
 class PriceQualityService:
+    TAX_IMPACT_ARTIFACT_DIR = Path("var/stablecoin_fx_replacement_tax_impact")
+
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
 
@@ -887,6 +896,158 @@ class PriceQualityService:
                 "aus vorhandenen Preiszeilen ausgewaehlt, bevorzugt FX-/USD_EUR-/ECB-"
                 "Quellen. Der Endpunkt schreibt keine Preise und baut FIFO nicht neu."
             ),
+        )
+
+    def stablecoin_fx_tax_impact_latest(
+        self,
+        *,
+        asset: str = "USDT",
+        year: int = 2024,
+        source: str = "derived:event_quote",
+    ) -> PriceQualityStablecoinFxTaxImpactLatestReport:
+        normalized_asset = asset.upper()
+        scope = self.stablecoin_fx_tax_impact_scope(
+            asset=normalized_asset,
+            year=year,
+            source=source,
+        )
+        path = self._stablecoin_fx_tax_impact_artifact_path(
+            asset=normalized_asset,
+            year=year,
+        )
+        payload: dict[str, object] | None = None
+        if path.exists():
+            payload = json.loads(path.read_text(encoding="utf-8"))
+
+        decisions = [
+            decision
+            for decision in self.store.list_review_decisions()
+            if decision.decision_type == "stablecoin_fx_replacement_tax_impact"
+            and decision.scope == scope
+        ]
+        decisions.sort(key=lambda item: item.created_at, reverse=True)
+        latest_decision = decisions[0] if decisions else None
+        conclusion = str(payload.get("conclusion")) if payload else None
+        replacement_plan = payload.get("replacement_plan") if payload else {}
+        baseline = payload.get("baseline") if payload else {}
+        patched = payload.get("patched") if payload else {}
+        delta = payload.get("delta") if payload else {}
+        return PriceQualityStablecoinFxTaxImpactLatestReport(
+            generated_at=datetime.now(timezone.utc),
+            asset=normalized_asset,
+            year=year,
+            source=source,
+            artifact_path=str(path) if path.exists() else None,
+            artifact_found=path.exists(),
+            artifact_generated_at=self._parse_optional_datetime(payload.get("generated_at") if payload else None),
+            conclusion=conclusion,
+            replacement_rows_count=int(self._mapping_value(replacement_plan, "rows_count") or 0),
+            replacement_ready_rows=int(self._mapping_value(replacement_plan, "ready_rows") or 0),
+            replacement_missing_rows=int(self._mapping_value(replacement_plan, "missing_rows") or 0),
+            applied_rows=int(self._mapping_value(replacement_plan, "applied_rows") or 0),
+            baseline_taxable_gain_loss_eur=self._optional_decimal(
+                self._mapping_value(baseline, "taxable_gain_loss_eur")
+            ),
+            patched_taxable_gain_loss_eur=self._optional_decimal(
+                self._mapping_value(patched, "taxable_gain_loss_eur")
+            ),
+            taxable_gain_loss_delta_eur=self._optional_decimal(
+                self._mapping_value(delta, "taxable_gain_loss_eur")
+            ),
+            baseline_stablecoin_gain_loss_eur=self._optional_decimal(
+                self._mapping_value(baseline, "stablecoin_gain_loss_eur")
+            ),
+            patched_stablecoin_gain_loss_eur=self._optional_decimal(
+                self._mapping_value(patched, "stablecoin_gain_loss_eur")
+            ),
+            stablecoin_gain_loss_delta_eur=self._optional_decimal(
+                self._mapping_value(delta, "stablecoin_gain_loss_eur")
+            ),
+            unmatched_disposals_delta=self._optional_int(
+                self._mapping_value(delta, "unmatched_disposals")
+            ),
+            existing_decisions_count=len(decisions),
+            latest_decision_id=latest_decision.decision_id if latest_decision else None,
+            latest_decision_action=(
+                latest_decision.payload.get("action")  # type: ignore[assignment]
+                if latest_decision and latest_decision.payload.get("action") in {"apply_replacement", "document_delta_only", "keep_existing"}
+                else None
+            ),
+            latest_decision_title=latest_decision.title if latest_decision else None,
+            decision_scope=scope,
+            decision_options=self._stablecoin_fx_tax_impact_decision_options(conclusion),
+            recommended_next_action=self._stablecoin_fx_tax_impact_next_action(
+                artifact_found=path.exists(),
+                conclusion=conclusion,
+                decisions_count=len(decisions),
+            ),
+            methodology=(
+                "Read-only Statusflaeche fuer Stablecoin-FX-Tax-Impact-Artefakte. "
+                "Der Report liest nur das letzte Skriptartefakt und vorhandene "
+                "Review-Decisions. Er schreibt keine Preise, keine FIFO-Lots und "
+                "keine Tax-Lines."
+            ),
+        )
+
+    def add_stablecoin_fx_tax_impact_decision(
+        self,
+        payload: PriceQualityStablecoinFxTaxImpactDecisionCreate,
+    ) -> PriceQualityStablecoinFxTaxImpactDecisionResult:
+        normalized_asset = payload.asset.upper()
+        latest = self.stablecoin_fx_tax_impact_latest(
+            asset=normalized_asset,
+            year=payload.year,
+            source=payload.source,
+        )
+        if not latest.artifact_found:
+            raise ValueError("stablecoin_fx_tax_impact_artifact_missing")
+        scope = latest.decision_scope
+        evidence_ref = payload.evidence_ref or latest.artifact_path
+        decision = self.store.add_review_decision(
+            ReviewDecisionCreate(
+                decision_type="stablecoin_fx_replacement_tax_impact",
+                scope=scope,
+                title=self._stablecoin_fx_tax_impact_decision_title(
+                    asset=normalized_asset,
+                    year=payload.year,
+                    action=payload.action,
+                ),
+                rationale=payload.rationale,
+                evidence_ref=evidence_ref,
+                actor="user",
+                source="api:/api/v1/prices/quality/stablecoin-fx-tax-impact-decisions",
+                payload={
+                    "action": payload.action,
+                    "asset": normalized_asset,
+                    "year": payload.year,
+                    "price_source": payload.source,
+                    "artifact_path": latest.artifact_path,
+                    "conclusion": latest.conclusion,
+                    "taxable_gain_loss_delta_eur": (
+                        str(latest.taxable_gain_loss_delta_eur)
+                        if latest.taxable_gain_loss_delta_eur is not None
+                        else None
+                    ),
+                    "stablecoin_gain_loss_delta_eur": (
+                        str(latest.stablecoin_gain_loss_delta_eur)
+                        if latest.stablecoin_gain_loss_delta_eur is not None
+                        else None
+                    ),
+                    "import_effect": "none",
+                    "ledger_effect": "none",
+                    "fifo_effect": "none",
+                    "tax_lines_effect": "none",
+                    "price_write_effect": "none",
+                },
+            )
+        )
+        return PriceQualityStablecoinFxTaxImpactDecisionResult(
+            decision_id=decision.decision_id,
+            scope=scope,
+            action=payload.action,
+            writes_prices=False,
+            writes_fifo=False,
+            writes_tax_lines=False,
         )
 
     def solscan_signature_review(self, limit: int = 120) -> PriceQualitySolscanSignatureReport:
@@ -2116,6 +2277,112 @@ class PriceQualityService:
         if status == "ready":
             return "Replacement-Kandidat vorhanden; Delta pruefen und danach kontrolliert anwenden oder als Review-Evidenz dokumentieren."
         return "Kein gleichdatierter Replacement-Preis vorhanden; vor Anwendung Tages-FX-/Stablecoin-EUR-Preisanker beschaffen."
+
+    @classmethod
+    def stablecoin_fx_tax_impact_scope(cls, *, asset: str, year: int, source: str) -> str:
+        return f"stablecoin_fx_replacement:asset:{asset.upper()}:year:{year}:source:{source}"
+
+    @classmethod
+    def _stablecoin_fx_tax_impact_artifact_path(cls, *, asset: str, year: int) -> Path:
+        return cls.TAX_IMPACT_ARTIFACT_DIR / f"latest_{asset.upper()}_{year}_tax_impact.json"
+
+    @staticmethod
+    def _mapping_value(value: object, key: str) -> object | None:
+        if isinstance(value, dict):
+            return value.get(key)
+        return None
+
+    @staticmethod
+    def _optional_decimal(value: object | None) -> Decimal | None:
+        if value is None:
+            return None
+        return Decimal(str(value))
+
+    @staticmethod
+    def _optional_int(value: object | None) -> int | None:
+        if value is None:
+            return None
+        return int(value)
+
+    @staticmethod
+    def _parse_optional_datetime(value: object | None) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    @staticmethod
+    def _stablecoin_fx_tax_impact_decision_options(
+        conclusion: str | None,
+    ) -> list[PriceQualityStablecoinFxTaxImpactDecisionOption]:
+        tax_delta = conclusion == "replacement_changes_tax_result_review_required"
+        return [
+            PriceQualityStablecoinFxTaxImpactDecisionOption(
+                action="document_delta_only",
+                label="Delta dokumentieren, keine Daten aendern",
+                recommended=tax_delta,
+                rationale=(
+                    "Geeignet, wenn die Abweichung fuer die aktuelle Abgabe nur "
+                    "dokumentiert werden soll und keine Preis-/FIFO-Neuberechnung "
+                    "in der Live-Datenbank erfolgen soll."
+                ),
+            ),
+            PriceQualityStablecoinFxTaxImpactDecisionOption(
+                action="keep_existing",
+                label="Bestehende Bewertung beibehalten",
+                recommended=not tax_delta,
+                rationale=(
+                    "Geeignet, wenn der Impact nicht materiell ist oder die "
+                    "bestehende Berechnung als konservativer Nachweis beibehalten "
+                    "werden soll."
+                ),
+            ),
+            PriceQualityStablecoinFxTaxImpactDecisionOption(
+                action="apply_replacement",
+                label="Replacement separat anwenden",
+                writes_prices=True,
+                writes_fifo=True,
+                recommended=False,
+                rationale=(
+                    "Nur nach gesonderter fachlicher Freigabe nutzen. Diese Option "
+                    "ist hier nur dokumentiert; dieser Endpunkt schreibt keine Preise "
+                    "und baut FIFO nicht neu."
+                ),
+            ),
+        ]
+
+    @staticmethod
+    def _stablecoin_fx_tax_impact_next_action(
+        *,
+        artifact_found: bool,
+        conclusion: str | None,
+        decisions_count: int,
+    ) -> str:
+        if not artifact_found:
+            return "Tax-Impact-Skript ausfuehren, bevor eine Review-Entscheidung dokumentiert wird."
+        if decisions_count:
+            return "Review-Entscheidung ist dokumentiert; Jahrespaket kann den Beleg referenzieren."
+        if conclusion == "replacement_changes_tax_result_review_required":
+            return "Steuerdelta vorhanden; document_delta_only, keep_existing oder separaten Apply-Pfad fachlich entscheiden."
+        if conclusion == "no_tax_delta_replacement_is_quality_closure_only":
+            return "Kein Steuerdelta; PriceQuality-Closure kann als Belegentscheidung vorbereitet werden."
+        return "Impact-Artefakt pruefen und fachliche Entscheidung dokumentieren."
+
+    @staticmethod
+    def _stablecoin_fx_tax_impact_decision_title(
+        *,
+        asset: str,
+        year: int,
+        action: str,
+    ) -> str:
+        labels = {
+            "document_delta_only": "Delta dokumentiert",
+            "keep_existing": "Bestehende Bewertung beibehalten",
+            "apply_replacement": "Replacement fachlich freigegeben",
+        }
+        return f"{asset.upper()} {year} Stablecoin-FX Tax Impact: {labels.get(action, action)}"
 
     @staticmethod
     def _count_dict(values: object) -> dict[str, int]:

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -467,6 +468,112 @@ def test_price_quality_stablecoin_fx_replacement_impact_marks_missing_rows(tmp_p
     assert data["all_replacement_ready"] is False
     assert data["rows"][0]["replacement_status"] == "missing_replacement"
     assert data["rows"][0]["replacement_price_eur"] is None
+
+
+def test_price_quality_stablecoin_fx_tax_impact_latest_reads_artifact(tmp_path, monkeypatch):
+    artifact_dir = tmp_path / "impact"
+    artifact_dir.mkdir()
+    (artifact_dir / "latest_USDT_2024_tax_impact.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-26T20:55:53+00:00",
+                "asset": "USDT",
+                "year": 2024,
+                "source": "derived:event_quote",
+                "replacement_plan": {
+                    "rows_count": 6,
+                    "ready_rows": 6,
+                    "missing_rows": 0,
+                    "applied_rows": 6,
+                },
+                "baseline": {
+                    "taxable_gain_loss_eur": "17187.535700018292083739",
+                    "stablecoin_gain_loss_eur": "448.568882903768959597",
+                },
+                "patched": {
+                    "taxable_gain_loss_eur": "17164.365258034450328223",
+                    "stablecoin_gain_loss_eur": "420.843483359799231191",
+                },
+                "delta": {
+                    "taxable_gain_loss_eur": "-23.170441983841755516",
+                    "stablecoin_gain_loss_eur": "-27.725399543969728406",
+                    "unmatched_disposals": 0,
+                },
+                "conclusion": "replacement_changes_tax_result_review_required",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(PriceQualityService, "TAX_IMPACT_ARTIFACT_DIR", artifact_dir)
+    client = TestClient(create_app(DuckDbStore(tmp_path / "steuerreport_v2.duckdb")))
+
+    response = client.get("/api/v1/prices/quality/stablecoin-fx-tax-impact-latest")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["artifact_found"] is True
+    assert data["replacement_rows_count"] == 6
+    assert data["taxable_gain_loss_delta_eur"] == "-23.170441983841755516"
+    assert data["stablecoin_gain_loss_delta_eur"] == "-27.725399543969728406"
+    assert data["decision_scope"] == "stablecoin_fx_replacement:asset:USDT:year:2024:source:derived:event_quote"
+    assert data["decision_options"][0]["action"] == "document_delta_only"
+    assert data["decision_options"][0]["recommended"] is True
+    assert "Steuerdelta" in data["recommended_next_action"]
+
+
+def test_price_quality_stablecoin_fx_tax_impact_decision_writes_review_only(tmp_path, monkeypatch):
+    artifact_dir = tmp_path / "impact"
+    artifact_dir.mkdir()
+    artifact_path = artifact_dir / "latest_USDT_2024_tax_impact.json"
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-26T20:55:53+00:00",
+                "replacement_plan": {
+                    "rows_count": 6,
+                    "ready_rows": 6,
+                    "missing_rows": 0,
+                    "applied_rows": 6,
+                },
+                "baseline": {"taxable_gain_loss_eur": "10", "stablecoin_gain_loss_eur": "2"},
+                "patched": {"taxable_gain_loss_eur": "8", "stablecoin_gain_loss_eur": "1"},
+                "delta": {
+                    "taxable_gain_loss_eur": "-2",
+                    "stablecoin_gain_loss_eur": "-1",
+                    "unmatched_disposals": 0,
+                },
+                "conclusion": "replacement_changes_tax_result_review_required",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(PriceQualityService, "TAX_IMPACT_ARTIFACT_DIR", artifact_dir)
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    client = TestClient(create_app(store))
+
+    response = client.post(
+        "/api/v1/prices/quality/stablecoin-fx-tax-impact-decisions",
+        json={
+            "asset": "USDT",
+            "year": 2024,
+            "action": "document_delta_only",
+            "rationale": "Delta ist dokumentiert; Live-Preise bleiben unveraendert.",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["action"] == "document_delta_only"
+    assert data["writes_prices"] is False
+    assert data["writes_fifo"] is False
+    assert data["writes_tax_lines"] is False
+    decisions = store.list_review_decisions()
+    assert len(decisions) == 1
+    assert decisions[0].decision_type == "stablecoin_fx_replacement_tax_impact"
+    assert decisions[0].evidence_ref == str(artifact_path)
+    assert decisions[0].payload["price_write_effect"] == "none"
+    assert decisions[0].payload["fifo_effect"] == "none"
+    assert decisions[0].payload["tax_lines_effect"] == "none"
 
 
 def test_price_quality_solscan_signature_review_separates_signature_refs(tmp_path):
