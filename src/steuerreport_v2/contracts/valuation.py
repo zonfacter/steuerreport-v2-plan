@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -384,6 +384,37 @@ class PriceQualityStablecoinFxTaxImpactDecisionResult(BaseModel):
     writes_prices: bool = False
     writes_fifo: bool = False
     writes_tax_lines: bool = False
+
+
+class PriceQualityStablecoinFxAnchorPreviewGroup(BaseModel):
+    asset: str
+    year: int
+    required_days: int = 0
+    ready_days: int = 0
+    missing_days: int = 0
+    tax_lines_count: int = 0
+    existing_decisions_count: int = 0
+    latest_decision_id: str | None = None
+    latest_decision_action: StablecoinFxReplacementDecisionAction | None = None
+    status: Literal["empty", "ready_for_review", "review_documented", "incomplete"]
+    recommended_next_action: str
+
+
+class PriceQualityStablecoinFxAnchorPreviewLatest(BaseModel):
+    generated_at: datetime
+    artifact_found: bool = False
+    artifact_path: str | None = None
+    artifact_generated_at: datetime | None = None
+    required_days: int = 0
+    ready_days: int = 0
+    missing_days: int = 0
+    groups_count: int = 0
+    groups_requiring_review: int = 0
+    taxable_gain_loss_delta_eur: Decimal | None = None
+    groups: list[PriceQualityStablecoinFxAnchorPreviewGroup] = Field(default_factory=list)
+    anchors: list[dict[str, Any]] = Field(default_factory=list)
+    tax_impact: list[dict[str, Any]] = Field(default_factory=list)
+    methodology: str
 
 
 class PriceQualitySolscanSignatureItem(BaseModel):

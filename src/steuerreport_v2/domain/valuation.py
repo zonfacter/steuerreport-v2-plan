@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 import json
 from pathlib import Path
+from typing import Any
 
 from steuerreport_v2.contracts.events import CanonicalEvent
 from steuerreport_v2.contracts.review import ReviewDecisionCreate
@@ -36,6 +37,8 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityStablecoinFxReplacementImpactReport,
     PriceQualityStablecoinFxReplacementImpactRow,
     PriceQualityStablecoinFxReplacementReport,
+    PriceQualityStablecoinFxAnchorPreviewGroup,
+    PriceQualityStablecoinFxAnchorPreviewLatest,
     PriceQualityStablecoinFxTaxImpactDecisionCreate,
     PriceQualityStablecoinFxTaxImpactDecisionOption,
     PriceQualityStablecoinFxTaxImpactDecisionResult,
@@ -452,6 +455,7 @@ class PriceCoverageService:
 
 class PriceQualityService:
     TAX_IMPACT_ARTIFACT_DIR = Path("var/stablecoin_fx_replacement_tax_impact")
+    ANCHOR_PREVIEW_ARTIFACT_DIR = Path("var/stablecoin_fx_anchor_preview")
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
@@ -1048,6 +1052,100 @@ class PriceQualityService:
             writes_prices=False,
             writes_fifo=False,
             writes_tax_lines=False,
+        )
+
+    def stablecoin_fx_anchor_preview_latest(
+        self,
+        *,
+        include_rows: bool = False,
+    ) -> PriceQualityStablecoinFxAnchorPreviewLatest:
+        path = self.ANCHOR_PREVIEW_ARTIFACT_DIR / "latest_stablecoin_fx_anchor_preview.json"
+        payload: dict[str, object] | None = None
+        if path.exists():
+            payload = json.loads(path.read_text(encoding="utf-8"))
+
+        summary = payload.get("summary") if payload else {}
+        tax_impact_summary = payload.get("tax_impact_summary") if payload else {}
+        if (
+            (not isinstance(tax_impact_summary, dict) or not tax_impact_summary)
+            and payload
+            and isinstance(payload.get("tax_impact"), list)
+        ):
+            tax_impact_summary = self._stablecoin_fx_anchor_tax_impact_summary(payload["tax_impact"])
+        raw_groups = self._mapping_value(summary, "groups") or []
+        decisions = self._stablecoin_fx_tax_impact_decisions_by_scope()
+        groups: list[PriceQualityStablecoinFxAnchorPreviewGroup] = []
+        if isinstance(raw_groups, list):
+            for item in raw_groups:
+                if not isinstance(item, dict):
+                    continue
+                asset = str(item.get("asset", "")).upper()
+                year = int(item.get("year") or 0)
+                scope = self.stablecoin_fx_tax_impact_scope(
+                    asset=asset,
+                    year=year,
+                    source="derived:event_quote",
+                )
+                group_decisions = decisions.get(scope, [])
+                latest = group_decisions[0] if group_decisions else None
+                missing_days = int(item.get("missing_days") or 0)
+                ready_days = int(item.get("ready_days") or 0)
+                if missing_days:
+                    status = "incomplete"
+                    next_action = "Fehlende USD/EUR-FX-Tage beschaffen, bevor eine Review-Decision moeglich ist."
+                elif latest:
+                    status = "review_documented"
+                    next_action = "Review-Decision ist dokumentiert; Apply-Pfad nur separat und kontrolliert ausfuehren."
+                elif ready_days:
+                    status = "ready_for_review"
+                    next_action = "Tax-Impact pruefen und Review-Decision je Asset/Jahr dokumentieren."
+                else:
+                    status = "empty"
+                    next_action = "Keine offenen Stablecoin-FX-Anker fuer diese Gruppe."
+                action = latest.payload.get("action") if latest else None
+                groups.append(
+                    PriceQualityStablecoinFxAnchorPreviewGroup(
+                        asset=asset,
+                        year=year,
+                        required_days=int(item.get("required_days") or 0),
+                        ready_days=ready_days,
+                        missing_days=missing_days,
+                        tax_lines_count=int(item.get("tax_lines_count") or 0),
+                        existing_decisions_count=len(group_decisions),
+                        latest_decision_id=latest.decision_id if latest else None,
+                        latest_decision_action=(
+                            action  # type: ignore[arg-type]
+                            if action in {"apply_replacement", "document_delta_only", "keep_existing"}
+                            else None
+                        ),
+                        status=status,  # type: ignore[arg-type]
+                        recommended_next_action=next_action,
+                    )
+                )
+
+        anchors = payload.get("anchors") if payload and include_rows else []
+        tax_impact = payload.get("tax_impact") if payload and include_rows else []
+        return PriceQualityStablecoinFxAnchorPreviewLatest(
+            generated_at=datetime.now(timezone.utc),
+            artifact_found=path.exists(),
+            artifact_path=str(path) if path.exists() else None,
+            artifact_generated_at=self._parse_optional_datetime(payload.get("generated_at") if payload else None),
+            required_days=int(self._mapping_value(summary, "required_days") or 0),
+            ready_days=int(self._mapping_value(summary, "ready_days") or 0),
+            missing_days=int(self._mapping_value(summary, "missing_days") or 0),
+            groups_count=len(groups),
+            groups_requiring_review=sum(1 for group in groups if group.status == "ready_for_review"),
+            taxable_gain_loss_delta_eur=self._optional_decimal(
+                self._mapping_value(tax_impact_summary, "taxable_gain_loss_delta_eur")
+            ),
+            groups=groups,
+            anchors=anchors if isinstance(anchors, list) else [],
+            tax_impact=tax_impact if isinstance(tax_impact, list) else [],
+            methodology=(
+                "Read-only Statusflaeche fuer das Stablecoin-FX-Anchor-Preview-Artefakt. "
+                "Der Endpunkt liest nur JSON und Review-Decisions. Er schreibt keine Preise, "
+                "keine FIFO-Lots und keine Tax-Lines."
+            ),
         )
 
     def solscan_signature_review(self, limit: int = 120) -> PriceQualitySolscanSignatureReport:
@@ -2281,6 +2379,47 @@ class PriceQualityService:
     @classmethod
     def stablecoin_fx_tax_impact_scope(cls, *, asset: str, year: int, source: str) -> str:
         return f"stablecoin_fx_replacement:asset:{asset.upper()}:year:{year}:source:{source}"
+
+    def _stablecoin_fx_tax_impact_decisions_by_scope(self) -> dict[str, list[Any]]:
+        result: dict[str, list[Any]] = defaultdict(list)
+        for decision in self.store.list_review_decisions():
+            if decision.decision_type != "stablecoin_fx_replacement_tax_impact":
+                continue
+            result[decision.scope].append(decision)
+        for decisions in result.values():
+            decisions.sort(key=lambda item: item.created_at, reverse=True)
+        return result
+
+    @staticmethod
+    def _stablecoin_fx_anchor_tax_impact_summary(rows: object) -> dict[str, object]:
+        if not isinstance(rows, list):
+            return {}
+        total = Decimal("0")
+        requiring_review = 0
+        quality_only = 0
+        incomplete = 0
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            conclusion = row.get("conclusion")
+            if conclusion == "replacement_changes_tax_result_review_required":
+                requiring_review += 1
+            elif conclusion == "no_tax_delta_replacement_is_quality_closure_only":
+                quality_only += 1
+            elif conclusion == "replacement_not_complete":
+                incomplete += 1
+            delta = row.get("delta")
+            if isinstance(delta, dict):
+                value = delta.get("taxable_gain_loss_eur")
+                if value is not None:
+                    total += Decimal(str(value))
+        return {
+            "groups_count": len(rows),
+            "groups_requiring_review": requiring_review,
+            "groups_complete_quality_only": quality_only,
+            "groups_incomplete": incomplete,
+            "taxable_gain_loss_delta_eur": str(total),
+        }
 
     @classmethod
     def _stablecoin_fx_tax_impact_artifact_path(cls, *, asset: str, year: int) -> Path:

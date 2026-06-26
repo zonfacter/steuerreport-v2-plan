@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.contracts.events import CanonicalEventCreate
+from steuerreport_v2.contracts.review import ReviewDecisionCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.valuation import PriceQualityService
 
@@ -574,6 +575,109 @@ def test_price_quality_stablecoin_fx_tax_impact_decision_writes_review_only(tmp_
     assert decisions[0].payload["price_write_effect"] == "none"
     assert decisions[0].payload["fifo_effect"] == "none"
     assert decisions[0].payload["tax_lines_effect"] == "none"
+
+
+def test_price_quality_stablecoin_fx_anchor_preview_latest_reads_artifact_and_decisions(tmp_path, monkeypatch):
+    artifact_dir = tmp_path / "anchor"
+    artifact_dir.mkdir()
+    (artifact_dir / "latest_stablecoin_fx_anchor_preview.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-26T21:38:33+00:00",
+                "summary": {
+                    "required_days": 2,
+                    "ready_days": 2,
+                    "missing_days": 0,
+                    "groups": [
+                        {
+                            "asset": "USDT",
+                            "year": 2025,
+                            "required_days": 2,
+                            "ready_days": 2,
+                            "missing_days": 0,
+                            "tax_lines_count": 310,
+                        }
+                    ],
+                },
+                "anchors": [
+                    {
+                        "asset": "USDT",
+                        "year": 2025,
+                        "price_date": "2025-01-20",
+                        "anchor_status": "ready",
+                    }
+                ],
+                "tax_impact": [
+                    {
+                        "asset": "USDT",
+                        "year": 2025,
+                        "delta": {"taxable_gain_loss_eur": "3866.01"},
+                    }
+                ],
+                "tax_impact_summary": {
+                    "groups_count": 1,
+                    "groups_requiring_review": 1,
+                    "taxable_gain_loss_delta_eur": "3866.01",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(PriceQualityService, "ANCHOR_PREVIEW_ARTIFACT_DIR", artifact_dir)
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    client = TestClient(create_app(store))
+
+    response = client.get("/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["artifact_found"] is True
+    assert data["required_days"] == 2
+    assert data["ready_days"] == 2
+    assert data["groups_requiring_review"] == 1
+    assert data["taxable_gain_loss_delta_eur"] == "3866.01"
+    assert data["groups"][0]["status"] == "ready_for_review"
+    assert data["anchors"] == []
+    assert data["tax_impact"] == []
+
+    response = client.get("/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest?include_rows=true")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["anchors"][0]["price_date"] == "2025-01-20"
+    assert data["tax_impact"][0]["delta"]["taxable_gain_loss_eur"] == "3866.01"
+
+    decision = client.post(
+        "/api/v1/prices/quality/stablecoin-fx-tax-impact-decisions",
+        json={
+            "asset": "USDT",
+            "year": 2025,
+            "action": "document_delta_only",
+            "rationale": "Anchor-Delta wird dokumentiert; kein Live-Apply.",
+        },
+    )
+
+    assert decision.status_code == 409
+    store.add_review_decision(
+        ReviewDecisionCreate(
+            decision_type="stablecoin_fx_replacement_tax_impact",
+            scope="stablecoin_fx_replacement:asset:USDT:year:2025:source:derived:event_quote",
+            title="USDT 2025 Anchor dokumentiert",
+            rationale="Anchor-Delta wird dokumentiert; kein Live-Apply.",
+            evidence_ref="unit-test",
+            actor="tester",
+            source="unit-test",
+            payload={"action": "document_delta_only"},
+        )
+    )
+
+    response = client.get("/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["groups_requiring_review"] == 0
+    assert data["groups"][0]["status"] == "review_documented"
+    assert data["groups"][0]["latest_decision_action"] == "document_delta_only"
 
 
 def test_price_quality_solscan_signature_review_separates_signature_refs(tmp_path):

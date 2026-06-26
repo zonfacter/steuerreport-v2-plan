@@ -265,6 +265,7 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityReport,
     PriceQualitySolscanSignatureReport,
     PriceQualityStablecoinFxReport,
+    PriceQualityStablecoinFxAnchorPreviewLatest,
     PriceQualityStablecoinFxReplacementImpactReport,
     PriceQualityStablecoinFxReplacementReport,
     PriceQualityStablecoinFxTaxImpactDecisionCreate,
@@ -1334,6 +1335,16 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return ApiResponse(data=result)
+
+    @app.get("/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest")
+    def price_quality_stablecoin_fx_anchor_preview_latest(
+        include_rows: bool = False,
+    ) -> ApiResponse[PriceQualityStablecoinFxAnchorPreviewLatest]:
+        return ApiResponse(
+            data=PriceQualityService(db).stablecoin_fx_anchor_preview_latest(
+                include_rows=include_rows,
+            )
+        )
 
     @app.get("/api/v1/prices/quality/solscan-signature-review")
     def price_quality_solscan_signature_review(limit: int = 120) -> ApiResponse[PriceQualitySolscanSignatureReport]:
