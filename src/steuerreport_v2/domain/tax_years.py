@@ -5047,6 +5047,7 @@ class TaxYearService:
         )
 
     def evidence_report(self, year: int) -> TaxYearEvidenceReport:
+        from steuerreport_v2.domain.valuation import PriceQualityService
         from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 
         status = self._status_for_year(year)
@@ -5077,6 +5078,10 @@ class TaxYearService:
         hnt_gain_loss = hnt.gain_loss_eur if hnt is not None else Decimal("0")
         tax_line_total = status.tax_lines_count + status.tax_free_lines_count
         review_decisions = self._review_decisions_for_year(year)
+        stablecoin_fx_tax_impact = PriceQualityService(self.store).stablecoin_fx_tax_impact_latest(
+            asset="USDT",
+            year=year,
+        )
         items = [
             TaxYearEvidenceItem(
                 evidence_id="tax-lines",
@@ -5336,6 +5341,32 @@ class TaxYearService:
                 status=self._evidence_item_status(len(review_decisions)),
                 required=bool(review_decisions),
                 note="Belegt fachliche Entscheidungen mit eindeutigem Jahresbezug; keine automatische Steuerdatenwirkung.",
+            ),
+            TaxYearEvidenceItem(
+                evidence_id="stablecoin-fx-tax-impact",
+                category=(
+                    "pruefen"
+                    if stablecoin_fx_tax_impact.artifact_found
+                    and stablecoin_fx_tax_impact.existing_decisions_count == 0
+                    else "beleg"
+                ),
+                label="Stablecoin FX Tax Impact",
+                endpoint=f"/api/v1/prices/quality/stablecoin-fx-tax-impact-latest?asset=USDT&year={year}",
+                file_format="json",
+                record_count=stablecoin_fx_tax_impact.replacement_rows_count,
+                amount_eur=stablecoin_fx_tax_impact.taxable_gain_loss_delta_eur,
+                status=(
+                    "review"
+                    if stablecoin_fx_tax_impact.artifact_found
+                    and stablecoin_fx_tax_impact.existing_decisions_count == 0
+                    else self._evidence_item_status(stablecoin_fx_tax_impact.replacement_rows_count)
+                ),
+                required=stablecoin_fx_tax_impact.artifact_found,
+                note=(
+                    "Read-only USDT-Stablecoin-FX-Steuerimpact aus temporaerem "
+                    "FIFO-Rebuild. Belegt, ob eine FX-Ersetzung nur PriceQuality "
+                    "schliesst oder das Steuerergebnis veraendert."
+                ),
             ),
             TaxYearEvidenceItem(
                 evidence_id="evidence-package",

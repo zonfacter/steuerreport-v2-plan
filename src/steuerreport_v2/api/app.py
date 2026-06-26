@@ -4747,6 +4747,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         filing_summary = tax_year_service.filing_summary(year)
         correction_map = tax_year_service.year_correction_map(year)
         evidence_report = tax_year_service.evidence_report(year)
+        stablecoin_fx_tax_impact = PriceQualityService(db).stablecoin_fx_tax_impact_latest(
+            asset="USDT",
+            year=year,
+        )
         bmf_closure_appendix = tax_year_service.bmf_closure_appendix(year)
         wallet_fifo_delta = wallet_fifo_service.preview(year=year)
         cex_exchange_outflow_evidence = wallet_fifo_service.cex_exchange_outflow_evidence(
@@ -4845,6 +4849,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 f"02_Steuerliche_CSVs/tax-year-{year}-evidence.json",
                 json.dumps(evidence_report.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/evidence",
+            ),
+            (
+                f"04_Preise_Paritaet/tax-year-{year}-stablecoin-fx-tax-impact.json",
+                json.dumps(
+                    stablecoin_fx_tax_impact.model_dump(mode="json"),
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                f"/api/v1/prices/quality/stablecoin-fx-tax-impact-latest?asset=USDT&year={year}",
             ),
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-bmf-closure-appendix.json",

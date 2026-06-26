@@ -16,6 +16,7 @@ from steuerreport_v2.contracts.tax_years import TaxYearAssetFifoPlausibilityRow
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.tax_years import TaxYearService
+from steuerreport_v2.domain.valuation import PriceQualityService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 
@@ -2007,6 +2008,52 @@ def test_tax_year_evidence_report_counts_year_review_decisions(tmp_path):
     assert items["review-decisions"].record_count == 1
     assert items["review-decisions"].status == "available"
     assert items["review-decisions"].required is True
+
+
+def test_tax_year_evidence_report_surfaces_stablecoin_fx_tax_impact(tmp_path, monkeypatch):
+    artifact_dir = tmp_path / "impact"
+    artifact_dir.mkdir()
+    (artifact_dir / "latest_USDT_2024_tax_impact.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-26T20:55:53+00:00",
+                "replacement_plan": {
+                    "rows_count": 6,
+                    "ready_rows": 6,
+                    "missing_rows": 0,
+                    "applied_rows": 6,
+                },
+                "baseline": {
+                    "taxable_gain_loss_eur": "17187.535700018292083739",
+                    "stablecoin_gain_loss_eur": "448.568882903768959597",
+                },
+                "patched": {
+                    "taxable_gain_loss_eur": "17164.365258034450328223",
+                    "stablecoin_gain_loss_eur": "420.843483359799231191",
+                },
+                "delta": {
+                    "taxable_gain_loss_eur": "-23.170441983841755516",
+                    "stablecoin_gain_loss_eur": "-27.725399543969728406",
+                    "unmatched_disposals": 0,
+                },
+                "conclusion": "replacement_changes_tax_result_review_required",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(PriceQualityService, "TAX_IMPACT_ARTIFACT_DIR", artifact_dir)
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+
+    report = TaxYearService(store).evidence_report(2024)
+    items = {item.evidence_id: item for item in report.items}
+
+    item = items["stablecoin-fx-tax-impact"]
+    assert item.category == "pruefen"
+    assert item.status == "review"
+    assert item.required is True
+    assert item.record_count == 6
+    assert item.amount_eur == Decimal("-23.170441983841755516")
+    assert item.endpoint == "/api/v1/prices/quality/stablecoin-fx-tax-impact-latest?asset=USDT&year=2024"
 
 
 def test_tax_year_evidence_report_surfaces_cex_exchange_outflow_evidence(tmp_path):

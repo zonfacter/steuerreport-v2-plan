@@ -12,6 +12,7 @@ from steuerreport_v2.contracts.valuation import PriceCoverageReport
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.exports import ExportService
 from steuerreport_v2.domain.reports import ReportCenterService
+from steuerreport_v2.domain.valuation import PriceQualityService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
@@ -845,4 +846,62 @@ def test_tax_year_evidence_package_contains_filtered_review_decisions(tmp_path):
         file["path"] == "03_Review_Entscheidungen/tax-year-2021-review-decisions.json"
         and file["source_endpoint"] == "/api/v1/export/review-decisions.csv"
         for file in manifest["files"]
+    )
+
+
+def test_tax_year_evidence_package_contains_stablecoin_fx_tax_impact(tmp_path, monkeypatch):
+    from steuerreport_v2.api.app import create_app
+
+    artifact_dir = tmp_path / "impact"
+    artifact_dir.mkdir()
+    (artifact_dir / "latest_USDT_2024_tax_impact.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-26T20:55:53+00:00",
+                "replacement_plan": {
+                    "rows_count": 6,
+                    "ready_rows": 6,
+                    "missing_rows": 0,
+                    "applied_rows": 6,
+                },
+                "baseline": {"taxable_gain_loss_eur": "10", "stablecoin_gain_loss_eur": "2"},
+                "patched": {"taxable_gain_loss_eur": "8", "stablecoin_gain_loss_eur": "1"},
+                "delta": {
+                    "taxable_gain_loss_eur": "-2",
+                    "stablecoin_gain_loss_eur": "-1",
+                    "unmatched_disposals": 0,
+                },
+                "conclusion": "replacement_changes_tax_result_review_required",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(PriceQualityService, "TAX_IMPACT_ARTIFACT_DIR", artifact_dir)
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    app = create_app(store)
+    route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/export/tax-years/{year}/evidence-package.zip"
+    )
+
+    response = route.endpoint(2024)
+
+    with ZipFile(BytesIO(response.body)) as package:
+        stablecoin_impact = json.loads(
+            package.read("04_Preise_Paritaet/tax-year-2024-stablecoin-fx-tax-impact.json").decode("utf-8")
+        )
+        manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
+
+    assert stablecoin_impact["artifact_found"] is True
+    assert stablecoin_impact["taxable_gain_loss_delta_eur"] == "-2"
+    assert any(
+        file["path"] == "04_Preise_Paritaet/tax-year-2024-stablecoin-fx-tax-impact.json"
+        and file["source_endpoint"]
+        == "/api/v1/prices/quality/stablecoin-fx-tax-impact-latest?asset=USDT&year=2024"
+        for file in manifest["files"]
+    )
+    assert (
+        "/api/v1/prices/quality/stablecoin-fx-tax-impact-latest?asset=USDT&year=2024"
+        in manifest["required_refs"]
     )
