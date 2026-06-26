@@ -70,3 +70,68 @@ def test_select_ready_rows_keeps_cmc_backed_rows_without_requiring_cmc_id():
     ]
 
     assert MODULE.select_ready_rows(rows) == rows
+
+
+def test_coinmarketcap_history_uses_cached_payload_without_http(tmp_path):
+    cache_path = MODULE.coinmarketcap_cache_path(
+        cache_dir=tmp_path,
+        cmc_id="2010",
+        start_date=date(2023, 1, 1),
+        end_date=date(2023, 1, 2),
+    )
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text(
+        """
+        {
+          "data": {
+            "quotes": [
+              {
+                "timeOpen": "2023-01-01T00:00:00.000Z",
+                "quote": {"close": "0.25"}
+              }
+            ]
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    class FailingClient:
+        def get(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+            raise AssertionError("HTTP must not be called when cache exists")
+
+    result = MODULE.fetch_coinmarketcap_usd_history(
+        client=FailingClient(),
+        cmc_id="2010",
+        start_date=date(2023, 1, 1),
+        end_date=date(2023, 1, 2),
+        cache_dir=tmp_path,
+    )
+
+    assert result == {date(2023, 1, 1): Decimal("0.25")}
+
+
+def test_parse_defillama_usd_payload_extracts_price_and_timestamp():
+    payload = {
+        "coins": {
+            "coingecko:pepe": {
+                "price": "0.00000909",
+                "timestamp": 1709942392,
+            }
+        }
+    }
+
+    price, timestamp = MODULE.parse_defillama_usd_payload(payload, coin_id="pepe")
+
+    assert price == Decimal("0.00000909")
+    assert timestamp == 1709942392
+
+
+def test_defillama_cache_path_sanitizes_coin_id(tmp_path):
+    path = MODULE.defillama_cache_path(
+        cache_dir=tmp_path,
+        coin_id="some/coin:id",
+        price_date=date(2025, 1, 20),
+    )
+
+    assert path == tmp_path / "defillama_coingecko_historical" / "some_coin_id" / "2025-01-20.json"

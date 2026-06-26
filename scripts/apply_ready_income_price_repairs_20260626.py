@@ -26,6 +26,7 @@ DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_PREVIEW = PROJECT_ROOT / "var" / "income_price_repair_previews" / "latest_all_income_price_repair_preview.json"
 DEFAULT_V1_FX_DB = Path("/root/.local/share/steuerreport/steuerreport.db")
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "income_price_repair_executes"
+DEFAULT_PRICE_CACHE_DIR = PROJECT_ROOT / "var" / "external_price_history_cache"
 
 REPAIR_SPEC = importlib.util.spec_from_file_location("income_price_repair", REPAIR_SCRIPT_PATH)
 REPAIR = importlib.util.module_from_spec(REPAIR_SPEC)
@@ -42,6 +43,8 @@ def main() -> None:
     parser.add_argument("--preview", default=str(DEFAULT_PREVIEW))
     parser.add_argument("--v1-fx-db", default=str(DEFAULT_V1_FX_DB))
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
+    parser.add_argument("--price-cache-dir", default=str(DEFAULT_PRICE_CACHE_DIR))
+    parser.add_argument("--refresh-price-cache", action="store_true")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     args = parser.parse_args()
@@ -61,6 +64,8 @@ def main() -> None:
                 row=row,
                 client=client,
                 v1_fx_db_path=Path(args.v1_fx_db),
+                price_cache_dir=Path(args.price_cache_dir),
+                refresh_price_cache=args.refresh_price_cache,
             )
             group_reports.append(report)
             if report["summary"]["failure_count"]:
@@ -87,6 +92,8 @@ def main() -> None:
         "methodology": (
             "Applies only preview rows with status=ready_for_execute. Each group is recomputed "
             "before writing; execution aborts if any recomputed group has provider/fx failures. "
+            "External CMC history is cached locally by provider/id/date range to make successful "
+            "provider reads reproducible across later rate limits. "
             "Existing price rows are not deleted. One DB backup and one PipelineService.rebuild_all "
             "are used for the whole batch."
         ),
@@ -132,6 +139,8 @@ def build_group_points(
     row: dict[str, Any],
     client: httpx.Client,
     v1_fx_db_path: Path,
+    price_cache_dir: Path,
+    refresh_price_cache: bool,
 ) -> tuple[dict[str, Any], list[Any]]:
     asset = str(row["asset"]).upper()
     source = str(row["source"]).lower()
@@ -160,6 +169,8 @@ def build_group_points(
             cmc_id=cmc_id,
             start_date=min(missing_dates),
             end_date=max(missing_dates),
+            cache_dir=price_cache_dir,
+            refresh=refresh_price_cache,
         )
     external_prices = {}
     failures: list[dict[str, Any]] = []
@@ -173,8 +184,12 @@ def build_group_points(
                 price_date=reward_day.price_date,
                 v1_fx_db_path=v1_fx_db_path,
                 source_label=source_label,
+                client=client,
+                coin_id=str(row["coin_id"]),
                 cmc_id=cmc_id,
                 cmc_history=cmc_history,
+                price_cache_dir=price_cache_dir,
+                refresh_price_cache=refresh_price_cache,
             )
         except Exception as exc:  # noqa: BLE001 - surfaced in report and aborts execute.
             failures.append({"date": reward_day.price_date.isoformat(), "error": str(exc)})
@@ -203,8 +218,12 @@ def resolve_external_price(
     price_date: date,
     v1_fx_db_path: Path,
     source_label: str,
+    client: httpx.Client,
+    coin_id: str,
     cmc_id: str | None,
     cmc_history: dict[date, Decimal],
+    price_cache_dir: Path,
+    refresh_price_cache: bool,
 ) -> Any:
     stable = REPAIR.fetch_stablecoin_eur_price(
         asset=asset,
@@ -236,7 +255,18 @@ def resolve_external_price(
                 provider_timestamp=None,
                 source=f"{source_label}:coinmarketcap_public_historical:{cmc_id}",
             )
-    raise ValueError(f"missing stable/cache/CMC price for {asset} on {price_date.isoformat()}")
+    defillama = fetch_defillama_cached_eur_price(
+        client=client,
+        coin_id=coin_id,
+        price_date=price_date,
+        v1_fx_db_path=v1_fx_db_path,
+        source_label=source_label,
+        cache_dir=price_cache_dir,
+        refresh=refresh_price_cache,
+    )
+    if defillama is not None:
+        return defillama
+    raise ValueError(f"missing stable/cache/CMC/DefiLlama price for {asset} on {price_date.isoformat()}")
 
 
 def fetch_coinmarketcap_usd_history(
@@ -245,7 +275,17 @@ def fetch_coinmarketcap_usd_history(
     cmc_id: str,
     start_date: date,
     end_date: date,
+    cache_dir: Path = DEFAULT_PRICE_CACHE_DIR,
+    refresh: bool = False,
 ) -> dict[date, Decimal]:
+    cache_path = coinmarketcap_cache_path(
+        cache_dir=cache_dir,
+        cmc_id=cmc_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    if cache_path.exists() and not refresh:
+        return coinmarketcap_history_from_payload(json.loads(cache_path.read_text(encoding="utf-8")))
     response = client.get(
         REPAIR.COINMARKETCAP_HISTORICAL_URL,
         params={
@@ -257,9 +297,96 @@ def fetch_coinmarketcap_usd_history(
         headers={"accept": "application/json"},
     )
     if response.status_code in {401, 403, 404, 429}:
+        if cache_path.exists():
+            return coinmarketcap_history_from_payload(json.loads(cache_path.read_text(encoding="utf-8")))
         return {}
     response.raise_for_status()
-    return coinmarketcap_history_from_payload(response.json())
+    payload = response.json()
+    if coinmarketcap_history_from_payload(payload):
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return coinmarketcap_history_from_payload(payload)
+
+
+def coinmarketcap_cache_path(*, cache_dir: Path, cmc_id: str, start_date: date, end_date: date) -> Path:
+    return (
+        cache_dir
+        / "coinmarketcap_public_historical"
+        / str(cmc_id)
+        / f"{start_date.isoformat()}_{end_date.isoformat()}.json"
+    )
+
+
+def fetch_defillama_cached_eur_price(
+    *,
+    client: httpx.Client,
+    coin_id: str,
+    price_date: date,
+    v1_fx_db_path: Path,
+    source_label: str,
+    cache_dir: Path = DEFAULT_PRICE_CACHE_DIR,
+    refresh: bool = False,
+) -> Any | None:
+    cache_path = defillama_cache_path(cache_dir=cache_dir, coin_id=coin_id, price_date=price_date)
+    payload: dict[str, Any] | None = None
+    if cache_path.exists() and not refresh:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    else:
+        timestamp = int(datetime.combine(price_date, time.min, tzinfo=UTC).timestamp())
+        token_id = f"coingecko:{coin_id}"
+        response = client.get(
+            f"{REPAIR.DEFILLAMA_BASE_URL}/prices/historical/{timestamp}/{token_id}",
+            headers={"accept": "application/json"},
+        )
+        if response.status_code in {401, 403, 404, 429}:
+            if cache_path.exists():
+                payload = json.loads(cache_path.read_text(encoding="utf-8"))
+            else:
+                return None
+        else:
+            response.raise_for_status()
+            payload = response.json()
+            if parse_defillama_usd_payload(payload, coin_id=coin_id)[0] > 0:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    if payload is None:
+        return None
+    price_usd, provider_timestamp = parse_defillama_usd_payload(payload, coin_id=coin_id)
+    if price_usd <= 0:
+        return None
+    usd_eur = REPAIR.usd_eur_rate(v1_fx_db_path, price_date)
+    if usd_eur <= 0:
+        return None
+    return REPAIR.ExternalPrice(
+        price_date=price_date,
+        price_usd=price_usd,
+        usd_eur=usd_eur,
+        price_eur=price_usd * usd_eur,
+        provider_timestamp=provider_timestamp,
+        source=f"{source_label}:defillama_coingecko_history:{coin_id}",
+    )
+
+
+def parse_defillama_usd_payload(payload: dict[str, Any], *, coin_id: str) -> tuple[Decimal, int | None]:
+    token_id = f"coingecko:{coin_id}"
+    coin = payload.get("coins", {}).get(token_id) if isinstance(payload, dict) else None
+    if not isinstance(coin, dict):
+        return Decimal("0"), None
+    provider_timestamp = coin.get("timestamp")
+    return (
+        decimal_value(coin.get("price")),
+        int(provider_timestamp) if provider_timestamp is not None else None,
+    )
+
+
+def defillama_cache_path(*, cache_dir: Path, coin_id: str, price_date: date) -> Path:
+    safe_coin_id = coin_id.replace("/", "_").replace(":", "_")
+    return (
+        cache_dir
+        / "defillama_coingecko_historical"
+        / safe_coin_id
+        / f"{price_date.isoformat()}.json"
+    )
 
 
 def coinmarketcap_history_from_payload(payload: dict[str, Any]) -> dict[date, Decimal]:
