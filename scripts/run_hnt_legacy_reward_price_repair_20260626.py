@@ -69,6 +69,7 @@ def main() -> None:
 
     db_path = Path(args.db)
     store = DuckDbStore(db_path)
+    source_label = repair_source_label(asset=args.asset, source=args.source, year=args.year)
     reward_days = load_reward_days(
         store=store,
         year=args.year,
@@ -90,9 +91,11 @@ def main() -> None:
             try:
                 external_prices[reward_day.price_date] = fetch_defillama_eur_price(
                     client=client,
+                    asset=args.asset,
                     coin_id=args.coin_id,
                     price_date=reward_day.price_date,
                     v1_fx_db_path=Path(args.v1_fx_db),
+                    source_label=source_label,
                 )
             except Exception as exc:  # noqa: BLE001 - CLI must expose provider/fx failures.
                 failures.append({"date": reward_day.price_date.isoformat(), "error": str(exc)})
@@ -213,10 +216,21 @@ def load_primary_price_dates(*, store: DuckDbStore, year: int, asset: str) -> se
 def fetch_defillama_eur_price(
     *,
     client: httpx.Client,
+    asset: str | None = None,
     coin_id: str,
     price_date: date,
     v1_fx_db_path: Path,
+    source_label: str = SOURCE_LABEL,
 ) -> ExternalPrice:
+    if asset:
+        cached = fetch_cached_eur_price(
+            asset=asset,
+            price_date=price_date,
+            v1_fx_db_path=v1_fx_db_path,
+            source_label=source_label,
+        )
+        if cached is not None:
+            return cached
     timestamp = int(datetime.combine(price_date, time.min, tzinfo=UTC).timestamp())
     token_id = f"coingecko:{coin_id}"
     response = client.get(
@@ -240,7 +254,58 @@ def fetch_defillama_eur_price(
         usd_eur=usd_eur,
         price_eur=price_usd * usd_eur,
         provider_timestamp=int(coin["timestamp"]) if coin.get("timestamp") is not None else None,
-        source=SOURCE_LABEL,
+        source=source_label,
+    )
+
+
+def fetch_cached_eur_price(
+    *,
+    asset: str,
+    price_date: date,
+    v1_fx_db_path: Path,
+    source_label: str,
+) -> ExternalPrice | None:
+    price_usd = asset_usd_rate(v1_fx_db_path, asset.upper(), price_date)
+    if price_usd <= 0:
+        return None
+    usd_eur = usd_eur_rate(v1_fx_db_path, price_date)
+    if usd_eur <= 0:
+        return None
+    return ExternalPrice(
+        price_date=price_date,
+        price_usd=price_usd,
+        usd_eur=usd_eur,
+        price_eur=price_usd * usd_eur,
+        provider_timestamp=None,
+        source=f"{source_label}:asset_usd_v1_fx_cache",
+    )
+
+
+def asset_usd_rate(db_path: Path, asset: str, rate_date: date) -> Decimal:
+    if not db_path.exists():
+        return Decimal("0")
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as con:
+        row = con.execute(
+            """
+            select rate
+            from fx_cache
+            where rate_date = ? and upper(base_ccy) = ? and quote_ccy = 'USD'
+            order by updated_at_utc desc
+            limit 1
+            """,
+            (rate_date.isoformat(), asset.upper()),
+        ).fetchone()
+    if row is None:
+        return Decimal("0")
+    return decimal_value(row[0])
+
+
+def repair_source_label(*, asset: str, source: str, year: int) -> str:
+    normalized_asset = asset.upper().strip()
+    normalized_source = source.lower().strip().replace(":", "_")
+    return (
+        "defillama_coingecko_history:usd_eur:v1_fx_cache:"
+        f"income_price_repair_20260626:{year}:{normalized_asset}:{normalized_source}"
     )
 
 

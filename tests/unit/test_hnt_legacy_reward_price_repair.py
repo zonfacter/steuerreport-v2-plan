@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import importlib.util
 import sys
+import sqlite3
 from pathlib import Path
 
 from steuerreport_v2.contracts.events import CanonicalEventCreate
@@ -154,3 +155,42 @@ def test_build_report_shows_delta_and_importability():
     assert report["summary"]["delta_eur"] == "452.81157370810194839750"
     assert report["summary"]["importable_price_days"] == 1
     assert report["rows"][0]["will_import"] is True
+
+
+def test_fetch_cached_eur_price_uses_asset_usd_and_usd_eur_fx_cache(tmp_path):
+    fx_db = tmp_path / "steuerreport.db"
+    with sqlite3.connect(fx_db) as con:
+        con.execute(
+            """
+            create table fx_cache (
+                rate_date text not null,
+                base_ccy text not null,
+                quote_ccy text not null,
+                rate text not null,
+                source text not null,
+                source_rate_date text,
+                updated_at_utc text not null
+            )
+            """
+        )
+        con.execute(
+            "insert into fx_cache values (?, ?, ?, ?, ?, ?, ?)",
+            ("2022-01-15", "HNT", "USD", "30", "defillama", "2022-01-15", "2026-01-01T00:00:00Z"),
+        )
+        con.execute(
+            "insert into fx_cache values (?, ?, ?, ?, ?, ?, ?)",
+            ("2022-01-15", "USD", "EUR", "0.88", "frankfurter", "2022-01-15", "2026-01-01T00:00:00Z"),
+        )
+
+    price = MODULE.fetch_cached_eur_price(
+        asset="HNT",
+        price_date=date(2022, 1, 15),
+        v1_fx_db_path=fx_db,
+        source_label="test_source",
+    )
+
+    assert price is not None
+    assert price.price_usd == Decimal("30")
+    assert price.usd_eur == Decimal("0.88")
+    assert price.price_eur == Decimal("26.40")
+    assert price.source == "test_source:asset_usd_v1_fx_cache"
