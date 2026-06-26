@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from steuerreport_v2.contracts.pipeline import PipelineResult
+
 PriceGapDecisionStatus = Literal[
     "unreviewed",
     "price_source_needed",
@@ -424,6 +426,33 @@ class PriceQualityStablecoinFxAnchorPreviewDecisionCreate(BaseModel):
     action: StablecoinFxReplacementDecisionAction
     rationale: str
     evidence_ref: str | None = None
+
+
+class PriceQualityStablecoinFxAnchorApplyRequest(BaseModel):
+    asset: str = Field(min_length=1)
+    year: int
+    source: str = "derived:event_quote"
+    dry_run: bool = True
+    confirm_apply: bool = False
+
+
+class PriceQualityStablecoinFxAnchorApplyResult(BaseModel):
+    asset: str
+    year: int
+    source: str
+    dry_run: bool
+    decision_id: str
+    anchor_days: int
+    ready_anchor_days: int
+    existing_anchor_prices: int
+    inserted_anchor_prices: int
+    affected_derived_price_rows: int
+    writes_prices: bool
+    writes_fifo: bool
+    writes_tax_lines: bool
+    pipeline: PipelineResult | None = None
+    artifact_path: str
+    methodology: str
 
 
 class PriceQualitySolscanSignatureItem(BaseModel):

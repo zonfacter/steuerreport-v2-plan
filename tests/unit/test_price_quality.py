@@ -603,13 +603,25 @@ def test_price_quality_stablecoin_fx_anchor_preview_latest_reads_artifact_and_de
                         "asset": "USDT",
                         "year": 2025,
                         "price_date": "2025-01-20",
+                        "source": "derived:event_quote",
                         "anchor_status": "ready",
+                        "price_point": {
+                            "asset": "USDT",
+                            "price_eur": "0.96937",
+                            "priced_at": "2025-01-20T00:00:00+00:00",
+                            "source": "stablecoin_fx_anchor:v1_fx_cache:frankfurter_timeseries:rate_date:2025-01-20:source_rate_date:2025-01-20",
+                            "confidence": "1.0",
+                        },
                     }
                 ],
                 "tax_impact": [
                     {
                         "asset": "USDT",
                         "year": 2025,
+                        "source": "derived:event_quote",
+                        "anchor_days": 1,
+                        "applied_replacements": 1,
+                        "conclusion": "replacement_changes_tax_result_review_required",
                         "delta": {"taxable_gain_loss_eur": "3866.01"},
                     }
                 ],
@@ -646,31 +658,58 @@ def test_price_quality_stablecoin_fx_anchor_preview_latest_reads_artifact_and_de
     assert data["anchors"][0]["price_date"] == "2025-01-20"
     assert data["tax_impact"][0]["delta"]["taxable_gain_loss_eur"] == "3866.01"
 
-    apply_attempt = client.post(
-        "/api/v1/prices/quality/stablecoin-fx-anchor-preview-decisions",
+    blocked_apply = client.post(
+        "/api/v1/prices/quality/stablecoin-fx-anchor-apply",
         json={
             "asset": "USDT",
             "year": 2025,
-            "action": "apply_replacement",
-            "rationale": "Anchor-Delta wird dokumentiert; kein Live-Apply.",
+            "dry_run": True,
         },
     )
 
-    assert apply_attempt.status_code == 409
-    assert apply_attempt.json()["detail"] == "stablecoin_fx_anchor_preview_apply_not_supported"
+    assert blocked_apply.status_code == 409
+    assert blocked_apply.json()["detail"] == "stablecoin_fx_anchor_apply_decision_missing"
 
     decision = client.post(
         "/api/v1/prices/quality/stablecoin-fx-anchor-preview-decisions",
         json={
             "asset": "USDT",
             "year": 2025,
-            "action": "document_delta_only",
-            "rationale": "Anchor-Delta wird dokumentiert; kein Live-Apply.",
+            "action": "apply_replacement",
+            "rationale": "Anchor-Delta geprueft; kontrollierter Apply ist freigegeben.",
         },
     )
 
     assert decision.status_code == 200
     assert decision.json()["data"]["writes_prices"] is False
+
+    dry_run = client.post(
+        "/api/v1/prices/quality/stablecoin-fx-anchor-apply",
+        json={
+            "asset": "USDT",
+            "year": 2025,
+            "dry_run": True,
+        },
+    )
+
+    assert dry_run.status_code == 200
+    data = dry_run.json()["data"]
+    assert data["dry_run"] is True
+    assert data["ready_anchor_days"] == 1
+    assert data["inserted_anchor_prices"] == 1
+    assert data["writes_prices"] is False
+
+    unconfirmed = client.post(
+        "/api/v1/prices/quality/stablecoin-fx-anchor-apply",
+        json={
+            "asset": "USDT",
+            "year": 2025,
+            "dry_run": False,
+        },
+    )
+
+    assert unconfirmed.status_code == 409
+    assert unconfirmed.json()["detail"] == "stablecoin_fx_anchor_apply_confirmation_required"
 
     response = client.get("/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest")
 
@@ -678,7 +717,36 @@ def test_price_quality_stablecoin_fx_anchor_preview_latest_reads_artifact_and_de
     data = response.json()["data"]
     assert data["groups_requiring_review"] == 0
     assert data["groups"][0]["status"] == "review_documented"
-    assert data["groups"][0]["latest_decision_action"] == "document_delta_only"
+    assert data["groups"][0]["latest_decision_action"] == "apply_replacement"
+
+    applied = client.post(
+        "/api/v1/prices/quality/stablecoin-fx-anchor-apply",
+        json={
+            "asset": "USDT",
+            "year": 2025,
+            "dry_run": False,
+            "confirm_apply": True,
+        },
+    )
+
+    assert applied.status_code == 200
+    data = applied.json()["data"]
+    assert data["dry_run"] is False
+    assert data["inserted_anchor_prices"] == 1
+    assert data["writes_prices"] is True
+    assert data["writes_fifo"] is True
+    assert data["pipeline"] is not None
+    with store.connect() as con:
+        row = con.execute(
+            """
+            select price_eur, source
+            from price_ledger
+            where upper(asset) = 'USDT'
+              and cast(priced_at as date) = date '2025-01-20'
+              and source like 'stablecoin_fx_anchor:%'
+            """
+        ).fetchone()
+    assert row[0] == Decimal("0.969370000000000000")
 
 
 def test_price_quality_solscan_signature_review_separates_signature_refs(tmp_path):

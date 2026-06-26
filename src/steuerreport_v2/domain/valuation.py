@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from steuerreport_v2.contracts.events import CanonicalEvent
-from steuerreport_v2.contracts.review import ReviewDecisionCreate
+from steuerreport_v2.contracts.prices import PricePointCreate
+from steuerreport_v2.contracts.review import ReviewDecision, ReviewDecisionCreate
 from steuerreport_v2.contracts.valuation import (
     MissingPriceCoverageItem,
     PriceGapDecisionStatus,
@@ -37,6 +38,8 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityStablecoinFxReplacementImpactReport,
     PriceQualityStablecoinFxReplacementImpactRow,
     PriceQualityStablecoinFxReplacementReport,
+    PriceQualityStablecoinFxAnchorApplyRequest,
+    PriceQualityStablecoinFxAnchorApplyResult,
     PriceQualityStablecoinFxAnchorPreviewDecisionCreate,
     PriceQualityStablecoinFxAnchorPreviewGroup,
     PriceQualityStablecoinFxAnchorPreviewLatest,
@@ -1153,8 +1156,6 @@ class PriceQualityService:
         self,
         payload: PriceQualityStablecoinFxAnchorPreviewDecisionCreate,
     ) -> PriceQualityStablecoinFxTaxImpactDecisionResult:
-        if payload.action == "apply_replacement":
-            raise ValueError("stablecoin_fx_anchor_preview_apply_not_supported")
         path = self.ANCHOR_PREVIEW_ARTIFACT_DIR / "latest_stablecoin_fx_anchor_preview.json"
         if not path.exists():
             raise ValueError("stablecoin_fx_anchor_preview_artifact_missing")
@@ -1221,6 +1222,92 @@ class PriceQualityService:
             writes_prices=False,
             writes_fifo=False,
             writes_tax_lines=False,
+        )
+
+    def apply_stablecoin_fx_anchor_prices(
+        self,
+        payload: PriceQualityStablecoinFxAnchorApplyRequest,
+    ) -> PriceQualityStablecoinFxAnchorApplyResult:
+        normalized_asset = payload.asset.upper()
+        path = self.ANCHOR_PREVIEW_ARTIFACT_DIR / "latest_stablecoin_fx_anchor_preview.json"
+        if not path.exists():
+            raise ValueError("stablecoin_fx_anchor_preview_artifact_missing")
+        if not payload.dry_run and not payload.confirm_apply:
+            raise ValueError("stablecoin_fx_anchor_apply_confirmation_required")
+        scope = self.stablecoin_fx_tax_impact_scope(
+            asset=normalized_asset,
+            year=payload.year,
+            source=payload.source,
+        )
+        decision = self._latest_stablecoin_fx_tax_impact_decision(scope)
+        if decision is None or decision.payload.get("action") != "apply_replacement":
+            raise ValueError("stablecoin_fx_anchor_apply_decision_missing")
+
+        artifact = json.loads(path.read_text(encoding="utf-8"))
+        anchors = self._stablecoin_fx_anchor_rows_for_group(
+            artifact.get("anchors"),
+            asset=normalized_asset,
+            year=payload.year,
+            source=payload.source,
+        )
+        ready_anchors = [row for row in anchors if row.get("anchor_status") == "ready"]
+        if not ready_anchors:
+            raise ValueError("stablecoin_fx_anchor_apply_ready_rows_missing")
+
+        price_points: list[PricePointCreate] = []
+        existing_anchor_prices = 0
+        for anchor in ready_anchors:
+            point = self._stablecoin_fx_anchor_price_point(anchor)
+            if point is None:
+                continue
+            if self._price_point_exists(
+                asset=point.asset,
+                priced_at=point.priced_at,
+                source=point.source,
+            ):
+                existing_anchor_prices += 1
+                continue
+            price_points.append(point)
+
+        affected_derived = self._stablecoin_fx_anchor_affected_derived_rows(
+            asset=normalized_asset,
+            year=payload.year,
+            source=payload.source,
+            anchors=ready_anchors,
+        )
+        pipeline = None
+        inserted = 0
+        if not payload.dry_run:
+            from steuerreport_v2.domain.pipeline import PipelineService
+
+            self.store.add_price_points(price_points)
+            inserted = len(price_points)
+            pipeline = PipelineService(self.store).rebuild_all()
+
+        return PriceQualityStablecoinFxAnchorApplyResult(
+            asset=normalized_asset,
+            year=payload.year,
+            source=payload.source,
+            dry_run=payload.dry_run,
+            decision_id=decision.decision_id,
+            anchor_days=len(anchors),
+            ready_anchor_days=len(ready_anchors),
+            existing_anchor_prices=existing_anchor_prices,
+            inserted_anchor_prices=len(price_points) if payload.dry_run else inserted,
+            affected_derived_price_rows=affected_derived,
+            writes_prices=not payload.dry_run and inserted > 0,
+            writes_fifo=not payload.dry_run,
+            writes_tax_lines=not payload.dry_run,
+            pipeline=pipeline,
+            artifact_path=str(path),
+            methodology=(
+                "Stablecoin-FX-Anchor-Apply fuer freigegebene Asset/Jahr-Gruppe. "
+                "Der Endpunkt benoetigt eine letzte Review-Decision mit action=apply_replacement. "
+                "Er schreibt nur fehlende nicht-derived Anchor-Preiszeilen aus dem Preview-Artefakt "
+                "und baut danach die Pipeline inklusive FIFO/Tax neu auf. Derived Event-Quote-Zeilen "
+                "werden nicht direkt geloescht; der Preis-Lookup bevorzugt gleichdatierte "
+                "nicht-derived Anchors."
+            ),
         )
 
     def solscan_signature_review(self, limit: int = 120) -> PriceQualitySolscanSignatureReport:
@@ -2465,6 +2552,10 @@ class PriceQualityService:
             decisions.sort(key=lambda item: item.created_at, reverse=True)
         return result
 
+    def _latest_stablecoin_fx_tax_impact_decision(self, scope: str) -> ReviewDecision | None:
+        decisions = self._stablecoin_fx_tax_impact_decisions_by_scope().get(scope, [])
+        return decisions[0] if decisions else None
+
     @staticmethod
     def _stablecoin_fx_anchor_tax_impact_summary(rows: object) -> dict[str, object]:
         if not isinstance(rows, list):
@@ -2495,6 +2586,91 @@ class PriceQualityService:
             "groups_incomplete": incomplete,
             "taxable_gain_loss_delta_eur": str(total),
         }
+
+    @staticmethod
+    def _stablecoin_fx_anchor_rows_for_group(
+        rows: object,
+        *,
+        asset: str,
+        year: int,
+        source: str,
+    ) -> list[dict[str, object]]:
+        if not isinstance(rows, list):
+            return []
+        result: list[dict[str, object]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if (
+                str(row.get("asset", "")).upper() == asset.upper()
+                and int(row.get("year") or 0) == year
+                and str(row.get("source") or "derived:event_quote") == source
+            ):
+                result.append(row)
+        result.sort(key=lambda item: str(item.get("price_date") or ""))
+        return result
+
+    @staticmethod
+    def _stablecoin_fx_anchor_price_point(anchor: dict[str, object]) -> PricePointCreate | None:
+        raw = anchor.get("price_point")
+        if not isinstance(raw, dict):
+            return None
+        raw_priced_at = raw.get("priced_at")
+        if raw_priced_at is None:
+            return None
+        priced_at = datetime.fromisoformat(str(raw_priced_at).replace("Z", "+00:00"))
+        if priced_at.tzinfo is None:
+            priced_at = priced_at.replace(tzinfo=timezone.utc)
+        return PricePointCreate(
+            asset=str(raw["asset"]).upper(),
+            price_eur=Decimal(str(raw["price_eur"])),
+            priced_at=priced_at.astimezone(timezone.utc),
+            source=str(raw["source"]),
+            confidence=Decimal(str(raw.get("confidence") or "1.0")),
+        )
+
+    def _price_point_exists(self, *, asset: str, priced_at: datetime, source: str) -> bool:
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select 1
+                from price_ledger
+                where upper(asset) = ?
+                  and priced_at = ?
+                  and source = ?
+                limit 1
+                """,
+                [asset.upper(), priced_at, source],
+            ).fetchone()
+        return row is not None
+
+    def _stablecoin_fx_anchor_affected_derived_rows(
+        self,
+        *,
+        asset: str,
+        year: int,
+        source: str,
+        anchors: list[dict[str, object]],
+    ) -> int:
+        dates = sorted({str(anchor.get("price_date")) for anchor in anchors if anchor.get("price_date")})
+        if not dates:
+            return 0
+        total = 0
+        with self.store.connect() as con:
+            for price_date in dates:
+                row = con.execute(
+                    """
+                    select count(*)::integer
+                    from price_ledger
+                    where upper(asset) = ?
+                      and date_part('year', priced_at)::integer = ?
+                      and source = ?
+                      and cast(priced_at as date) = cast(? as date)
+                    """,
+                    [asset.upper(), year, source, price_date],
+                ).fetchone()
+                total += int(row[0] or 0)
+        return total
 
     @staticmethod
     def _stablecoin_fx_anchor_impact_for_group(

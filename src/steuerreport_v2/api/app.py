@@ -265,6 +265,8 @@ from steuerreport_v2.contracts.valuation import (
     PriceQualityReport,
     PriceQualitySolscanSignatureReport,
     PriceQualityStablecoinFxReport,
+    PriceQualityStablecoinFxAnchorApplyRequest,
+    PriceQualityStablecoinFxAnchorApplyResult,
     PriceQualityStablecoinFxAnchorPreviewDecisionCreate,
     PriceQualityStablecoinFxAnchorPreviewLatest,
     PriceQualityStablecoinFxReplacementImpactReport,
@@ -1353,6 +1355,16 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     ) -> ApiResponse[PriceQualityStablecoinFxTaxImpactDecisionResult]:
         try:
             result = PriceQualityService(db).add_stablecoin_fx_anchor_preview_decision(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return ApiResponse(data=result)
+
+    @app.post("/api/v1/prices/quality/stablecoin-fx-anchor-apply")
+    def apply_price_quality_stablecoin_fx_anchor_prices(
+        payload: PriceQualityStablecoinFxAnchorApplyRequest,
+    ) -> ApiResponse[PriceQualityStablecoinFxAnchorApplyResult]:
+        try:
+            result = PriceQualityService(db).apply_stablecoin_fx_anchor_prices(payload)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return ApiResponse(data=result)
