@@ -825,6 +825,20 @@ type Snapshot = {
     example_setting_json: string;
     methodology: string;
   };
+  taxBmfAmendmentWorklist?: {
+    generated_at: string;
+    years: Array<Record<string, unknown>>;
+    available_years: number[];
+    correction_review_years: number[];
+    compare_declared_years: number[];
+    archive_only_years: number[];
+    blocked_years: number[];
+    total_v2_taxable_private_disposals_eur: string;
+    total_v2_rewards_mining_staking_income_eur: string;
+    total_v2_derivative_pnl_eur: string;
+    ascii_table: string;
+    methodology: string;
+  };
   taxYearMethodology?: {
     year: number;
     generated_at: string;
@@ -1881,6 +1895,7 @@ function App() {
         taxBmfSubmissionGuide: { key: "taxBmfSubmissionGuide", label: "BMF-Abgabehilfe", load: () => getApi<Snapshot["taxBmfSubmissionGuide"]>("/api/v1/tax-methodology/bmf-submission-guide") },
         taxBmfPriorFilingComparison: { key: "taxBmfPriorFilingComparison", label: "Alt-Erklaerungsvergleich", load: () => getApi<Snapshot["taxBmfPriorFilingComparison"]>("/api/v1/tax-methodology/bmf-prior-filing-comparison") },
         taxBmfPriorFilingDeclaredAmounts: { key: "taxBmfPriorFilingDeclaredAmounts", label: "Alt-Erklaerungswerte", load: () => getApi<Snapshot["taxBmfPriorFilingDeclaredAmounts"]>("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts") },
+        taxBmfAmendmentWorklist: { key: "taxBmfAmendmentWorklist", label: "Korrekturpruefungs-Worklist", load: () => getApi<Snapshot["taxBmfAmendmentWorklist"]>("/api/v1/tax-methodology/bmf-amendment-worklist") },
         taxYearDetail: { key: "taxYearDetail", label: "Steuerjahr-Detail", load: () => getApi<Snapshot["taxYearDetail"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}`) },
         taxDeclarationGuide: { key: "taxDeclarationGuide", label: "Steuererklaerungshilfe", load: () => getApi<Snapshot["taxDeclarationGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/declaration-guide`) },
         taxYearFilingSummary: { key: "taxYearFilingSummary", label: "Steuerjahr-Erklaerung", load: () => getApi<Snapshot["taxYearFilingSummary"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/filing-summary`) },
@@ -1952,6 +1967,7 @@ function App() {
         "taxBmfSubmissionGuide",
         "taxBmfPriorFilingComparison",
         "taxBmfPriorFilingDeclaredAmounts",
+        "taxBmfAmendmentWorklist",
         "taxYearDetail",
         "taxDeclarationGuide",
         "taxYearFilingSummary",
@@ -3577,6 +3593,7 @@ function Content({
         taxBmfSubmissionGuide={snapshot.taxBmfSubmissionGuide}
         taxBmfPriorFilingComparison={snapshot.taxBmfPriorFilingComparison}
         taxBmfPriorFilingDeclaredAmounts={snapshot.taxBmfPriorFilingDeclaredAmounts}
+        taxBmfAmendmentWorklist={snapshot.taxBmfAmendmentWorklist}
         taxYearDetail={snapshot.taxYearDetail}
         taxDeclarationGuide={snapshot.taxDeclarationGuide}
         taxYearFilingSummary={snapshot.taxYearFilingSummary}
@@ -8025,6 +8042,7 @@ function TaxPanel({
   taxBmfSubmissionGuide,
   taxBmfPriorFilingComparison,
   taxBmfPriorFilingDeclaredAmounts,
+  taxBmfAmendmentWorklist,
   taxYearDetail,
   taxDeclarationGuide,
   taxYearFilingSummary,
@@ -8102,6 +8120,7 @@ function TaxPanel({
   taxBmfSubmissionGuide: Snapshot["taxBmfSubmissionGuide"];
   taxBmfPriorFilingComparison: Snapshot["taxBmfPriorFilingComparison"];
   taxBmfPriorFilingDeclaredAmounts: Snapshot["taxBmfPriorFilingDeclaredAmounts"];
+  taxBmfAmendmentWorklist: Snapshot["taxBmfAmendmentWorklist"];
   taxYearDetail: Snapshot["taxYearDetail"];
   taxDeclarationGuide: Snapshot["taxDeclarationGuide"];
   taxYearFilingSummary: Snapshot["taxYearFilingSummary"];
@@ -8448,6 +8467,70 @@ function TaxPanel({
           {taxBmfSubmissionGuide.ascii_table ? (
             <pre className="asciiTable" aria-label="Kopierbare BMF-Abgabehilfe">
               {taxBmfSubmissionGuide.ascii_table}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+
+      {taxBmfAmendmentWorklist ? (
+        <div className="panel declarationGuidePanel">
+          <div className="panelToolbar">
+            <strong>Korrekturpruefungs-Worklist</strong>
+            <span className={`statusPill ${(taxBmfAmendmentWorklist.blocked_years ?? []).length > 0 ? "blocked" : (taxBmfAmendmentWorklist.correction_review_years ?? []).length > 0 ? "warning" : "ok"}`}>
+              {(taxBmfAmendmentWorklist.correction_review_years ?? []).length} Korrekturpruefung · {(taxBmfAmendmentWorklist.compare_declared_years ?? []).length} Delta-Vergleich
+            </span>
+          </div>
+          <div className="portfolioSummaryStrip">
+            <Metric title="V2 Anlage SO" value={`${formatCurrency(taxBmfAmendmentWorklist.total_v2_taxable_private_disposals_eur)} EUR`} />
+            <Metric title="V2 Rewards" value={`${formatCurrency(taxBmfAmendmentWorklist.total_v2_rewards_mining_staking_income_eur)} EUR`} />
+            <Metric title="V2 Derivate" value={`${formatCurrency(taxBmfAmendmentWorklist.total_v2_derivative_pnl_eur)} EUR`} />
+            <Metric title="Blockiert" value={String((taxBmfAmendmentWorklist.blocked_years ?? []).length)} />
+          </div>
+          <TablePanel
+            title="Naechste Schritte fuer Vorjahre"
+            rows={(taxBmfAmendmentWorklist.years ?? []).map((row) => ({
+              jahr: row.year,
+              status: row.status_label,
+              altwert_status: row.prior_filing_status,
+              anlage_so_eur: formatCurrency(row.v2_taxable_private_disposals_eur),
+              rewards_eur: formatCurrency(row.v2_rewards_mining_staking_income_eur),
+              derivate_eur: formatCurrency(row.v2_derivative_pnl_eur),
+              fachreview: row.technical_review_requirements_count,
+              grund: row.correction_reason,
+              naechster_schritt: row.next_action,
+              summary: row.filing_summary_endpoint,
+              korrektur: row.correction_map_endpoint,
+              korrektur_csv: row.correction_map_csv_endpoint,
+              paket: row.evidence_package_endpoint
+            }))}
+            compact
+            rowActions={[
+              {
+                label: "Jahr oeffnen",
+                icon: <ReceiptText size={16} />,
+                onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
+              },
+              {
+                label: "Filing Summary",
+                icon: <FileJson size={16} />,
+                onClick: (row) => onDownload(String(row.summary ?? ""))
+              },
+              {
+                label: "Korrekturkarte",
+                icon: <FileJson size={16} />,
+                onClick: (row) => onDownload(String(row.korrektur ?? ""))
+              },
+              {
+                label: "Belegpaket",
+                icon: <PackageCheck size={16} />,
+                onClick: (row) => onDownload(String(row.paket ?? ""))
+              }
+            ]}
+            footer={taxBmfAmendmentWorklist.methodology}
+          />
+          {taxBmfAmendmentWorklist.ascii_table ? (
+            <pre className="asciiTable" aria-label="Kopierbare Korrekturpruefungs-Worklist">
+              {taxBmfAmendmentWorklist.ascii_table}
             </pre>
           ) : null}
         </div>

@@ -686,6 +686,65 @@ def test_bmf_prior_filing_declared_amounts_endpoint_writes_setting(tmp_path):
     assert get_response.json()["data"]["years"][0]["year"] == 2021
 
 
+def test_bmf_amendment_worklist_prioritizes_untrusted_prior_filings(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service.bmf_submission_guide = lambda years=None: SimpleNamespace(
+        years=[
+            SimpleNamespace(
+                year=2021,
+                taxable_private_disposals_eur=Decimal("-7341.45"),
+                rewards_mining_staking_income_eur=Decimal("6630.73"),
+                derivative_pnl_eur=Decimal("0"),
+                tax_free_private_disposals_eur=Decimal("0"),
+                technical_review_requirements_count=3,
+                correction_review_recommended=True,
+                amendment_reason="V2 enthaelt eintragungsrelevante Jahreswerte.",
+                blocking_count=0,
+                filing_summary_endpoint="/summary",
+                correction_map_endpoint="/correction",
+                correction_map_csv_endpoint="/correction.csv",
+                evidence_package_endpoint="/evidence.zip",
+            )
+        ]
+    )
+    service.bmf_prior_filing_comparison = lambda years=None: SimpleNamespace(
+        years=[
+            SimpleNamespace(
+                year=2021,
+                declared_values_status="probably_wrong",
+                status="declared_values_untrusted",
+                amendment_review_recommended=True,
+                v2_taxable_private_disposals_eur=Decimal("-7341.45"),
+                v2_rewards_mining_staking_income_eur=Decimal("6630.73"),
+                v2_derivative_pnl_eur=Decimal("0"),
+                v2_tax_free_private_disposals_eur=Decimal("0"),
+            )
+        ]
+    )
+
+    worklist = service.bmf_amendment_worklist(years=[2021])
+
+    row = worklist.years[0]
+    assert worklist.correction_review_years == [2021]
+    assert row.status == "prepare_correction_review"
+    assert row.priority == 1
+    assert row.prior_filing_status == "probably_wrong"
+    assert row.v2_rewards_mining_staking_income_eur == Decimal("6630.73")
+    assert "vermutlich falsch" in row.correction_reason
+    assert "Original-Steuererklaerung" in row.next_action
+
+
+def test_bmf_amendment_worklist_endpoint(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    response = TestClient(create_app(store)).get("/api/v1/tax-methodology/bmf-amendment-worklist")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["available_years"] == [2021, 2022, 2023, 2024, 2025]
+    assert "years" in payload
+
+
 def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)

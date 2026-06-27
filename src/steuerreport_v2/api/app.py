@@ -176,6 +176,7 @@ from steuerreport_v2.contracts.tax import (
 )
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionPlan,
+    TaxBmfAmendmentWorklist,
     TaxBmfClosureBacklogReport,
     TaxBmfClosureBacklogSnapshot,
     TaxBmfFinalizationMatrix,
@@ -2242,6 +2243,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-methodology/bmf-prior-filing-comparison")
     def tax_methodology_bmf_prior_filing_comparison() -> ApiResponse[TaxBmfPriorFilingComparison]:
         return ApiResponse(data=TaxMethodologyService(db).bmf_prior_filing_comparison())
+
+    @app.get("/api/v1/tax-methodology/bmf-amendment-worklist")
+    def tax_methodology_bmf_amendment_worklist() -> ApiResponse[TaxBmfAmendmentWorklist]:
+        return ApiResponse(data=TaxMethodologyService(db).bmf_amendment_worklist())
 
     @app.get("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts")
     def tax_methodology_bmf_prior_filing_declared_amounts() -> ApiResponse[TaxBmfPriorFilingDeclaredAmounts]:

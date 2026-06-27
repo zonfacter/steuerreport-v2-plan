@@ -362,6 +362,42 @@ class TaxBmfPriorFilingDeclaredAmountsWriteResult(BaseModel):
     comparison: TaxBmfPriorFilingComparison
 
 
+class TaxBmfAmendmentWorklistYear(BaseModel):
+    year: int
+    priority: int = 0
+    status: Literal["prepare_correction_review", "compare_declared_values", "archive_only", "blocked"]
+    status_label: str
+    prior_filing_status: str
+    v2_taxable_private_disposals_eur: Decimal = Decimal("0")
+    v2_rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    v2_derivative_pnl_eur: Decimal = Decimal("0")
+    v2_tax_free_private_disposals_eur: Decimal = Decimal("0")
+    technical_review_requirements_count: int = 0
+    amendment_review_recommended: bool = False
+    correction_reason: str
+    next_action: str
+    filing_summary_endpoint: str
+    correction_map_endpoint: str
+    correction_map_csv_endpoint: str
+    evidence_package_endpoint: str
+    display_line: str
+
+
+class TaxBmfAmendmentWorklist(BaseModel):
+    generated_at: str
+    years: list[TaxBmfAmendmentWorklistYear] = Field(default_factory=list)
+    available_years: list[int] = Field(default_factory=list)
+    correction_review_years: list[int] = Field(default_factory=list)
+    compare_declared_years: list[int] = Field(default_factory=list)
+    archive_only_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    total_v2_taxable_private_disposals_eur: Decimal = Decimal("0")
+    total_v2_rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    total_v2_derivative_pnl_eur: Decimal = Decimal("0")
+    ascii_table: str
+    methodology: str
+
+
 class TaxBmfClosureBacklogItem(BaseModel):
     year: int
     priority: int = 0

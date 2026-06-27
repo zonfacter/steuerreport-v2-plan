@@ -8,6 +8,8 @@ from pathlib import Path
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionItem,
     TaxBmfActionPlan,
+    TaxBmfAmendmentWorklist,
+    TaxBmfAmendmentWorklistYear,
     TaxBmfClosureBacklogItem,
     TaxBmfClosureBacklogReport,
     TaxBmfClosureBacklogSnapshot,
@@ -1027,6 +1029,185 @@ class TaxMethodologyService:
             f"{self._eur(row.delta_rewards_mining_staking_income_eur or Decimal('0'))} | "
             f"{self._eur(row.delta_derivative_pnl_eur or Decimal('0'))} | "
             f"{row.next_action}"
+        )
+
+    def bmf_amendment_worklist(self, *, years: list[int] | None = None) -> TaxBmfAmendmentWorklist:
+        generated_at = self._now()
+        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        submission = self.bmf_submission_guide(years=selected_years)
+        comparison = self.bmf_prior_filing_comparison(years=selected_years)
+        submission_by_year = {row.year: row for row in submission.years}
+        comparison_by_year = {row.year: row for row in comparison.years}
+        rows = [
+            self._bmf_amendment_worklist_year(
+                year,
+                submission=submission_by_year.get(year),
+                comparison=comparison_by_year.get(year),
+            )
+            for year in selected_years
+        ]
+        rows.sort(key=lambda row: (row.priority, row.year))
+        return TaxBmfAmendmentWorklist(
+            generated_at=generated_at,
+            years=rows,
+            available_years=selected_years,
+            correction_review_years=[row.year for row in rows if row.status == "prepare_correction_review"],
+            compare_declared_years=[row.year for row in rows if row.status == "compare_declared_values"],
+            archive_only_years=[row.year for row in rows if row.status == "archive_only"],
+            blocked_years=[row.year for row in rows if row.status == "blocked"],
+            total_v2_taxable_private_disposals_eur=sum(
+                (row.v2_taxable_private_disposals_eur for row in rows),
+                Decimal("0"),
+            ),
+            total_v2_rewards_mining_staking_income_eur=sum(
+                (row.v2_rewards_mining_staking_income_eur for row in rows),
+                Decimal("0"),
+            ),
+            total_v2_derivative_pnl_eur=sum((row.v2_derivative_pnl_eur for row in rows), Decimal("0")),
+            ascii_table=self._bmf_amendment_worklist_ascii(rows),
+            methodology=(
+                "Read-only Korrekturpruefungs-Worklist fuer 2021-2025. Kombiniert "
+                "BMF-Abgabehilfe und Alt-Erklaerungsvergleich. Jahre mit unbekannten "
+                "oder vermutlich falschen Altwerten werden als Korrekturpruefung "
+                "gefuehrt, ohne scheinexakte Delta-Betraege zu erzeugen. Die Worklist "
+                "schreibt keine Steuerdaten, Preise, FIFO-Lots oder Review-Entscheidungen."
+            ),
+        )
+
+    def _bmf_amendment_worklist_year(
+        self,
+        year: int,
+        *,
+        submission: TaxBmfSubmissionGuideYear | None,
+        comparison: TaxBmfPriorFilingComparisonYear | None,
+    ) -> TaxBmfAmendmentWorklistYear:
+        prior_status = str(getattr(comparison, "declared_values_status", "unknown"))
+        technical_review = int(getattr(submission, "technical_review_requirements_count", 0) or 0)
+        amendment_review = bool(
+            getattr(submission, "correction_review_recommended", False)
+            or getattr(comparison, "amendment_review_recommended", False)
+        )
+        if getattr(submission, "blocking_count", 0):
+            status = "blocked"
+            label = "Blocker zuerst klaeren"
+            priority = 0
+        elif prior_status in {"unknown", "probably_wrong", "not_filed"}:
+            status = "prepare_correction_review"
+            label = "Korrekturpruefung vorbereiten"
+            priority = 1
+        elif comparison is not None and comparison.status == "delta_review":
+            status = "compare_declared_values"
+            label = "Delta gegen Altwerte pruefen"
+            priority = 2
+        elif amendment_review or technical_review:
+            status = "prepare_correction_review"
+            label = "Belege/Korrektur pruefen"
+            priority = 3
+        else:
+            status = "archive_only"
+            label = "Archivieren"
+            priority = 9
+        correction_reason = self._bmf_amendment_reason(submission, comparison, prior_status)
+        result = TaxBmfAmendmentWorklistYear(
+            year=year,
+            priority=priority,
+            status=status,  # type: ignore[arg-type]
+            status_label=label,
+            prior_filing_status=prior_status,
+            v2_taxable_private_disposals_eur=getattr(
+                submission,
+                "taxable_private_disposals_eur",
+                getattr(comparison, "v2_taxable_private_disposals_eur", Decimal("0")),
+            ),
+            v2_rewards_mining_staking_income_eur=getattr(
+                submission,
+                "rewards_mining_staking_income_eur",
+                getattr(comparison, "v2_rewards_mining_staking_income_eur", Decimal("0")),
+            ),
+            v2_derivative_pnl_eur=getattr(
+                submission,
+                "derivative_pnl_eur",
+                getattr(comparison, "v2_derivative_pnl_eur", Decimal("0")),
+            ),
+            v2_tax_free_private_disposals_eur=getattr(
+                submission,
+                "tax_free_private_disposals_eur",
+                getattr(comparison, "v2_tax_free_private_disposals_eur", Decimal("0")),
+            ),
+            technical_review_requirements_count=technical_review,
+            amendment_review_recommended=amendment_review,
+            correction_reason=correction_reason,
+            next_action=self._bmf_amendment_next_action(status, prior_status),
+            filing_summary_endpoint=getattr(
+                submission,
+                "filing_summary_endpoint",
+                f"/api/v1/tax-years/{year}/filing-summary",
+            ),
+            correction_map_endpoint=getattr(
+                submission,
+                "correction_map_endpoint",
+                f"/api/v1/tax-years/{year}/correction-map",
+            ),
+            correction_map_csv_endpoint=getattr(
+                submission,
+                "correction_map_csv_endpoint",
+                f"/api/v1/export/tax-years/{year}/correction-map.csv",
+            ),
+            evidence_package_endpoint=getattr(
+                submission,
+                "evidence_package_endpoint",
+                f"/api/v1/export/tax-years/{year}/evidence-package.zip",
+            ),
+            display_line="",
+        )
+        result.display_line = self._bmf_amendment_worklist_line(result)
+        return result
+
+    def _bmf_amendment_reason(
+        self,
+        submission: TaxBmfSubmissionGuideYear | None,
+        comparison: TaxBmfPriorFilingComparisonYear | None,
+        prior_status: str,
+    ) -> str:
+        if prior_status == "probably_wrong":
+            return "Alt-Erklaerung wurde als vermutlich falsch/nicht belastbar markiert."
+        if prior_status == "unknown":
+            return "Alt-Erklaerungswerte sind unbekannt oder noch nicht aus Bescheid/Erklaerung uebertragen."
+        if prior_status == "not_filed":
+            return "Jahr ist als nicht erklaert markiert; V2-Werte gegen Abgabepflicht/Nachreichung pruefen."
+        if comparison is not None and comparison.status == "delta_review":
+            return "Belegte Altwerte weichen rechnerisch von V2 ab."
+        if submission is not None and submission.amendment_reason:
+            return submission.amendment_reason
+        return "Keine priorisierte Korrekturpruefung aus V2-Sicht."
+
+    def _bmf_amendment_next_action(self, status: str, prior_status: str) -> str:
+        if status == "blocked":
+            return "BMF-/FIFO-Blocker zuerst schliessen, dann Korrekturpruefung wiederholen."
+        if prior_status in {"probably_wrong", "unknown"}:
+            return "Original-Steuererklaerung und Bescheid beschaffen; V2-Filing-Summary und Belegpaket je Jahr gegenueberstellen."
+        if prior_status == "not_filed":
+            return "Pruefen, ob Nachreichung/Erstangabe fuer das Jahr erforderlich ist; Belegpaket vorbereiten."
+        if status == "compare_declared_values":
+            return "Delta-Zeilen fachlich mit Bescheid/Erklaerung vergleichen und Korrekturkarte verwenden."
+        if status == "archive_only":
+            return "Jahrespaket archivieren."
+        return "Korrekturkarte, Filing Summary und Belegpaket fuer Steuerberater/Finanzamt vorbereiten."
+
+    def _bmf_amendment_worklist_ascii(self, rows: list[TaxBmfAmendmentWorklistYear]) -> str:
+        if not rows:
+            return "Jahr | Status | Anlage SO | Rewards | Derivate | Grund | Aktion"
+        header = "Jahr | Status | Anlage SO | Rewards | Derivate | Grund | Aktion"
+        separator = "-----|--------|-----------|---------|----------|-------|-------"
+        return "\n".join([header, separator, *(row.display_line for row in rows)])
+
+    def _bmf_amendment_worklist_line(self, row: TaxBmfAmendmentWorklistYear) -> str:
+        return (
+            f"{row.year} | {row.status_label} | "
+            f"{self._eur(row.v2_taxable_private_disposals_eur)} | "
+            f"{self._eur(row.v2_rewards_mining_staking_income_eur)} | "
+            f"{self._eur(row.v2_derivative_pnl_eur)} | "
+            f"{row.correction_reason} | {row.next_action}"
         )
 
     def write_bmf_filing_readiness_snapshot(
