@@ -1475,6 +1475,22 @@ type Snapshot = {
     groups: Array<Record<string, unknown>>;
     methodology: string;
   };
+  priceStablecoinFxAnchorPreview?: {
+    generated_at: string;
+    artifact_found: boolean;
+    artifact_path?: string | null;
+    artifact_generated_at?: string | null;
+    required_days: number;
+    ready_days: number;
+    missing_days: number;
+    groups_count: number;
+    groups_requiring_review: number;
+    taxable_gain_loss_delta_eur?: string | null;
+    groups: Array<Record<string, unknown>>;
+    anchors: Array<Record<string, unknown>>;
+    tax_impact: Array<Record<string, unknown>>;
+    methodology: string;
+  };
   priceSolscanSignatureReview?: {
     generated_at: string;
     groups_count: number;
@@ -1849,6 +1865,7 @@ function App() {
         priceQuality: { key: "priceQuality", label: "Preisqualitaet", load: () => getApi<Snapshot["priceQuality"]>("/api/v1/prices/quality") },
         priceManualReview: { key: "priceManualReview", label: "Preisqualitaet manuell", load: () => getApi<Snapshot["priceManualReview"]>("/api/v1/prices/quality/manual-review") },
         priceStablecoinFxReview: { key: "priceStablecoinFxReview", label: "Stablecoin-FX-Review", load: () => getApi<Snapshot["priceStablecoinFxReview"]>("/api/v1/prices/quality/stablecoin-fx-review") },
+        priceStablecoinFxAnchorPreview: { key: "priceStablecoinFxAnchorPreview", label: "Stablecoin-FX-Anker", load: () => getApi<Snapshot["priceStablecoinFxAnchorPreview"]>("/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest") },
         priceSolscanSignatureReview: { key: "priceSolscanSignatureReview", label: "Solscan-Signatur-Review", load: () => getApi<Snapshot["priceSolscanSignatureReview"]>("/api/v1/prices/quality/solscan-signature-review") },
         priceBinanceNormalizerReview: { key: "priceBinanceNormalizerReview", label: "Binance-Normalizer-Review", load: () => getApi<Snapshot["priceBinanceNormalizerReview"]>("/api/v1/prices/quality/binance-normalizer-review") },
         priceEventQuoteEvidenceReview: { key: "priceEventQuoteEvidenceReview", label: "Event-Quote-Evidenz", load: () => getApi<Snapshot["priceEventQuoteEvidenceReview"]>("/api/v1/prices/quality/event-quote-evidence-review") },
@@ -1935,7 +1952,7 @@ function App() {
             ? ["portfolioReconciliation", "portfolioValuationAudit", "separationReport", "fiatDeposits", "latestPrices"]
             : []),
           ...(portfolioViewMode === "expert"
-            ? ["prices", "priceQuality", "priceManualReview", "priceStablecoinFxReview", "priceSolscanSignatureReview", "priceBinanceNormalizerReview", "priceEventQuoteEvidenceReview", "priceRequirements"]
+            ? ["prices", "priceQuality", "priceManualReview", "priceStablecoinFxReview", "priceStablecoinFxAnchorPreview", "priceSolscanSignatureReview", "priceBinanceNormalizerReview", "priceEventQuoteEvidenceReview", "priceRequirements"]
             : [])
         ],
         stichtage: ["health", "portfolioAsOf", "priceCoverage"],
@@ -1948,7 +1965,7 @@ function App() {
           "jupiterRiskReview",
           "reviewDecisions",
           ...(reviewViewMode !== "tasks" ? ["reviewEvidenceTraces", "reviewDecisionSuggestions", "blockpitSolanaPreflight"] : []),
-          ...(reviewViewMode === "expert" ? ["priceCoverage", "priceQuality", "priceManualReview", "priceStablecoinFxReview", "priceSolscanSignatureReview", "priceBinanceNormalizerReview", "priceEventQuoteEvidenceReview", "priceRequirements"] : [])
+          ...(reviewViewMode === "expert" ? ["priceCoverage", "priceQuality", "priceManualReview", "priceStablecoinFxReview", "priceStablecoinFxAnchorPreview", "priceSolscanSignatureReview", "priceBinanceNormalizerReview", "priceEventQuoteEvidenceReview", "priceRequirements"] : [])
         ],
         parity: ["health", "parity", "parityDiagnostics", "parityReleaseReadiness", "parityReferences", "hntFifoProvenance"],
         tax: taxLoaderKeys,
@@ -2339,6 +2356,71 @@ function App() {
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Preisqualitaetsentscheidung konnte nicht gespeichert werden");
+      setLoading(false);
+    }
+  }
+
+  async function addStablecoinFxAnchorDecision(row: Record<string, unknown>, action: string) {
+    const asset = String(row.asset ?? "").trim();
+    const year = Number(row.year ?? 0);
+    const source = String(row.source ?? "derived:event_quote").trim() || "derived:event_quote";
+    if (!asset || !year) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await postApi("/api/v1/prices/quality/stablecoin-fx-anchor-preview-decisions", {
+        asset,
+        year,
+        source,
+        action,
+        rationale:
+          action === "apply_replacement"
+            ? "In der V2-Oberflaeche freigegebener Stablecoin-FX-Anker. Die Decision selbst schreibt keine Preise; der Apply-Pfad bleibt separat."
+            : "In der V2-Oberflaeche dokumentierte Stablecoin-FX-Anker-Entscheidung ohne Preis-Write.",
+        evidence_ref: "api:/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest?include_rows=true"
+      });
+      setNotice(`Stablecoin-FX-Ankerentscheidung gespeichert: ${asset} ${year} ${action}`);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Stablecoin-FX-Ankerentscheidung konnte nicht gespeichert werden");
+      setLoading(false);
+    }
+  }
+
+  async function applyStablecoinFxAnchor(row: Record<string, unknown>, dryRun: boolean) {
+    const asset = String(row.asset ?? "").trim();
+    const year = Number(row.year ?? 0);
+    const source = String(row.source ?? "derived:event_quote").trim() || "derived:event_quote";
+    if (!asset || !year) {
+      return;
+    }
+    if (!dryRun && !window.confirm(`${asset} ${year}: Stablecoin-FX-Anker wirklich live anwenden und FIFO/Tax neu berechnen?`)) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await postApi<Record<string, unknown>>(
+        "/api/v1/prices/quality/stablecoin-fx-anchor-apply",
+        {
+          asset,
+          year,
+          source,
+          dry_run: dryRun,
+          confirm_apply: !dryRun
+        },
+        180_000
+      );
+      setNotice(
+        dryRun
+          ? `Stablecoin-FX-Anker Dry-Run: ${asset} ${year}, geplante Preiszeilen ${String(result.inserted_anchor_prices ?? 0)}`
+          : `Stablecoin-FX-Anker angewendet: ${asset} ${year}, Preiszeilen ${String(result.inserted_anchor_prices ?? 0)}`
+      );
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Stablecoin-FX-Anker-Apply konnte nicht ausgefuehrt werden");
       setLoading(false);
     }
   }
@@ -2845,6 +2927,8 @@ function App() {
           onBackfillCurrentPortfolioPrices={backfillCurrentPortfolioPrices}
           onAddPriceGapDecision={addPriceGapDecision}
           onAddPriceQualityDecision={addPriceQualityDecision}
+          onAddStablecoinFxAnchorDecision={addStablecoinFxAnchorDecision}
+          onApplyStablecoinFxAnchor={applyStablecoinFxAnchor}
           onDeletePricePoint={deletePricePoint}
           onCreatePdfExport={createPdfExport}
           onRunReportAction={runReportAction}
@@ -2974,6 +3058,8 @@ function Content({
   onBackfillCurrentPortfolioPrices,
   onAddPriceGapDecision,
   onAddPriceQualityDecision,
+  onAddStablecoinFxAnchorDecision,
+  onApplyStablecoinFxAnchor,
   onDeletePricePoint,
   onCreatePdfExport,
   onRunReportAction,
@@ -3047,6 +3133,8 @@ function Content({
   onBackfillCurrentPortfolioPrices: (maxRequests: string, dryRun: boolean, assets: string) => void;
   onAddPriceGapDecision: (scope: string, decisionStatus: string) => void;
   onAddPriceQualityDecision: (row: Record<string, unknown>, decisionStatus: string) => void;
+  onAddStablecoinFxAnchorDecision: (row: Record<string, unknown>, action: string) => void;
+  onApplyStablecoinFxAnchor: (row: Record<string, unknown>, dryRun: boolean) => void;
   onDeletePricePoint: (priceId: string) => void;
   onCreatePdfExport: (label: string, estimatedPages: string) => void;
   onRunReportAction: (path: string, label: string) => void;
@@ -3274,11 +3362,14 @@ function Content({
               quality={snapshot.priceQuality}
               manualReview={snapshot.priceManualReview}
               stablecoinFxReview={snapshot.priceStablecoinFxReview}
+              stablecoinFxAnchorPreview={snapshot.priceStablecoinFxAnchorPreview}
               solscanSignatureReview={snapshot.priceSolscanSignatureReview}
               binanceNormalizerReview={snapshot.priceBinanceNormalizerReview}
               eventQuoteEvidenceReview={snapshot.priceEventQuoteEvidenceReview}
               onDownload={onDownload}
               onAddDecision={onAddPriceQualityDecision}
+              onAddStablecoinFxAnchorDecision={onAddStablecoinFxAnchorDecision}
+              onApplyStablecoinFxAnchor={onApplyStablecoinFxAnchor}
             />
             <TablePanel
               title="Portfolio-Positionen"
@@ -6277,21 +6368,27 @@ function PriceQualityPanel({
   quality,
   manualReview,
   stablecoinFxReview,
+  stablecoinFxAnchorPreview,
   solscanSignatureReview,
   binanceNormalizerReview,
   eventQuoteEvidenceReview,
   onDownload,
   onAddDecision,
+  onAddStablecoinFxAnchorDecision,
+  onApplyStablecoinFxAnchor,
   compact = false
 }: {
   quality: Snapshot["priceQuality"];
   manualReview?: Snapshot["priceManualReview"];
   stablecoinFxReview?: Snapshot["priceStablecoinFxReview"];
+  stablecoinFxAnchorPreview?: Snapshot["priceStablecoinFxAnchorPreview"];
   solscanSignatureReview?: Snapshot["priceSolscanSignatureReview"];
   binanceNormalizerReview?: Snapshot["priceBinanceNormalizerReview"];
   eventQuoteEvidenceReview?: Snapshot["priceEventQuoteEvidenceReview"];
   onDownload?: (path: string) => void;
   onAddDecision?: (row: Record<string, unknown>, decisionStatus: string) => void;
+  onAddStablecoinFxAnchorDecision?: (row: Record<string, unknown>, action: string) => void;
+  onApplyStablecoinFxAnchor?: (row: Record<string, unknown>, dryRun: boolean) => void;
   compact?: boolean;
 }) {
   const groups = quality?.groups ?? [];
@@ -6394,6 +6491,14 @@ function PriceQualityPanel({
               onClick: (row) => onDownload(String(row.evidence_ref ?? ""))
             }
           ] : undefined}
+        />
+      ) : null}
+      {stablecoinFxAnchorPreview ? (
+        <StablecoinFxAnchorPreviewPanel
+          report={stablecoinFxAnchorPreview}
+          onDownload={onDownload}
+          onAddDecision={onAddStablecoinFxAnchorDecision}
+          onApply={onApplyStablecoinFxAnchor}
         />
       ) : null}
       {solscanSignatureReview ? (
@@ -6523,6 +6628,97 @@ function PriceQualityPanel({
           />
         </>
       )}
+    </Stack>
+  );
+}
+
+function StablecoinFxAnchorPreviewPanel({
+  report,
+  onDownload,
+  onAddDecision,
+  onApply
+}: {
+  report: Snapshot["priceStablecoinFxAnchorPreview"];
+  onDownload?: (path: string) => void;
+  onAddDecision?: (row: Record<string, unknown>, action: string) => void;
+  onApply?: (row: Record<string, unknown>, dryRun: boolean) => void;
+}) {
+  const groups = report?.groups ?? [];
+  const rows = groups.map((row) => ({
+    status: row.status,
+    asset: row.asset,
+    year: row.year,
+    source: row.source ?? "derived:event_quote",
+    ready_days: row.ready_days,
+    missing_days: row.missing_days,
+    decisions: row.existing_decisions_count,
+    action: row.latest_decision_action ?? "-",
+    tax_lines_count: row.tax_lines_count,
+    next_action: row.recommended_next_action
+  }));
+  const canAct = onAddDecision !== undefined || onApply !== undefined || onDownload !== undefined;
+  return (
+    <Stack>
+      <div className="panel">
+        <div className="panelToolbar">
+          <strong>Stablecoin-FX-Anker</strong>
+          <span>{report?.artifact_generated_at ? formatDateTime(report.artifact_generated_at) : "-"}</span>
+        </div>
+        <div className="reviewSummary">
+          <Metric title="Offene Tage" value={String(report?.required_days ?? 0)} />
+          <Metric title="Bereit" value={String(report?.ready_days ?? 0)} />
+          <Metric title="Fehlend" value={String(report?.missing_days ?? 0)} />
+          <Metric title="Review offen" value={String(report?.groups_requiring_review ?? 0)} />
+          <Metric title="Tax-Delta" value={`${formatCurrency(report?.taxable_gain_loss_delta_eur)} EUR`} />
+        </div>
+        <div className="footer">
+          {report?.artifact_found
+            ? "V1-USD/EUR-FX-Anker sind als Artefakt vorhanden. Apply ist erst nach Review-Freigabe je Asset/Jahr moeglich."
+            : "Kein Stablecoin-FX-Anker-Artefakt vorhanden."}
+        </div>
+      </div>
+      <TablePanel
+        title="Stablecoin-FX-Anker Gruppen"
+        rows={rows}
+        footer={report?.methodology ?? "Stablecoin-FX-Ankerstatus wird geladen."}
+        rowActions={canAct ? [
+          ...(onDownload ? [{
+            label: "Artefakt JSON",
+            icon: <FileJson size={16} />,
+            onClick: () => onDownload("/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest?include_rows=true")
+          }] : []),
+          ...(onAddDecision ? [
+            {
+              label: "Apply freigeben",
+              icon: <Check size={16} />,
+              onClick: (row: Record<string, unknown>) => onAddDecision(row, "apply_replacement")
+            },
+            {
+              label: "Nur dokumentieren",
+              icon: <ReceiptText size={16} />,
+              onClick: (row: Record<string, unknown>) => onAddDecision(row, "document_delta_only")
+            },
+            {
+              label: "Bestehende Bewertung behalten",
+              icon: <AlertTriangle size={16} />,
+              onClick: (row: Record<string, unknown>) => onAddDecision(row, "keep_existing")
+            }
+          ] : []),
+          ...(onApply ? [
+            {
+              label: "Dry-Run",
+              icon: <Database size={16} />,
+              onClick: (row: Record<string, unknown>) => onApply(row, true)
+            },
+            {
+              label: "Live anwenden",
+              icon: <PackageCheck size={16} />,
+              tone: "danger" as const,
+              onClick: (row: Record<string, unknown>) => onApply(row, false)
+            }
+          ] : [])
+        ] : undefined}
+      />
     </Stack>
   );
 }
