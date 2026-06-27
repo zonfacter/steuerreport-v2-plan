@@ -783,6 +783,23 @@ type Snapshot = {
     ascii_table: string;
     methodology: string;
   };
+  taxBmfSubmissionGuide?: {
+    generated_at: string;
+    years: Array<Record<string, unknown>>;
+    available_years: number[];
+    ready_years: number[];
+    conservative_ready_years: number[];
+    review_years: number[];
+    blocked_years: number[];
+    empty_years: number[];
+    amendment_review_years: number[];
+    total_taxable_private_disposals_eur: string;
+    total_rewards_mining_staking_income_eur: string;
+    total_derivative_pnl_eur: string;
+    total_tax_free_private_disposals_eur: string;
+    ascii_table: string;
+    methodology: string;
+  };
   taxYearMethodology?: {
     year: number;
     generated_at: string;
@@ -1827,6 +1844,7 @@ function App() {
         taxMethodologySummary: { key: "taxMethodologySummary", label: "BMF-Methodik", load: () => getApi<Snapshot["taxMethodologySummary"]>(`/api/v1/tax-methodology/summary?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxBmfActionPlan: { key: "taxBmfActionPlan", label: "BMF-Aktionsliste", load: () => getApi<Snapshot["taxBmfActionPlan"]>(`/api/v1/tax-methodology/bmf-action-plan?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxBmfFinalizationMatrix: { key: "taxBmfFinalizationMatrix", label: "BMF-Finalisierung", load: () => getApi<Snapshot["taxBmfFinalizationMatrix"]>("/api/v1/tax-methodology/bmf-finalization-matrix") },
+        taxBmfSubmissionGuide: { key: "taxBmfSubmissionGuide", label: "BMF-Abgabehilfe", load: () => getApi<Snapshot["taxBmfSubmissionGuide"]>("/api/v1/tax-methodology/bmf-submission-guide") },
         taxYearDetail: { key: "taxYearDetail", label: "Steuerjahr-Detail", load: () => getApi<Snapshot["taxYearDetail"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}`) },
         taxDeclarationGuide: { key: "taxDeclarationGuide", label: "Steuererklaerungshilfe", load: () => getApi<Snapshot["taxDeclarationGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/declaration-guide`) },
         taxYearFilingSummary: { key: "taxYearFilingSummary", label: "Steuerjahr-Erklaerung", load: () => getApi<Snapshot["taxYearFilingSummary"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/filing-summary`) },
@@ -1895,6 +1913,7 @@ function App() {
         "taxFilingClosureOverview",
         "taxYearsCorrectionMap",
         "taxBmfFinalizationMatrix",
+        "taxBmfSubmissionGuide",
         "taxYearDetail",
         "taxDeclarationGuide",
         "taxYearFilingSummary",
@@ -3497,6 +3516,7 @@ function Content({
         taxMethodologySummary={snapshot.taxMethodologySummary}
         taxBmfActionPlan={snapshot.taxBmfActionPlan}
         taxBmfFinalizationMatrix={snapshot.taxBmfFinalizationMatrix}
+        taxBmfSubmissionGuide={snapshot.taxBmfSubmissionGuide}
         taxYearDetail={snapshot.taxYearDetail}
         taxDeclarationGuide={snapshot.taxDeclarationGuide}
         taxYearFilingSummary={snapshot.taxYearFilingSummary}
@@ -7941,6 +7961,7 @@ function TaxPanel({
   taxMethodologySummary,
   taxBmfActionPlan,
   taxBmfFinalizationMatrix,
+  taxBmfSubmissionGuide,
   taxYearDetail,
   taxDeclarationGuide,
   taxYearFilingSummary,
@@ -8014,6 +8035,7 @@ function TaxPanel({
   taxMethodologySummary: Snapshot["taxMethodologySummary"];
   taxBmfActionPlan: Snapshot["taxBmfActionPlan"];
   taxBmfFinalizationMatrix: Snapshot["taxBmfFinalizationMatrix"];
+  taxBmfSubmissionGuide: Snapshot["taxBmfSubmissionGuide"];
   taxYearDetail: Snapshot["taxYearDetail"];
   taxDeclarationGuide: Snapshot["taxDeclarationGuide"];
   taxYearFilingSummary: Snapshot["taxYearFilingSummary"];
@@ -8277,6 +8299,90 @@ function TaxPanel({
           <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
         </div>
       </section>
+
+      {taxBmfSubmissionGuide ? (
+        <div className="panel declarationGuidePanel">
+          <div className="panelToolbar">
+            <strong>BMF-Abgabehilfe 2021-2025</strong>
+            <span className={`statusPill ${(taxBmfSubmissionGuide.blocked_years ?? []).length > 0 ? "blocked" : (taxBmfSubmissionGuide.review_years ?? []).length > 0 ? "warning" : "ok"}`}>
+              {(taxBmfSubmissionGuide.ready_years ?? []).length} ready · {(taxBmfSubmissionGuide.conservative_ready_years ?? []).length} konservativ
+            </span>
+          </div>
+          <div className="portfolioSummaryStrip">
+            <Metric title="Anlage SO G/V" value={`${formatCurrency(taxBmfSubmissionGuide.total_taxable_private_disposals_eur)} EUR`} />
+            <Metric title="Rewards/Mining" value={`${formatCurrency(taxBmfSubmissionGuide.total_rewards_mining_staking_income_eur)} EUR`} />
+            <Metric title="Derivate" value={`${formatCurrency(taxBmfSubmissionGuide.total_derivative_pnl_eur)} EUR`} />
+            <Metric title="Korrektur pruefen" value={String((taxBmfSubmissionGuide.amendment_review_years ?? []).length)} />
+          </div>
+          <TablePanel
+            title="Was fuer die Steuererklaerung zu tun ist"
+            rows={(taxBmfSubmissionGuide.years ?? []).map((row) => ({
+              jahr: row.year,
+              status: row.status_label,
+              einreichbar: row.can_submit ? "ja" : row.can_submit_conservative ? "konservativ" : "nein",
+              eintragen: row.declaration_bucket,
+              ziel: row.where_to_enter,
+              anlage_so_eur: formatCurrency(row.taxable_private_disposals_eur),
+              rewards_eur: formatCurrency(row.rewards_mining_staking_income_eur),
+              derivate_eur: formatCurrency(row.derivative_pnl_eur),
+              beilegen: row.attach_count,
+              pruefen: row.review_requirements_count,
+              archivieren: row.archive_count,
+              naechster_schritt: row.next_action,
+              filing: row.filing_summary_endpoint,
+              checklist_csv: row.filing_checklist_csv_endpoint,
+              korrektur: row.correction_map_endpoint,
+              korrektur_csv: row.correction_map_csv_endpoint,
+              paket: row.evidence_package_endpoint
+            }))}
+            compact
+            rowActions={[
+              {
+                label: "Jahr oeffnen",
+                icon: <ReceiptText size={16} />,
+                onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
+              },
+              {
+                label: "Filing Summary",
+                icon: <FileJson size={16} />,
+                onClick: (row) => onDownload(String(row.filing ?? ""))
+              },
+              {
+                label: "Checkliste CSV",
+                icon: <FileDown size={16} />,
+                onClick: (row) => onDownload(String(row.checklist_csv ?? ""))
+              },
+              {
+                label: "Belegpaket",
+                icon: <PackageCheck size={16} />,
+                onClick: (row) => onDownload(String(row.paket ?? ""))
+              }
+            ]}
+            footer={taxBmfSubmissionGuide.methodology}
+          />
+          <div className="evidenceGrid">
+            {(taxBmfSubmissionGuide.years ?? []).map((row) => (
+              <div className="evidenceCard" key={`bmf-submission-${String(row.year)}`}>
+                <div className="evidenceCardHeader">
+                  <strong>{String(row.year)}</strong>
+                  <span className={`statusPill ${String(row.status) === "blocked" ? "blocked" : String(row.status) === "review_required" ? "warning" : "ok"}`}>
+                    {String(row.status_label ?? "-")}
+                  </span>
+                </div>
+                <p>{String(row.filing_sentence ?? "")}</p>
+                <p>{String(row.attachment_sentence ?? "")}</p>
+                <p>{String(row.archive_sentence ?? "")}</p>
+                <p>{String(row.review_sentence ?? "")}</p>
+              </div>
+            ))}
+          </div>
+          {taxBmfSubmissionGuide.ascii_table ? (
+            <pre className="asciiTable" aria-label="Kopierbare BMF-Abgabehilfe">
+              {taxBmfSubmissionGuide.ascii_table}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
 
       {taxBmfFinalizationMatrix ? (
         <div className="panel declarationGuidePanel">

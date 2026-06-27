@@ -233,6 +233,56 @@ class TaxBmfFinalizationMatrix(BaseModel):
     methodology: str
 
 
+class TaxBmfSubmissionGuideYear(BaseModel):
+    year: int
+    status: Literal["ready", "conservative_ready", "review_required", "blocked", "empty"]
+    status_label: str
+    can_submit: bool = False
+    can_submit_conservative: bool = False
+    correction_review_recommended: bool = False
+    declaration_bucket: str
+    where_to_enter: str
+    taxable_private_disposals_eur: Decimal = Decimal("0")
+    rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    derivative_pnl_eur: Decimal = Decimal("0")
+    tax_free_private_disposals_eur: Decimal = Decimal("0")
+    enter_count: int = 0
+    attach_count: int = 0
+    review_count: int = 0
+    archive_count: int = 0
+    blocking_count: int = 0
+    review_requirements_count: int = 0
+    filing_sentence: str
+    attachment_sentence: str
+    archive_sentence: str
+    review_sentence: str
+    next_action: str
+    filing_summary_endpoint: str
+    filing_checklist_csv_endpoint: str
+    correction_map_endpoint: str
+    correction_map_csv_endpoint: str
+    evidence_package_endpoint: str
+    display_line: str
+
+
+class TaxBmfSubmissionGuide(BaseModel):
+    generated_at: str
+    years: list[TaxBmfSubmissionGuideYear] = Field(default_factory=list)
+    available_years: list[int] = Field(default_factory=list)
+    ready_years: list[int] = Field(default_factory=list)
+    conservative_ready_years: list[int] = Field(default_factory=list)
+    review_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    empty_years: list[int] = Field(default_factory=list)
+    amendment_review_years: list[int] = Field(default_factory=list)
+    total_taxable_private_disposals_eur: Decimal = Decimal("0")
+    total_rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    total_derivative_pnl_eur: Decimal = Decimal("0")
+    total_tax_free_private_disposals_eur: Decimal = Decimal("0")
+    ascii_table: str
+    methodology: str
+
+
 class TaxBmfClosureBacklogItem(BaseModel):
     year: int
     priority: int = 0

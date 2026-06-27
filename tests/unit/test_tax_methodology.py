@@ -396,6 +396,81 @@ def test_bmf_finalization_matrix_endpoint(tmp_path):
     assert response.json()["data"]["available_years"] == [2021, 2022, 2023, 2024, 2025]
 
 
+def test_bmf_submission_guide_combines_finalization_and_closure(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service.bmf_finalization_matrix = lambda years=None: SimpleNamespace(
+        years=[
+            SimpleNamespace(
+                year=2024,
+                finalization_status="conservative_ready",
+                status_label="Konservativ einreichbar",
+                can_submit=False,
+                can_submit_conservative=True,
+                correction_review_recommended=True,
+                taxable_private_disposals_eur=Decimal("18490.21"),
+                rewards_mining_staking_income_eur=Decimal("1091.64"),
+                derivative_pnl_eur=Decimal("-71.90"),
+                tax_free_private_disposals_eur=Decimal("200.00"),
+                blocking_count=0,
+                review_count=4,
+                next_action="Belegpaket beilegen.",
+                filing_summary_endpoint="/api/v1/tax-years/2024/filing-summary",
+                correction_map_endpoint="/api/v1/tax-years/2024/correction-map",
+                evidence_package_endpoint="/api/v1/export/tax-years/2024/evidence-package.zip",
+            )
+        ]
+    )
+    service.tax_years.filing_closure_overview = lambda years=None: SimpleNamespace(
+        rows=[
+            SimpleNamespace(
+                year=2024,
+                declaration_bucket="Anlage SO + Rewards/Mining",
+                where_to_enter="Anlage SO und Reward-Einnahmen",
+                private_disposals_gain_loss_eur=Decimal("18490.21"),
+                rewards_mining_staking_income_eur=Decimal("1091.64"),
+                derivative_pnl_eur=Decimal("-71.90"),
+                tax_free_private_disposals_eur=Decimal("200.00"),
+                eintragen_count=3,
+                beilegen_count=2,
+                pruefen_count=1,
+                archivieren_count=4,
+                amendment_review_recommended=True,
+                next_action="Mit Appendix einreichen.",
+                filing_summary_endpoint="/api/v1/tax-years/2024/filing-summary",
+                filing_checklist_csv_endpoint="/api/v1/export/tax-years/2024/filing-checklist.csv",
+                correction_map_endpoint="/api/v1/tax-years/2024/correction-map",
+                correction_map_csv_endpoint="/api/v1/export/tax-years/2024/correction-map.csv",
+                evidence_package_endpoint="/api/v1/export/tax-years/2024/evidence-package.zip",
+            )
+        ]
+    )
+
+    guide = service.bmf_submission_guide(years=[2024])
+
+    assert guide.conservative_ready_years == [2024]
+    assert guide.amendment_review_years == [2024]
+    assert guide.total_taxable_private_disposals_eur == Decimal("18490.21")
+    row = guide.years[0]
+    assert row.can_submit_conservative is True
+    assert row.enter_count == 3
+    assert row.attach_count == 2
+    assert row.review_requirements_count == 4
+    assert "Anlage SO + Rewards/Mining" in row.filing_sentence
+    assert "Belegpaket" in row.attachment_sentence
+    assert "2024 | Konservativ einreichbar" in guide.ascii_table
+
+
+def test_bmf_submission_guide_endpoint(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    response = TestClient(create_app(store)).get("/api/v1/tax-methodology/bmf-submission-guide")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["available_years"] == [2021, 2022, 2023, 2024, 2025]
+    assert "ascii_table" in payload
+
+
 def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)

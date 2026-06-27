@@ -18,6 +18,8 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfFilingReadinessReport,
     TaxBmfFilingReadinessSnapshot,
     TaxBmfFilingReadinessYear,
+    TaxBmfSubmissionGuide,
+    TaxBmfSubmissionGuideYear,
     TaxRewardBmfRecheckReport,
     TaxRewardBmfRecheckYear,
     TaxMethodologyGap,
@@ -389,6 +391,305 @@ class TaxMethodologyService:
                 "Die Matrix ist eine Arbeits-/Abschlussampel und schreibt keine Imports, "
                 "Preise, FIFO-Lots, Tax-Lines oder Review-Entscheidungen."
             ),
+        )
+
+    def bmf_submission_guide(self, *, years: list[int] | None = None) -> TaxBmfSubmissionGuide:
+        generated_at = self._now()
+        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        finalization = self.bmf_finalization_matrix(years=selected_years)
+        closure = self.tax_years.filing_closure_overview(years=selected_years)
+        finalization_by_year = {row.year: row for row in finalization.years}
+        closure_by_year = {row.year: row for row in closure.rows}
+        rows = [
+            self._bmf_submission_guide_year(
+                year,
+                finalization=finalization_by_year.get(year),
+                closure=closure_by_year.get(year),
+            )
+            for year in selected_years
+        ]
+        return TaxBmfSubmissionGuide(
+            generated_at=generated_at,
+            years=rows,
+            available_years=selected_years,
+            ready_years=[row.year for row in rows if row.status == "ready"],
+            conservative_ready_years=[row.year for row in rows if row.status == "conservative_ready"],
+            review_years=[row.year for row in rows if row.status == "review_required"],
+            blocked_years=[row.year for row in rows if row.status == "blocked"],
+            empty_years=[row.year for row in rows if row.status == "empty"],
+            amendment_review_years=[row.year for row in rows if row.correction_review_recommended],
+            total_taxable_private_disposals_eur=sum(
+                (row.taxable_private_disposals_eur for row in rows),
+                Decimal("0"),
+            ),
+            total_rewards_mining_staking_income_eur=sum(
+                (row.rewards_mining_staking_income_eur for row in rows),
+                Decimal("0"),
+            ),
+            total_derivative_pnl_eur=sum((row.derivative_pnl_eur for row in rows), Decimal("0")),
+            total_tax_free_private_disposals_eur=sum(
+                (row.tax_free_private_disposals_eur for row in rows),
+                Decimal("0"),
+            ),
+            ascii_table=self._bmf_submission_ascii(rows),
+            methodology=(
+                "Read-only BMF-Abgabehilfe aus Finalisierungsmatrix, Filing-Closure-"
+                "Overview und Korrekturkarte. Sie zeigt pro Jahr die eintragungs-"
+                "relevanten Betraege, Beleg-/Archivierungspflichten und Korrektur-"
+                "hinweise, schreibt aber keine Imports, Preise, FIFO-Lots, Tax-Lines "
+                "oder Review-Entscheidungen."
+            ),
+        )
+
+    def _bmf_submission_guide_year(
+        self,
+        year: int,
+        *,
+        finalization: TaxBmfFinalizationYear | None,
+        closure,
+    ) -> TaxBmfSubmissionGuideYear:
+        status = self._bmf_submission_status(finalization)
+        status_label = (
+            finalization.status_label
+            if finalization is not None
+            else "Keine Aktivitaet"
+            if status == "empty"
+            else "Pruefen"
+        )
+        taxable_private = self._decimal_attr(
+            closure,
+            "private_disposals_gain_loss_eur",
+            getattr(finalization, "taxable_private_disposals_eur", Decimal("0")),
+        )
+        rewards = self._decimal_attr(
+            closure,
+            "rewards_mining_staking_income_eur",
+            getattr(finalization, "rewards_mining_staking_income_eur", Decimal("0")),
+        )
+        derivatives = self._decimal_attr(
+            closure,
+            "derivative_pnl_eur",
+            getattr(finalization, "derivative_pnl_eur", Decimal("0")),
+        )
+        tax_free = self._decimal_attr(
+            closure,
+            "tax_free_private_disposals_eur",
+            getattr(finalization, "tax_free_private_disposals_eur", Decimal("0")),
+        )
+        enter_count = int(getattr(closure, "eintragen_count", 0) or 0)
+        attach_count = int(getattr(closure, "beilegen_count", 0) or 0)
+        review_count = int(getattr(closure, "pruefen_count", 0) or 0)
+        archive_count = int(getattr(closure, "archivieren_count", 0) or 0)
+        blocking_count = int(getattr(finalization, "blocking_count", 0) or 0)
+        review_requirements_count = int(getattr(finalization, "review_count", 0) or 0)
+        correction_review = bool(
+            getattr(closure, "amendment_review_recommended", False)
+            or getattr(finalization, "correction_review_recommended", False)
+        )
+        declaration_bucket = str(getattr(closure, "declaration_bucket", "") or self._bmf_submission_bucket(
+            taxable_private=taxable_private,
+            rewards=rewards,
+            derivatives=derivatives,
+        ))
+        where_to_enter = str(getattr(closure, "where_to_enter", "") or self._bmf_submission_where_to_enter(
+            taxable_private=taxable_private,
+            rewards=rewards,
+            derivatives=derivatives,
+        ))
+        filing_summary_endpoint = str(
+            getattr(closure, "filing_summary_endpoint", "")
+            or getattr(finalization, "filing_summary_endpoint", "")
+            or f"/api/v1/tax-years/{year}/filing-summary"
+        )
+        correction_map_endpoint = str(
+            getattr(closure, "correction_map_endpoint", "")
+            or getattr(finalization, "correction_map_endpoint", "")
+            or f"/api/v1/tax-years/{year}/correction-map"
+        )
+        evidence_package_endpoint = str(
+            getattr(closure, "evidence_package_endpoint", "")
+            or getattr(finalization, "evidence_package_endpoint", "")
+            or f"/api/v1/export/tax-years/{year}/evidence-package.zip"
+        )
+        next_action = str(
+            getattr(closure, "next_action", "")
+            or getattr(finalization, "next_action", "")
+            or "Jahresdaten und Belege pruefen."
+        )
+        row = TaxBmfSubmissionGuideYear(
+            year=year,
+            status=status,  # type: ignore[arg-type]
+            status_label=status_label,
+            can_submit=status == "ready",
+            can_submit_conservative=status in {"ready", "conservative_ready"},
+            correction_review_recommended=correction_review,
+            declaration_bucket=declaration_bucket,
+            where_to_enter=where_to_enter,
+            taxable_private_disposals_eur=taxable_private,
+            rewards_mining_staking_income_eur=rewards,
+            derivative_pnl_eur=derivatives,
+            tax_free_private_disposals_eur=tax_free,
+            enter_count=enter_count,
+            attach_count=attach_count,
+            review_count=review_count,
+            archive_count=archive_count,
+            blocking_count=blocking_count,
+            review_requirements_count=review_requirements_count,
+            filing_sentence=self._bmf_submission_filing_sentence(
+                taxable_private=taxable_private,
+                rewards=rewards,
+                derivatives=derivatives,
+                declaration_bucket=declaration_bucket,
+                where_to_enter=where_to_enter,
+            ),
+            attachment_sentence=self._bmf_submission_attachment_sentence(
+                attach_count=attach_count,
+                correction_review=correction_review,
+                evidence_package_endpoint=evidence_package_endpoint,
+            ),
+            archive_sentence=self._bmf_submission_archive_sentence(
+                tax_free=tax_free,
+                archive_count=archive_count,
+            ),
+            review_sentence=self._bmf_submission_review_sentence(
+                status=status,
+                blocking_count=blocking_count,
+                review_requirements_count=review_requirements_count,
+                correction_review=correction_review,
+            ),
+            next_action=next_action,
+            filing_summary_endpoint=filing_summary_endpoint,
+            filing_checklist_csv_endpoint=str(
+                getattr(closure, "filing_checklist_csv_endpoint", "")
+                or f"/api/v1/export/tax-years/{year}/filing-checklist.csv"
+            ),
+            correction_map_endpoint=correction_map_endpoint,
+            correction_map_csv_endpoint=str(
+                getattr(closure, "correction_map_csv_endpoint", "")
+                or f"/api/v1/export/tax-years/{year}/correction-map.csv"
+            ),
+            evidence_package_endpoint=evidence_package_endpoint,
+            display_line="",
+        )
+        row.display_line = self._bmf_submission_line(row)
+        return row
+
+    def _bmf_submission_status(self, finalization: TaxBmfFinalizationYear | None) -> str:
+        if finalization is None:
+            return "empty"
+        if finalization.finalization_status == "bmf_ready":
+            return "ready"
+        if finalization.finalization_status == "conservative_ready":
+            return "conservative_ready"
+        if finalization.finalization_status == "blocked":
+            return "blocked"
+        if finalization.finalization_status == "empty":
+            return "empty"
+        return "review_required"
+
+    def _decimal_attr(self, obj, attr: str, fallback: Decimal) -> Decimal:
+        value = getattr(obj, attr, None) if obj is not None else None
+        if value is None:
+            return fallback
+        return Decimal(str(value))
+
+    def _bmf_submission_bucket(
+        self,
+        *,
+        taxable_private: Decimal,
+        rewards: Decimal,
+        derivatives: Decimal,
+    ) -> str:
+        parts = []
+        if taxable_private:
+            parts.append("Anlage SO")
+        if rewards:
+            parts.append("Rewards/Mining")
+        if derivatives:
+            parts.append("Derivate pruefen")
+        return " + ".join(parts) if parts else "keine Eingabe aus V2-Werten"
+
+    def _bmf_submission_where_to_enter(
+        self,
+        *,
+        taxable_private: Decimal,
+        rewards: Decimal,
+        derivatives: Decimal,
+    ) -> str:
+        targets = []
+        if taxable_private:
+            targets.append("Private Veraeusserungsgeschaefte / Anlage SO")
+        if rewards:
+            targets.append("Mining-/Reward-Einnahmen laut Steuerberaterzuordnung")
+        if derivatives:
+            targets.append("Derivate/Termingeschaefte separat pruefen")
+        return "; ".join(targets) if targets else "Keine Eintragung, Belege archivieren"
+
+    def _bmf_submission_filing_sentence(
+        self,
+        *,
+        taxable_private: Decimal,
+        rewards: Decimal,
+        derivatives: Decimal,
+        declaration_bucket: str,
+        where_to_enter: str,
+    ) -> str:
+        return (
+            f"Eintragen: {declaration_bucket}. Ziel: {where_to_enter}. "
+            f"Anlage SO {self._eur(taxable_private)}, Rewards/Mining {self._eur(rewards)}, "
+            f"Derivate {self._eur(derivatives)}."
+        )
+
+    def _bmf_submission_attachment_sentence(
+        self,
+        *,
+        attach_count: int,
+        correction_review: bool,
+        evidence_package_endpoint: str,
+    ) -> str:
+        prefix = f"Beilegen: {attach_count} Position(en) aus Filing-/BMF-Checkliste."
+        if correction_review:
+            prefix += " Vorjahres-/Nachreichungspruefung ist markiert."
+        return f"{prefix} Belegpaket: {evidence_package_endpoint}."
+
+    def _bmf_submission_archive_sentence(self, *, tax_free: Decimal, archive_count: int) -> str:
+        return (
+            f"Archivieren: {archive_count} Position(en), insbesondere steuerfreie "
+            f"private Veraeusserungen nach Haltefrist {self._eur(tax_free)}."
+        )
+
+    def _bmf_submission_review_sentence(
+        self,
+        *,
+        status: str,
+        blocking_count: int,
+        review_requirements_count: int,
+        correction_review: bool,
+    ) -> str:
+        if status == "blocked":
+            return f"Nicht einreichen: {blocking_count} Blocker zuerst schliessen."
+        if review_requirements_count or correction_review:
+            return (
+                f"Konservativ einreichbar mit {review_requirements_count} Review-Hinweis(en); "
+                "Korrektur-/Nachreichungsbedarf gegen urspruengliche Erklaerung pruefen."
+            )
+        if status == "empty":
+            return "Keine V2-Aktivitaet; nur archivieren, falls externe Belege vorhanden sind."
+        return "Keine offenen BMF-Blocker in der Abschlussmatrix."
+
+    def _bmf_submission_ascii(self, rows: list[TaxBmfSubmissionGuideYear]) -> str:
+        if not rows:
+            return "Jahr | Status | Eintragen | Beilegen | Pruefen | Naechster Schritt"
+        header = "Jahr | Status | Eintragen | Beilegen | Pruefen | Naechster Schritt"
+        separator = "-----|--------|-----------|----------|---------|-----------------"
+        return "\n".join([header, separator, *(row.display_line for row in rows)])
+
+    def _bmf_submission_line(self, row: TaxBmfSubmissionGuideYear) -> str:
+        return (
+            f"{row.year} | {row.status_label} | "
+            f"{self._eur(row.taxable_private_disposals_eur)} / "
+            f"{self._eur(row.rewards_mining_staking_income_eur)} | "
+            f"{row.attach_count} | {row.review_requirements_count} | {row.next_action}"
         )
 
     def write_bmf_filing_readiness_snapshot(
