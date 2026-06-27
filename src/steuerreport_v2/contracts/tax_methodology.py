@@ -252,6 +252,9 @@ class TaxBmfSubmissionGuideYear(BaseModel):
     archive_count: int = 0
     blocking_count: int = 0
     review_requirements_count: int = 0
+    technical_review_requirements_count: int = 0
+    declaration_compare_required: bool = False
+    amendment_reason: str | None = None
     filing_sentence: str
     attachment_sentence: str
     archive_sentence: str

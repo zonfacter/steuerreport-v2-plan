@@ -482,10 +482,12 @@ class TaxMethodologyService:
         archive_count = int(getattr(closure, "archivieren_count", 0) or 0)
         blocking_count = int(getattr(finalization, "blocking_count", 0) or 0)
         review_requirements_count = int(getattr(finalization, "review_count", 0) or 0)
+        technical_review_requirements_count = self._bmf_submission_technical_review_count(finalization)
         correction_review = bool(
             getattr(closure, "amendment_review_recommended", False)
             or getattr(finalization, "correction_review_recommended", False)
         )
+        amendment_reason = str(getattr(closure, "amendment_reason", "") or "").strip() or None
         declaration_bucket = str(getattr(closure, "declaration_bucket", "") or self._bmf_submission_bucket(
             taxable_private=taxable_private,
             rewards=rewards,
@@ -535,6 +537,9 @@ class TaxMethodologyService:
             archive_count=archive_count,
             blocking_count=blocking_count,
             review_requirements_count=review_requirements_count,
+            technical_review_requirements_count=technical_review_requirements_count,
+            declaration_compare_required=correction_review,
+            amendment_reason=amendment_reason,
             filing_sentence=self._bmf_submission_filing_sentence(
                 taxable_private=taxable_private,
                 rewards=rewards,
@@ -555,7 +560,9 @@ class TaxMethodologyService:
                 status=status,
                 blocking_count=blocking_count,
                 review_requirements_count=review_requirements_count,
+                technical_review_requirements_count=technical_review_requirements_count,
                 correction_review=correction_review,
+                amendment_reason=amendment_reason,
             ),
             next_action=next_action,
             filing_summary_endpoint=filing_summary_endpoint,
@@ -586,6 +593,22 @@ class TaxMethodologyService:
         if finalization.finalization_status == "empty":
             return "empty"
         return "review_required"
+
+    def _bmf_submission_technical_review_count(self, finalization: TaxBmfFinalizationYear | None) -> int:
+        if finalization is None:
+            return 0
+        return sum(
+            1
+            for requirement in getattr(finalization, "requirements", [])
+            if requirement.status == "review"
+            and requirement.key
+            in {
+                "fifo_traceability",
+                "income_rewards_mining",
+                "transfers_provenance",
+                "prices_fx",
+            }
+        )
 
     def _decimal_attr(self, obj, attr: str, fallback: Decimal) -> Decimal:
         value = getattr(obj, attr, None) if obj is not None else None
@@ -664,14 +687,27 @@ class TaxMethodologyService:
         status: str,
         blocking_count: int,
         review_requirements_count: int,
+        technical_review_requirements_count: int,
         correction_review: bool,
+        amendment_reason: str | None,
     ) -> str:
         if status == "blocked":
             return f"Nicht einreichen: {blocking_count} Blocker zuerst schliessen."
-        if review_requirements_count or correction_review:
+        if technical_review_requirements_count and correction_review:
             return (
-                f"Konservativ einreichbar mit {review_requirements_count} Review-Hinweis(en); "
-                "Korrektur-/Nachreichungsbedarf gegen urspruengliche Erklaerung pruefen."
+                f"Konservativ einreichbar: {technical_review_requirements_count} fachliche "
+                "Nachweis-Hinweis(e) beilegen und die V2-Betraege gegen die urspruengliche "
+                f"Erklaerung vergleichen. Grund: {amendment_reason or 'eintragungsrelevante V2-Betraege vorhanden'}"
+            )
+        if technical_review_requirements_count:
+            return (
+                f"Konservativ einreichbar mit {technical_review_requirements_count} fachlichen "
+                "Nachweis-Hinweis(en); diese im Jahrespaket beilegen."
+            )
+        if correction_review:
+            return (
+                "Keine technischen BMF-Blocker; V2-Betraege gegen die urspruengliche "
+                f"Erklaerung vergleichen. Grund: {amendment_reason or 'eintragungsrelevante V2-Betraege vorhanden'}"
             )
         if status == "empty":
             return "Keine V2-Aktivitaet; nur archivieren, falls externe Belege vorhanden sind."
@@ -873,7 +909,7 @@ class TaxMethodologyService:
         )
         price_review = bool(stablecoin_review) or any(
             code in review_codes
-            for code in {"asset_fifo_quote_attribution_documented", "asset_fifo_possible_recalculation"}
+            for code in {"asset_fifo_possible_recalculation"}
         )
         price_status = "blocked" if price_blocked else "review" if price_review else "ok"
         requirement_rows.append(

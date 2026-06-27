@@ -418,6 +418,12 @@ def test_bmf_submission_guide_combines_finalization_and_closure(tmp_path):
                 filing_summary_endpoint="/api/v1/tax-years/2024/filing-summary",
                 correction_map_endpoint="/api/v1/tax-years/2024/correction-map",
                 evidence_package_endpoint="/api/v1/export/tax-years/2024/evidence-package.zip",
+                requirements=[
+                    SimpleNamespace(key="fifo_traceability", status="review"),
+                    SimpleNamespace(key="transfers_provenance", status="review"),
+                    SimpleNamespace(key="prices_fx", status="ok"),
+                    SimpleNamespace(key="evidence_package", status="review"),
+                ],
             )
         ]
     )
@@ -436,6 +442,10 @@ def test_bmf_submission_guide_combines_finalization_and_closure(tmp_path):
                 pruefen_count=1,
                 archivieren_count=4,
                 amendment_review_recommended=True,
+                amendment_reason=(
+                    "V2 enthaelt eintragungsrelevante Jahreswerte. Wenn die urspruengliche Erklaerung davon "
+                    "abweicht oder diese Werte fehlten, Korrektur/Nachreichung pruefen."
+                ),
                 next_action="Mit Appendix einreichen.",
                 filing_summary_endpoint="/api/v1/tax-years/2024/filing-summary",
                 filing_checklist_csv_endpoint="/api/v1/export/tax-years/2024/filing-checklist.csv",
@@ -456,8 +466,15 @@ def test_bmf_submission_guide_combines_finalization_and_closure(tmp_path):
     assert row.enter_count == 3
     assert row.attach_count == 2
     assert row.review_requirements_count == 4
+    assert row.technical_review_requirements_count == 2
+    assert row.declaration_compare_required is True
+    assert row.amendment_reason == (
+        "V2 enthaelt eintragungsrelevante Jahreswerte. Wenn die urspruengliche Erklaerung davon "
+        "abweicht oder diese Werte fehlten, Korrektur/Nachreichung pruefen."
+    )
     assert "Anlage SO + Rewards/Mining" in row.filing_sentence
     assert "Belegpaket" in row.attachment_sentence
+    assert "2 fachliche" in row.review_sentence
     assert "2024 | Konservativ einreichbar" in guide.ascii_table
 
 
