@@ -755,6 +755,7 @@ class TaxMethodologyService:
             match_years=[row.year for row in rows if row.status == "match"],
             delta_review_years=[row.year for row in rows if row.status == "delta_review"],
             missing_declared_years=[row.year for row in rows if row.status == "missing_declared_values"],
+            untrusted_declared_years=[row.year for row in rows if row.status == "declared_values_untrusted"],
             empty_years=[row.year for row in rows if row.status == "empty"],
             total_delta_taxable_private_disposals_eur=sum(
                 (row.delta_taxable_private_disposals_eur or Decimal("0") for row in rows),
@@ -785,10 +786,12 @@ class TaxMethodologyService:
         rows = [
             TaxBmfPriorFilingDeclaredYear(
                 year=year,
-                taxable_private_disposals_eur=values["taxable_private_disposals_eur"],
-                rewards_mining_staking_income_eur=values["rewards_mining_staking_income_eur"],
-                derivative_pnl_eur=values["derivative_pnl_eur"],
-                tax_free_private_disposals_eur=values["tax_free_private_disposals_eur"],
+                declared_values_status=values["declared_values_status"],  # type: ignore[arg-type]
+                note=str(values.get("note") or "") or None,
+                taxable_private_disposals_eur=Decimal(str(values["taxable_private_disposals_eur"])),
+                rewards_mining_staking_income_eur=Decimal(str(values["rewards_mining_staking_income_eur"])),
+                derivative_pnl_eur=Decimal(str(values["derivative_pnl_eur"])),
+                tax_free_private_disposals_eur=Decimal(str(values["tax_free_private_disposals_eur"])),
             )
             for year, values in sorted(declared_by_year.items())
         ]
@@ -813,6 +816,8 @@ class TaxMethodologyService:
             "years": {
                 str(row.year): {
                     "taxable_private_disposals_eur": str(row.taxable_private_disposals_eur),
+                    "declared_values_status": row.declared_values_status,
+                    "note": row.note,
                     "rewards_mining_staking_income_eur": str(row.rewards_mining_staking_income_eur),
                     "derivative_pnl_eur": str(row.derivative_pnl_eur),
                     "tax_free_private_disposals_eur": str(row.tax_free_private_disposals_eur),
@@ -832,7 +837,7 @@ class TaxMethodologyService:
             comparison=self.bmf_prior_filing_comparison(years=[row.year for row in years] or None),
         )
 
-    def _prior_filing_declared_amounts(self) -> tuple[dict[int, dict[str, Decimal]], bool]:
+    def _prior_filing_declared_amounts(self) -> tuple[dict[int, dict[str, object]], bool]:
         raw = None
         for setting in self.store.list_admin_settings():
             if setting.key == self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING:
@@ -847,7 +852,7 @@ class TaxMethodologyService:
         years_payload = payload.get("years") if isinstance(payload, dict) else payload
         if not isinstance(years_payload, dict):
             return {}, True
-        parsed: dict[int, dict[str, Decimal]] = {}
+        parsed: dict[int, dict[str, object]] = {}
         for year_key, item in years_payload.items():
             if not isinstance(item, dict):
                 continue
@@ -857,6 +862,8 @@ class TaxMethodologyService:
                 continue
             parsed[year] = {
                 "taxable_private_disposals_eur": self._optional_decimal(item.get("taxable_private_disposals_eur")),
+                "declared_values_status": self._prior_filing_status(item.get("declared_values_status")),
+                "note": str(item.get("note") or ""),
                 "rewards_mining_staking_income_eur": self._optional_decimal(
                     item.get("rewards_mining_staking_income_eur")
                 ),
@@ -868,7 +875,7 @@ class TaxMethodologyService:
     def _bmf_prior_filing_comparison_year(
         self,
         row: TaxBmfSubmissionGuideYear,
-        declared: dict[str, Decimal] | None,
+        declared: dict[str, object] | None,
     ) -> TaxBmfPriorFilingComparisonYear:
         if declared is None:
             status = "empty" if row.status == "empty" else "missing_declared_values"
@@ -877,6 +884,7 @@ class TaxMethodologyService:
                 status=status,  # type: ignore[arg-type]
                 status_label="Keine Altwerte hinterlegt" if status == "missing_declared_values" else "Keine Aktivitaet",
                 declared_values_configured=False,
+                declared_values_status="unknown",
                 v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
                 v2_rewards_mining_staking_income_eur=row.rewards_mining_staking_income_eur,
                 v2_derivative_pnl_eur=row.derivative_pnl_eur,
@@ -896,10 +904,47 @@ class TaxMethodologyService:
             result.display_line = self._bmf_prior_filing_line(result)
             return result
 
-        delta_taxable = row.taxable_private_disposals_eur - declared["taxable_private_disposals_eur"]
-        delta_rewards = row.rewards_mining_staking_income_eur - declared["rewards_mining_staking_income_eur"]
-        delta_derivatives = row.derivative_pnl_eur - declared["derivative_pnl_eur"]
-        delta_tax_free = row.tax_free_private_disposals_eur - declared["tax_free_private_disposals_eur"]
+        declared_status = str(declared.get("declared_values_status") or "declared_values")
+        declared_note = str(declared.get("note") or "") or None
+        if declared_status != "declared_values":
+            status_label = {
+                "unknown": "Altwerte unbekannt",
+                "probably_wrong": "Altwerte vermutlich falsch",
+                "not_filed": "Nicht erklaert",
+            }.get(declared_status, "Altwerte nicht belastbar")
+            result = TaxBmfPriorFilingComparisonYear(
+                year=row.year,
+                status="declared_values_untrusted",
+                status_label=status_label,
+                declared_values_configured=True,
+                declared_values_status=declared_status,  # type: ignore[arg-type]
+                declared_values_note=declared_note,
+                v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
+                v2_rewards_mining_staking_income_eur=row.rewards_mining_staking_income_eur,
+                v2_derivative_pnl_eur=row.derivative_pnl_eur,
+                v2_tax_free_private_disposals_eur=row.tax_free_private_disposals_eur,
+                amendment_review_recommended=row.status != "empty",
+                next_action=(
+                    "Keine rechnerische Delta-Aussage: urspruengliche Erklaerung ist als nicht belastbar markiert. "
+                    "Originalbescheid/Steuererklaerung beschaffen oder Jahr konservativ als Korrekturpruefung behandeln."
+                ),
+                setting_key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
+                filing_summary_endpoint=row.filing_summary_endpoint,
+                correction_map_endpoint=row.correction_map_endpoint,
+                evidence_package_endpoint=row.evidence_package_endpoint,
+                display_line="",
+            )
+            result.display_line = self._bmf_prior_filing_line(result)
+            return result
+
+        declared_taxable = Decimal(str(declared["taxable_private_disposals_eur"]))
+        declared_rewards = Decimal(str(declared["rewards_mining_staking_income_eur"]))
+        declared_derivatives = Decimal(str(declared["derivative_pnl_eur"]))
+        declared_tax_free = Decimal(str(declared["tax_free_private_disposals_eur"]))
+        delta_taxable = row.taxable_private_disposals_eur - declared_taxable
+        delta_rewards = row.rewards_mining_staking_income_eur - declared_rewards
+        delta_derivatives = row.derivative_pnl_eur - declared_derivatives
+        delta_tax_free = row.tax_free_private_disposals_eur - declared_tax_free
         absolute_delta = sum(
             (abs(value) for value in [delta_taxable, delta_rewards, delta_derivatives, delta_tax_free]),
             Decimal("0"),
@@ -910,17 +955,19 @@ class TaxMethodologyService:
             status="delta_review" if has_delta else "match",
             status_label="Abweichung pruefen" if has_delta else "Altwerte passen",
             declared_values_configured=True,
+            declared_values_status="declared_values",
+            declared_values_note=declared_note,
             v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
-            declared_taxable_private_disposals_eur=declared["taxable_private_disposals_eur"],
+            declared_taxable_private_disposals_eur=declared_taxable,
             delta_taxable_private_disposals_eur=delta_taxable,
             v2_rewards_mining_staking_income_eur=row.rewards_mining_staking_income_eur,
-            declared_rewards_mining_staking_income_eur=declared["rewards_mining_staking_income_eur"],
+            declared_rewards_mining_staking_income_eur=declared_rewards,
             delta_rewards_mining_staking_income_eur=delta_rewards,
             v2_derivative_pnl_eur=row.derivative_pnl_eur,
-            declared_derivative_pnl_eur=declared["derivative_pnl_eur"],
+            declared_derivative_pnl_eur=declared_derivatives,
             delta_derivative_pnl_eur=delta_derivatives,
             v2_tax_free_private_disposals_eur=row.tax_free_private_disposals_eur,
-            declared_tax_free_private_disposals_eur=declared["tax_free_private_disposals_eur"],
+            declared_tax_free_private_disposals_eur=declared_tax_free,
             delta_tax_free_private_disposals_eur=delta_tax_free,
             absolute_delta_eur=absolute_delta,
             amendment_review_recommended=has_delta,
@@ -943,11 +990,19 @@ class TaxMethodologyService:
             return Decimal("0")
         return Decimal(str(value))
 
+    def _prior_filing_status(self, value) -> str:
+        status = str(value or "declared_values")
+        if status in {"declared_values", "unknown", "probably_wrong", "not_filed"}:
+            return status
+        return "declared_values"
+
     def _prior_filing_example_json(self) -> str:
         return json.dumps(
             {
                 "years": {
                     "2021": {
+                        "declared_values_status": "probably_wrong",
+                        "note": "Ich vermute, dass die damalige Eintragung nicht korrekt war.",
                         "taxable_private_disposals_eur": "0.00",
                         "rewards_mining_staking_income_eur": "11000.00",
                         "derivative_pnl_eur": "0.00",

@@ -560,6 +560,52 @@ def test_bmf_prior_filing_comparison_calculates_delta_from_admin_setting(tmp_pat
     assert "2021 | Abweichung pruefen" in comparison.ascii_table
 
 
+def test_bmf_prior_filing_comparison_keeps_probably_wrong_values_untrusted(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.upsert_admin_setting(
+        AdminSettingWrite(
+            key="tax.prior_filing.declared_amounts",
+            value_json=(
+                '{"years":{"2021":{'
+                '"declared_values_status":"probably_wrong",'
+                '"note":"damals vermutlich falsch eingetragen",'
+                '"taxable_private_disposals_eur":"0.00",'
+                '"rewards_mining_staking_income_eur":"11000.00",'
+                '"derivative_pnl_eur":"0.00",'
+                '"tax_free_private_disposals_eur":"0.00"'
+                "}}}"
+            ),
+        )
+    )
+    service = TaxMethodologyService(store)
+    service.bmf_submission_guide = lambda years=None: SimpleNamespace(
+        years=[
+            SimpleNamespace(
+                year=2021,
+                status="conservative_ready",
+                taxable_private_disposals_eur=Decimal("-7341.45"),
+                rewards_mining_staking_income_eur=Decimal("6630.73"),
+                derivative_pnl_eur=Decimal("0"),
+                tax_free_private_disposals_eur=Decimal("0"),
+                filing_summary_endpoint="/summary",
+                correction_map_endpoint="/correction",
+                evidence_package_endpoint="/evidence.zip",
+            )
+        ]
+    )
+
+    comparison = service.bmf_prior_filing_comparison(years=[2021])
+
+    row = comparison.years[0]
+    assert comparison.untrusted_declared_years == [2021]
+    assert comparison.delta_review_years == []
+    assert row.status == "declared_values_untrusted"
+    assert row.declared_values_status == "probably_wrong"
+    assert row.declared_values_note == "damals vermutlich falsch eingetragen"
+    assert row.delta_rewards_mining_staking_income_eur is None
+    assert row.amendment_review_recommended is True
+
+
 def test_bmf_prior_filing_comparison_endpoint(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     response = TestClient(create_app(store)).get("/api/v1/tax-methodology/bmf-prior-filing-comparison")
@@ -594,6 +640,8 @@ def test_bmf_prior_filing_declared_amounts_write_roundtrip(tmp_path):
             years=[
                 SimpleNamespace(
                     year=2021,
+                    declared_values_status="declared_values",
+                    note=None,
                     taxable_private_disposals_eur=Decimal("0"),
                     rewards_mining_staking_income_eur=Decimal("11000"),
                     derivative_pnl_eur=Decimal("0"),

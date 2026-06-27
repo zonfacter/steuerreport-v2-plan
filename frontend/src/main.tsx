@@ -809,6 +809,7 @@ type Snapshot = {
     match_years: number[];
     delta_review_years: number[];
     missing_declared_years: number[];
+    untrusted_declared_years: number[];
     empty_years: number[];
     total_delta_taxable_private_disposals_eur: string;
     total_delta_rewards_mining_staking_income_eur: string;
@@ -8456,8 +8457,8 @@ function TaxPanel({
         <div className="panel declarationGuidePanel">
           <div className="panelToolbar">
             <strong>Alt-Erklaerungsvergleich</strong>
-            <span className={`statusPill ${(taxBmfPriorFilingComparison.delta_review_years ?? []).length > 0 ? "warning" : (taxBmfPriorFilingComparison.missing_declared_years ?? []).length > 0 ? "warning" : "ok"}`}>
-              {(taxBmfPriorFilingComparison.delta_review_years ?? []).length} Abweichung · {(taxBmfPriorFilingComparison.missing_declared_years ?? []).length} ohne Altwert
+            <span className={`statusPill ${(taxBmfPriorFilingComparison.delta_review_years ?? []).length > 0 || (taxBmfPriorFilingComparison.untrusted_declared_years ?? []).length > 0 ? "warning" : (taxBmfPriorFilingComparison.missing_declared_years ?? []).length > 0 ? "warning" : "ok"}`}>
+              {(taxBmfPriorFilingComparison.delta_review_years ?? []).length} Abweichung · {(taxBmfPriorFilingComparison.untrusted_declared_years ?? []).length} unklar/falsch · {(taxBmfPriorFilingComparison.missing_declared_years ?? []).length} ohne Altwert
             </span>
           </div>
           <div className="portfolioSummaryStrip">
@@ -8472,6 +8473,8 @@ function TaxPanel({
               jahr: row.year,
               status: row.status_label,
               altwerte: row.declared_values_configured ? "hinterlegt" : "fehlen",
+              altwert_status: row.declared_values_status,
+              notiz: row.declared_values_note,
               v2_anlage_so_eur: formatCurrency(row.v2_taxable_private_disposals_eur),
               erklaert_anlage_so_eur: row.declared_taxable_private_disposals_eur == null ? "-" : formatCurrency(row.declared_taxable_private_disposals_eur),
               delta_anlage_so_eur: row.delta_taxable_private_disposals_eur == null ? "-" : formatCurrency(row.delta_taxable_private_disposals_eur),
@@ -11110,14 +11113,17 @@ function PriorFilingDeclaredAmountsForm({
           taxable_private_disposals_eur: String(current?.taxable_private_disposals_eur ?? "0.00"),
           rewards_mining_staking_income_eur: String(current?.rewards_mining_staking_income_eur ?? "0.00"),
           derivative_pnl_eur: String(current?.derivative_pnl_eur ?? "0.00"),
-          tax_free_private_disposals_eur: String(current?.tax_free_private_disposals_eur ?? "0.00")
+          tax_free_private_disposals_eur: String(current?.tax_free_private_disposals_eur ?? "0.00"),
+          declared_values_status: String(current?.declared_values_status ?? "unknown"),
+          note: String(current?.note ?? "")
         };
       })
     );
   }, [baseYears, declaredAmounts?.years]);
 
   function updateRow(year: number, key: string, value: string) {
-    setRows((current) => current.map((row) => row.year === year ? { ...row, [key]: value.replace(",", ".") } : row));
+    const nextValue = key.endsWith("_eur") ? value.replace(",", ".") : value;
+    setRows((current) => current.map((row) => row.year === year ? { ...row, [key]: nextValue } : row));
   }
 
   return (
@@ -11137,6 +11143,8 @@ function PriorFilingDeclaredAmountsForm({
               <th>Rewards/Mining</th>
               <th>Derivate</th>
               <th>Steuerfrei archiviert</th>
+              <th>Status</th>
+              <th>Notiz</th>
             </tr>
           </thead>
           <tbody>
@@ -11149,6 +11157,15 @@ function PriorFilingDeclaredAmountsForm({
                   <td><input value={String(row.rewards_mining_staking_income_eur)} onChange={(event) => updateRow(year, "rewards_mining_staking_income_eur", event.target.value)} /></td>
                   <td><input value={String(row.derivative_pnl_eur)} onChange={(event) => updateRow(year, "derivative_pnl_eur", event.target.value)} /></td>
                   <td><input value={String(row.tax_free_private_disposals_eur)} onChange={(event) => updateRow(year, "tax_free_private_disposals_eur", event.target.value)} /></td>
+                  <td>
+                    <select value={String(row.declared_values_status)} onChange={(event) => updateRow(year, "declared_values_status", event.target.value)}>
+                      <option value="unknown">unbekannt</option>
+                      <option value="probably_wrong">vermutlich falsch</option>
+                      <option value="declared_values">belegte Werte</option>
+                      <option value="not_filed">nicht erklaert</option>
+                    </select>
+                  </td>
+                  <td><input value={String(row.note)} onChange={(event) => updateRow(year, "note", event.target.value)} /></td>
                 </tr>
               );
             })}
