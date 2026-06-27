@@ -286,6 +286,52 @@ class TaxBmfSubmissionGuide(BaseModel):
     methodology: str
 
 
+class TaxBmfPriorFilingComparisonYear(BaseModel):
+    year: int
+    status: Literal["match", "delta_review", "missing_declared_values", "empty"]
+    status_label: str
+    declared_values_configured: bool = False
+    v2_taxable_private_disposals_eur: Decimal = Decimal("0")
+    declared_taxable_private_disposals_eur: Decimal | None = None
+    delta_taxable_private_disposals_eur: Decimal | None = None
+    v2_rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    declared_rewards_mining_staking_income_eur: Decimal | None = None
+    delta_rewards_mining_staking_income_eur: Decimal | None = None
+    v2_derivative_pnl_eur: Decimal = Decimal("0")
+    declared_derivative_pnl_eur: Decimal | None = None
+    delta_derivative_pnl_eur: Decimal | None = None
+    v2_tax_free_private_disposals_eur: Decimal = Decimal("0")
+    declared_tax_free_private_disposals_eur: Decimal | None = None
+    delta_tax_free_private_disposals_eur: Decimal | None = None
+    absolute_delta_eur: Decimal = Decimal("0")
+    amendment_review_recommended: bool = False
+    next_action: str
+    setting_key: str
+    filing_summary_endpoint: str
+    correction_map_endpoint: str
+    evidence_package_endpoint: str
+    display_line: str
+
+
+class TaxBmfPriorFilingComparison(BaseModel):
+    generated_at: str
+    setting_key: str
+    setting_exists: bool = False
+    years: list[TaxBmfPriorFilingComparisonYear] = Field(default_factory=list)
+    available_years: list[int] = Field(default_factory=list)
+    match_years: list[int] = Field(default_factory=list)
+    delta_review_years: list[int] = Field(default_factory=list)
+    missing_declared_years: list[int] = Field(default_factory=list)
+    empty_years: list[int] = Field(default_factory=list)
+    total_delta_taxable_private_disposals_eur: Decimal = Decimal("0")
+    total_delta_rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    total_delta_derivative_pnl_eur: Decimal = Decimal("0")
+    total_absolute_delta_eur: Decimal = Decimal("0")
+    example_setting_json: str
+    ascii_table: str
+    methodology: str
+
+
 class TaxBmfClosureBacklogItem(BaseModel):
     year: int
     priority: int = 0

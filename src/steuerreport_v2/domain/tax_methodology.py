@@ -18,6 +18,8 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfFilingReadinessReport,
     TaxBmfFilingReadinessSnapshot,
     TaxBmfFilingReadinessYear,
+    TaxBmfPriorFilingComparison,
+    TaxBmfPriorFilingComparisonYear,
     TaxBmfSubmissionGuide,
     TaxBmfSubmissionGuideYear,
     TaxRewardBmfRecheckReport,
@@ -45,6 +47,8 @@ class TaxMethodologyService:
     EXCHANGE_SEQUENCING_POOLS = {"binance", "bitget", "pionex"}
     DEFAULT_BMF_FILING_READINESS_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_filing_readiness")
     DEFAULT_BMF_CLOSURE_BACKLOG_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_closure_backlog")
+    PRIOR_FILING_DECLARED_AMOUNTS_SETTING = "tax.prior_filing.declared_amounts"
+    PRIOR_FILING_DELTA_TOLERANCE_EUR = Decimal("0.01")
     CONSERVATIVE_REVIEW_ONLY_CODES = {
         "asset_fifo_quote_attribution_documented",
         "gain_evidence_event_level_reconciled",
@@ -726,6 +730,191 @@ class TaxMethodologyService:
             f"{self._eur(row.taxable_private_disposals_eur)} / "
             f"{self._eur(row.rewards_mining_staking_income_eur)} | "
             f"{row.attach_count} | {row.review_requirements_count} | {row.next_action}"
+        )
+
+    def bmf_prior_filing_comparison(self, *, years: list[int] | None = None) -> TaxBmfPriorFilingComparison:
+        generated_at = self._now()
+        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        submission = self.bmf_submission_guide(years=selected_years)
+        declared_by_year, setting_exists = self._prior_filing_declared_amounts()
+        rows = [
+            self._bmf_prior_filing_comparison_year(row, declared_by_year.get(row.year))
+            for row in submission.years
+        ]
+        return TaxBmfPriorFilingComparison(
+            generated_at=generated_at,
+            setting_key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
+            setting_exists=setting_exists,
+            years=rows,
+            available_years=selected_years,
+            match_years=[row.year for row in rows if row.status == "match"],
+            delta_review_years=[row.year for row in rows if row.status == "delta_review"],
+            missing_declared_years=[row.year for row in rows if row.status == "missing_declared_values"],
+            empty_years=[row.year for row in rows if row.status == "empty"],
+            total_delta_taxable_private_disposals_eur=sum(
+                (row.delta_taxable_private_disposals_eur or Decimal("0") for row in rows),
+                Decimal("0"),
+            ),
+            total_delta_rewards_mining_staking_income_eur=sum(
+                (row.delta_rewards_mining_staking_income_eur or Decimal("0") for row in rows),
+                Decimal("0"),
+            ),
+            total_delta_derivative_pnl_eur=sum(
+                (row.delta_derivative_pnl_eur or Decimal("0") for row in rows),
+                Decimal("0"),
+            ),
+            total_absolute_delta_eur=sum((row.absolute_delta_eur for row in rows), Decimal("0")),
+            example_setting_json=self._prior_filing_example_json(),
+            ascii_table=self._bmf_prior_filing_ascii(rows),
+            methodology=(
+                "Read-only Vergleich zwischen V2-Abgabehilfe und optional hinterlegten "
+                f"Alt-Erklaerungswerten aus Admin-Setting {self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING}. "
+                "Positive Deltas bedeuten: V2 liegt ueber dem erklaerten Wert; negative Deltas "
+                "bedeuten: V2 liegt darunter. Der Vergleich schreibt keine Steuerdaten und "
+                "entscheidet nicht automatisch ueber Nachreichung oder Einspruch."
+            ),
+        )
+
+    def _prior_filing_declared_amounts(self) -> tuple[dict[int, dict[str, Decimal]], bool]:
+        raw = None
+        for setting in self.store.list_admin_settings():
+            if setting.key == self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING:
+                raw = setting.value_json
+                break
+        if raw is None:
+            return {}, False
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            return {}, True
+        years_payload = payload.get("years") if isinstance(payload, dict) else payload
+        if not isinstance(years_payload, dict):
+            return {}, True
+        parsed: dict[int, dict[str, Decimal]] = {}
+        for year_key, item in years_payload.items():
+            if not isinstance(item, dict):
+                continue
+            try:
+                year = int(year_key)
+            except Exception:
+                continue
+            parsed[year] = {
+                "taxable_private_disposals_eur": self._optional_decimal(item.get("taxable_private_disposals_eur")),
+                "rewards_mining_staking_income_eur": self._optional_decimal(
+                    item.get("rewards_mining_staking_income_eur")
+                ),
+                "derivative_pnl_eur": self._optional_decimal(item.get("derivative_pnl_eur")),
+                "tax_free_private_disposals_eur": self._optional_decimal(item.get("tax_free_private_disposals_eur")),
+            }
+        return parsed, True
+
+    def _bmf_prior_filing_comparison_year(
+        self,
+        row: TaxBmfSubmissionGuideYear,
+        declared: dict[str, Decimal] | None,
+    ) -> TaxBmfPriorFilingComparisonYear:
+        if declared is None:
+            status = "empty" if row.status == "empty" else "missing_declared_values"
+            result = TaxBmfPriorFilingComparisonYear(
+                year=row.year,
+                status=status,  # type: ignore[arg-type]
+                status_label="Keine Altwerte hinterlegt" if status == "missing_declared_values" else "Keine Aktivitaet",
+                declared_values_configured=False,
+                v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
+                v2_rewards_mining_staking_income_eur=row.rewards_mining_staking_income_eur,
+                v2_derivative_pnl_eur=row.derivative_pnl_eur,
+                v2_tax_free_private_disposals_eur=row.tax_free_private_disposals_eur,
+                amendment_review_recommended=status == "missing_declared_values",
+                next_action=(
+                    f"Altwerte im Admin-Setting {self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING} hinterlegen."
+                    if status == "missing_declared_values"
+                    else "Keine Aktion."
+                ),
+                setting_key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
+                filing_summary_endpoint=row.filing_summary_endpoint,
+                correction_map_endpoint=row.correction_map_endpoint,
+                evidence_package_endpoint=row.evidence_package_endpoint,
+                display_line="",
+            )
+            result.display_line = self._bmf_prior_filing_line(result)
+            return result
+
+        delta_taxable = row.taxable_private_disposals_eur - declared["taxable_private_disposals_eur"]
+        delta_rewards = row.rewards_mining_staking_income_eur - declared["rewards_mining_staking_income_eur"]
+        delta_derivatives = row.derivative_pnl_eur - declared["derivative_pnl_eur"]
+        delta_tax_free = row.tax_free_private_disposals_eur - declared["tax_free_private_disposals_eur"]
+        absolute_delta = sum(
+            (abs(value) for value in [delta_taxable, delta_rewards, delta_derivatives, delta_tax_free]),
+            Decimal("0"),
+        )
+        has_delta = absolute_delta > self.PRIOR_FILING_DELTA_TOLERANCE_EUR
+        result = TaxBmfPriorFilingComparisonYear(
+            year=row.year,
+            status="delta_review" if has_delta else "match",
+            status_label="Abweichung pruefen" if has_delta else "Altwerte passen",
+            declared_values_configured=True,
+            v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
+            declared_taxable_private_disposals_eur=declared["taxable_private_disposals_eur"],
+            delta_taxable_private_disposals_eur=delta_taxable,
+            v2_rewards_mining_staking_income_eur=row.rewards_mining_staking_income_eur,
+            declared_rewards_mining_staking_income_eur=declared["rewards_mining_staking_income_eur"],
+            delta_rewards_mining_staking_income_eur=delta_rewards,
+            v2_derivative_pnl_eur=row.derivative_pnl_eur,
+            declared_derivative_pnl_eur=declared["derivative_pnl_eur"],
+            delta_derivative_pnl_eur=delta_derivatives,
+            v2_tax_free_private_disposals_eur=row.tax_free_private_disposals_eur,
+            declared_tax_free_private_disposals_eur=declared["tax_free_private_disposals_eur"],
+            delta_tax_free_private_disposals_eur=delta_tax_free,
+            absolute_delta_eur=absolute_delta,
+            amendment_review_recommended=has_delta,
+            next_action=(
+                "Differenz mit der urspruenglichen Steuererklaerung und Belegen pruefen."
+                if has_delta
+                else "Altwerte archivieren; keine rechnerische Abweichung oberhalb 0,01 EUR."
+            ),
+            setting_key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
+            filing_summary_endpoint=row.filing_summary_endpoint,
+            correction_map_endpoint=row.correction_map_endpoint,
+            evidence_package_endpoint=row.evidence_package_endpoint,
+            display_line="",
+        )
+        result.display_line = self._bmf_prior_filing_line(result)
+        return result
+
+    def _optional_decimal(self, value) -> Decimal:
+        if value is None or value == "":
+            return Decimal("0")
+        return Decimal(str(value))
+
+    def _prior_filing_example_json(self) -> str:
+        return json.dumps(
+            {
+                "years": {
+                    "2021": {
+                        "taxable_private_disposals_eur": "0.00",
+                        "rewards_mining_staking_income_eur": "11000.00",
+                        "derivative_pnl_eur": "0.00",
+                        "tax_free_private_disposals_eur": "0.00",
+                    }
+                }
+            },
+            indent=2,
+        )
+
+    def _bmf_prior_filing_ascii(self, rows: list[TaxBmfPriorFilingComparisonYear]) -> str:
+        if not rows:
+            return "Jahr | Status | Delta SO | Delta Rewards | Delta Derivate | Aktion"
+        header = "Jahr | Status | Delta SO | Delta Rewards | Delta Derivate | Aktion"
+        separator = "-----|--------|----------|---------------|----------------|-------"
+        return "\n".join([header, separator, *(row.display_line for row in rows)])
+
+    def _bmf_prior_filing_line(self, row: TaxBmfPriorFilingComparisonYear) -> str:
+        return (
+            f"{row.year} | {row.status_label} | "
+            f"{self._eur(row.delta_taxable_private_disposals_eur or Decimal('0'))} | "
+            f"{self._eur(row.delta_rewards_mining_staking_income_eur or Decimal('0'))} | "
+            f"{self._eur(row.delta_derivative_pnl_eur or Decimal('0'))} | "
+            f"{row.next_action}"
         )
 
     def write_bmf_filing_readiness_snapshot(

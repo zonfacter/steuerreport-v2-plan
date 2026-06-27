@@ -800,6 +800,24 @@ type Snapshot = {
     ascii_table: string;
     methodology: string;
   };
+  taxBmfPriorFilingComparison?: {
+    generated_at: string;
+    setting_key: string;
+    setting_exists: boolean;
+    years: Array<Record<string, unknown>>;
+    available_years: number[];
+    match_years: number[];
+    delta_review_years: number[];
+    missing_declared_years: number[];
+    empty_years: number[];
+    total_delta_taxable_private_disposals_eur: string;
+    total_delta_rewards_mining_staking_income_eur: string;
+    total_delta_derivative_pnl_eur: string;
+    total_absolute_delta_eur: string;
+    example_setting_json: string;
+    ascii_table: string;
+    methodology: string;
+  };
   taxYearMethodology?: {
     year: number;
     generated_at: string;
@@ -1845,6 +1863,7 @@ function App() {
         taxBmfActionPlan: { key: "taxBmfActionPlan", label: "BMF-Aktionsliste", load: () => getApi<Snapshot["taxBmfActionPlan"]>(`/api/v1/tax-methodology/bmf-action-plan?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxBmfFinalizationMatrix: { key: "taxBmfFinalizationMatrix", label: "BMF-Finalisierung", load: () => getApi<Snapshot["taxBmfFinalizationMatrix"]>("/api/v1/tax-methodology/bmf-finalization-matrix") },
         taxBmfSubmissionGuide: { key: "taxBmfSubmissionGuide", label: "BMF-Abgabehilfe", load: () => getApi<Snapshot["taxBmfSubmissionGuide"]>("/api/v1/tax-methodology/bmf-submission-guide") },
+        taxBmfPriorFilingComparison: { key: "taxBmfPriorFilingComparison", label: "Alt-Erklaerungsvergleich", load: () => getApi<Snapshot["taxBmfPriorFilingComparison"]>("/api/v1/tax-methodology/bmf-prior-filing-comparison") },
         taxYearDetail: { key: "taxYearDetail", label: "Steuerjahr-Detail", load: () => getApi<Snapshot["taxYearDetail"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}`) },
         taxDeclarationGuide: { key: "taxDeclarationGuide", label: "Steuererklaerungshilfe", load: () => getApi<Snapshot["taxDeclarationGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/declaration-guide`) },
         taxYearFilingSummary: { key: "taxYearFilingSummary", label: "Steuerjahr-Erklaerung", load: () => getApi<Snapshot["taxYearFilingSummary"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/filing-summary`) },
@@ -1914,6 +1933,7 @@ function App() {
         "taxYearsCorrectionMap",
         "taxBmfFinalizationMatrix",
         "taxBmfSubmissionGuide",
+        "taxBmfPriorFilingComparison",
         "taxYearDetail",
         "taxDeclarationGuide",
         "taxYearFilingSummary",
@@ -3517,6 +3537,7 @@ function Content({
         taxBmfActionPlan={snapshot.taxBmfActionPlan}
         taxBmfFinalizationMatrix={snapshot.taxBmfFinalizationMatrix}
         taxBmfSubmissionGuide={snapshot.taxBmfSubmissionGuide}
+        taxBmfPriorFilingComparison={snapshot.taxBmfPriorFilingComparison}
         taxYearDetail={snapshot.taxYearDetail}
         taxDeclarationGuide={snapshot.taxDeclarationGuide}
         taxYearFilingSummary={snapshot.taxYearFilingSummary}
@@ -7962,6 +7983,7 @@ function TaxPanel({
   taxBmfActionPlan,
   taxBmfFinalizationMatrix,
   taxBmfSubmissionGuide,
+  taxBmfPriorFilingComparison,
   taxYearDetail,
   taxDeclarationGuide,
   taxYearFilingSummary,
@@ -8036,6 +8058,7 @@ function TaxPanel({
   taxBmfActionPlan: Snapshot["taxBmfActionPlan"];
   taxBmfFinalizationMatrix: Snapshot["taxBmfFinalizationMatrix"];
   taxBmfSubmissionGuide: Snapshot["taxBmfSubmissionGuide"];
+  taxBmfPriorFilingComparison: Snapshot["taxBmfPriorFilingComparison"];
   taxYearDetail: Snapshot["taxYearDetail"];
   taxDeclarationGuide: Snapshot["taxDeclarationGuide"];
   taxYearFilingSummary: Snapshot["taxYearFilingSummary"];
@@ -8381,6 +8404,81 @@ function TaxPanel({
           {taxBmfSubmissionGuide.ascii_table ? (
             <pre className="asciiTable" aria-label="Kopierbare BMF-Abgabehilfe">
               {taxBmfSubmissionGuide.ascii_table}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+
+      {taxBmfPriorFilingComparison ? (
+        <div className="panel declarationGuidePanel">
+          <div className="panelToolbar">
+            <strong>Alt-Erklaerungsvergleich</strong>
+            <span className={`statusPill ${(taxBmfPriorFilingComparison.delta_review_years ?? []).length > 0 ? "warning" : (taxBmfPriorFilingComparison.missing_declared_years ?? []).length > 0 ? "warning" : "ok"}`}>
+              {(taxBmfPriorFilingComparison.delta_review_years ?? []).length} Abweichung · {(taxBmfPriorFilingComparison.missing_declared_years ?? []).length} ohne Altwert
+            </span>
+          </div>
+          <div className="portfolioSummaryStrip">
+            <Metric title="Delta Anlage SO" value={`${formatCurrency(taxBmfPriorFilingComparison.total_delta_taxable_private_disposals_eur)} EUR`} />
+            <Metric title="Delta Rewards" value={`${formatCurrency(taxBmfPriorFilingComparison.total_delta_rewards_mining_staking_income_eur)} EUR`} />
+            <Metric title="Delta Derivate" value={`${formatCurrency(taxBmfPriorFilingComparison.total_delta_derivative_pnl_eur)} EUR`} />
+            <Metric title="Absolute Abweichung" value={`${formatCurrency(taxBmfPriorFilingComparison.total_absolute_delta_eur)} EUR`} />
+          </div>
+          <TablePanel
+            title="V2 gegen urspruenglich erklaerte Werte"
+            rows={(taxBmfPriorFilingComparison.years ?? []).map((row) => ({
+              jahr: row.year,
+              status: row.status_label,
+              altwerte: row.declared_values_configured ? "hinterlegt" : "fehlen",
+              v2_anlage_so_eur: formatCurrency(row.v2_taxable_private_disposals_eur),
+              erklaert_anlage_so_eur: row.declared_taxable_private_disposals_eur == null ? "-" : formatCurrency(row.declared_taxable_private_disposals_eur),
+              delta_anlage_so_eur: row.delta_taxable_private_disposals_eur == null ? "-" : formatCurrency(row.delta_taxable_private_disposals_eur),
+              v2_rewards_eur: formatCurrency(row.v2_rewards_mining_staking_income_eur),
+              erklaert_rewards_eur: row.declared_rewards_mining_staking_income_eur == null ? "-" : formatCurrency(row.declared_rewards_mining_staking_income_eur),
+              delta_rewards_eur: row.delta_rewards_mining_staking_income_eur == null ? "-" : formatCurrency(row.delta_rewards_mining_staking_income_eur),
+              absolut_delta_eur: formatCurrency(row.absolute_delta_eur),
+              naechster_schritt: row.next_action,
+              filing: row.filing_summary_endpoint,
+              korrektur: row.correction_map_endpoint,
+              paket: row.evidence_package_endpoint
+            }))}
+            compact
+            rowActions={[
+              {
+                label: "Jahr oeffnen",
+                icon: <ReceiptText size={16} />,
+                onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
+              },
+              {
+                label: "Korrekturkarte",
+                icon: <FileJson size={16} />,
+                onClick: (row) => onDownload(String(row.korrektur ?? ""))
+              },
+              {
+                label: "Belegpaket",
+                icon: <PackageCheck size={16} />,
+                onClick: (row) => onDownload(String(row.paket ?? ""))
+              }
+            ]}
+            footer={taxBmfPriorFilingComparison.methodology}
+          />
+          {!taxBmfPriorFilingComparison.setting_exists ? (
+            <div className="evidenceCard">
+              <div className="evidenceCardHeader">
+                <strong>Altwerte hinterlegen</strong>
+                <span className="statusPill warning">Admin-Setting fehlt</span>
+              </div>
+              <p>
+                Lege im Admin-Bereich das Setting <code>{taxBmfPriorFilingComparison.setting_key}</code> an.
+                Danach kann V2 die urspruenglich erklaerten Werte je Jahr gegenrechnen.
+              </p>
+              <pre className="asciiTable" aria-label="Beispiel JSON fuer Alt-Erklaerungswerte">
+                {taxBmfPriorFilingComparison.example_setting_json}
+              </pre>
+            </div>
+          ) : null}
+          {taxBmfPriorFilingComparison.ascii_table ? (
+            <pre className="asciiTable" aria-label="Kopierbarer Alt-Erklaerungsvergleich">
+              {taxBmfPriorFilingComparison.ascii_table}
             </pre>
           ) : null}
         </div>
