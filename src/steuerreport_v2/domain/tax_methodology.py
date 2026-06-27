@@ -12,6 +12,9 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfClosureBacklogReport,
     TaxBmfClosureBacklogSnapshot,
     TaxBmfClosureBacklogYear,
+    TaxBmfFinalizationMatrix,
+    TaxBmfFinalizationRequirement,
+    TaxBmfFinalizationYear,
     TaxBmfFilingReadinessReport,
     TaxBmfFilingReadinessSnapshot,
     TaxBmfFilingReadinessYear,
@@ -28,6 +31,7 @@ from steuerreport_v2.contracts.tax_methodology import (
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 from steuerreport_v2.domain.tax_years import TaxYearService
+from steuerreport_v2.domain.valuation import PriceQualityService
 
 
 class TaxMethodologyService:
@@ -313,6 +317,80 @@ class TaxMethodologyService:
             note="Read-only Snapshot aus var/bmf_filing_readiness; API berechnet dabei keine Methodology neu.",
         )
 
+    def bmf_finalization_matrix(
+        self,
+        *,
+        years: list[int] | None = None,
+        include_reward_recheck: bool = False,
+    ) -> TaxBmfFinalizationMatrix:
+        generated_at = self._now()
+        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        snapshot = self.bmf_filing_readiness_snapshot()
+        if snapshot.status == "available" and snapshot.report is not None:
+            readiness = snapshot.report
+        else:
+            readiness = self.bmf_filing_readiness()
+        readiness_by_year = {row.year: row for row in readiness.years}
+        filing = self.tax_years.filing_matrix()
+        if not all(year in {row.year for row in filing.rows} for year in selected_years):
+            filing = self.tax_years.filing_matrix(years=selected_years)
+        filing_by_year = {row.year: row for row in filing.rows}
+        correction = self.tax_years.correction_map()
+        if not all(year in {row.year for row in correction.years} for year in selected_years):
+            correction = self.tax_years.correction_map(years=selected_years)
+        correction_by_year = {row.year: row for row in correction.years}
+        reward_by_year: dict[int, object] = {}
+        if include_reward_recheck:
+            reward = self.reward_bmf_recheck()
+            reward_by_year = {row.year: row for row in reward.years}
+        stablecoin_anchor = PriceQualityService(self.store).stablecoin_fx_anchor_preview_latest()
+        stablecoin_groups_by_year: dict[int, list[object]] = {}
+        for group in stablecoin_anchor.groups:
+            stablecoin_groups_by_year.setdefault(group.year, []).append(group)
+
+        rows = [
+            self._bmf_finalization_year(
+                year,
+                readiness=readiness_by_year.get(year),
+                filing=filing_by_year.get(year),
+                correction=correction_by_year.get(year),
+                reward=reward_by_year.get(year),
+                stablecoin_groups=stablecoin_groups_by_year.get(year, []),
+            )
+            for year in selected_years
+        ]
+        return TaxBmfFinalizationMatrix(
+            generated_at=generated_at,
+            years=rows,
+            available_years=selected_years,
+            ready_years=[row.year for row in rows if row.finalization_status == "bmf_ready"],
+            conservative_ready_years=[
+                row.year for row in rows if row.finalization_status == "conservative_ready"
+            ],
+            review_years=[row.year for row in rows if row.finalization_status == "review_required"],
+            blocked_years=[row.year for row in rows if row.finalization_status == "blocked"],
+            empty_years=[row.year for row in rows if row.finalization_status == "empty"],
+            total_taxable_private_disposals_eur=sum(
+                (row.taxable_private_disposals_eur for row in rows),
+                Decimal("0"),
+            ),
+            total_rewards_mining_staking_income_eur=sum(
+                (row.rewards_mining_staking_income_eur for row in rows),
+                Decimal("0"),
+            ),
+            total_derivative_pnl_eur=sum((row.derivative_pnl_eur for row in rows), Decimal("0")),
+            ascii_table=self._bmf_finalization_ascii(rows),
+            methodology=(
+                "Read-only BMF-Finalisierungsmatrix fuer 2021-2025. Kombiniert "
+                "BMF-Filing-Readiness, Filing-Matrix, Korrekturkarte, Evidence-Status "
+                "und Stablecoin-FX-Ankerstatus. Der teure Reward-Recheck wird nur mit "
+                "include_reward_recheck=true live geladen; die schnelle Dashboard-"
+                "Ansicht nutzt die im Readiness-Snapshot enthaltenen Reward-Summen. "
+                "Die Matrix ist eine Arbeits-/Abschlussampel und schreibt keine Imports, "
+                "Preise, FIFO-Lots, Tax-Lines oder Review-Entscheidungen."
+            ),
+        )
+
     def write_bmf_filing_readiness_snapshot(
         self,
         *,
@@ -328,6 +406,293 @@ class TaxMethodologyService:
         artifact.write_bytes(content)
         latest.write_bytes(content)
         return latest
+
+    def _bmf_finalization_year(
+        self,
+        year: int,
+        *,
+        readiness: TaxBmfFilingReadinessYear | None,
+        filing,
+        correction,
+        reward,
+        stablecoin_groups: list[object],
+    ) -> TaxBmfFinalizationYear:
+        if readiness is None:
+            readiness = self._bmf_filing_readiness_year(year, payment_row=None)
+        requirements = self._bmf_finalization_requirements(
+            year,
+            readiness=readiness,
+            filing=filing,
+            correction=correction,
+            reward=reward,
+            stablecoin_groups=stablecoin_groups,
+        )
+        blocking_count = sum(1 for item in requirements if item.status == "blocked")
+        review_count = sum(1 for item in requirements if item.status == "review")
+        finalization_status = self._bmf_finalization_status(readiness, blocking_count, review_count)
+        status_label = self._bmf_finalization_label(finalization_status)
+        evidence_refs = [
+            ref
+            for ref in [
+                readiness.methodology_endpoint,
+                readiness.filing_summary_endpoint,
+                readiness.bmf_closure_appendix_endpoint,
+                readiness.evidence_package_endpoint,
+                f"/api/v1/tax-years/{year}/evidence",
+                f"/api/v1/tax-years/{year}/correction-map",
+            ]
+            if ref
+        ]
+        tax_free = (
+            filing.tax_free_private_disposals_eur
+            if filing is not None
+            else Decimal("0")
+        )
+        correction_review = bool(
+            correction.amendment_review_recommended
+            if correction is not None
+            else finalization_status in {"review_required", "blocked"}
+        )
+        return TaxBmfFinalizationYear(
+            year=year,
+            finalization_status=finalization_status,
+            status_label=status_label,
+            can_submit=finalization_status == "bmf_ready",
+            can_submit_conservative=finalization_status in {"bmf_ready", "conservative_ready"},
+            correction_review_recommended=correction_review,
+            taxable_private_disposals_eur=readiness.taxable_private_disposals_eur,
+            rewards_mining_staking_income_eur=readiness.rewards_mining_staking_income_eur,
+            derivative_pnl_eur=readiness.derivative_pnl_eur,
+            tax_free_private_disposals_eur=tax_free,
+            blocking_count=blocking_count,
+            review_count=review_count,
+            evidence_refs=evidence_refs,
+            requirements=requirements,
+            next_action=self._bmf_finalization_next_action(finalization_status, readiness, requirements),
+            filing_summary_endpoint=readiness.filing_summary_endpoint,
+            correction_map_endpoint=f"/api/v1/tax-years/{year}/correction-map",
+            evidence_package_endpoint=readiness.evidence_package_endpoint,
+            display_line=self._bmf_finalization_line(
+                year=year,
+                label=status_label,
+                taxable_private_disposals_eur=readiness.taxable_private_disposals_eur,
+                rewards_mining_staking_income_eur=readiness.rewards_mining_staking_income_eur,
+                derivative_pnl_eur=readiness.derivative_pnl_eur,
+                blocking_count=blocking_count,
+                review_count=review_count,
+            ),
+        )
+
+    def _bmf_finalization_requirements(
+        self,
+        year: int,
+        *,
+        readiness: TaxBmfFilingReadinessYear,
+        filing,
+        correction,
+        reward,
+        stablecoin_groups: list[object],
+    ) -> list[TaxBmfFinalizationRequirement]:
+        requirement_rows: list[TaxBmfFinalizationRequirement] = []
+        blocking_codes = set(readiness.blocking_gap_codes)
+        review_codes = set(readiness.review_gap_codes)
+        status = "blocked" if blocking_codes else "review" if review_codes else "ok"
+        if readiness.filing_status == "empty":
+            status = "empty"
+        requirement_rows.append(
+            TaxBmfFinalizationRequirement(
+                key="fifo_traceability",
+                label="FIFO / Haltefrist / Tax-Lines",
+                status=status,  # type: ignore[arg-type]
+                detail=(
+                    "BMF-Methodik meldet keine offenen FIFO-Blocker."
+                    if status == "ok"
+                    else f"Offene Codes: {', '.join(sorted(blocking_codes | review_codes))}"
+                ),
+                evidence_ref=readiness.methodology_endpoint,
+            )
+        )
+
+        reward_status = "ok"
+        reward_detail = "Keine offenen Reward-/Mining-Abweichungen."
+        if reward is not None and getattr(reward, "consistency_status", "ok") == "review":
+            reward_status = "review"
+            flags = getattr(reward, "flags", [])
+            reward_detail = "Reward-Recheck pruefen: " + (", ".join(flags) if flags else "Review-Signal vorhanden")
+        elif readiness.rewards_mining_staking_income_eur == 0:
+            reward_status = "empty"
+            reward_detail = "Keine Reward-/Mining-/Staking-Einnahmen in diesem Jahr."
+        requirement_rows.append(
+            TaxBmfFinalizationRequirement(
+                key="income_rewards_mining",
+                label="Rewards / Mining / Staking",
+                status=reward_status,  # type: ignore[arg-type]
+                detail=reward_detail,
+                evidence_ref=f"/api/v1/tax-years/{year}/income-guide",
+            )
+        )
+
+        private_status = "ok" if readiness.taxable_private_disposals_eur or readiness.filing_status != "empty" else "empty"
+        requirement_rows.append(
+            TaxBmfFinalizationRequirement(
+                key="private_disposals",
+                label="Private Veraeusserungen",
+                status=private_status,  # type: ignore[arg-type]
+                detail=(
+                    f"Steuerpflichtiger privater G/V: {self._eur(readiness.taxable_private_disposals_eur)}."
+                    if private_status != "empty"
+                    else "Keine steuerpflichtigen privaten Veraeusserungen aus V2-Werten."
+                ),
+                evidence_ref=readiness.filing_summary_endpoint,
+            )
+        )
+
+        transfer_status = "blocked" if any(code.startswith("wallet_fifo") for code in blocking_codes) else (
+            "review" if readiness.appendix_items_count or any(code.startswith("wallet_fifo") for code in review_codes) else "ok"
+        )
+        requirement_rows.append(
+            TaxBmfFinalizationRequirement(
+                key="transfers_provenance",
+                label="Transfers / Depotwechsel / Herkunft",
+                status=transfer_status,  # type: ignore[arg-type]
+                detail=(
+                    f"Appendix-Positionen: {readiness.appendix_items_count}, manuell: {readiness.appendix_manual_evidence_required_count}."
+                    if transfer_status != "ok"
+                    else "Keine offene Transfer-/Herkunftsbeilage fuer dieses Jahr."
+                ),
+                evidence_ref=readiness.bmf_closure_appendix_endpoint,
+            )
+        )
+
+        stablecoin_review = [
+            group for group in stablecoin_groups if getattr(group, "status", "") in {"ready_for_review", "incomplete"}
+        ]
+        price_blocked = "missing_price_groups" in blocking_codes or any(
+            getattr(group, "status", "") == "incomplete" for group in stablecoin_groups
+        )
+        price_review = bool(stablecoin_review) or any(
+            code in review_codes
+            for code in {"asset_fifo_quote_attribution_documented", "asset_fifo_possible_recalculation"}
+        )
+        price_status = "blocked" if price_blocked else "review" if price_review else "ok"
+        requirement_rows.append(
+            TaxBmfFinalizationRequirement(
+                key="prices_fx",
+                label="Preise / FX / Stablecoins",
+                status=price_status,  # type: ignore[arg-type]
+                detail=(
+                    f"Stablecoin-FX-Gruppen offen: {len(stablecoin_review)}."
+                    if stablecoin_review
+                    else "Keine offenen Preis-/FX-Blocker in der Finalisierungsmatrix."
+                ),
+                evidence_ref="/api/v1/prices/quality/stablecoin-fx-anchor-preview-latest",
+            )
+        )
+
+        filing_status = "ok" if filing is not None and filing.action_status in {"ready", "conservative_ready"} else (
+            "review" if filing is not None else "blocked"
+        )
+        requirement_rows.append(
+            TaxBmfFinalizationRequirement(
+                key="declaration_help",
+                label="Steuererklaerungshilfe",
+                status=filing_status,  # type: ignore[arg-type]
+                detail=(
+                    filing.next_action
+                    if filing is not None
+                    else "Filing-Matrix fuer dieses Jahr konnte nicht erzeugt werden."
+                ),
+                evidence_ref=readiness.filing_summary_endpoint,
+            )
+        )
+
+        evidence_status = "blocked" if readiness.filing_status == "blocked" else (
+            "review" if correction is not None and correction.amendment_review_recommended else "ok"
+        )
+        requirement_rows.append(
+            TaxBmfFinalizationRequirement(
+                key="evidence_package",
+                label="Belegpaket / Korrekturkarte",
+                status=evidence_status,  # type: ignore[arg-type]
+                detail=(
+                    correction.amendment_reason
+                    if correction is not None
+                    else "Jahresbelegpaket und Korrekturkarte verlinkt."
+                ),
+                evidence_ref=readiness.evidence_package_endpoint,
+            )
+        )
+        return requirement_rows
+
+    @staticmethod
+    def _bmf_finalization_status(
+        readiness: TaxBmfFilingReadinessYear,
+        blocking_count: int,
+        review_count: int,
+    ) -> str:
+        if readiness.filing_status == "empty":
+            return "empty"
+        if blocking_count:
+            return "blocked"
+        if readiness.filing_status == "bmf_ready" and review_count == 0:
+            return "bmf_ready"
+        if readiness.filing_status in {"bmf_ready", "conservative_appendix"}:
+            return "conservative_ready"
+        return "review_required"
+
+    @staticmethod
+    def _bmf_finalization_label(status: str) -> str:
+        labels = {
+            "bmf_ready": "BMF-ready",
+            "conservative_ready": "Konservativ einreichbar",
+            "review_required": "Review noetig",
+            "blocked": "Blockiert",
+            "empty": "Keine V2-Aktivitaet",
+        }
+        return labels.get(status, status)
+
+    @staticmethod
+    def _bmf_finalization_next_action(
+        status: str,
+        readiness: TaxBmfFilingReadinessYear,
+        requirements: list[TaxBmfFinalizationRequirement],
+    ) -> str:
+        if status == "bmf_ready":
+            return "Filing Summary, Checkliste und Jahresbelegpaket fuer die Erklaerung verwenden."
+        if status == "conservative_ready":
+            return "Konservative Beilage/Korrekturkarte beilegen und offene Review-Hinweise nicht als steuerneutrale Transfers behaupten."
+        if status == "empty":
+            return "Keine V2-Eingabewerte; optional Jahresbeleg archivieren."
+        first_blocker = next((item for item in requirements if item.status == "blocked"), None)
+        if first_blocker is not None:
+            return f"Blocker schliessen: {first_blocker.label}."
+        return readiness.next_action
+
+    def _bmf_finalization_ascii(self, rows: list[TaxBmfFinalizationYear]) -> str:
+        if not rows:
+            return "Jahr | Status | Privat G/V | Rewards | Derivate | Blocker | Review"
+        header = "Jahr | Status | Privat G/V | Rewards | Derivate | Blocker | Review"
+        separator = "-----|--------|------------|---------|----------|---------|-------"
+        return "\n".join([header, separator, *(row.display_line for row in rows)])
+
+    def _bmf_finalization_line(
+        self,
+        *,
+        year: int,
+        label: str,
+        taxable_private_disposals_eur: Decimal,
+        rewards_mining_staking_income_eur: Decimal,
+        derivative_pnl_eur: Decimal,
+        blocking_count: int,
+        review_count: int,
+    ) -> str:
+        return (
+            f"{year} | {label} | "
+            f"{self._eur(taxable_private_disposals_eur)} | "
+            f"{self._eur(rewards_mining_staking_income_eur)} | "
+            f"{self._eur(derivative_pnl_eur)} | "
+            f"{blocking_count} | {review_count}"
+        )
 
     def reward_bmf_recheck(self) -> TaxRewardBmfRecheckReport:
         generated_at = self._now()

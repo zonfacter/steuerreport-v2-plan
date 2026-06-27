@@ -179,6 +179,60 @@ class TaxBmfFilingReadinessSnapshot(BaseModel):
     note: str
 
 
+class TaxBmfFinalizationRequirement(BaseModel):
+    key: Literal[
+        "fifo_traceability",
+        "income_rewards_mining",
+        "private_disposals",
+        "transfers_provenance",
+        "prices_fx",
+        "declaration_help",
+        "evidence_package",
+    ]
+    label: str
+    status: Literal["ok", "review", "blocked", "empty"]
+    detail: str
+    evidence_ref: str | None = None
+
+
+class TaxBmfFinalizationYear(BaseModel):
+    year: int
+    finalization_status: Literal["bmf_ready", "conservative_ready", "review_required", "blocked", "empty"]
+    status_label: str
+    can_submit: bool = False
+    can_submit_conservative: bool = False
+    correction_review_recommended: bool = False
+    taxable_private_disposals_eur: Decimal = Decimal("0")
+    rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    derivative_pnl_eur: Decimal = Decimal("0")
+    tax_free_private_disposals_eur: Decimal = Decimal("0")
+    blocking_count: int = 0
+    review_count: int = 0
+    evidence_refs: list[str] = Field(default_factory=list)
+    requirements: list[TaxBmfFinalizationRequirement] = Field(default_factory=list)
+    next_action: str
+    filing_summary_endpoint: str
+    correction_map_endpoint: str
+    evidence_package_endpoint: str
+    display_line: str
+
+
+class TaxBmfFinalizationMatrix(BaseModel):
+    generated_at: str
+    years: list[TaxBmfFinalizationYear] = Field(default_factory=list)
+    available_years: list[int] = Field(default_factory=list)
+    ready_years: list[int] = Field(default_factory=list)
+    conservative_ready_years: list[int] = Field(default_factory=list)
+    review_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    empty_years: list[int] = Field(default_factory=list)
+    total_taxable_private_disposals_eur: Decimal = Decimal("0")
+    total_rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    total_derivative_pnl_eur: Decimal = Decimal("0")
+    ascii_table: str
+    methodology: str
+
+
 class TaxBmfClosureBacklogItem(BaseModel):
     year: int
     priority: int = 0

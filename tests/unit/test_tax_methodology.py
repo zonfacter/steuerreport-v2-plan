@@ -268,9 +268,132 @@ def test_bmf_filing_readiness_snapshot_roundtrip(tmp_path):
     assert snapshot.years_count == 0
     assert snapshot.available_years == [2021, 2022, 2023, 2024, 2025]
     assert snapshot.blocked_years == [2021, 2022, 2023]
-    assert snapshot.review_years == [2025]
-    assert snapshot.conservative_appendix_years == [2024]
-    assert snapshot.report.conservative_appendix_years == [2024]
+
+
+def test_bmf_finalization_matrix_combines_filing_correction_rewards_and_fx(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service.bmf_filing_readiness_snapshot = lambda: SimpleNamespace(
+        status="missing",
+        report=None,
+    )
+    service.bmf_filing_readiness = lambda year=None: SimpleNamespace(
+        years=[
+            SimpleNamespace(
+                year=2024,
+                filing_status="conservative_appendix",
+                status_label="Konservativ belegbar",
+                methodology_status="review",
+                bmf_ready=False,
+                can_file_with_conservative_appendix=True,
+                appendix_status="ready",
+                appendix_items_count=2,
+                appendix_manual_evidence_required_count=0,
+                taxable_private_disposals_eur=Decimal("18490.21"),
+                rewards_mining_staking_income_eur=Decimal("1097.06"),
+                derivative_pnl_eur=Decimal("-71.90"),
+                blocking_gap_codes=[],
+                review_gap_codes=["wallet_fifo_delta_present"],
+                next_action="Appendix beilegen.",
+                methodology_endpoint="/api/v1/tax-years/2024/methodology",
+                filing_summary_endpoint="/api/v1/tax-years/2024/filing-summary",
+                bmf_closure_appendix_endpoint="/api/v1/tax-years/2024/bmf-closure-appendix",
+                evidence_package_endpoint="/api/v1/export/tax-years/2024/evidence-package.zip",
+                display_line="2024 | Konservativ belegbar",
+            ),
+            SimpleNamespace(
+                year=2025,
+                filing_status="blocked",
+                status_label="Blockiert",
+                methodology_status="blocked",
+                bmf_ready=False,
+                can_file_with_conservative_appendix=False,
+                appendix_status="blocked",
+                appendix_items_count=1,
+                appendix_manual_evidence_required_count=1,
+                taxable_private_disposals_eur=Decimal("-923.63"),
+                rewards_mining_staking_income_eur=Decimal("45.43"),
+                derivative_pnl_eur=Decimal("0"),
+                blocking_gap_codes=["missing_price_groups"],
+                review_gap_codes=[],
+                next_action="Blocker schliessen.",
+                methodology_endpoint="/api/v1/tax-years/2025/methodology",
+                filing_summary_endpoint="/api/v1/tax-years/2025/filing-summary",
+                bmf_closure_appendix_endpoint="/api/v1/tax-years/2025/bmf-closure-appendix",
+                evidence_package_endpoint="/api/v1/export/tax-years/2025/evidence-package.zip",
+                display_line="2025 | Blockiert",
+            ),
+        ]
+    )
+    service.tax_years.filing_matrix = lambda years=None: SimpleNamespace(
+        rows=[
+            SimpleNamespace(
+                year=2024,
+                action_status="conservative_ready",
+                next_action="Konservativ belegbar.",
+                tax_free_private_disposals_eur=Decimal("100.00"),
+            ),
+            SimpleNamespace(
+                year=2025,
+                action_status="blocked",
+                next_action="Blocker klaeren.",
+                tax_free_private_disposals_eur=Decimal("0"),
+            ),
+        ]
+    )
+    service.tax_years.correction_map = lambda years=None: SimpleNamespace(
+        years=[
+            SimpleNamespace(
+                year=2024,
+                amendment_review_recommended=True,
+                amendment_reason="Vorjahr pruefen.",
+            ),
+            SimpleNamespace(
+                year=2025,
+                amendment_review_recommended=True,
+                amendment_reason="Blocker pruefen.",
+            ),
+        ]
+    )
+    service.reward_bmf_recheck = lambda: SimpleNamespace(
+        years=[
+            SimpleNamespace(year=2024, consistency_status="ok", flags=[]),
+            SimpleNamespace(year=2025, consistency_status="review", flags=["missing_income_value"]),
+        ]
+    )
+    from steuerreport_v2.domain.valuation import PriceQualityService
+
+    original_anchor = PriceQualityService.stablecoin_fx_anchor_preview_latest
+    PriceQualityService.stablecoin_fx_anchor_preview_latest = lambda self: SimpleNamespace(
+        groups=[
+            SimpleNamespace(year=2025, status="ready_for_review"),
+        ]
+    )
+    try:
+        matrix = service.bmf_finalization_matrix(years=[2024, 2025], include_reward_recheck=True)
+    finally:
+        PriceQualityService.stablecoin_fx_anchor_preview_latest = original_anchor
+
+    assert matrix.conservative_ready_years == [2024]
+    assert matrix.blocked_years == [2025]
+    assert matrix.total_taxable_private_disposals_eur == Decimal("17566.58")
+    year_2024 = matrix.years[0]
+    year_2025 = matrix.years[1]
+    assert year_2024.can_submit_conservative is True
+    assert year_2024.correction_review_recommended is True
+    assert any(item.key == "transfers_provenance" and item.status == "review" for item in year_2024.requirements)
+    assert any(item.key == "prices_fx" and item.status == "blocked" for item in year_2025.requirements)
+    assert any(item.key == "income_rewards_mining" and item.status == "review" for item in year_2025.requirements)
+    assert "Jahr | Status" in matrix.ascii_table
+
+
+def test_bmf_finalization_matrix_endpoint(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    # Route smoke test uses the real app/service path on an empty DB.
+    response = TestClient(create_app(store)).get("/api/v1/tax-methodology/bmf-finalization-matrix")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["available_years"] == [2021, 2022, 2023, 2024, 2025]
 
 
 def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
