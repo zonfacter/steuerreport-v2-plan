@@ -182,6 +182,9 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfFilingReadinessReport,
     TaxBmfFilingReadinessSnapshot,
     TaxBmfPriorFilingComparison,
+    TaxBmfPriorFilingDeclaredAmounts,
+    TaxBmfPriorFilingDeclaredAmountsWrite,
+    TaxBmfPriorFilingDeclaredAmountsWriteResult,
     TaxBmfSubmissionGuide,
     TaxRewardBmfRecheckReport,
     TaxMethodologyReport,
@@ -2239,6 +2242,16 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/tax-methodology/bmf-prior-filing-comparison")
     def tax_methodology_bmf_prior_filing_comparison() -> ApiResponse[TaxBmfPriorFilingComparison]:
         return ApiResponse(data=TaxMethodologyService(db).bmf_prior_filing_comparison())
+
+    @app.get("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts")
+    def tax_methodology_bmf_prior_filing_declared_amounts() -> ApiResponse[TaxBmfPriorFilingDeclaredAmounts]:
+        return ApiResponse(data=TaxMethodologyService(db).bmf_prior_filing_declared_amounts())
+
+    @app.put("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts")
+    def tax_methodology_write_bmf_prior_filing_declared_amounts(
+        payload: TaxBmfPriorFilingDeclaredAmountsWrite,
+    ) -> ApiResponse[TaxBmfPriorFilingDeclaredAmountsWriteResult]:
+        return ApiResponse(data=TaxMethodologyService(db).write_bmf_prior_filing_declared_amounts(payload))
 
     @app.get("/api/v1/tax-years/reward-bmf-recheck")
     def tax_years_reward_bmf_recheck() -> ApiResponse[TaxRewardBmfRecheckReport]:

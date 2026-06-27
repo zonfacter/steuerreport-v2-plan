@@ -332,6 +332,31 @@ class TaxBmfPriorFilingComparison(BaseModel):
     methodology: str
 
 
+class TaxBmfPriorFilingDeclaredYear(BaseModel):
+    year: int
+    taxable_private_disposals_eur: Decimal = Decimal("0")
+    rewards_mining_staking_income_eur: Decimal = Decimal("0")
+    derivative_pnl_eur: Decimal = Decimal("0")
+    tax_free_private_disposals_eur: Decimal = Decimal("0")
+
+
+class TaxBmfPriorFilingDeclaredAmounts(BaseModel):
+    setting_key: str
+    years: list[TaxBmfPriorFilingDeclaredYear] = Field(default_factory=list)
+    example_setting_json: str
+    methodology: str
+
+
+class TaxBmfPriorFilingDeclaredAmountsWrite(BaseModel):
+    years: list[TaxBmfPriorFilingDeclaredYear] = Field(default_factory=list)
+
+
+class TaxBmfPriorFilingDeclaredAmountsWriteResult(BaseModel):
+    setting_key: str
+    written_years: list[int] = Field(default_factory=list)
+    comparison: TaxBmfPriorFilingComparison
+
+
 class TaxBmfClosureBacklogItem(BaseModel):
     year: int
     priority: int = 0

@@ -20,6 +20,10 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfFilingReadinessYear,
     TaxBmfPriorFilingComparison,
     TaxBmfPriorFilingComparisonYear,
+    TaxBmfPriorFilingDeclaredAmounts,
+    TaxBmfPriorFilingDeclaredAmountsWrite,
+    TaxBmfPriorFilingDeclaredAmountsWriteResult,
+    TaxBmfPriorFilingDeclaredYear,
     TaxBmfSubmissionGuide,
     TaxBmfSubmissionGuideYear,
     TaxRewardBmfRecheckReport,
@@ -32,6 +36,7 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxTraceabilityMetric,
     TaxYearComplianceStatus,
 )
+from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 from steuerreport_v2.domain.tax_years import TaxYearService
@@ -773,6 +778,58 @@ class TaxMethodologyService:
                 "bedeuten: V2 liegt darunter. Der Vergleich schreibt keine Steuerdaten und "
                 "entscheidet nicht automatisch ueber Nachreichung oder Einspruch."
             ),
+        )
+
+    def bmf_prior_filing_declared_amounts(self) -> TaxBmfPriorFilingDeclaredAmounts:
+        declared_by_year, _setting_exists = self._prior_filing_declared_amounts()
+        rows = [
+            TaxBmfPriorFilingDeclaredYear(
+                year=year,
+                taxable_private_disposals_eur=values["taxable_private_disposals_eur"],
+                rewards_mining_staking_income_eur=values["rewards_mining_staking_income_eur"],
+                derivative_pnl_eur=values["derivative_pnl_eur"],
+                tax_free_private_disposals_eur=values["tax_free_private_disposals_eur"],
+            )
+            for year, values in sorted(declared_by_year.items())
+        ]
+        return TaxBmfPriorFilingDeclaredAmounts(
+            setting_key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
+            years=rows,
+            example_setting_json=self._prior_filing_example_json(),
+            methodology=(
+                "Read-only Ansicht der hinterlegten Alt-Erklaerungswerte aus dem "
+                f"Admin-Setting {self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING}. Diese "
+                "Werte dienen nur dem Vergleich gegen V2 und veraendern keine "
+                "Tax-Lines, FIFO-Lots, Preise oder Review-Entscheidungen."
+            ),
+        )
+
+    def write_bmf_prior_filing_declared_amounts(
+        self,
+        payload: TaxBmfPriorFilingDeclaredAmountsWrite,
+    ) -> TaxBmfPriorFilingDeclaredAmountsWriteResult:
+        years = sorted(payload.years, key=lambda row: row.year)
+        serialized = {
+            "years": {
+                str(row.year): {
+                    "taxable_private_disposals_eur": str(row.taxable_private_disposals_eur),
+                    "rewards_mining_staking_income_eur": str(row.rewards_mining_staking_income_eur),
+                    "derivative_pnl_eur": str(row.derivative_pnl_eur),
+                    "tax_free_private_disposals_eur": str(row.tax_free_private_disposals_eur),
+                }
+                for row in years
+            }
+        }
+        self.store.upsert_admin_setting(
+            AdminSettingWrite(
+                key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
+                value_json=json.dumps(serialized, sort_keys=True),
+            )
+        )
+        return TaxBmfPriorFilingDeclaredAmountsWriteResult(
+            setting_key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
+            written_years=[row.year for row in years],
+            comparison=self.bmf_prior_filing_comparison(years=[row.year for row in years] or None),
         )
 
     def _prior_filing_declared_amounts(self) -> tuple[dict[int, dict[str, Decimal]], bool]:

@@ -570,6 +570,74 @@ def test_bmf_prior_filing_comparison_endpoint(tmp_path):
     assert payload["available_years"] == [2021, 2022, 2023, 2024, 2025]
 
 
+def test_bmf_prior_filing_declared_amounts_write_roundtrip(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    service.bmf_submission_guide = lambda years=None: SimpleNamespace(
+        years=[
+            SimpleNamespace(
+                year=2021,
+                status="conservative_ready",
+                taxable_private_disposals_eur=Decimal("-7341.45"),
+                rewards_mining_staking_income_eur=Decimal("6630.73"),
+                derivative_pnl_eur=Decimal("0"),
+                tax_free_private_disposals_eur=Decimal("0"),
+                filing_summary_endpoint="/summary",
+                correction_map_endpoint="/correction",
+                evidence_package_endpoint="/evidence.zip",
+            )
+        ]
+    )
+
+    result = service.write_bmf_prior_filing_declared_amounts(
+        SimpleNamespace(
+            years=[
+                SimpleNamespace(
+                    year=2021,
+                    taxable_private_disposals_eur=Decimal("0"),
+                    rewards_mining_staking_income_eur=Decimal("11000"),
+                    derivative_pnl_eur=Decimal("0"),
+                    tax_free_private_disposals_eur=Decimal("0"),
+                )
+            ]
+        )
+    )
+    declared = service.bmf_prior_filing_declared_amounts()
+
+    assert result.written_years == [2021]
+    assert result.comparison.delta_review_years == [2021]
+    assert declared.years[0].year == 2021
+    assert declared.years[0].rewards_mining_staking_income_eur == Decimal("11000")
+    stored = {setting.key: setting.value_json for setting in store.list_admin_settings()}
+    assert "tax.prior_filing.declared_amounts" in stored
+
+
+def test_bmf_prior_filing_declared_amounts_endpoint_writes_setting(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    client = TestClient(create_app(store))
+
+    response = client.put(
+        "/api/v1/tax-methodology/bmf-prior-filing-declared-amounts",
+        json={
+            "years": [
+                {
+                    "year": 2021,
+                    "taxable_private_disposals_eur": "0.00",
+                    "rewards_mining_staking_income_eur": "11000.00",
+                    "derivative_pnl_eur": "0.00",
+                    "tax_free_private_disposals_eur": "0.00",
+                }
+            ]
+        },
+    )
+    get_response = client.get("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["written_years"] == [2021]
+    assert get_response.status_code == 200
+    assert get_response.json()["data"]["years"][0]["year"] == 2021
+
+
 def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)

@@ -818,6 +818,12 @@ type Snapshot = {
     ascii_table: string;
     methodology: string;
   };
+  taxBmfPriorFilingDeclaredAmounts?: {
+    setting_key: string;
+    years: Array<Record<string, unknown>>;
+    example_setting_json: string;
+    methodology: string;
+  };
   taxYearMethodology?: {
     year: number;
     generated_at: string;
@@ -1710,6 +1716,15 @@ async function patchApi<T>(path: string, payload: unknown): Promise<T> {
   return body.data;
 }
 
+async function putApi<T>(path: string, payload: unknown): Promise<T> {
+  const body = await fetchApiResponse<T>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return body.data;
+}
+
 function App() {
   const [active, setActive] = useState<Section>("dashboard");
   const [snapshot, setSnapshot] = useState<Snapshot>({});
@@ -1864,6 +1879,7 @@ function App() {
         taxBmfFinalizationMatrix: { key: "taxBmfFinalizationMatrix", label: "BMF-Finalisierung", load: () => getApi<Snapshot["taxBmfFinalizationMatrix"]>("/api/v1/tax-methodology/bmf-finalization-matrix") },
         taxBmfSubmissionGuide: { key: "taxBmfSubmissionGuide", label: "BMF-Abgabehilfe", load: () => getApi<Snapshot["taxBmfSubmissionGuide"]>("/api/v1/tax-methodology/bmf-submission-guide") },
         taxBmfPriorFilingComparison: { key: "taxBmfPriorFilingComparison", label: "Alt-Erklaerungsvergleich", load: () => getApi<Snapshot["taxBmfPriorFilingComparison"]>("/api/v1/tax-methodology/bmf-prior-filing-comparison") },
+        taxBmfPriorFilingDeclaredAmounts: { key: "taxBmfPriorFilingDeclaredAmounts", label: "Alt-Erklaerungswerte", load: () => getApi<Snapshot["taxBmfPriorFilingDeclaredAmounts"]>("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts") },
         taxYearDetail: { key: "taxYearDetail", label: "Steuerjahr-Detail", load: () => getApi<Snapshot["taxYearDetail"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}`) },
         taxDeclarationGuide: { key: "taxDeclarationGuide", label: "Steuererklaerungshilfe", load: () => getApi<Snapshot["taxDeclarationGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/declaration-guide`) },
         taxYearFilingSummary: { key: "taxYearFilingSummary", label: "Steuerjahr-Erklaerung", load: () => getApi<Snapshot["taxYearFilingSummary"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/filing-summary`) },
@@ -1934,6 +1950,7 @@ function App() {
         "taxBmfFinalizationMatrix",
         "taxBmfSubmissionGuide",
         "taxBmfPriorFilingComparison",
+        "taxBmfPriorFilingDeclaredAmounts",
         "taxYearDetail",
         "taxDeclarationGuide",
         "taxYearFilingSummary",
@@ -2611,6 +2628,23 @@ function App() {
     }
   }
 
+  async function savePriorFilingDeclaredAmounts(years: Array<Record<string, unknown>>) {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await putApi<Record<string, unknown>>(
+        "/api/v1/tax-methodology/bmf-prior-filing-declared-amounts",
+        { years }
+      );
+      const written = Array.isArray(result.written_years) ? result.written_years.length : 0;
+      setNotice(`Alt-Erklaerungswerte gespeichert: ${written} Jahr(e)`);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Alt-Erklaerungswerte konnten nicht gespeichert werden");
+      setLoading(false);
+    }
+  }
+
   async function saveCexCredentials(connectorId: string, apiKey: string, apiSecret: string, passphrase: string) {
     setLoading(true);
     setError(null);
@@ -3002,6 +3036,7 @@ function App() {
           onAddV1Reference={addV1Reference}
           onAddParityDecision={addParityDecision}
           onAddCexSenderOwnershipDecision={addCexSenderOwnershipDecision}
+          onSavePriorFilingDeclaredAmounts={savePriorFilingDeclaredAmounts}
           onDeleteV1Reference={deleteV1Reference}
           onAcceptReviewSuggestion={acceptReviewSuggestion}
           onCanonicalizeReviewEvidenceTraces={canonicalizeReviewEvidenceTraces}
@@ -3133,6 +3168,7 @@ function Content({
   onAddV1Reference,
   onAddParityDecision,
   onAddCexSenderOwnershipDecision,
+  onSavePriorFilingDeclaredAmounts,
   onDeleteV1Reference,
   onAcceptReviewSuggestion,
   onCanonicalizeReviewEvidenceTraces,
@@ -3208,6 +3244,7 @@ function Content({
   onAddV1Reference: (payload: Record<string, unknown>) => void;
   onAddParityDecision: (scope: string, decisionStatus: string) => void;
   onAddCexSenderOwnershipDecision: (row: Record<string, unknown>, decisionStatus: string) => void;
+  onSavePriorFilingDeclaredAmounts: (years: Array<Record<string, unknown>>) => void;
   onDeleteV1Reference: (referenceId: string) => void;
   onAcceptReviewSuggestion: (suggestionId: string) => void;
   onCanonicalizeReviewEvidenceTraces: (execute: boolean) => void;
@@ -3538,6 +3575,7 @@ function Content({
         taxBmfFinalizationMatrix={snapshot.taxBmfFinalizationMatrix}
         taxBmfSubmissionGuide={snapshot.taxBmfSubmissionGuide}
         taxBmfPriorFilingComparison={snapshot.taxBmfPriorFilingComparison}
+        taxBmfPriorFilingDeclaredAmounts={snapshot.taxBmfPriorFilingDeclaredAmounts}
         taxYearDetail={snapshot.taxYearDetail}
         taxDeclarationGuide={snapshot.taxDeclarationGuide}
         taxYearFilingSummary={snapshot.taxYearFilingSummary}
@@ -3598,6 +3636,7 @@ function Content({
         onRebuildTax={onRebuildTax}
         onRebuildDerivatives={onRebuildDerivatives}
         onAddCexSenderOwnershipDecision={onAddCexSenderOwnershipDecision}
+        onSavePriorFilingDeclaredAmounts={onSavePriorFilingDeclaredAmounts}
         onDownload={onDownload}
       />
     );
@@ -7984,6 +8023,7 @@ function TaxPanel({
   taxBmfFinalizationMatrix,
   taxBmfSubmissionGuide,
   taxBmfPriorFilingComparison,
+  taxBmfPriorFilingDeclaredAmounts,
   taxYearDetail,
   taxDeclarationGuide,
   taxYearFilingSummary,
@@ -8044,6 +8084,7 @@ function TaxPanel({
   onRebuildTax,
   onRebuildDerivatives,
   onAddCexSenderOwnershipDecision,
+  onSavePriorFilingDeclaredAmounts,
   onDownload
 }: {
   taxSummary: Record<string, unknown> | null | undefined;
@@ -8059,6 +8100,7 @@ function TaxPanel({
   taxBmfFinalizationMatrix: Snapshot["taxBmfFinalizationMatrix"];
   taxBmfSubmissionGuide: Snapshot["taxBmfSubmissionGuide"];
   taxBmfPriorFilingComparison: Snapshot["taxBmfPriorFilingComparison"];
+  taxBmfPriorFilingDeclaredAmounts: Snapshot["taxBmfPriorFilingDeclaredAmounts"];
   taxYearDetail: Snapshot["taxYearDetail"];
   taxDeclarationGuide: Snapshot["taxDeclarationGuide"];
   taxYearFilingSummary: Snapshot["taxYearFilingSummary"];
@@ -8119,6 +8161,7 @@ function TaxPanel({
   onRebuildTax: () => void;
   onRebuildDerivatives: () => void;
   onAddCexSenderOwnershipDecision: (row: Record<string, unknown>, decisionStatus: string) => void;
+  onSavePriorFilingDeclaredAmounts: (years: Array<Record<string, unknown>>) => void;
   onDownload: (path: string) => void;
 }) {
   const gainLossTotal = taxLines.reduce(
@@ -8461,6 +8504,11 @@ function TaxPanel({
             ]}
             footer={taxBmfPriorFilingComparison.methodology}
           />
+          <PriorFilingDeclaredAmountsForm
+            comparison={taxBmfPriorFilingComparison}
+            declaredAmounts={taxBmfPriorFilingDeclaredAmounts}
+            onSave={onSavePriorFilingDeclaredAmounts}
+          />
           {!taxBmfPriorFilingComparison.setting_exists ? (
             <div className="evidenceCard">
               <div className="evidenceCardHeader">
@@ -8468,7 +8516,7 @@ function TaxPanel({
                 <span className="statusPill warning">Admin-Setting fehlt</span>
               </div>
               <p>
-                Lege im Admin-Bereich das Setting <code>{taxBmfPriorFilingComparison.setting_key}</code> an.
+                Nutze die Eingabefelder oben oder lege im Admin-Bereich das Setting <code>{taxBmfPriorFilingComparison.setting_key}</code> an.
                 Danach kann V2 die urspruenglich erklaerten Werte je Jahr gegenrechnen.
               </p>
               <pre className="asciiTable" aria-label="Beispiel JSON fuer Alt-Erklaerungswerte">
@@ -11034,6 +11082,87 @@ function TaxPanel({
         </>
       ) : null}
     </Stack>
+  );
+}
+
+function PriorFilingDeclaredAmountsForm({
+  comparison,
+  declaredAmounts,
+  onSave
+}: {
+  comparison: Snapshot["taxBmfPriorFilingComparison"];
+  declaredAmounts: Snapshot["taxBmfPriorFilingDeclaredAmounts"];
+  onSave: (years: Array<Record<string, unknown>>) => void;
+}) {
+  const baseYears = useMemo(
+    () => (comparison?.available_years ?? [2021, 2022, 2023, 2024, 2025]).map(Number),
+    [comparison?.available_years]
+  );
+  const [rows, setRows] = useState<Array<Record<string, string | number>>>([]);
+
+  useEffect(() => {
+    const existing = new Map((declaredAmounts?.years ?? []).map((row) => [Number(row.year), row]));
+    setRows(
+      baseYears.map((year) => {
+        const current = existing.get(year);
+        return {
+          year,
+          taxable_private_disposals_eur: String(current?.taxable_private_disposals_eur ?? "0.00"),
+          rewards_mining_staking_income_eur: String(current?.rewards_mining_staking_income_eur ?? "0.00"),
+          derivative_pnl_eur: String(current?.derivative_pnl_eur ?? "0.00"),
+          tax_free_private_disposals_eur: String(current?.tax_free_private_disposals_eur ?? "0.00")
+        };
+      })
+    );
+  }, [baseYears, declaredAmounts?.years]);
+
+  function updateRow(year: number, key: string, value: string) {
+    setRows((current) => current.map((row) => row.year === year ? { ...row, [key]: value.replace(",", ".") } : row));
+  }
+
+  return (
+    <div className="evidenceCard">
+      <div className="evidenceCardHeader">
+        <strong>Urspruenglich erklaerte Werte erfassen</strong>
+        <span className={`statusPill ${comparison?.setting_exists ? "ok" : "warning"}`}>
+          {comparison?.setting_exists ? "Altwerte vorhanden" : "Altwerte fehlen"}
+        </span>
+      </div>
+      <div className="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Jahr</th>
+              <th>Anlage SO G/V</th>
+              <th>Rewards/Mining</th>
+              <th>Derivate</th>
+              <th>Steuerfrei archiviert</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const year = Number(row.year);
+              return (
+                <tr key={year}>
+                  <td>{year}</td>
+                  <td><input value={String(row.taxable_private_disposals_eur)} onChange={(event) => updateRow(year, "taxable_private_disposals_eur", event.target.value)} /></td>
+                  <td><input value={String(row.rewards_mining_staking_income_eur)} onChange={(event) => updateRow(year, "rewards_mining_staking_income_eur", event.target.value)} /></td>
+                  <td><input value={String(row.derivative_pnl_eur)} onChange={(event) => updateRow(year, "derivative_pnl_eur", event.target.value)} /></td>
+                  <td><input value={String(row.tax_free_private_disposals_eur)} onChange={(event) => updateRow(year, "tax_free_private_disposals_eur", event.target.value)} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="panelToolbar">
+        <span>EUR-Werte mit Punkt oder Komma eingeben. Leere Jahre mit 0,00 stehen lassen.</span>
+        <button type="button" onClick={() => onSave(rows)}>
+          <ClipboardCheck size={18} />
+          <span>Altwerte speichern</span>
+        </button>
+      </div>
+    </div>
   );
 }
 
