@@ -2248,6 +2248,60 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def tax_methodology_bmf_amendment_worklist() -> ApiResponse[TaxBmfAmendmentWorklist]:
         return ApiResponse(data=TaxMethodologyService(db).bmf_amendment_worklist())
 
+    def render_bmf_amendment_worklist_csv(*, service: TaxMethodologyService | None = None) -> str:
+        worklist = (service or TaxMethodologyService(db)).bmf_amendment_worklist()
+        output = io.StringIO()
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "Year",
+                "Status",
+                "Prior_Filing_Status",
+                "V2_Taxable_Private_Disposals_EUR",
+                "V2_Rewards_Mining_Staking_Income_EUR",
+                "V2_Derivative_Pnl_EUR",
+                "V2_Tax_Free_Private_Disposals_EUR",
+                "Technical_Review_Requirements_Count",
+                "Amendment_Review_Recommended",
+                "Correction_Reason",
+                "Next_Action",
+                "Filing_Summary_Endpoint",
+                "Correction_Map_Endpoint",
+                "Correction_Map_CSV_Endpoint",
+                "Evidence_Package_Endpoint",
+            ],
+        )
+        writer.writeheader()
+        for row in worklist.years:
+            writer.writerow(
+                {
+                    "Year": row.year,
+                    "Status": row.status,
+                    "Prior_Filing_Status": row.prior_filing_status,
+                    "V2_Taxable_Private_Disposals_EUR": row.v2_taxable_private_disposals_eur.quantize(Decimal("0.01")),
+                    "V2_Rewards_Mining_Staking_Income_EUR": row.v2_rewards_mining_staking_income_eur.quantize(Decimal("0.01")),
+                    "V2_Derivative_Pnl_EUR": row.v2_derivative_pnl_eur.quantize(Decimal("0.01")),
+                    "V2_Tax_Free_Private_Disposals_EUR": row.v2_tax_free_private_disposals_eur.quantize(Decimal("0.01")),
+                    "Technical_Review_Requirements_Count": row.technical_review_requirements_count,
+                    "Amendment_Review_Recommended": "yes" if row.amendment_review_recommended else "no",
+                    "Correction_Reason": row.correction_reason,
+                    "Next_Action": row.next_action,
+                    "Filing_Summary_Endpoint": row.filing_summary_endpoint,
+                    "Correction_Map_Endpoint": row.correction_map_endpoint,
+                    "Correction_Map_CSV_Endpoint": row.correction_map_csv_endpoint,
+                    "Evidence_Package_Endpoint": row.evidence_package_endpoint,
+                }
+            )
+        return output.getvalue()
+
+    @app.get("/api/v1/export/tax-methodology/bmf-amendment-worklist.csv")
+    def download_bmf_amendment_worklist_csv() -> Response:
+        return Response(
+            content=render_bmf_amendment_worklist_csv(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=bmf-amendment-worklist.csv"},
+        )
+
     @app.get("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts")
     def tax_methodology_bmf_prior_filing_declared_amounts() -> ApiResponse[TaxBmfPriorFilingDeclaredAmounts]:
         return ApiResponse(data=TaxMethodologyService(db).bmf_prior_filing_declared_amounts())

@@ -745,6 +745,18 @@ def test_bmf_amendment_worklist_endpoint(tmp_path):
     assert "years" in payload
 
 
+def test_bmf_amendment_worklist_csv_endpoint(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    client = TestClient(create_app(store))
+
+    response = client.get("/api/v1/export/tax-methodology/bmf-amendment-worklist.csv")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "Year,Status,Prior_Filing_Status" in response.text
+    assert "V2_Taxable_Private_Disposals_EUR" in response.text
+
+
 def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)

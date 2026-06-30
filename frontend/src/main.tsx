@@ -8479,6 +8479,10 @@ function TaxPanel({
             <span className={`statusPill ${(taxBmfAmendmentWorklist.blocked_years ?? []).length > 0 ? "blocked" : (taxBmfAmendmentWorklist.correction_review_years ?? []).length > 0 ? "warning" : "ok"}`}>
               {(taxBmfAmendmentWorklist.correction_review_years ?? []).length} Korrekturpruefung · {(taxBmfAmendmentWorklist.compare_declared_years ?? []).length} Delta-Vergleich
             </span>
+            <button type="button" onClick={() => onDownload("/api/v1/export/tax-methodology/bmf-amendment-worklist.csv")}>
+              <FileDown size={18} />
+              <span>Worklist CSV</span>
+            </button>
           </div>
           <div className="portfolioSummaryStrip">
             <Metric title="V2 Anlage SO" value={`${formatCurrency(taxBmfAmendmentWorklist.total_v2_taxable_private_disposals_eur)} EUR`} />
