@@ -55,6 +55,9 @@ Der aktuelle Abschlussstand ist in zwei Einstiegspunkten dokumentiert:
     Sicherheitsregeln.
 - `docs/626_API_ENDPOINT_REFERENZ_VOLLSTAENDIG_2026-07-05.md`
   - Vollstaendige aus dem Code generierte Liste aller API-Endpunkte.
+- `docs/627_QUELLEN_CONNECTOR_SETUP_UND_WALLET_REGISTRY_2026-07-05.md`
+  - Einrichtung und Pruefung von Wallets, Binance, Bitget, Pionex, Alchemy,
+    Solscan und Jupiter.
 
 ## V1 bleibt Referenz
 
