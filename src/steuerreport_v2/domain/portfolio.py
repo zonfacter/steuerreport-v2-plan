@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import json
@@ -38,6 +38,8 @@ from steuerreport_v2.contracts.portfolio import (
     PortfolioTokenRiskReport,
     PortfolioTokenRiskRow,
     PortfolioTrendPoint,
+    PortfolioValueHistoryPoint,
+    PortfolioValueHistoryReport,
     PortfolioValuationAuditReport,
     PortfolioValuationAuditRow,
     PortfolioVirtualWallet,
@@ -303,6 +305,110 @@ class PortfolioService:
                 "Nachweise fuer die stichtagsgenaue Historie. Sie werden nicht als "
                 "steuerpflichtige Veraeusserung behandelt, solange kein Trade/"
                 "Income-Kontext vorliegt."
+            ),
+        )
+
+    def value_history(
+        self,
+        from_date: str | date | datetime | None = None,
+        to_date: str | date | datetime | None = None,
+        interval: str = "month",
+        max_points: int = 72,
+    ) -> PortfolioValueHistoryReport:
+        ledger_start, ledger_end = self._ledger_date_bounds()
+        requested_to = self._normalize_as_of(to_date).date() if to_date else (ledger_end or datetime.now(timezone.utc).date())
+        default_from = max(
+            ledger_start or requested_to,
+            requested_to - timedelta(days=730),
+        )
+        requested_from = (
+            self._normalize_as_of(from_date).date()
+            if from_date
+            else default_from
+        )
+        if requested_from > requested_to:
+            requested_from, requested_to = requested_to, requested_from
+
+        normalized_interval = self._normalize_history_interval(interval, requested_from, requested_to)
+        safe_max_points = min(max(int(max_points), 2), 366)
+        markers = self._history_mark_dates(
+            requested_from,
+            requested_to,
+            interval=normalized_interval,
+            max_points=safe_max_points,
+        )
+        points: list[PortfolioValueHistoryPoint] = []
+        ledger_rows = self._ledger_rows_until(datetime.combine(requested_to, time.max, tzinfo=timezone.utc))
+        account_aliases = build_account_alias_map_for_store(
+            self.store,
+            [str(row.account) for row in ledger_rows],
+        )
+        prices = self._price_lookup()
+        grouped_balances: dict[tuple[str, str], Decimal] = {}
+        row_index = 0
+        for marker in markers:
+            marker_at = datetime.combine(marker, time.max, tzinfo=timezone.utc)
+            while row_index < len(ledger_rows) and self._normalize_as_of(ledger_rows[row_index].event_time) <= marker_at:
+                row = ledger_rows[row_index]
+                account = canonical_account_label(str(row.account), account_aliases)
+                key = (account, str(row.asset))
+                grouped_balances[key] = grouped_balances.get(key, Decimal("0")) + (row.quantity or Decimal("0"))
+                row_index += 1
+            total = Decimal("0")
+            excluded_total = Decimal("0")
+            missing: set[str] = set()
+            position_accounts: set[str] = set()
+            position_assets: set[str] = set()
+            positions_count = 0
+            for (account, asset), quantity in grouped_balances.items():
+                if self._is_zero_quantity(quantity):
+                    continue
+                if self._is_transfer_counterparty_account(account) or self._is_current_source_excluded_account(account, asset):
+                    continue
+                price = prices.at_or_before(asset, marker_at)
+                if price is None:
+                    missing.add(asset)
+                    if not self._is_portfolio_excluded_account(account):
+                        positions_count += 1
+                        position_accounts.add(account)
+                        position_assets.add(asset)
+                    continue
+                value = quantity * price.price_eur
+                if self._is_portfolio_excluded_account(account):
+                    excluded_total += value
+                else:
+                    total += value
+                    positions_count += 1
+                    position_accounts.add(account)
+                    position_assets.add(asset)
+            points.append(
+                PortfolioValueHistoryPoint(
+                    date=marker.isoformat(),
+                    as_of=marker_at,
+                    total_value_eur=total,
+                    positions_count=positions_count,
+                    assets_count=len(position_assets),
+                    accounts_count=len(position_accounts),
+                    excluded_value_eur=excluded_total,
+                    missing_price_assets=sorted(missing),
+                )
+            )
+
+        values = [point.total_value_eur for point in points]
+        return PortfolioValueHistoryReport(
+            from_date=requested_from.isoformat(),
+            to_date=requested_to.isoformat(),
+            interval=normalized_interval,
+            points=points,
+            points_count=len(points),
+            negative_points_count=sum(1 for value in values if value < 0),
+            min_total_value_eur=min(values) if values else None,
+            max_total_value_eur=max(values) if values else None,
+            methodology=(
+                "V2-Portfolio-Historie aus derselben Methodik wie /api/v1/portfolio/as-of: "
+                "Balance-Ledger bis Stichtag, historische EUR-Preise am oder vor dem "
+                "Stichtag, Transfer-/Bridge-Gegenparteien aus dem Besitzwert ausgeklammert. "
+                "Dieser Verlauf ersetzt den alten Legacy-Roh-Event-Chart."
             ),
         )
 
@@ -2309,6 +2415,95 @@ class PortfolioService:
             SimpleNamespace(account=row[0], asset=row[1], quantity=row[2])
             for row in rows
         ]
+
+    def _ledger_rows_until(self, as_of: datetime) -> list[SimpleNamespace]:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select event_time, account, asset, delta_quantity
+                from balance_ledger
+                where event_time <= ?
+                order by event_time, account, asset
+                """,
+                [as_of],
+            ).fetchall()
+        return [
+            SimpleNamespace(event_time=row[0], account=row[1], asset=row[2], quantity=row[3] or Decimal("0"))
+            for row in rows
+        ]
+
+    def _ledger_date_bounds(self) -> tuple[date | None, date | None]:
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select min(event_time), max(event_time)
+                from balance_ledger
+                """
+            ).fetchone()
+        if not row or row[0] is None or row[1] is None:
+            return None, None
+        return self._coerce_date(row[0]), self._coerce_date(row[1])
+
+    def _coerce_date(self, value: object) -> date:
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
+
+    def _normalize_history_interval(self, value: str, start: date, end: date) -> str:
+        normalized = str(value or "month").strip().lower()
+        if normalized in {"day", "daily", "1d"}:
+            return "day"
+        if normalized in {"week", "weekly", "1w"}:
+            return "week"
+        if normalized in {"quarter", "quarterly", "3mo"}:
+            return "quarter"
+        if normalized in {"year", "yearly", "1y"}:
+            return "year"
+        if normalized in {"auto"}:
+            span_days = max((end - start).days, 1)
+            if span_days <= 93:
+                return "day"
+            if span_days <= 730:
+                return "week"
+            if span_days <= 1825:
+                return "month"
+            return "quarter"
+        return "month"
+
+    def _history_mark_dates(self, start: date, end: date, *, interval: str, max_points: int) -> list[date]:
+        markers = {start, end}
+        current = start
+        while current <= end:
+            markers.add(current)
+            if interval == "day":
+                current = current + timedelta(days=1)
+            elif interval == "week":
+                current = current + timedelta(days=7)
+            elif interval == "quarter":
+                current = self._add_months(current, 3)
+            elif interval == "year":
+                current = self._add_months(current, 12)
+            else:
+                current = self._add_months(current, 1)
+        ordered = sorted(day for day in markers if start <= day <= end)
+        if len(ordered) <= max_points:
+            return ordered
+        stride = max(1, len(ordered) // max_points)
+        downsampled = ordered[::stride]
+        if ordered[-1] not in downsampled:
+            downsampled.append(ordered[-1])
+        return downsampled[: max_points - 1] + [ordered[-1]] if len(downsampled) > max_points else downsampled
+
+    def _add_months(self, source: date, months: int) -> date:
+        month_index = source.month - 1 + months
+        year = source.year + month_index // 12
+        month = month_index % 12 + 1
+        month_start = date(year, month, 1)
+        next_month = date(year + (1 if month == 12 else 0), 1 if month == 12 else month + 1, 1)
+        last_day = (next_month - timedelta(days=1)).day
+        return month_start.replace(day=min(source.day, last_day))
 
     def _asset_balances_at(self, at_time: datetime, *, before: bool) -> dict[str, Decimal]:
         operator = "<" if before else "<="

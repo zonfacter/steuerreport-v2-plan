@@ -115,6 +115,7 @@ from steuerreport_v2.contracts.portfolio import (
     PortfolioSnapshot,
     PortfolioSourceOverview,
     PortfolioTokenRiskReport,
+    PortfolioValueHistoryReport,
     PortfolioValuationAuditReport,
     PortfolioWalletHistoryImportRequest,
     PortfolioWalletHistoryImportResult,
@@ -1494,6 +1495,27 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/portfolio/as-of")
     def portfolio_as_of(as_of: str | None = None) -> ApiResponse[PortfolioAsOfSnapshot]:
         return ApiResponse(data=PortfolioService(db).as_of_snapshot(as_of))
+
+    @app.get("/api/v1/portfolio/value-history")
+    def portfolio_value_history(
+        from_date: str | None = None,
+        to_date: str | None = None,
+        interval: str = "month",
+        max_points: int = 72,
+    ) -> ApiResponse[PortfolioValueHistoryReport]:
+        cache_key = f"portfolio:value-history:{from_date or ''}:{to_date or ''}:{interval}:{max_points}"
+        return ApiResponse(
+            data=cached_response(
+                cache_key,
+                60,
+                lambda: PortfolioService(db).value_history(
+                    from_date=from_date,
+                    to_date=to_date,
+                    interval=interval,
+                    max_points=max_points,
+                ),
+            )
+        )
 
     @app.get("/api/v1/portfolio/sources")
     def portfolio_sources() -> ApiResponse[PortfolioSourceOverview]:

@@ -328,6 +328,86 @@ def test_portfolio_as_of_api(tmp_path):
     assert data["missing_price_assets"] == []
 
 
+def test_portfolio_value_history_uses_as_of_methodology(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="pionex",
+        filename="history.csv",
+        content=(
+            "time,coin,change,type,account\n"
+            "2026-02-13T10:00:00Z,USDT,100,deposit,pionex-main\n"
+            "2026-02-14T12:00:00Z,BTC,0.1,deposit,pionex-main\n"
+            "2026-02-15T00:00:01Z,BTC,0.2,deposit,pionex-main\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    BalanceLedgerBuilder(store).rebuild()
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2026, 2, 13, tzinfo=timezone.utc),
+            source="manual-usdt",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="BTC",
+            price_eur=Decimal("40000"),
+            priced_at=datetime(2026, 2, 14, 23, 0, tzinfo=timezone.utc),
+            source="manual-btc",
+        )
+    )
+
+    service = PortfolioService(store)
+    as_of = service.as_of_snapshot("2026-02-14")
+    history = service.value_history(
+        from_date="2026-02-13",
+        to_date="2026-02-14",
+        interval="day",
+        max_points=10,
+    )
+
+    assert history.interval == "day"
+    assert history.points_count == 2
+    assert history.negative_points_count == 0
+    assert history.points[-1].date == "2026-02-14"
+    assert history.points[-1].total_value_eur == as_of.total_value_eur
+    assert history.points[-1].total_value_eur == Decimal("4100.000000000000000000000000000000000000")
+    assert "ersetzt den alten Legacy-Roh-Event-Chart" in history.methodology
+
+
+def test_portfolio_value_history_api(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    _build_balance(store)
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2021, 4, 29, tzinfo=timezone.utc),
+            source="manual-usdt",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="BTC",
+            price_eur=Decimal("50000"),
+            priced_at=datetime(2021, 4, 29, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+
+    response = TestClient(create_app(store)).get(
+        "/api/v1/portfolio/value-history?from_date=2021-04-28&to_date=2021-04-29&interval=day"
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["points_count"] == 2
+    assert data["negative_points_count"] == 0
+    assert Decimal(data["points"][-1]["total_value_eur"]) == Decimal("25100")
+
+
 def test_portfolio_snapshot_reports_missing_prices(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     _build_balance(store)

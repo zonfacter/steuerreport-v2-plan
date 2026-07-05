@@ -65,6 +65,29 @@ class PortfolioTrendPoint(BaseModel):
     missing_price_assets: list[str] = Field(default_factory=list)
 
 
+class PortfolioValueHistoryPoint(BaseModel):
+    date: str
+    as_of: datetime
+    total_value_eur: Decimal
+    positions_count: int
+    assets_count: int
+    accounts_count: int
+    excluded_value_eur: Decimal = Decimal("0")
+    missing_price_assets: list[str] = Field(default_factory=list)
+
+
+class PortfolioValueHistoryReport(BaseModel):
+    from_date: str
+    to_date: str
+    interval: str
+    points: list[PortfolioValueHistoryPoint] = Field(default_factory=list)
+    points_count: int
+    negative_points_count: int
+    min_total_value_eur: Decimal | None = None
+    max_total_value_eur: Decimal | None = None
+    methodology: str
+
+
 class PortfolioInvestmentLocation(BaseModel):
     account: str
     asset: str

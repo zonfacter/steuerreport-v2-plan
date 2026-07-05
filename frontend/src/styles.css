@@ -2528,6 +2528,17 @@ p {
   stroke-width: 3;
 }
 
+.portfolioValueCanvas .zeroLine {
+  stroke: #b65b4a;
+  stroke-dasharray: 6 6;
+  stroke-width: 2;
+}
+
+.portfolioValueCanvas .negativePoint {
+  fill: #fff4ef;
+  stroke: #b65b4a;
+}
+
 .trendCanvas text {
   fill: #5d685f;
   font-size: 13px;

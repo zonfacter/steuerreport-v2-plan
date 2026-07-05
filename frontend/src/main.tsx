@@ -423,6 +423,17 @@ type Snapshot = {
     methodology: string;
     transfer_context_note?: string | null;
   };
+  portfolioValueHistory?: {
+    from_date: string;
+    to_date: string;
+    interval: string;
+    points: Array<Record<string, unknown>>;
+    points_count: number;
+    negative_points_count: number;
+    min_total_value_eur?: string | null;
+    max_total_value_eur?: string | null;
+    methodology: string;
+  };
   portfolioSources?: {
     total_value_eur: string;
     groups: Array<Record<string, unknown>>;
@@ -1868,6 +1879,7 @@ function App() {
         portfolioSources: { key: "portfolioSources", label: "Portfolio-Quellen", load: () => getApi<Snapshot["portfolioSources"]>("/api/v1/portfolio/sources") },
         portfolioReconciliation: { key: "portfolioReconciliation", label: "Portfolio-Abgleich", load: () => getApi<Snapshot["portfolioReconciliation"]>("/api/v1/portfolio/reconciliation") },
         portfolioAsOf: { key: "portfolioAsOf", label: "Stichtags-Portfolio", load: () => getApi<Snapshot["portfolioAsOf"]>(`/api/v1/portfolio/as-of?as_of=${encodeURIComponent(asOfDate)}`) },
+        portfolioValueHistory: { key: "portfolioValueHistory", label: "V2-Portfolio-Verlauf", load: () => getApi<Snapshot["portfolioValueHistory"]>(`/api/v1/portfolio/value-history?to_date=${encodeURIComponent(asOfDate)}&interval=month&max_points=72`) },
         separationReport: { key: "separationReport", label: "Trennungs-Portfolio", load: () => getApi<Snapshot["separationReport"]>("/api/v1/portfolio/separation-report") },
         fiatDeposits: { key: "fiatDeposits", label: "Binance-Fiat-Einzahlungen", load: () => getApi<Snapshot["fiatDeposits"]>("/api/v1/portfolio/fiat-deposits/binance") },
         review: { key: "review", label: "Review", load: () => getApi<Snapshot["review"]>("/api/v1/review/gates") },
@@ -2066,7 +2078,7 @@ function App() {
             ? ["prices", "priceQuality", "priceManualReview", "priceStablecoinFxReview", "priceStablecoinFxAnchorPreview", "priceSolscanSignatureReview", "priceBinanceNormalizerReview", "priceEventQuoteEvidenceReview", "priceRequirements"]
             : [])
         ],
-        stichtage: ["health", "portfolioAsOf", "priceCoverage"],
+        stichtage: ["health", "portfolioAsOf", "portfolioValueHistory", "priceCoverage"],
         zugewinn: ["health", "divorceEqualization"],
         flows: ["health", "flows", "transferCandidates"],
         review: [
@@ -3540,6 +3552,7 @@ function Content({
     return (
       <PortfolioAsOfPage
         snapshot={snapshot.portfolioAsOf}
+        history={snapshot.portfolioValueHistory}
         asOfDate={asOfDate}
         onAsOfDateChange={onAsOfDateChange}
       />
@@ -5749,12 +5762,101 @@ function PortfolioReconciliationPanel({
   );
 }
 
+function PortfolioValueHistoryPanel({
+  history,
+  selectedDate
+}: {
+  history: Snapshot["portfolioValueHistory"];
+  selectedDate: string;
+}) {
+  const rawPoints = history?.points ?? [];
+  const pointsData = rawPoints
+    .map((point) => ({
+      date: String(point.date ?? ""),
+      value: parseNumber(point.total_value_eur),
+      missing: Array.isArray(point.missing_price_assets) ? point.missing_price_assets.length : 0,
+      positions: Number(point.positions_count ?? 0)
+    }))
+    .filter((point) => point.date);
+  const minValue = Math.min(...pointsData.map((point) => point.value), 0);
+  const maxValue = Math.max(...pointsData.map((point) => point.value), 1);
+  const latest = pointsData[pointsData.length - 1];
+  const negativeCount = Number(history?.negative_points_count ?? 0);
+  const width = 920;
+  const height = 220;
+  const left = 58;
+  const right = 28;
+  const top = 24;
+  const bottom = 40;
+  const chartWidth = width - left - right;
+  const chartHeight = height - top - bottom;
+  const range = Math.max(maxValue - minValue, 1);
+  const chartPoints = pointsData.map((point, index) => {
+    const x = left + (pointsData.length <= 1 ? 0 : (index / (pointsData.length - 1)) * chartWidth);
+    const y = top + chartHeight - ((point.value - minValue) / range) * chartHeight;
+    return { ...point, x, y };
+  });
+  const zeroY = top + chartHeight - ((0 - minValue) / range) * chartHeight;
+  const path = chartPoints
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(" ");
+
+  return (
+    <div className="panel portfolioHistoryPanel">
+      <div className="panelToolbar">
+        <strong>V2-Portfolioverlauf</strong>
+        <span>{history?.interval ?? "month"} · {history?.points_count ?? 0} Punkte</span>
+      </div>
+      <div className="portfolioSummaryStrip">
+        <Metric title="Letzter Stichtag" value={latest ? `${formatCurrency(latest.value)} EUR` : "-"} />
+        <Metric title="Von" value={history?.from_date ?? "-"} />
+        <Metric title="Bis" value={history?.to_date ?? selectedDate} />
+        <Metric title="Negative V2-Punkte" value={String(negativeCount)} />
+      </div>
+      {negativeCount > 0 ? (
+        <div className="notice inlineNotice reviewNotice">
+          Der V2-Verlauf enthaelt negative Stichtage. Das ist ein echter Ledger-Prueffall und nicht der alte Legacy-Roh-Event-Chart.
+        </div>
+      ) : (
+        <div className="notice inlineNotice">
+          Keine negativen V2-Stichtagswerte im geladenen Verlauf. Diese Kurve nutzt dieselbe Methodik wie die Stichtagsbewertung.
+        </div>
+      )}
+      <div className="trendCanvas portfolioValueCanvas">
+        {chartPoints.length === 0 ? (
+          <div className="empty">Keine Verlaufspunkte vorhanden.</div>
+        ) : (
+          <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="V2-Portfolioverlauf">
+            <line x1={left} y1={top + chartHeight} x2={width - right} y2={top + chartHeight} />
+            <line x1={left} y1={top} x2={left} y2={top + chartHeight} />
+            {minValue < 0 ? <line className="zeroLine" x1={left} y1={zeroY} x2={width - right} y2={zeroY} /> : null}
+            <text x={left} y={height - 12}>{chartPoints[0]?.date}</text>
+            <text x={width - right - 92} y={height - 12}>{chartPoints[chartPoints.length - 1]?.date}</text>
+            <text x={left + 4} y={top + 14}>{formatCurrency(maxValue)} EUR</text>
+            <text x={left + 4} y={top + chartHeight - 4}>{formatCurrency(minValue)} EUR</text>
+            <path d={path} />
+            {chartPoints.map((point, index) => (
+              <g key={`${point.date}-${index}`}>
+                <circle cx={point.x} cy={point.y} r={point.value < 0 ? "5" : "4"} className={point.value < 0 ? "negativePoint" : ""} />
+                <title>{`${point.date}: ${formatCurrency(point.value)} EUR · Positionen: ${point.positions} · fehlende Preise: ${point.missing}`}</title>
+              </g>
+            ))}
+          </svg>
+        )}
+      </div>
+      <div className="footer">{history?.methodology ?? ""}</div>
+    </div>
+  );
+}
+
 function PortfolioAsOfPage({
   snapshot,
+  history,
   asOfDate,
   onAsOfDateChange
 }: {
   snapshot: Snapshot["portfolioAsOf"];
+  history: Snapshot["portfolioValueHistory"];
   asOfDate: string;
   onAsOfDateChange: (date: string) => void;
 }) {
@@ -5805,6 +5907,8 @@ function PortfolioAsOfPage({
         <Metric title="Konten/Wallets" value={String(accountRows.length)} />
         <Metric title="Preisdeckung" value={`${coverage}%`} />
       </div>
+
+      <PortfolioValueHistoryPanel history={history} selectedDate={asOfDate} />
 
       {snapshot?.transfer_context_note ? (
         <div className="notice inlineNotice">
