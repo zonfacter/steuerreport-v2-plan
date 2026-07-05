@@ -3343,6 +3343,7 @@ function Content({
           binanceEarnHistoryApiPreview={snapshot.binanceEarnHistoryApiPreview}
           selectedSourceId={selectedSourceId}
           onSelectedSourceIdChange={onSelectedSourceIdChange}
+          onNavigate={onNavigate}
           onRefreshConfiguredSources={onRefreshConfiguredSources}
           sourceRefreshLoading={sourceRefreshLoading}
           sourceViewMode={sourceViewMode}
@@ -3851,6 +3852,7 @@ function SourcesPage({
   binanceEarnHistoryApiPreview,
   selectedSourceId,
   onSelectedSourceIdChange,
+  onNavigate,
   onRefreshConfiguredSources,
   sourceRefreshLoading,
   sourceViewMode,
@@ -3865,6 +3867,7 @@ function SourcesPage({
   binanceEarnHistoryApiPreview: Snapshot["binanceEarnHistoryApiPreview"];
   selectedSourceId: string | null;
   onSelectedSourceIdChange: (sourceId: string) => void;
+  onNavigate: (section: Section) => void;
   onRefreshConfiguredSources: () => void;
   sourceRefreshLoading: boolean;
   sourceViewMode: SourceViewMode;
@@ -3914,6 +3917,15 @@ function SourcesPage({
           {health.missing_live_sources > 0 ? ` · ${health.missing_live_sources} Live-Anker fehlen` : ""}
         </div>
       ) : null}
+      <SourceCommandCenter
+        sources={sources}
+        connectorRows={connectorRows}
+        activeId={activeId}
+        onSelectSource={onSelectedSourceIdChange}
+        onNavigate={onNavigate}
+        onRefreshConfiguredSources={onRefreshConfiguredSources}
+        sourceRefreshLoading={sourceRefreshLoading}
+      />
       <div className="taxViewSwitch" role="tablist" aria-label="Quellen Ansicht">
         <button
           type="button"
@@ -4797,6 +4809,91 @@ function sourceMeta(source: Record<string, unknown>): string {
   }
   parts.push(String(source.current_status ?? "-"));
   return parts.join(" · ");
+}
+
+function SourceCommandCenter({
+  sources,
+  connectorRows,
+  activeId,
+  onSelectSource,
+  onNavigate,
+  onRefreshConfiguredSources,
+  sourceRefreshLoading
+}: {
+  sources: Array<Record<string, unknown>>;
+  connectorRows: Array<Record<string, unknown>>;
+  activeId: string;
+  onSelectSource: (sourceId: string) => void;
+  onNavigate: (section: Section) => void;
+  onRefreshConfiguredSources: () => void;
+  sourceRefreshLoading: boolean;
+}) {
+  const diagnosticsBySource = new Map(connectorRows.map((row) => [String(row.source_id), row]));
+  const missingCredentials = connectorRows.filter((row) => String(row.credential_status) === "missing").length;
+  const staleSnapshots = connectorRows.filter((row) => Number(row.last_snapshot_age_days ?? 0) > 3).length;
+  const openReconciliation = sources.reduce((total, source) => total + Number(source.open_reconciliation_issues ?? 0), 0);
+  const overallTone = missingCredentials > 0 ? "blocked" : staleSnapshots > 0 || openReconciliation > 0 ? "warning" : "ok";
+  return (
+    <section className={`sourceCommandCenter ${overallTone}`}>
+      <div className="sourceCommandHeader">
+        <div>
+          <span className="heroKicker">Quellen verbinden</span>
+          <h3>{missingCredentials > 0 ? "API-Zugriff einrichten" : staleSnapshots > 0 ? "Live-Bestaende aktualisieren" : "Quellenstatus pruefen"}</h3>
+          <p>
+            Vorhandene Wallets und Handelsplattformen bleiben getrennt sichtbar. Steuerdaten werden hier nicht veraendert;
+            die Aktionen aktualisieren nur Credentials oder Live-Snapshots.
+          </p>
+        </div>
+        <div className="sourceCommandActions">
+          <button type="button" onClick={() => onNavigate("admin")}>
+            <Settings size={16} />
+            <span>Credentials</span>
+          </button>
+          <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading}>
+            <RefreshCcw size={16} />
+            <span>{sourceRefreshLoading ? "Abfrage laeuft" : "Live abfragen"}</span>
+          </button>
+        </div>
+      </div>
+      <div className="sourceCommandMetrics">
+        <Metric title="Credentials fehlen" value={String(missingCredentials)} />
+        <Metric title="Snapshots veraltet" value={String(staleSnapshots)} />
+        <Metric title="Abgleich offen" value={String(openReconciliation)} />
+        <Metric title="Quellen" value={String(sources.length)} />
+      </div>
+      <div className="sourceCommandGrid">
+        {sources.map((source) => {
+          const sourceId = String(source.source_id);
+          const diagnostic = diagnosticsBySource.get(sourceId);
+          const credentialStatus = String(diagnostic?.credential_status ?? "not_required");
+          const liveStatus = String(source.live_freshness ?? diagnostic?.status ?? "missing");
+          const tone = credentialStatus === "missing"
+            ? "blocked"
+            : Number(source.open_reconciliation_issues ?? 0) > 0 || liveStatus === "stale"
+              ? "warning"
+              : "ok";
+          return (
+            <button
+              key={`source-command-${sourceId}`}
+              className={`sourceCommandCard ${tone} ${sourceId === activeId ? "active" : ""}`}
+              type="button"
+              onClick={() => onSelectSource(sourceId)}
+            >
+              <span className={`statusPill ${tone}`}>
+                {credentialStatus === "missing" ? "Credentials fehlen" : liveStatus === "stale" ? "Live veraltet" : "ok"}
+              </span>
+              <strong>{String(source.label ?? sourceId)}</strong>
+              <em>{String(source.source_type ?? diagnostic?.connector_type ?? "-")} · {formatCurrency(source.value_eur)} EUR</em>
+              <small>
+                Credentials {sourceCredentialStatusLabel(credentialStatus)} · Live {sourceLiveFreshnessLabel(liveStatus, source.live_age_days)}
+              </small>
+              <small>{String(source.open_reconciliation_issues ?? 0)} Abgleich · {String(source.open_price_issues ?? 0)} Preis</small>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function CockpitBar({
@@ -8501,6 +8598,15 @@ function TaxPanel({
   const solanaSwapEvidenceItem = activeEvidenceItems.find((item) => String(item.evidence_id) === "tax-solana-stablecoin-swap-evidence");
   const solanaSwapFifoEvidenceItem = activeEvidenceItems.find((item) => String(item.evidence_id) === "tax-solana-stablecoin-swap-fifo-lines");
   const hasSolanaSwapEvidence = Boolean(solanaSwapEvidenceItem || solanaSwapFifoEvidenceItem || (taxSolanaStablecoinSwapContext?.events_count ?? 0) > 0);
+  const taxProductRows = buildTaxProductYearRows({
+    years,
+    paymentRows,
+    filingMatrixRows,
+    filingClosureRows,
+    submissionRows: taxBmfSubmissionGuide?.years ?? [],
+    finalizationRows: taxBmfFinalizationMatrix?.years ?? []
+  });
+  const activeTaxProductRow = taxProductRows.find((row) => row.year === activeYearValue);
   return (
     <Stack>
       <section className="taxYearHero">
@@ -8562,6 +8668,14 @@ function TaxPanel({
           <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
         </div>
       </section>
+
+      <TaxProductCommandCenter
+        rows={taxProductRows}
+        activeYear={activeYearValue}
+        activeRow={activeTaxProductRow}
+        onSelectYear={onSelectedTaxYearChange}
+        onDownload={onDownload}
+      />
 
       {taxBmfSubmissionGuide ? (
         <div className="panel declarationGuidePanel">
@@ -11350,6 +11464,245 @@ function TaxPanel({
       ) : null}
     </Stack>
   );
+}
+
+type TaxProductYearRow = {
+  year: string;
+  tone: "ok" | "warning" | "blocked";
+  statusLabel: string;
+  declarationBucket: string;
+  whereToEnter: string;
+  taxablePrivateDisposalsEur: unknown;
+  rewardsMiningStakingIncomeEur: unknown;
+  derivativePnlEur: unknown;
+  taxFreePrivateDisposalsEur: unknown;
+  attachCount: number;
+  reviewCount: number;
+  nextAction: string;
+  filingEndpoint: string;
+  checklistEndpoint: string;
+  evidencePackageEndpoint: string;
+};
+
+function TaxProductCommandCenter({
+  rows,
+  activeYear,
+  activeRow,
+  onSelectYear,
+  onDownload
+}: {
+  rows: TaxProductYearRow[];
+  activeYear: string;
+  activeRow: TaxProductYearRow | undefined;
+  onSelectYear: (year: string) => void;
+  onDownload: (path: string) => void;
+}) {
+  const readyCount = rows.filter((row) => row.tone === "ok").length;
+  const reviewCount = rows.filter((row) => row.tone === "warning").length;
+  const blockedCount = rows.filter((row) => row.tone === "blocked").length;
+  return (
+    <section className="taxProductCenter">
+      <div className="taxProductHeader">
+        <div>
+          <span className="heroKicker">Abgabe-Navigator</span>
+          <h3>{activeYear}: {activeRow?.statusLabel ?? "Jahresstatus wird geladen"}</h3>
+          <p>{activeRow?.nextAction ?? "Waehle ein Steuerjahr, um Eingabewerte, Belege und naechste Schritte zu sehen."}</p>
+        </div>
+        <div className="taxProductStatusStack">
+          <span className="statusPill ok">{readyCount} bereit</span>
+          <span className="statusPill warning">{reviewCount} pruefen</span>
+          <span className="statusPill blocked">{blockedCount} blockiert</span>
+        </div>
+      </div>
+      <div className="taxProductSummary">
+        <Metric title="Eintragen Anlage SO" value={`${formatCurrency(activeRow?.taxablePrivateDisposalsEur)} EUR`} />
+        <Metric title="Rewards/Mining" value={`${formatCurrency(activeRow?.rewardsMiningStakingIncomeEur)} EUR`} />
+        <Metric title="Derivate" value={`${formatCurrency(activeRow?.derivativePnlEur)} EUR`} />
+        <Metric title="Steuerfrei archivieren" value={`${formatCurrency(activeRow?.taxFreePrivateDisposalsEur)} EUR`} />
+      </div>
+      <div className="taxProductActiveActions">
+        <div>
+          <strong>{activeRow?.declarationBucket ?? "Eingabeziel offen"}</strong>
+          <span>{activeRow?.whereToEnter ?? "Eingabeziel wird aus der Jahreslogik geladen."}</span>
+        </div>
+        <button type="button" disabled={!activeRow?.filingEndpoint} onClick={() => onDownload(activeRow?.filingEndpoint ?? "")}>
+          <FileJson size={16} />
+          <span>Eingabehilfe</span>
+        </button>
+        <button type="button" disabled={!activeRow?.checklistEndpoint} onClick={() => onDownload(activeRow?.checklistEndpoint ?? "")}>
+          <FileDown size={16} />
+          <span>Checkliste</span>
+        </button>
+        <button type="button" disabled={!activeRow?.evidencePackageEndpoint} onClick={() => onDownload(activeRow?.evidencePackageEndpoint ?? "")}>
+          <PackageCheck size={16} />
+          <span>Belegpaket</span>
+        </button>
+      </div>
+      <div className="taxProductYearGrid">
+        {rows.map((row) => (
+          <button
+            key={row.year}
+            className={`taxProductYearCard ${row.tone} ${row.year === activeYear ? "active" : ""}`}
+            type="button"
+            onClick={() => onSelectYear(row.year)}
+          >
+            <span className={`statusPill ${row.tone}`}>{row.statusLabel}</span>
+            <strong>{row.year}</strong>
+            <em>{row.declarationBucket}</em>
+            <small>
+              SO {formatCurrency(row.taxablePrivateDisposalsEur)} EUR · Rewards {formatCurrency(row.rewardsMiningStakingIncomeEur)} EUR
+            </small>
+            <small>{row.attachCount} beilegen · {row.reviewCount} pruefen</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function buildTaxProductYearRows({
+  years,
+  paymentRows,
+  filingMatrixRows,
+  filingClosureRows,
+  submissionRows,
+  finalizationRows
+}: {
+  years: Array<Record<string, unknown>>;
+  paymentRows: Array<Record<string, unknown>>;
+  filingMatrixRows: Array<Record<string, unknown>>;
+  filingClosureRows: Array<Record<string, unknown>>;
+  submissionRows: Array<Record<string, unknown>>;
+  finalizationRows: Array<Record<string, unknown>>;
+}): TaxProductYearRow[] {
+  const yearValues = new Set<string>();
+  for (const list of [years, paymentRows, filingMatrixRows, filingClosureRows, submissionRows, finalizationRows]) {
+    for (const row of list) {
+      if (row.year !== undefined && row.year !== null) {
+        yearValues.add(String(row.year));
+      }
+    }
+  }
+  return Array.from(yearValues)
+    .sort((left, right) => Number(left) - Number(right))
+    .map((year) => {
+      const payment = paymentRows.find((row) => String(row.year) === year);
+      const matrix = filingMatrixRows.find((row) => String(row.year) === year);
+      const closure = filingClosureRows.find((row) => String(row.year) === year);
+      const submission = submissionRows.find((row) => String(row.year) === year);
+      const finalization = finalizationRows.find((row) => String(row.year) === year);
+      const status = String(
+        closure?.filing_status
+          ?? matrix?.action_status
+          ?? submission?.status
+          ?? finalization?.status
+          ?? payment?.status
+          ?? ""
+      );
+      const tone = taxProductTone(status);
+      return {
+        year,
+        tone,
+        statusLabel: String(
+          submission?.status_label
+            ?? finalization?.status_label
+            ?? filingActionStatusLabel(status || matrix?.action_status || closure?.filing_status)
+            ?? "-"
+        ),
+        declarationBucket: String(
+          payment?.declaration_bucket
+            ?? submission?.declaration_bucket
+            ?? closure?.declaration_bucket
+            ?? "Steuerjahr pruefen"
+        ),
+        whereToEnter: String(
+          payment?.where_to_enter
+            ?? submission?.where_to_enter
+            ?? "Eingabeziel im Filing Summary pruefen"
+        ),
+        taxablePrivateDisposalsEur: firstDefined(
+          payment?.private_disposals_gain_loss_eur,
+          submission?.taxable_private_disposals_eur,
+          finalization?.taxable_private_disposals_eur,
+          closure?.private_disposals_gain_loss_eur,
+          matrix?.taxable_private_disposals_eur
+        ),
+        rewardsMiningStakingIncomeEur: firstDefined(
+          payment?.rewards_mining_staking_income_eur,
+          submission?.rewards_mining_staking_income_eur,
+          finalization?.rewards_mining_staking_income_eur,
+          closure?.rewards_mining_staking_income_eur,
+          matrix?.rewards_mining_staking_income_eur
+        ),
+        derivativePnlEur: firstDefined(
+          payment?.derivative_pnl_eur,
+          submission?.derivative_pnl_eur,
+          finalization?.derivative_pnl_eur,
+          closure?.derivative_pnl_eur,
+          matrix?.derivative_pnl_eur
+        ),
+        taxFreePrivateDisposalsEur: firstDefined(
+          payment?.tax_free_private_disposals_eur,
+          closure?.tax_free_private_disposals_eur,
+          submission?.tax_free_private_disposals_eur,
+          finalization?.tax_free_private_disposals_eur
+        ),
+        attachCount: Number(
+          closure?.beilegen_count
+            ?? submission?.attach_count
+            ?? matrix?.bmf_closure_appendix_items_count
+            ?? 0
+        ),
+        reviewCount: Number(
+          closure?.pruefen_count
+            ?? submission?.technical_review_requirements_count
+            ?? finalization?.review_count
+            ?? 0
+        ),
+        nextAction: String(
+          closure?.next_action
+            ?? submission?.next_action
+            ?? finalization?.next_action
+            ?? matrix?.next_action
+            ?? payment?.what_to_do
+            ?? "Jahresdetails pruefen"
+        ),
+        filingEndpoint: String(
+          closure?.filing_summary_endpoint
+            ?? submission?.filing_summary_endpoint
+            ?? finalization?.filing_summary_endpoint
+            ?? matrix?.filing_summary_endpoint
+            ?? `/api/v1/tax-years/${year}/filing-summary`
+        ),
+        checklistEndpoint: String(
+          closure?.filing_checklist_csv_endpoint
+            ?? submission?.filing_checklist_csv_endpoint
+            ?? matrix?.filing_checklist_csv_endpoint
+            ?? `/api/v1/export/tax-years/${year}/filing-checklist.csv`
+        ),
+        evidencePackageEndpoint: String(
+          closure?.evidence_package_endpoint
+            ?? submission?.evidence_package_endpoint
+            ?? finalization?.evidence_package_endpoint
+            ?? matrix?.evidence_package_endpoint
+            ?? `/api/v1/export/tax-years/${year}/evidence-package.zip`
+        )
+      };
+    });
+}
+
+function firstDefined(...values: unknown[]): unknown {
+  return values.find((value) => value !== undefined && value !== null) ?? 0;
+}
+
+function taxProductTone(status: string): "ok" | "warning" | "blocked" {
+  if (["ready", "conservative_ready", "bmf_ready", "ok", "finished"].includes(status)) {
+    return "ok";
+  }
+  if (["blocked", "not_ready"].includes(status)) {
+    return "blocked";
+  }
+  return "warning";
 }
 
 function PriorFilingDeclaredAmountsForm({
