@@ -122,6 +122,7 @@ def test_vertical_slice_routes_are_registered(tmp_path):
     assert "/api/v1/review/evidence-traces" in paths
     assert "/api/v1/review/evidence-traces/canonicalize" in paths
     assert "/api/v1/review/decision-suggestions/{suggestion_id}/accept" in paths
+    assert "/api/v1/product/readiness" in paths
     assert "/api/v1/parity/v1/references" in paths
     assert "/api/v1/parity/v1/references/{reference_id}" in paths
     assert "/api/v1/parity/v1/import/wiso" in paths

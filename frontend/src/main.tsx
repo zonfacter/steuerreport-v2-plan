@@ -168,6 +168,25 @@ type Snapshot = {
     }>;
     methodology: string;
   };
+  productReadiness?: {
+    generated_at: string;
+    overall_status: string;
+    can_prepare_tax_report: boolean;
+    can_file_without_review: boolean;
+    headline: string;
+    next_action: string;
+    next_action_path: string;
+    checks: Array<Record<string, unknown>>;
+    sources: Array<Record<string, unknown>>;
+    ready_years: number[];
+    conservative_ready_years: number[];
+    review_years: number[];
+    blocked_years: number[];
+    setup_required_sources: number;
+    review_items_count: number;
+    blocking_items_count: number;
+    methodology: string;
+  };
   sourcesOverview?: {
     generated_at: string;
     total_value_eur: string;
@@ -1778,6 +1797,7 @@ function App() {
       const allLoaders: Record<string, SnapshotLoader> = {
         health: { key: "health", label: "Health", load: () => getApi<Record<string, unknown>>("/api/v1/health") },
         cockpit: { key: "cockpit", label: "Cockpit", load: () => getApi<Snapshot["cockpit"]>("/api/v1/cockpit/summary") },
+        productReadiness: { key: "productReadiness", label: "Produkt-Readiness", load: () => getApi<Snapshot["productReadiness"]>("/api/v1/product/readiness") },
         sourcesOverview: { key: "sourcesOverview", label: "Quellen", load: () => getApi<Snapshot["sourcesOverview"]>("/api/v1/sources/overview") },
         sourceConnectorDiagnostics: { key: "sourceConnectorDiagnostics", label: "Connector-Diagnose", load: () => getApi<Snapshot["sourceConnectorDiagnostics"]>("/api/v1/sources/connector-diagnostics") },
         v1CexCredentialTakeover: { key: "v1CexCredentialTakeover", label: "V1-CEX-Credential-Uebernahme", load: () => getApi<Snapshot["v1CexCredentialTakeover"]>("/api/v1/admin/cex-credentials/v1-takeover") },
@@ -2015,7 +2035,7 @@ function App() {
           : [])
       ];
       const loaderKeysBySection: Record<Section, string[]> = {
-        dashboard: ["health", "cockpit"],
+        dashboard: ["health", "cockpit", "productReadiness"],
         sources: [
           "health",
           "sourcesOverview",
@@ -3301,6 +3321,7 @@ function Content({
     return (
       <CockpitDashboard
         summary={snapshot.cockpit}
+        readiness={snapshot.productReadiness}
         database={snapshot.health}
         onNavigate={onNavigate}
         onRebuildPipeline={onRebuildPipeline}
@@ -4517,6 +4538,7 @@ function reportTone(status: unknown): "ok" | "warning" | "blocked" {
 
 function CockpitDashboard({
   summary,
+  readiness,
   database,
   onNavigate,
   onRebuildPipeline,
@@ -4524,6 +4546,7 @@ function CockpitDashboard({
   sourceRefreshLoading
 }: {
   summary: Snapshot["cockpit"];
+  readiness: Snapshot["productReadiness"];
   database: Record<string, unknown> | undefined;
   onNavigate: (section: Section) => void;
   onRebuildPipeline: () => void;
@@ -4607,6 +4630,8 @@ function CockpitDashboard({
           </div>
         </div>
       </section>
+
+      <ProductReadinessPanel report={readiness} onNavigate={onNavigate} />
 
       <div className="cockpitMetricGrid">
         <Metric title="API-Livebestand" value={`${formatCurrency(summary?.portfolio_value_eur)} EUR`} />
@@ -4798,6 +4823,155 @@ function CockpitBar({
       <p>{meta}</p>
     </div>
   );
+}
+
+function ProductReadinessPanel({
+  report,
+  onNavigate
+}: {
+  report: Snapshot["productReadiness"];
+  onNavigate: (section: Section) => void;
+}) {
+  if (!report) {
+    return (
+      <section className="panel productReadinessPanel">
+        <div className="panelToolbar">
+          <strong>Abgabe-Readiness</strong>
+          <span className="statusPill neutral">wird geladen</span>
+        </div>
+        <div className="empty">Produkt-Readiness wird geladen.</div>
+      </section>
+    );
+  }
+  const tone = readinessTone(report.overall_status);
+  const checks = report.checks ?? [];
+  const sources = report.sources ?? [];
+  const nextSection = readinessSectionForPath(report.next_action_path);
+  const years = readinessYearsLine(report);
+  return (
+    <section className={`panel productReadinessPanel ${tone}`}>
+      <div className="panelToolbar">
+        <div>
+          <strong>Abgabe-Readiness</strong>
+          <span>{report.generated_at ? `Stand ${formatDateTime(report.generated_at)}` : ""}</span>
+        </div>
+        <span className={`statusPill ${tone}`}>{readinessLabel(report.overall_status)}</span>
+      </div>
+      <div className="productReadinessHeader">
+        <div>
+          <h3>{report.headline}</h3>
+          <p>{years}</p>
+        </div>
+        <button type="button" onClick={() => onNavigate(nextSection)}>
+          {tone === "ok" ? <Check size={16} /> : <AlertTriangle size={16} />}
+          <span>{report.next_action}</span>
+        </button>
+      </div>
+      <div className="productReadinessGrid">
+        <Metric title="Abgabe ohne Review" value={report.can_file_without_review ? "ja" : "nein"} />
+        <Metric title="Vorbereitung moeglich" value={report.can_prepare_tax_report ? "ja" : "nein"} />
+        <Metric title="Setup-Quellen" value={String(report.setup_required_sources ?? 0)} />
+        <Metric title="Review/Blocker" value={`${report.review_items_count ?? 0}/${report.blocking_items_count ?? 0}`} />
+      </div>
+      <div className="readinessCheckGrid">
+        {checks.map((check) => (
+          <button
+            key={String(check.key)}
+            className={`readinessCheck ${readinessTone(String(check.status))}`}
+            type="button"
+            onClick={() => onNavigate(readinessSectionForPath(String(check.action_path ?? "")))}
+            title={String(check.detail ?? "")}
+          >
+            <span className={`statusPill ${readinessTone(String(check.status))}`}>{String(check.status ?? "-")}</span>
+            <strong>{String(check.label ?? check.key)}</strong>
+            <em>{String(check.detail ?? "-")}</em>
+            <b>{String(check.next_action ?? "-")}</b>
+          </button>
+        ))}
+      </div>
+      <div className="sourceReadinessGrid">
+        {sources.slice(0, 6).map((source) => (
+          <button
+            key={String(source.source_id)}
+            className={`sourceReadinessCard ${readinessTone(String(source.status))}`}
+            type="button"
+            onClick={() => onNavigate(readinessSectionForPath(String(source.action_path ?? "")))}
+            title={String(source.next_action ?? "")}
+          >
+            <span className={`statusPill ${readinessTone(String(source.status))}`}>{String(source.status ?? "-")}</span>
+            <strong>{String(source.label ?? source.source_id)}</strong>
+            <em>{String(source.connector_id ?? "-")} · Credentials {String(source.credential_status ?? "-")} · Live {String(source.live_status ?? "-")}</em>
+            <small>
+              Ledger {formatCurrency(source.ledger_value_eur)} EUR
+              {source.live_value_eur !== null && source.live_value_eur !== undefined
+                ? ` · Live ${formatCurrency(source.live_value_eur)} EUR · Delta ${formatCurrency(source.delta_value_eur ?? 0)} EUR`
+                : ""}
+            </small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function readinessTone(status: string | undefined): "ok" | "warning" | "blocked" | "neutral" {
+  const normalized = String(status ?? "");
+  if (normalized === "ready" || normalized === "ok") {
+    return "ok";
+  }
+  if (normalized === "review" || normalized === "warning" || normalized === "info") {
+    return "warning";
+  }
+  if (normalized === "blocked" || normalized === "blocker" || normalized === "setup_required") {
+    return "blocked";
+  }
+  return "neutral";
+}
+
+function readinessLabel(status: string | undefined): string {
+  return {
+    ready: "bereit",
+    review: "Review",
+    blocked: "blockiert",
+    setup_required: "Setup offen"
+  }[String(status ?? "")] ?? String(status ?? "-");
+}
+
+function readinessSectionForPath(path: string | undefined): Section {
+  const value = String(path ?? "");
+  if (value.includes("/admin")) {
+    return "admin";
+  }
+  if (value.includes("/sources")) {
+    return "sources";
+  }
+  if (value.includes("/review")) {
+    return "review";
+  }
+  if (value.includes("/tax")) {
+    return "tax";
+  }
+  if (value.includes("/reports") || value.includes("/export")) {
+    return "export";
+  }
+  if (value.includes("/portfolio")) {
+    return "portfolio";
+  }
+  return "dashboard";
+}
+
+function readinessYearsLine(report: NonNullable<Snapshot["productReadiness"]>): string {
+  const ready = report.ready_years ?? [];
+  const conservative = report.conservative_ready_years ?? [];
+  const review = report.review_years ?? [];
+  const blocked = report.blocked_years ?? [];
+  const parts = [
+    ready.length > 0 ? `BMF-ready: ${ready.join(", ")}` : "",
+    conservative.length > 0 ? `konservativ: ${conservative.join(", ")}` : "",
+    review.length > 0 ? `Review: ${review.join(", ")}` : "",
+    blocked.length > 0 ? `blockiert: ${blocked.join(", ")}` : ""
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "Noch kein Jahres-Snapshot fuer die Abgabe geladen.";
 }
 
 function quickActionIcon(section: Section): React.ReactNode {

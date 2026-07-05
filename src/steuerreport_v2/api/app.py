@@ -141,6 +141,7 @@ from steuerreport_v2.contracts.pipeline import (
     ImportRunResult,
     PipelineResult,
 )
+from steuerreport_v2.contracts.product_readiness import ProductReadinessReport
 from steuerreport_v2.contracts.review import (
     ReviewDecision,
     ReviewDecisionCreate,
@@ -306,6 +307,7 @@ from steuerreport_v2.domain.parity import V1ParityService
 from steuerreport_v2.domain.parser_preflight import ParserPreflightService
 from steuerreport_v2.domain.price_csv_importer import PriceCsvImporter
 from steuerreport_v2.domain.portfolio import PortfolioService
+from steuerreport_v2.domain.product_readiness import ProductReadinessService
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.domain.reports import ReportCenterService
@@ -473,6 +475,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def cockpit_summary() -> ApiResponse[CockpitSummary]:
         return ApiResponse(
             data=cached_response("cockpit:summary", 10, lambda: CockpitService(db).summary())
+        )
+
+    @app.get("/api/v1/product/readiness")
+    def product_readiness() -> ApiResponse[ProductReadinessReport]:
+        return ApiResponse(
+            data=cached_response("product:readiness", 10, lambda: ProductReadinessService(db).report())
         )
 
     @app.get("/api/v1/admin/settings")

@@ -14,8 +14,8 @@ Diese Referenz wurde aus `src/steuerreport_v2/api/app.py` erzeugt und listet all
 
 ## Statistik
 
-- Endpunkte gesamt: `270`
-- GET: `211`
+- Endpunkte gesamt: `271`
+- GET: `212`
 - POST: `51`
 - PUT: `1`
 - PATCH: `1`
@@ -45,7 +45,13 @@ Diese Referenz wurde aus `src/steuerreport_v2/api/app.py` erzeugt und listet all
 
 | Methode | Endpoint | Zweck | Schreibwirkung | Code |
 | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/cockpit/summary` | COCKPIT summary | read-only | `app.py:473` `cockpit_summary` |
+| `GET` | `/api/v1/cockpit/summary` | COCKPIT summary | read-only | `app.py:475` `cockpit_summary` |
+
+## Product Readiness
+
+| Methode | Endpoint | Zweck | Schreibwirkung | Code |
+| --- | --- | --- | --- | --- |
+| `GET` | `/api/v1/product/readiness` | Produkt-Readiness fuer vorhandene Quellen, Review-Gate, Steuerjahre und Belegpakete | read-only | `app.py:481` `product_readiness` |
 
 ## Contracts
 
@@ -415,4 +421,3 @@ Diese Referenz wurde aus `src/steuerreport_v2/api/app.py` erzeugt und listet all
 | Methode | Endpoint | Zweck | Schreibwirkung | Code |
 | --- | --- | --- | --- | --- |
 | `POST` | `/api/v1/pipeline/rebuild` | Rebuild pipeline | schreibt/erzeugt Artefakte | `app.py:3217` `rebuild_pipeline` |
-

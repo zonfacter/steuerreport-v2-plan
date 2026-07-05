@@ -189,8 +189,8 @@ class SourceService:
             missing_snapshots=sum(1 for item in diagnostics if item.status == "missing_snapshot"),
             methodology=(
                 "Read-only Connector-Diagnose. CEX-Credentials werden ueber den "
-                "V1-Admin-Load-Pfad nur als entschluesselbar/nicht entschluesselbar "
-                "geprueft; zusaetzlich werden V1-Settings-Metadaten ohne Secret-Werte "
+                "V2-Secret-Store nur als vorhanden/entschluesselbar/nicht entschluesselbar "
+                "geprueft; zusaetzlich werden V2-Settings-Metadaten ohne Secret-Werte "
                 "gelesen. Secret-Werte werden nicht zurueckgegeben. Snapshot-Status "
                 "stammt aus persistierten V2-Live-Snapshots und loest keine Exchange-"
                 "Abfrage, FIFO-Buchung oder Ledger-Aenderung aus."
@@ -650,14 +650,14 @@ class SourceService:
         if credential_status == "missing":
             return (
                 "missing_credentials",
-                "API-Zugangsdaten sind in V1 aktuell nicht vollstaendig gespeichert.",
-                "API-Key/Secret fuer diese Quelle in V1/V2-Admin neu hinterlegen und danach alle Quellen per API abfragen.",
+                "API-Zugangsdaten sind in V2 aktuell nicht vollstaendig gespeichert.",
+                "API-Key/Secret fuer diese Quelle in der V2-Administration neu hinterlegen und danach alle Quellen per API abfragen.",
             )
         if credential_status == "error":
             return (
                 "credential_check_failed",
                 f"Credential-Status konnte nicht gelesen werden{': ' + credential_issue if credential_issue else ''}.",
-                "V1-Admin-Service und Secret-Key-Konfiguration pruefen; keine Live-Werte als frisch annehmen.",
+                "V2-Secret-Key-Konfiguration pruefen; keine Live-Werte als frisch annehmen.",
             )
         if last_snapshot_at is None:
             return (
