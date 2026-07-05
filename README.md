@@ -50,6 +50,9 @@ Der aktuelle Abschlussstand ist in zwei Einstiegspunkten dokumentiert:
 - `docs/624_FINAL_RELEASE_DOKUMENTATION_KI_HANDOFF_2026-07-05.md`
   - Architektur, Invarianten, Validierung, kritische Fachregeln und
     Weiterarbeitsanweisungen fuer KI-Agenten oder Entwickler.
+- `docs/625_SYSTEM_SETUP_UND_LOKALE_KI_BETRIEB_2026-07-05.md`
+  - Einrichtung, API/systemd-Betrieb, lokale KI-Endpunkte, KI-Jobs und
+    Sicherheitsregeln.
 
 ## V1 bleibt Referenz
 
