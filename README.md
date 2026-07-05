@@ -51,6 +51,8 @@ Der aktuelle Abschlussstand hat einen kanonischen Einstiegspunkt:
 
 - `docs/623_FINAL_RELEASE_DOKUMENTATION_MENSCH_2026-07-05.md`
   - Bedienung, Steuerjahr-Status, Belege, Finanzamtslogik und Grenzen.
+- `docs/001_REGELN_UND_ANPASSUNG_STEUERLOGIK_2026-07-05.md`
+  - Kanonische Steuer-/FIFO-/Connector-Regeln und Anpassungsleitfaden.
 - `docs/624_FINAL_RELEASE_DOKUMENTATION_KI_HANDOFF_2026-07-05.md`
   - Architektur, Invarianten, Validierung, kritische Fachregeln und
     Weiterarbeitsanweisungen fuer KI-Agenten oder Entwickler.
