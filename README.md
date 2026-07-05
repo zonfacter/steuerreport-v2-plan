@@ -41,6 +41,16 @@ Der erste lauffaehige Schnitt muss Ende-zu-Ende funktionieren:
 - `frontend/`: React/TypeScript-Frontend.
 - `tests/`: Regressionen und Golden Cases.
 
+## Final-Release-Dokumentation
+
+Der aktuelle Abschlussstand ist in zwei Einstiegspunkten dokumentiert:
+
+- `docs/623_FINAL_RELEASE_DOKUMENTATION_MENSCH_2026-07-05.md`
+  - Bedienung, Steuerjahr-Status, Belege, Finanzamtslogik und Grenzen.
+- `docs/624_FINAL_RELEASE_DOKUMENTATION_KI_HANDOFF_2026-07-05.md`
+  - Architektur, Invarianten, Validierung, kritische Fachregeln und
+    Weiterarbeitsanweisungen fuer KI-Agenten oder Entwickler.
+
 ## V1 bleibt Referenz
 
 V2 darf Blockpit, V1-Steuerlaeufe und alte Portfolio-Berechnungen nur als
