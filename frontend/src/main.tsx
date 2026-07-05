@@ -2057,6 +2057,7 @@ function App() {
           "portfolioTokenRisk",
           "portfolioSources",
           "taxHoldingPeriods",
+          "taxLossRealizationPlanner",
           "priceCoverage",
           ...(portfolioViewMode !== "overview"
             ? ["portfolioReconciliation", "portfolioValuationAudit", "separationReport", "fiatDeposits", "latestPrices"]
@@ -3415,6 +3416,7 @@ function Content({
           portfolio={snapshot.portfolio}
           sources={snapshot.portfolioSources}
           holdingPeriods={snapshot.taxHoldingPeriods}
+          lossPlanner={snapshot.taxLossRealizationPlanner}
           priceCoverage={snapshot.priceCoverage}
           onDownload={onDownload}
         />
@@ -5186,12 +5188,14 @@ function PortfolioDecisionPanel({
   portfolio,
   sources,
   holdingPeriods,
+  lossPlanner,
   priceCoverage,
   onDownload
 }: {
   portfolio: Snapshot["portfolio"];
   sources: Snapshot["portfolioSources"];
   holdingPeriods: Snapshot["taxHoldingPeriods"];
+  lossPlanner: Snapshot["taxLossRealizationPlanner"];
   priceCoverage: Snapshot["priceCoverage"];
   onDownload: (path: string) => void;
 }) {
@@ -5206,38 +5210,140 @@ function PortfolioDecisionPanel({
     .at(-1);
   const topSource = (sources?.groups ?? [])[0];
   return (
-    <section className={`portfolioDecision ${tone}`}>
-      <div className="portfolioDecisionMain">
-        <span className="heroKicker">Portfolio-Uebersicht</span>
-        <h2>{formatCurrency(portfolio?.total_value_eur)} EUR</h2>
-        <p>
-          Aktueller Bestand mit Preisdeckung, Quellenverteilung und Haltefrist-Ausblick. Detailabgleich und Preisdiagnosen liegen in den Tabs.
-        </p>
-        <div className="taxFilingTargets">
-          <span className={`statusPill ${tone}`}>{missingPrices.length === 0 ? "Preise vollstaendig" : "Preise pruefen"}</span>
-          <span>Preisstand {latestPriceAt ? formatDateTime(latestPriceAt) : "-"}</span>
-          <span>Top-Quelle {topSource ? String(topSource.source_group) : "-"}</span>
+    <Stack>
+      <section className={`portfolioDecision ${tone}`}>
+        <div className="portfolioDecisionMain">
+          <span className="heroKicker">Portfolio-Uebersicht</span>
+          <h2>{formatCurrency(portfolio?.total_value_eur)} EUR</h2>
+          <p>
+            Aktueller Bestand mit Preisdeckung, Quellenverteilung und Haltefrist-Ausblick. Detailabgleich und Preisdiagnosen liegen in den Tabs.
+          </p>
+          <div className="taxFilingTargets">
+            <span className={`statusPill ${tone}`}>{missingPrices.length === 0 ? "Preise vollstaendig" : "Preise pruefen"}</span>
+            <span>Preisstand {latestPriceAt ? formatDateTime(latestPriceAt) : "-"}</span>
+            <span>Top-Quelle {topSource ? String(topSource.source_group) : "-"}</span>
+          </div>
+        </div>
+        <div className="portfolioDecisionActions">
+          <button type="button" onClick={() => onDownload("/api/v1/portfolio/snapshot")}>
+            <FileJson size={18} />
+            <span>Snapshot JSON</span>
+          </button>
+          <button type="button" onClick={() => onDownload("/api/v1/prices/coverage")}>
+            <FileJson size={18} />
+            <span>Preisdeckung JSON</span>
+          </button>
+          <button type="button" onClick={() => onDownload("/api/v1/tax/holding-periods")}>
+            <FileJson size={18} />
+            <span>Haltefristen JSON</span>
+          </button>
+        </div>
+        <div className="taxFilingDecisionMetrics">
+          <Metric title="Preisdeckung" value={formatPercent(priceCoveragePct)} />
+          <Metric title="Jetzt steuerfrei" value={`${formatCurrency(holdingPeriods?.tax_free_now_value_eur)} EUR`} />
+          <Metric title="30 Tage" value={`${formatCurrency(holdingPeriods?.next_30_days_value_eur)} EUR`} />
+          <Metric title="Ausgeklammert" value={`${formatCurrency(portfolio?.excluded_value_eur)} EUR`} />
+        </div>
+      </section>
+      <PortfolioHoldingDecisionPanel
+        holdingPeriods={holdingPeriods}
+        lossPlanner={lossPlanner}
+        onDownload={onDownload}
+      />
+    </Stack>
+  );
+}
+
+function PortfolioHoldingDecisionPanel({
+  holdingPeriods,
+  lossPlanner,
+  onDownload
+}: {
+  holdingPeriods: Snapshot["taxHoldingPeriods"];
+  lossPlanner: Snapshot["taxLossRealizationPlanner"];
+  onDownload: (path: string) => void;
+}) {
+  const buckets = holdingPeriods?.buckets ?? [];
+  const lots = holdingPeriods?.lots ?? [];
+  const lossRows = lossPlanner?.rows ?? [];
+  const topLossRows = lossRows
+    .filter((row) => String(row.status) === "tax_relevant_loss_if_sold_now")
+    .slice(0, 4);
+  const maxBucketValue = Math.max(...buckets.map((bucket) => parseNumber(bucket.value_eur)), 1);
+  return (
+    <section className="holdingDecisionPanel">
+      <div className="holdingDecisionHeader">
+        <div>
+          <span className="heroKicker">Haltefrist & Verkaufsfenster</span>
+          <h3>Was kann steuerfrei oder verlustrelevant sein?</h3>
+          <p>
+            Sicht aus offenen FIFO-Lots ab {holdingPeriods?.as_of ? formatDateTime(holdingPeriods.as_of) : "-"}.
+            Dust unter {formatCurrency(holdingPeriods?.min_value_eur ?? 1)} EUR wird ausgeblendet.
+          </p>
+        </div>
+        <div className="holdingDecisionActions">
+          <button type="button" onClick={() => onDownload("/api/v1/tax/holding-periods")}>
+            <FileJson size={16} />
+            <span>Haltefristen</span>
+          </button>
+          <button type="button" onClick={() => onDownload("/api/v1/tax/loss-realization-planner?min_loss_eur=1&min_value_eur=1&limit=120")}>
+            <FileJson size={16} />
+            <span>Verlustplanung</span>
+          </button>
         </div>
       </div>
-      <div className="portfolioDecisionActions">
-        <button type="button" onClick={() => onDownload("/api/v1/portfolio/snapshot")}>
-          <FileJson size={18} />
-          <span>Snapshot JSON</span>
-        </button>
-        <button type="button" onClick={() => onDownload("/api/v1/prices/coverage")}>
-          <FileJson size={18} />
-          <span>Preisdeckung JSON</span>
-        </button>
-        <button type="button" onClick={() => onDownload("/api/v1/tax/holding-periods")}>
-          <FileJson size={18} />
-          <span>Haltefristen JSON</span>
-        </button>
-      </div>
-      <div className="taxFilingDecisionMetrics">
-        <Metric title="Preisdeckung" value={formatPercent(priceCoveragePct)} />
+      <div className="holdingTimelineMetrics">
         <Metric title="Jetzt steuerfrei" value={`${formatCurrency(holdingPeriods?.tax_free_now_value_eur)} EUR`} />
-        <Metric title="30 Tage" value={`${formatCurrency(holdingPeriods?.next_30_days_value_eur)} EUR`} />
-        <Metric title="Ausgeklammert" value={`${formatCurrency(portfolio?.excluded_value_eur)} EUR`} />
+        <Metric title="7 Tage" value={`${formatCurrency(holdingPeriods?.next_7_days_value_eur)} EUR`} />
+        <Metric title="7 Monate" value={`${formatCurrency(holdingPeriods?.next_7_months_value_eur)} EUR`} />
+        <Metric title="1 Jahr" value={`${formatCurrency(holdingPeriods?.next_year_value_eur)} EUR`} />
+        <Metric title="Verlust jetzt nutzbar" value={`${formatCurrency(lossPlanner?.tax_relevant_loss_if_sold_now_eur)} EUR`} />
+      </div>
+      <div className="holdingTimelineGrid">
+        <div className="holdingBucketList">
+          {buckets.length === 0 ? (
+            <div className="empty">Keine Haltefrist-Buckets vorhanden.</div>
+          ) : (
+            buckets.map((bucket) => (
+              <div key={String(bucket.bucket)} className="holdingBucketRow">
+                <div>
+                  <strong>{String(bucket.label ?? bucket.bucket)}</strong>
+                  <span>{String(bucket.lots_count ?? 0)} Lot(s) · {(Array.isArray(bucket.assets) ? bucket.assets : []).join(", ") || "-"}</span>
+                </div>
+                <em>{formatCurrency(bucket.value_eur)} EUR</em>
+                <div className="barTrack" aria-hidden="true">
+                  <div className="barFill" style={{ width: `${Math.max(4, Math.min((parseNumber(bucket.value_eur) / maxBucketValue) * 100, 100))}%` }} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="holdingActionList">
+          <div className="holdingActionHeader">
+            <strong>Top-Verlustfenster</strong>
+            <span>{topLossRows.length} Position(en)</span>
+          </div>
+          {topLossRows.length === 0 ? (
+            <div className="empty">Keine steuerrelevanten Verlustfenster ueber Filter sichtbar.</div>
+          ) : (
+            topLossRows.map((row) => (
+              <div key={String(row.lot_id)} className="holdingActionItem">
+                <strong>{String(row.asset)}</strong>
+                <span>{formatCurrency(row.unrealized_gain_loss_eur)} EUR · steuerfrei ab {row.tax_free_at ? formatDate(row.tax_free_at) : "-"}</span>
+                <em>{String(row.action_note ?? row.evidence_note ?? "")}</em>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+      <div className="holdingLotStrip">
+        {lots.slice(0, 8).map((lot) => (
+          <div key={String(lot.lot_id)} className={`holdingLotChip ${parseNumber(lot.days_until_tax_free) <= 0 ? "ok" : parseNumber(lot.days_until_tax_free) <= 30 ? "warning" : ""}`}>
+            <strong>{String(lot.asset)}</strong>
+            <span>{formatCurrency(lot.current_value_eur)} EUR</span>
+            <em>{parseNumber(lot.days_until_tax_free) <= 0 ? "steuerfrei" : `${String(lot.days_until_tax_free)} Tage`}</em>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -13742,6 +13848,20 @@ function formatDateTime(value: unknown): string {
   return date.toLocaleString("de-DE", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "UTC"
+  });
+}
+
+function formatDate(value: unknown): string {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleDateString("de-DE", {
+    dateStyle: "medium",
     timeZone: "UTC"
   });
 }

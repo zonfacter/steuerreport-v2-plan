@@ -421,6 +421,184 @@ p {
   font-size: 13px;
 }
 
+.holdingDecisionPanel {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.holdingDecisionHeader {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+}
+
+.holdingDecisionHeader h3 {
+  color: #17201b;
+  font-size: 26px;
+  line-height: 1.18;
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.holdingDecisionHeader p {
+  color: #4d5a52;
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.holdingDecisionActions {
+  display: grid;
+  gap: 8px;
+}
+
+.holdingDecisionActions button {
+  align-items: center;
+  background: #26372f;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 12px;
+}
+
+.holdingTimelineMetrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.holdingTimelineGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+}
+
+.holdingBucketList,
+.holdingActionList {
+  border: 1px solid #ece8e0;
+  border-radius: 8px;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.holdingBucketRow {
+  border-bottom: 1px solid #ece8e0;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 12px;
+}
+
+.holdingBucketRow:last-child {
+  border-bottom: 0;
+}
+
+.holdingBucketRow .barTrack {
+  grid-column: 1 / -1;
+}
+
+.holdingBucketRow strong,
+.holdingBucketRow span,
+.holdingBucketRow em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.holdingBucketRow span,
+.holdingBucketRow em {
+  color: #5d685f;
+  font-size: 13px;
+  font-style: normal;
+}
+
+.holdingActionHeader,
+.holdingActionItem {
+  border-bottom: 1px solid #ece8e0;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.holdingActionItem:last-child {
+  border-bottom: 0;
+}
+
+.holdingActionHeader {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.holdingActionHeader strong,
+.holdingActionHeader span,
+.holdingActionItem strong,
+.holdingActionItem span,
+.holdingActionItem em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.holdingActionHeader span,
+.holdingActionItem span,
+.holdingActionItem em {
+  color: #5d685f;
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.holdingLotStrip {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.holdingLotChip {
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.holdingLotChip.ok {
+  border-color: #add3ba;
+}
+
+.holdingLotChip.warning {
+  border-color: #e2c56c;
+}
+
+.holdingLotChip strong,
+.holdingLotChip span,
+.holdingLotChip em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.holdingLotChip span,
+.holdingLotChip em {
+  color: #5d685f;
+  font-size: 13px;
+  font-style: normal;
+}
+
 .portfolioSummaryStrip {
   border-bottom: 1px solid #ece8e0;
   display: grid;
@@ -3068,6 +3246,10 @@ th {
   .asOfHero,
   .asOfMetricGrid,
   .asOfCockpitGrid,
+  .holdingDecisionHeader,
+  .holdingTimelineMetrics,
+  .holdingTimelineGrid,
+  .holdingLotStrip,
   .cockpitHero,
   .cockpitMetricGrid,
   .productReadinessHeader,
