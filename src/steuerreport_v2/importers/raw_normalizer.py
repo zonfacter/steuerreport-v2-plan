@@ -61,12 +61,14 @@ class RawNormalizer:
             else:
                 skipped += 1
         event_rows = self._merge_binance_small_assets_exchange_bnb(batch.source, event_rows)
+        event_rows = self._merge_binance_sol_staking_purchase_quotes(batch.source, event_rows)
+        event_rows = self._split_binance_simple_earn_flexible_redemption_yield(batch.source, event_rows)
         event_rows = self._merge_binance_transaction_related_quotes(batch.source, event_rows)
         event_rows = self._merge_binance_same_asset_trade_fees(batch.source, event_rows)
         event_rows = self._merge_binance_transaction_spend_quotes(batch.source, event_rows)
         event_rows = self._merge_binance_same_asset_trade_fees(batch.source, event_rows)
+        event_rows = self._merge_solana_rpc_swap_quotes(batch.source, event_rows)
         event_payloads = [event for event, _row in event_rows]
-        event_payloads = self._merge_solana_rpc_swap_quotes(batch.source, event_payloads)
         events = self.store.add_canonical_events(event_payloads)
         return events, NormalizationReport(
             batch_id=batch_id,
@@ -349,6 +351,160 @@ class RawNormalizer:
                 rewritten.append((index, event, row))
 
         return [(event, row) for _index, event, row in sorted(rewritten, key=lambda item: item[0])]
+
+    def _merge_binance_sol_staking_purchase_quotes(
+        self,
+        source: str,
+        event_rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]],
+    ) -> list[tuple[CanonicalEventCreate, dict[str, str | None]]]:
+        if source != "binance":
+            return event_rows
+
+        grouped: dict[
+            tuple[datetime, str, str],
+            list[tuple[int, CanonicalEventCreate, dict[str, str | None]]],
+        ] = {}
+        passthrough: list[tuple[int, CanonicalEventCreate, dict[str, str | None]]] = []
+        for index, (event, row) in enumerate(event_rows):
+            operation = self._binance_operation(row)
+            if operation == "sol staking - purchase":
+                grouped.setdefault((event.event_time, event.account or "", operation), []).append(
+                    (index, event, row)
+                )
+            else:
+                passthrough.append((index, event, row))
+
+        if not grouped:
+            return event_rows
+
+        rewritten: list[tuple[int, CanonicalEventCreate, dict[str, str | None]]] = passthrough
+        for _key, items in grouped.items():
+            spend_items = [
+                (index, event, row)
+                for index, event, row in items
+                if event.asset == "SOL" and event.quantity < 0
+            ]
+            buy_items = [
+                (index, event, row)
+                for index, event, row in items
+                if event.asset == "BNSOL" and event.quantity > 0
+            ]
+            total_spend = sum((abs(event.quantity) for _index, event, _row in spend_items), Decimal("0"))
+            total_quantity = sum((event.quantity for _index, event, _row in buy_items), Decimal("0"))
+            if total_spend <= 0 or total_quantity <= 0:
+                rewritten.extend(items)
+                continue
+
+            spend_indexes = {index for index, _event, _row in spend_items}
+            buy_indexes = {index for index, _event, _row in buy_items}
+            for index, event, row in items:
+                if index in spend_indexes:
+                    rewritten.append(
+                        (
+                            index,
+                            event.model_copy(
+                                update={
+                                    "event_type": "unknown",
+                                    "quantity": Decimal("0"),
+                                    "quote_asset": None,
+                                    "quote_quantity": None,
+                                    "confidence": Decimal("0.70"),
+                                }
+                            ),
+                            row,
+                        )
+                    )
+                    continue
+                if index in buy_indexes:
+                    quote_quantity = total_spend * (event.quantity / total_quantity)
+                    rewritten.append(
+                        (
+                            index,
+                            event.model_copy(
+                                update={
+                                    "event_type": "trade",
+                                    "quote_asset": "SOL",
+                                    "quote_quantity": quote_quantity,
+                                    "confidence": Decimal("0.90"),
+                                }
+                            ),
+                            row,
+                        )
+                    )
+                    continue
+                rewritten.append((index, event, row))
+
+        return [(event, row) for _index, event, row in sorted(rewritten, key=lambda item: item[0])]
+
+    def _split_binance_simple_earn_flexible_redemption_yield(
+        self,
+        source: str,
+        event_rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]],
+    ) -> list[tuple[CanonicalEventCreate, dict[str, str | None]]]:
+        if source != "binance":
+            return event_rows
+
+        principal_by_key: dict[tuple[str, str], Decimal] = {}
+        rewritten: list[
+            tuple[tuple[datetime, int, int], CanonicalEventCreate, dict[str, str | None]]
+        ] = []
+        chronological = sorted(
+            enumerate(event_rows),
+            key=lambda item: (item[1][0].event_time, item[0]),
+        )
+        for index, (event, row) in chronological:
+            operation = self._binance_operation(row)
+            key = (event.account or "", event.asset)
+            if operation == "simple earn flexible subscription" and event.quantity < 0:
+                principal_by_key[key] = principal_by_key.get(key, Decimal("0")) + abs(event.quantity)
+                rewritten.append(((event.event_time, index, 0), event, row))
+                continue
+
+            if operation == "simple earn flexible redemption" and event.quantity > 0:
+                available = principal_by_key.get(key, Decimal("0"))
+                if available <= 0:
+                    rewritten.append(((event.event_time, index, 0), event, row))
+                    continue
+                transfer_quantity = min(event.quantity, available)
+                yield_quantity = event.quantity - transfer_quantity
+                principal_by_key[key] = available - transfer_quantity
+                if transfer_quantity > 0:
+                    rewritten.append(
+                        (
+                            (event.event_time, index, 0),
+                            event.model_copy(
+                                update={
+                                    "quantity": transfer_quantity,
+                                    "event_type": "transfer",
+                                    "quote_asset": None,
+                                    "quote_quantity": None,
+                                    "confidence": Decimal("0.90"),
+                                }
+                            ),
+                            row,
+                        )
+                    )
+                if yield_quantity > 0:
+                    rewritten.append(
+                        (
+                            (event.event_time, index, 1),
+                            event.model_copy(
+                                update={
+                                    "quantity": yield_quantity,
+                                    "event_type": "income",
+                                    "quote_asset": None,
+                                    "quote_quantity": None,
+                                    "confidence": Decimal("0.85"),
+                                }
+                            ),
+                            row,
+                        )
+                    )
+                continue
+
+            rewritten.append(((event.event_time, index, 0), event, row))
+
+        return [(event, row) for _sort_key, event, row in sorted(rewritten, key=lambda item: item[0])]
 
     def _merge_binance_same_asset_trade_fees(
         self,
@@ -636,20 +792,22 @@ class RawNormalizer:
     def _merge_solana_rpc_swap_quotes(
         self,
         source: str,
-        events: list[CanonicalEventCreate],
-    ) -> list[CanonicalEventCreate]:
+        event_rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]],
+    ) -> list[tuple[CanonicalEventCreate, dict[str, str | None]]]:
         if source != "solana_rpc":
-            return events
+            return event_rows
 
-        grouped: dict[str, list[tuple[int, CanonicalEventCreate]]] = {}
-        for index, event in enumerate(events):
+        grouped: dict[str, list[tuple[int, CanonicalEventCreate, dict[str, str | None]]]] = {}
+        for index, (event, row) in enumerate(event_rows):
             if event.event_type in {"trade", "transfer", "income"} and event.tx_id:
-                grouped.setdefault(event.tx_id, []).append((index, event))
+                grouped.setdefault(event.tx_id, []).append((index, event, row))
 
         rewritten: dict[int, CanonicalEventCreate] = {}
         for _tx_id, items in grouped.items():
-            incoming = [(index, event) for index, event in items if event.quantity > 0]
-            outgoing = [(index, event) for index, event in items if event.quantity < 0]
+            if any(self._contains_solana_claim_or_airdrop_instruction(row) for _index, _event, row in items):
+                continue
+            incoming = [(index, event) for index, event, _row in items if event.quantity > 0]
+            outgoing = [(index, event) for index, event, _row in items if event.quantity < 0]
             if not incoming or not outgoing:
                 continue
 
@@ -732,7 +890,10 @@ class RawNormalizer:
                     }
                 )
 
-        return [rewritten.get(index, event) for index, event in enumerate(events)]
+        return [
+            (rewritten.get(index, event), row)
+            for index, (event, row) in enumerate(event_rows)
+        ]
 
     def _solana_rpc_collapse_dust_outgoing(
         self,
@@ -756,7 +917,10 @@ class RawNormalizer:
     ) -> bool:
         if asset is None or self._canonical_asset(asset) not in {"HNT", "IOT", "MOBILE"}:
             return False
-        return self._contains_solana_helium_reward_instruction(row)
+        if self._contains_solana_helium_reward_instruction(row):
+            return True
+        defi_label = str(row.get("defi label") or row.get("defi_label") or "").strip().lower()
+        return defi_label == "staking"
 
     def _contains_solana_helium_reward_instruction(self, value: object) -> bool:
         reward_instructions = {
@@ -772,6 +936,22 @@ class RawNormalizer:
             return False
         normalized = re.sub(r"[^a-z0-9]", "", str(value).lower())
         return any(instruction in normalized for instruction in reward_instructions)
+
+    def _contains_solana_claim_or_airdrop_instruction(self, value: object) -> bool:
+        claim_instructions = {
+            "newclaim",
+            "creatednewclaim",
+            "claimstatus",
+            "airdrop",
+        }
+        if isinstance(value, dict):
+            return any(self._contains_solana_claim_or_airdrop_instruction(item) for item in value.values())
+        if isinstance(value, (list, tuple, set)):
+            return any(self._contains_solana_claim_or_airdrop_instruction(item) for item in value)
+        if value is None:
+            return False
+        normalized = re.sub(r"[^a-z0-9]", "", str(value).lower())
+        return any(instruction in normalized for instruction in claim_instructions)
 
     def _is_configured_asset(self, asset: str) -> bool:
         normalized = asset.strip().upper()
@@ -871,6 +1051,15 @@ class RawNormalizer:
         if lowered == "auto-invest transaction":
             return "transfer"
         if lowered == "index-auto-investment - redeem positions":
+            return "transfer"
+        if lowered in {
+            "simple earn flexible subscription",
+            "simple earn flexible redemption",
+        }:
+            return "transfer"
+        if lowered == "sol staking - purchase":
+            return "trade"
+        if lowered in {"staking purchase", "staking redemption"}:
             return "transfer"
         if lowered == "asset recovery":
             return "transfer"

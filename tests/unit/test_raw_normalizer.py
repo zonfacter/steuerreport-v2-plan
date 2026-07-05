@@ -998,6 +998,73 @@ def test_binance_crypto_box_is_reward_but_auto_invest_and_index_redeem_are_trans
     assert sol.quantity == Decimal("0.16379017")
 
 
+def test_binance_sol_staking_purchase_is_bnsol_trade_not_staking_reward(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="transaction-history.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "25-02-28 06:55:47,Spot,SOL Staking - Purchase,BNSOL,22.32304223,\n"
+            "25-02-28 06:55:47,Spot,SOL Staking - Purchase,SOL,-23.189761,\n"
+        ),
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    bnsol = next(event for event in events if event.asset == "BNSOL")
+    sol = next(event for event in events if event.asset == "SOL")
+    assert bnsol.event_type == "trade"
+    assert bnsol.quantity == Decimal("22.32304223")
+    assert bnsol.quote_asset == "SOL"
+    assert bnsol.quote_quantity == Decimal("23.189761")
+    assert sol.event_type == "unknown"
+    assert sol.quantity == Decimal("0")
+
+
+def test_binance_simple_earn_flexible_moves_are_internal_transfers(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="transaction-history.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "25-03-09 21:01:51,Spot,Simple Earn Flexible Subscription,BNSOL,-22.32304223,Binance Earn\n"
+            "25-03-23 15:44:22,Spot,Simple Earn Flexible Redemption,BNSOL,22.32305193,Binance Earn\n"
+        ),
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    assert [(event.asset, event.event_type, event.quantity) for event in events] == [
+        ("BNSOL", "transfer", Decimal("-22.32304223")),
+        ("BNSOL", "transfer", Decimal("22.32304223")),
+        ("BNSOL", "income", Decimal("0.00000970")),
+    ]
+
+
+def test_binance_staking_purchase_and_redemption_are_principal_transfers(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="transaction-history.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "25-01-01 08:00:00,Spot,Staking Purchase,HNT,-100,\n"
+            "25-01-31 08:00:00,Spot,Staking Redemption,HNT,100,\n"
+            "25-02-01 08:00:00,Spot,Staking Rewards,HNT,0.5,\n"
+        ),
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    assert [(event.asset, event.event_type, event.quantity) for event in events] == [
+        ("HNT", "transfer", Decimal("-100")),
+        ("HNT", "transfer", Decimal("100")),
+        ("HNT", "staking", Decimal("0.5")),
+    ]
+
+
 def test_bitget_spot_trading_history_derives_quote_and_utc_time(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(

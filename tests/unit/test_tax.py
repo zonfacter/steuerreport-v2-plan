@@ -430,3 +430,41 @@ def test_fifo_creates_non_stable_quote_asset_lot_for_crypto_sale(tmp_path):
     lots_by_asset = {lot.asset: lot for lot in result.lots}
     assert lots_by_asset["SOL"].quantity_total == Decimal("0.300000000000000000")
     assert lots_by_asset["SOL"].cost_basis_eur_total == Decimal("27.000000000000000000")
+
+
+def test_fifo_values_quote_asset_disposal_with_received_stable_asset_value(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="manual-csv",
+        filename="trump-usdt.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2025-01-20T07:12:26Z,TRUMP,140,buy,USDT,8252.81\n"
+            "2025-01-20T08:49:58Z,USDT,8363.63,buy,TRUMP,140\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.96"),
+            priced_at=datetime(2025, 1, 20, 7, 12, 26, tzinfo=timezone.utc),
+            source="usdt-price",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="TRUMP",
+            price_eur=Decimal("35"),
+            priced_at=datetime(2025, 1, 20, 7, 12, 26, tzinfo=timezone.utc),
+            source="should-not-price-disposal-proceeds",
+        )
+    )
+
+    result = TaxService(store).rebuild_fifo()
+
+    assert result.unmatched_disposals == 0
+    trump_line = next(line for line in result.tax_lines if line.asset == "TRUMP")
+    assert trump_line.acquisition_cost_eur == Decimal("7922.697600000000000000")
+    assert trump_line.disposal_proceeds_eur == Decimal("8029.084800000000000000")
+    assert trump_line.gain_loss_eur == Decimal("106.387200000000000000")

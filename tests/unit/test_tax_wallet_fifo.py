@@ -903,6 +903,97 @@ def test_wallet_fifo_provenance_closure_documents_binance_fiat_purchase(tmp_path
     assert report.review_required_count == 0
 
 
+def test_wallet_fifo_provenance_closure_documents_moonpay_apple_pay_onramp(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    wallet = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="solana_rpc",
+            filename="jup_wallet_solscan_balance_change_2026-05-27.json",
+            file_hash="moonpay-apple-pay-sol",
+        )
+    )
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "source": "solana_rpc",
+                    "signature": "moonpay-sol-tx",
+                    "event_type": "sol_transfer",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2026, 1, 1, 14, 49, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="SOL",
+                quantity=Decimal("1.972"),
+                account=wallet,
+                tx_id="moonpay-sol-tx",
+                raw_object_id=raw.raw_object_id,
+            ),
+        ]
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="SOL",
+            price_eur=Decimal("80"),
+            priced_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            source="unit",
+        )
+    )
+    artifact_dir = tmp_path / "solana_batches"
+    artifact_dir.mkdir()
+    artifact = artifact_dir / "latest_2026_SOL_provenance_classification.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "run_id": "run-moonpay",
+                "generated_at": "2026-07-05T11:30:00+00:00",
+                "year": 2026,
+                "asset": "SOL",
+                "pool_id": f"solana_rpc:{wallet}",
+                "provider": "rpc",
+                "total_events": 1,
+                "classified_count": 1,
+                "own_transfer_candidates_count": 0,
+                "external_or_unknown_count": 1,
+                "failed_count": 0,
+                "classifications": [
+                    {
+                        "event_id": "event-1",
+                        "signature": "moonpay-sol-tx",
+                        "status": "external_or_unknown_origin",
+                        "asset": "SOL",
+                        "expected_amount": "1.972",
+                        "matched_amount": "1.972",
+                        "sender_owner": WalletFifoPreviewService.MOONPAY_APPLE_PAY_SOLANA_SENDER,
+                        "receiver_owner": wallet,
+                        "sender_is_known_own_wallet": False,
+                        "receiver_is_known_own_wallet": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(WalletFifoPreviewService, "DEFAULT_SOLANA_PROVENANCE_BATCH_DIR", artifact_dir)
+    TaxService(store).rebuild_fifo()
+
+    report = WalletFifoPreviewService(store).provenance_closure_report(2026)
+
+    assert report.review_required_count == 0
+    assert report.items[0].category == "fiat_onramp_purchase"
+    assert report.items[0].closure_status == "documented_moonpay_apple_pay_onramp"
+    assert "keine FIFO-Fortfuehrung" in report.items[0].tax_treatment_hint
+
+
 def test_wallet_fifo_provenance_closure_counts_partial_legacy_hnt_cex_deposit(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     helium_batch = store.create_import_batch(
@@ -2036,6 +2127,175 @@ def test_wallet_fifo_provenance_marks_binance_simple_earn_api_context_internal(t
     assert gaps.gaps_count == 0
 
 
+def test_wallet_fifo_provenance_marks_binance_transaction_history_earn_redemption_internal(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="binance",
+            filename="Binance-Transaction-History.xlsx",
+            file_hash="binance-bnsol-earn-roundtrip",
+        )
+    )
+    raw_purchase = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "Account": "Spot",
+                    "Change": "22.32304223",
+                    "Coin": "BNSOL",
+                    "Operation": "SOL Staking - Purchase",
+                    "Remark": None,
+                    "Time": "25-02-28 06:55:47",
+                }
+            ),
+        ),
+    )
+    raw_subscription = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=2,
+            payload_json=json.dumps(
+                {
+                    "Account": "Spot",
+                    "Change": "-22.32304223",
+                    "Coin": "BNSOL",
+                    "Operation": "Simple Earn Flexible Subscription",
+                    "Remark": "Binance Earn",
+                    "Time": "25-03-09 21:01:51",
+                }
+            ),
+        ),
+    )
+    raw_redemption = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=3,
+            payload_json=json.dumps(
+                {
+                    "Account": "Spot",
+                    "Change": "22.32305193",
+                    "Coin": "BNSOL",
+                    "Operation": "Simple Earn Flexible Redemption",
+                    "Remark": "Binance Earn",
+                    "Time": "25-03-23 15:44:22",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2025, 2, 28, 6, 55, 47, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="BNSOL",
+                quantity=Decimal("22.32304223"),
+                quote_asset="SOL",
+                quote_quantity=Decimal("23.189761"),
+                account="Spot",
+                raw_object_id=raw_purchase.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2025, 3, 9, 21, 1, 51, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="BNSOL",
+                quantity=Decimal("-22.32304223"),
+                account="Spot",
+                raw_object_id=raw_subscription.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2025, 3, 23, 15, 44, 22, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="BNSOL",
+                quantity=Decimal("22.32304223"),
+                account="Spot",
+                raw_object_id=raw_redemption.raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2025, 3, 23, 15, 44, 22, tzinfo=timezone.utc),
+                event_type="income",
+                asset="BNSOL",
+                quantity=Decimal("0.00000970"),
+                account="Spot",
+                raw_object_id=raw_redemption.raw_object_id,
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    service = WalletFifoPreviewService(store)
+    preview = service.preview(year=2025)
+    report = service.provenance_priorities(2025)
+    events = service.provenance_events(2025, asset="BNSOL", pool_id="binance:Spot")
+    gaps = service.exchange_evidence_gaps(2025, asset="BNSOL")
+
+    assert preview.unresolved_inbound_provenance_count == 0
+    assert preview.transfer_traces[-1].status == "resolved_by_exchange_internal_context"
+    assert report.groups_count == 0
+    assert events.events_count == 0
+    assert gaps.gaps_count == 0
+
+
+def test_wallet_fifo_provenance_marks_binance_staking_redemption_internal(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="binance",
+            filename="Binance-Transaction-History.xlsx",
+            file_hash="binance-hnt-staking-redemption",
+        )
+    )
+    raw_redemption = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "Account": "Spot",
+                    "Change": "42.66970598",
+                    "Coin": "HNT",
+                    "Operation": "Staking Redemption",
+                    "Remark": None,
+                    "Time": "22-02-24 02:36:41",
+                    "User ID": "75432044",
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                event_time=datetime(2022, 2, 24, 2, 36, 41, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="HNT",
+                quantity=Decimal("42.66970598"),
+                account="Spot",
+                raw_object_id=raw_redemption.raw_object_id,
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    service = WalletFifoPreviewService(store)
+    preview = service.preview(year=2022)
+    report = service.provenance_priorities(2022)
+    events = service.provenance_events(2022, asset="HNT", pool_id="binance:Spot")
+    gaps = service.exchange_evidence_gaps(2022, asset="HNT")
+
+    assert preview.unresolved_inbound_provenance_count == 0
+    assert preview.transfer_traces[0].status == "resolved_by_exchange_internal_context"
+    assert preview.transfer_traces[0].source_pool_id == "exchange_internal_context"
+    assert report.groups_count == 0
+    assert events.events_count == 0
+    assert gaps.gaps_count == 0
+
+
 def test_wallet_fifo_provenance_marks_binance_spot_futures_transfer_internal(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = store.create_import_batch(
@@ -2764,6 +3024,123 @@ def test_wallet_fifo_provenance_resolves_solana_tiny_raw_credit(tmp_path):
     assert preview.unresolved_inbound_provenance_count == 0
     assert preview.transfer_traces[0].status == "resolved_by_solana_tiny_raw_credit"
     assert preview.transfer_traces[0].source_pool_id == "solana_tiny_raw_credit"
+    assert report.groups_count == 0
+    assert raw_breakdown.groups_count == 0
+
+
+def test_wallet_fifo_provenance_resolves_solana_helium_reward_claim_context(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="solana_rpc",
+            filename="solana-readonly.sqlite",
+            file_hash="helium-iot-claim-resolved",
+        )
+    )
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "source": "solana_rpc",
+                    "signature": "iot-claim-tx",
+                    "defi_label": "claim",
+                    "event_type": "token_transfer",
+                    "raw_row": str(
+                        {
+                            "logMessages": [
+                                "Program log: Instruction: SetCurrentRewardsWrapperV1",
+                                "Program log: Instruction: SetCurrentRewardsV0",
+                                "Program log: Instruction: DistributeCompressionRewardsV0",
+                            ]
+                        }
+                    ),
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2024, 4, 28, 12, 0, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="IOT",
+                quantity=Decimal("898221.114046"),
+                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                tx_id="iot-claim-tx",
+                raw_object_id=raw.raw_object_id,
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    service = WalletFifoPreviewService(store)
+    preview = service.preview(year=2024)
+    report = service.provenance_priorities(2024)
+    raw_breakdown = service.raw_provenance_breakdown(2024)
+
+    assert preview.unresolved_inbound_provenance_count == 0
+    assert preview.transfer_traces[0].status == "resolved_by_solana_helium_reward_context"
+    assert preview.transfer_traces[0].source_pool_id == "helium_solana_reward_context"
+    assert report.groups_count == 0
+    assert raw_breakdown.groups_count == 0
+
+
+def test_wallet_fifo_provenance_resolves_solana_helium_staking_reward_context(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="solana_rpc",
+            filename="solana-readonly.sqlite",
+            file_hash="helium-iot-staking-resolved",
+        )
+    )
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "source": "solana_rpc",
+                    "signature": "iot-staking-tx",
+                    "defi_label": "staking",
+                    "event_type": "token_transfer",
+                    "raw_row": str(
+                        {
+                            "transaction": {"message": {"accountKeys": [{"pubkey": "circAbx64bbsscPbQzZAUvuXpHqrCe6fLMzc2uKXz9g"}]}},
+                            "meta": {"logMessages": ["Program circAbx64bbsscPbQzZAUvuXpHqrCe6fLMzc2uKXz9g invoke"]},
+                        }
+                    ),
+                }
+            ),
+        ),
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2024, 1, 18, 1, 28, 25, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="IOT",
+                quantity=Decimal("164.879512"),
+                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                tx_id="iot-staking-tx",
+                raw_object_id=raw.raw_object_id,
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    service = WalletFifoPreviewService(store)
+    preview = service.preview(year=2024)
+    report = service.provenance_priorities(2024)
+    raw_breakdown = service.raw_provenance_breakdown(2024)
+
+    assert preview.unresolved_inbound_provenance_count == 0
+    assert preview.transfer_traces[0].status == "resolved_by_solana_helium_reward_context"
+    assert preview.transfer_traces[0].source_pool_id == "helium_solana_reward_context"
     assert report.groups_count == 0
     assert raw_breakdown.groups_count == 0
 

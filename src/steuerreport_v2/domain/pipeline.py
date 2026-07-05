@@ -29,6 +29,8 @@ class PipelineService:
         normalized_events = 0
         for batch in self.store.list_import_batches():
             normalized_events += len(RawNormalizer(self.store).normalize_batch(batch.batch_id))
+        self._suppress_solana_rpc_duplicate_reward_income_events()
+        self._carry_forward_solana_rpc_legacy_helium_claim_rewards()
         return self._rebuild_ledgers(normalized_events)
 
     def rebuild_after_import(self, batch_id: str) -> ImportRunResult:
@@ -36,6 +38,8 @@ class PipelineService:
         if batch is None:
             raise ValueError(f"unknown import batch: {batch_id}")
         _, report = RawNormalizer(self.store).normalize_batch_with_report(batch_id)
+        self._suppress_solana_rpc_duplicate_reward_income_events()
+        self._carry_forward_solana_rpc_legacy_helium_claim_rewards()
         pipeline = self._rebuild_ledgers(report.created_events)
         return ImportRunResult(
             batch_id=batch_id,
@@ -70,6 +74,96 @@ class PipelineService:
             review_issues_open=gate.issues_open,
             allow_export=gate.allow_export,
         )
+
+    def _suppress_solana_rpc_duplicate_reward_income_events(self) -> int:
+        with self.store.connect() as con:
+            suppressed = con.execute(
+                """
+                with duplicate_income as (
+                    select income.event_id
+                    from canonical_events income
+                    join canonical_events reward
+                      on reward.source = income.source
+                     and reward.tx_id = income.tx_id
+                     and reward.event_time = income.event_time
+                     and reward.asset = income.asset
+                     and reward.quantity = income.quantity
+                     and coalesce(reward.account, '') = coalesce(income.account, '')
+                     and reward.event_type = 'reward'
+                    where income.source = 'solana_rpc'
+                      and income.event_type = 'income'
+                      and income.asset in ('HNT', 'IOT', 'MOBILE')
+                      and income.tx_id is not null
+                )
+                update canonical_events
+                   set event_type = 'unknown',
+                       quantity = 0,
+                       quote_asset = null,
+                       quote_quantity = null,
+                       fee_asset = null,
+                       fee_quantity = null,
+                       confidence = 0.70
+                 where event_id in (select event_id from duplicate_income)
+                returning event_id
+                """
+            ).fetchall()
+        return len(suppressed)
+
+    def _carry_forward_solana_rpc_legacy_helium_claim_rewards(self) -> int:
+        with self.store.connect() as con:
+            carried = con.execute(
+                """
+                with legacy as (
+                    select
+                        extract(year from event_time)::integer as tax_year,
+                        asset,
+                        sum(quantity) as legacy_quantity
+                    from canonical_events
+                    where source = 'helium'
+                      and event_type = 'mining'
+                      and asset in ('HNT', 'IOT', 'MOBILE')
+                      and quantity > 0
+                    group by 1, 2
+                ),
+                solana as (
+                    select
+                        extract(year from event_time)::integer as tax_year,
+                        asset,
+                        sum(quantity) as solana_quantity
+                    from canonical_events
+                    where source = 'solana_rpc'
+                      and event_type = 'reward'
+                      and asset in ('HNT', 'IOT', 'MOBILE')
+                      and quantity > 0
+                    group by 1, 2
+                ),
+                matched as (
+                    select solana.tax_year, solana.asset
+                    from solana
+                    join legacy
+                      on legacy.tax_year = solana.tax_year
+                     and legacy.asset = solana.asset
+                    where solana.tax_year = 2024
+                      and legacy.legacy_quantity > 0
+                      and solana.solana_quantity > 0
+                      and abs(solana.solana_quantity - legacy.legacy_quantity)
+                          / greatest(legacy.legacy_quantity, solana.solana_quantity)
+                          <= 0.10
+                )
+                update canonical_events event
+                   set event_type = 'transfer',
+                       quote_asset = null,
+                       quote_quantity = null,
+                       confidence = 0.85
+                  from matched
+                 where event.source = 'solana_rpc'
+                   and event.event_type = 'reward'
+                   and event.asset = matched.asset
+                   and extract(year from event.event_time)::integer = matched.tax_year
+                returning event.event_id
+                """
+            ).fetchall()
+        return len(carried)
 
     def seed_demo(self) -> DemoSeedResult:
         self.store.delete_import_batches_by_source("demo")

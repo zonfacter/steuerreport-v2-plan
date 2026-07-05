@@ -1263,9 +1263,24 @@ class TaxMethodologyService:
             if ref
         ]
         tax_free = (
-            filing.tax_free_private_disposals_eur
+            getattr(filing, "tax_free_private_disposals_eur", Decimal("0"))
             if filing is not None
             else Decimal("0")
+        )
+        taxable_private = (
+            getattr(filing, "taxable_private_disposals_eur", readiness.taxable_private_disposals_eur)
+            if filing is not None
+            else readiness.taxable_private_disposals_eur
+        )
+        rewards_income = (
+            getattr(filing, "rewards_mining_staking_income_eur", readiness.rewards_mining_staking_income_eur)
+            if filing is not None
+            else readiness.rewards_mining_staking_income_eur
+        )
+        derivative_pnl = (
+            getattr(filing, "derivative_pnl_eur", readiness.derivative_pnl_eur)
+            if filing is not None
+            else readiness.derivative_pnl_eur
         )
         correction_review = bool(
             correction.amendment_review_recommended
@@ -1279,9 +1294,9 @@ class TaxMethodologyService:
             can_submit=finalization_status == "bmf_ready",
             can_submit_conservative=finalization_status in {"bmf_ready", "conservative_ready"},
             correction_review_recommended=correction_review,
-            taxable_private_disposals_eur=readiness.taxable_private_disposals_eur,
-            rewards_mining_staking_income_eur=readiness.rewards_mining_staking_income_eur,
-            derivative_pnl_eur=readiness.derivative_pnl_eur,
+            taxable_private_disposals_eur=taxable_private,
+            rewards_mining_staking_income_eur=rewards_income,
+            derivative_pnl_eur=derivative_pnl,
             tax_free_private_disposals_eur=tax_free,
             blocking_count=blocking_count,
             review_count=review_count,
@@ -1294,9 +1309,9 @@ class TaxMethodologyService:
             display_line=self._bmf_finalization_line(
                 year=year,
                 label=status_label,
-                taxable_private_disposals_eur=readiness.taxable_private_disposals_eur,
-                rewards_mining_staking_income_eur=readiness.rewards_mining_staking_income_eur,
-                derivative_pnl_eur=readiness.derivative_pnl_eur,
+                taxable_private_disposals_eur=taxable_private,
+                rewards_mining_staking_income_eur=rewards_income,
+                derivative_pnl_eur=derivative_pnl,
                 blocking_count=blocking_count,
                 review_count=review_count,
             ),

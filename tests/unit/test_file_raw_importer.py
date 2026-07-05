@@ -237,6 +237,95 @@ def test_solana_rpc_token_transfer_pair_with_same_tx_creates_trade(tmp_path):
     assert usdc.quantity == Decimal("0")
 
 
+def test_solana_rpc_new_claim_token_transfer_is_not_merged_to_trade(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="jup-claim-2024.json",
+        file_hash="test-solana-rpc-jup-new-claim",
+        rows=[
+            {
+                "timestamp_utc": "2024-04-28T19:09:21+00:00",
+                "event_type": "token_transfer",
+                "asset": "JUP",
+                "quantity": "1200",
+                "side": "in",
+                "tx_id": "tx-jup-new-claim",
+                "wallet_address": "wallet-1",
+                "defi_label": "lp",
+                "logMessages": [
+                    "Program log: Instruction: NewClaim",
+                    "Program log: Created new claim with locked 0 and 1200000000 unlocked",
+                ],
+            },
+            {
+                "timestamp_utc": "2024-04-28T19:09:21+00:00",
+                "event_type": "sol_transfer",
+                "asset": "SOL",
+                "quantity": "0.001622447",
+                "side": "out",
+                "tx_id": "tx-jup-new-claim",
+                "wallet_address": "wallet-1",
+            },
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    jup = next(event for event in events if event.asset == "JUP")
+    sol = next(event for event in events if event.asset == "SOL")
+    assert jup.event_type == "income"
+    assert jup.quantity == Decimal("1200")
+    assert jup.quote_asset is None
+    assert jup.quote_quantity is None
+    assert sol.event_type == "transfer"
+    assert sol.quantity == Decimal("-0.001622447")
+
+
+def test_solana_rpc_helium_staking_token_transfer_is_reward_not_trade(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="helium-staking-claim-2024.json",
+        file_hash="test-solana-rpc-helium-staking-reward",
+        rows=[
+            {
+                "timestamp_utc": "2024-01-18T01:28:25+00:00",
+                "event_type": "token_transfer",
+                "asset": "IOT",
+                "quantity": "164.879512",
+                "side": "in",
+                "tx_id": "tx-iot-staking-reward",
+                "wallet_address": "wallet-1",
+                "defi_label": "staking",
+            },
+            {
+                "timestamp_utc": "2024-01-18T01:28:25+00:00",
+                "event_type": "sol_transfer",
+                "asset": "SOL",
+                "quantity": "0.000005001",
+                "side": "out",
+                "tx_id": "tx-iot-staking-reward",
+                "wallet_address": "wallet-1",
+                "defi_label": "staking",
+                "fee": "0.000005001",
+                "fee_asset": "SOL",
+            },
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    iot = next(event for event in events if event.asset == "IOT")
+    sol = next(event for event in events if event.asset == "SOL")
+    assert iot.event_type == "reward"
+    assert iot.quantity == Decimal("164.879512")
+    assert iot.quote_asset is None
+    assert iot.quote_quantity is None
+    assert sol.event_type == "transfer"
+    assert sol.quantity == Decimal("-0.000005001")
+
+
 def test_solana_rpc_swap_with_sol_dust_uses_stable_quote(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_rows(

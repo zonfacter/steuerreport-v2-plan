@@ -1376,7 +1376,32 @@ class TaxYearService:
         snapshot_map = self._correction_map_from_readiness_snapshot()
         if snapshot_map is None:
             return None
-        return next((item for item in snapshot_map.years if item.year == year), None)
+        snapshot_year = next((item for item in snapshot_map.years if item.year == year), None)
+        if snapshot_year is None:
+            return None
+        payment_row = next((row for row in self.payment_overview(years=[year]).rows if row.year == year), None)
+        if self._correction_snapshot_is_stale_for_year(snapshot_year, payment_row=payment_row):
+            return None
+        return snapshot_year
+
+    def _correction_snapshot_is_stale_for_year(self, snapshot_year: TaxYearCorrectionMap, *, payment_row) -> bool:
+        if payment_row is None:
+            return False
+        live_values = (
+            payment_row.private_disposals_gain_loss_eur,
+            payment_row.rewards_mining_staking_income_eur,
+            payment_row.derivative_pnl_eur,
+            payment_row.tax_free_private_disposals_eur,
+        )
+        if not any(live_values):
+            return False
+        snapshot_values = (
+            snapshot_year.taxable_private_disposals_eur,
+            snapshot_year.rewards_mining_staking_income_eur,
+            snapshot_year.derivative_pnl_eur,
+            snapshot_year.tax_free_private_disposals_eur,
+        )
+        return live_values != snapshot_values
 
     def _correction_map_from_readiness_snapshot(self) -> TaxYearsCorrectionMap | None:
         path = self._bmf_filing_readiness_snapshot_path()
@@ -1404,7 +1429,20 @@ class TaxYearService:
             rewards_income = Decimal(str(item.get("rewards_mining_staking_income_eur") or "0"))
             derivative_pnl = Decimal(str(item.get("derivative_pnl_eur") or "0"))
             payment_row = payment_rows.get(year)
-            tax_free = payment_row.tax_free_private_disposals_eur if payment_row is not None else Decimal("0")
+            if payment_row is not None and any(
+                (
+                    payment_row.private_disposals_gain_loss_eur,
+                    payment_row.rewards_mining_staking_income_eur,
+                    payment_row.derivative_pnl_eur,
+                    payment_row.tax_free_private_disposals_eur,
+                )
+            ):
+                taxable_private = payment_row.private_disposals_gain_loss_eur
+                rewards_income = payment_row.rewards_mining_staking_income_eur
+                derivative_pnl = payment_row.derivative_pnl_eur
+                tax_free = payment_row.tax_free_private_disposals_eur
+            else:
+                tax_free = Decimal("0")
             appendix_items = int(item.get("appendix_items_count") or 0)
             appendix_manual = int(item.get("appendix_manual_evidence_required_count") or 0)
             blocking_codes = item.get("blocking_gap_codes") if isinstance(item.get("blocking_gap_codes"), list) else []
@@ -1801,6 +1839,21 @@ class TaxYearService:
             appendix_items_count = int(item.get("appendix_items_count") or 0)
             appendix_manual_count = int(item.get("appendix_manual_evidence_required_count") or 0)
             derivative_pnl = Decimal(str(item.get("derivative_pnl_eur") or "0"))
+            taxable_private = Decimal(str(item.get("taxable_private_disposals_eur") or "0"))
+            rewards_income = Decimal(str(item.get("rewards_mining_staking_income_eur") or "0"))
+            tax_free = payment_row.tax_free_private_disposals_eur if payment_row is not None else Decimal("0")
+            if payment_row is not None and any(
+                (
+                    payment_row.private_disposals_gain_loss_eur,
+                    payment_row.rewards_mining_staking_income_eur,
+                    payment_row.derivative_pnl_eur,
+                    payment_row.tax_free_private_disposals_eur,
+                )
+            ):
+                taxable_private = payment_row.private_disposals_gain_loss_eur
+                rewards_income = payment_row.rewards_mining_staking_income_eur
+                derivative_pnl = payment_row.derivative_pnl_eur
+                tax_free = payment_row.tax_free_private_disposals_eur
             action_status: TaxYearFilingActionStatus
             if blocking_codes:
                 action_status = "blocked"
@@ -1820,8 +1873,6 @@ class TaxYearService:
             next_action = self._filing_matrix_snapshot_next_action(counts, action_status)
             if action_status != "conservative_ready" and item.get("next_action"):
                 next_action = str(item.get("next_action"))
-            taxable_private = Decimal(str(item.get("taxable_private_disposals_eur") or "0"))
-            rewards_income = Decimal(str(item.get("rewards_mining_staking_income_eur") or "0"))
             row = TaxYearFilingMatrixRow(
                 year=year,
                 status_label=str(item.get("status_label") or item.get("filing_status") or "-"),
@@ -1831,9 +1882,7 @@ class TaxYearService:
                 taxable_private_disposals_eur=taxable_private,
                 rewards_mining_staking_income_eur=rewards_income,
                 derivative_pnl_eur=derivative_pnl,
-                tax_free_private_disposals_eur=(
-                    payment_row.tax_free_private_disposals_eur if payment_row is not None else Decimal("0")
-                ),
+                tax_free_private_disposals_eur=tax_free,
                 checklist_counts=counts,
                 bmf_closure_appendix_status=str(item.get("appendix_status") or "") or None,
                 bmf_closure_appendix_items_count=appendix_items_count,

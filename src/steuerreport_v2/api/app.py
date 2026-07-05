@@ -4951,6 +4951,230 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         def response_body(response: Response) -> bytes:
             return bytes(response.body or b"")
 
+        def render_tax_year_canonical_events_csv() -> bytes:
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(
+                [
+                    "Event_ID",
+                    "Zeitpunkt_UTC",
+                    "Quelle",
+                    "Source_Ref",
+                    "Event_Typ",
+                    "Asset",
+                    "Menge",
+                    "Quote_Asset",
+                    "Quote_Menge",
+                    "Fee_Asset",
+                    "Fee_Menge",
+                    "TxID",
+                    "Wallet",
+                    "Account",
+                    "Confidence",
+                    "Raw_Object_ID",
+                    "Export_Klassifizierung",
+                    "Steuerwirkung_Hinweis",
+                ]
+            )
+            with db.connect() as con:
+                rows = con.execute(
+                    """
+                    select
+                        e.event_id,
+                        e.event_time::varchar,
+                        e.source,
+                        coalesce(e.source_ref, ''),
+                        e.event_type,
+                        e.asset,
+                        e.quantity::varchar,
+                        coalesce(e.quote_asset, ''),
+                        coalesce(e.quote_quantity::varchar, ''),
+                        coalesce(e.fee_asset, ''),
+                        coalesce(e.fee_quantity::varchar, ''),
+                        coalesce(e.tx_id, ''),
+                        coalesce(e.wallet, ''),
+                        coalesce(e.account, ''),
+                        e.confidence::varchar,
+                        coalesce(e.raw_object_id, ''),
+                        case
+                            when lower(e.event_type) = 'unknown'
+                             and e.quantity = 0
+                             and e.source = 'binance'
+                             and lower(coalesce(json_extract_string(r.payload_json, '$.Operation'), '')) in (
+                                'transaction fee',
+                                'transaction sold',
+                                'transaction spend'
+                             )
+                                then 'binance_merged_trade_component_no_own_tax_line'
+                            when lower(e.event_type) = 'unknown'
+                             and e.quantity = 0
+                             and e.source = 'binance_withdrawal_api'
+                                then 'binance_withdrawal_evidence_anchor_no_own_tax_line'
+                            when lower(e.event_type) = 'unknown'
+                                then 'unknown_requires_review'
+                            else 'tax_or_ledger_event'
+                        end as export_classification,
+                        case
+                            when lower(e.event_type) = 'unknown'
+                             and e.quantity = 0
+                             and e.source = 'binance'
+                             and lower(coalesce(json_extract_string(r.payload_json, '$.Operation'), '')) in (
+                                'transaction fee',
+                                'transaction sold',
+                                'transaction spend'
+                             )
+                                then 'Rohkomponente eines Binance-Trades; in zusammengefuehrter Trade-Zeile beruecksichtigt, keine eigene Tax-Line.'
+                            when lower(e.event_type) = 'unknown'
+                             and e.quantity = 0
+                             and e.source = 'binance_withdrawal_api'
+                                then 'Binance-Withdrawal-Beleganker; dient dem Transfernachweis, keine eigene FIFO-Veräusserung.'
+                            when lower(e.event_type) = 'unknown'
+                                then 'Review noetig: nicht als steuerneutral oder steuerfrei behaupten.'
+                            else ''
+                        end as tax_effect_note
+                    from canonical_events e
+                    left join raw_objects r on r.raw_object_id = e.raw_object_id
+                    where e.event_time >= ? and e.event_time < ?
+                    order by e.event_time, e.event_id
+                    """,
+                    [
+                        datetime(year, 1, 1),
+                        datetime(year + 1, 1, 1),
+                    ],
+                ).fetchall()
+            writer.writerows(rows)
+            return output.getvalue().encode("utf-8")
+
+        def render_tax_year_unknown_event_review_csv() -> bytes:
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(
+                [
+                    "Event_ID",
+                    "Zeitpunkt_UTC",
+                    "Quelle",
+                    "Account",
+                    "Asset",
+                    "Menge",
+                    "Raw_Operation",
+                    "Raw_Change",
+                    "TxID",
+                    "Raw_Object_ID",
+                    "Export_Klassifizierung",
+                    "Steuerwirkung_Hinweis",
+                ]
+            )
+            with db.connect() as con:
+                rows = con.execute(
+                    """
+                    select
+                        e.event_id,
+                        e.event_time::varchar,
+                        e.source,
+                        coalesce(e.account, ''),
+                        e.asset,
+                        e.quantity::varchar,
+                        coalesce(json_extract_string(r.payload_json, '$.Operation'), ''),
+                        coalesce(json_extract_string(r.payload_json, '$.Change'), ''),
+                        coalesce(e.tx_id, json_extract_string(r.payload_json, '$.tx_id'), ''),
+                        coalesce(e.raw_object_id, ''),
+                        case
+                            when e.quantity = 0
+                             and e.source = 'binance'
+                             and lower(coalesce(json_extract_string(r.payload_json, '$.Operation'), '')) in (
+                                'transaction fee',
+                                'transaction sold',
+                                'transaction spend'
+                             )
+                                then 'binance_merged_trade_component_no_own_tax_line'
+                            when e.quantity = 0
+                             and e.source = 'binance_withdrawal_api'
+                                then 'binance_withdrawal_evidence_anchor_no_own_tax_line'
+                            else 'unknown_requires_review'
+                        end as export_classification,
+                        case
+                            when e.quantity = 0
+                             and e.source = 'binance'
+                             and lower(coalesce(json_extract_string(r.payload_json, '$.Operation'), '')) in (
+                                'transaction fee',
+                                'transaction sold',
+                                'transaction spend'
+                             )
+                                then 'Rohkomponente eines Binance-Trades; in zusammengefuehrter Trade-Zeile beruecksichtigt, keine eigene Tax-Line.'
+                            when e.quantity = 0
+                             and e.source = 'binance_withdrawal_api'
+                                then 'Binance-Withdrawal-Beleganker; dient dem Transfernachweis, keine eigene FIFO-Veräusserung.'
+                            else 'Review noetig: nicht als steuerneutral oder steuerfrei behaupten.'
+                        end as tax_effect_note
+                    from canonical_events e
+                    left join raw_objects r on r.raw_object_id = e.raw_object_id
+                    where e.event_time >= ? and e.event_time < ?
+                      and lower(e.event_type) = 'unknown'
+                    order by e.event_time, e.event_id
+                    """,
+                    [
+                        datetime(year, 1, 1),
+                        datetime(year + 1, 1, 1),
+                    ],
+                ).fetchall()
+            writer.writerows(rows)
+            return output.getvalue().encode("utf-8")
+
+        def render_tax_year_reward_mining_events_csv() -> bytes:
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(
+                [
+                    "Event_ID",
+                    "Zeitpunkt_UTC",
+                    "Quelle",
+                    "Event_Typ",
+                    "Asset",
+                    "Menge",
+                    "Quote_Asset",
+                    "Quote_Menge",
+                    "TxID",
+                    "Wallet",
+                    "Account",
+                    "Raw_Object_ID",
+                    "Steuerlicher_Hinweis",
+                ]
+            )
+            with db.connect() as con:
+                rows = con.execute(
+                    """
+                    select
+                        event_id,
+                        event_time::varchar,
+                        source,
+                        event_type,
+                        asset,
+                        quantity::varchar,
+                        coalesce(quote_asset, ''),
+                        coalesce(quote_quantity::varchar, ''),
+                        coalesce(tx_id, ''),
+                        coalesce(wallet, ''),
+                        coalesce(account, ''),
+                        coalesce(raw_object_id, ''),
+                        case
+                            when lower(event_type) = 'mining' then 'mining_reward_detail'
+                            when lower(event_type) = 'reward' then 'reward_detail'
+                            when lower(event_type) = 'staking' then 'staking_detail'
+                            else 'income_detail_review'
+                        end
+                    from canonical_events
+                    where event_time >= ? and event_time < ?
+                      and lower(event_type) in ('mining', 'reward', 'staking', 'income')
+                    order by event_time, event_id
+                    """,
+                    [
+                        datetime(year, 1, 1),
+                        datetime(year + 1, 1, 1),
+                    ],
+                ).fetchall()
+            writer.writerows(rows)
+            return output.getvalue().encode("utf-8")
+
         files: list[tuple[str, bytes, str]] = [
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-filing-summary.json",
@@ -5068,6 +5292,21 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     ensure_ascii=False,
                 ).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/cex-exchange-outflow-anchor-feasibility?source_exchange=bitget&target_cex=binance&network=SOL",
+            ),
+            (
+                f"01_Transaktionen/tax-year-{year}-canonical-events.csv",
+                render_tax_year_canonical_events_csv(),
+                "/api/v1/events/canonical",
+            ),
+            (
+                f"01_Transaktionen/tax-year-{year}-unknown-event-review.csv",
+                render_tax_year_unknown_event_review_csv(),
+                "/api/v1/events/canonical?event_type=unknown",
+            ),
+            (
+                f"01_Transaktionen/tax-year-{year}-reward-mining-staking-events.csv",
+                render_tax_year_reward_mining_events_csv(),
+                "/api/v1/events/canonical?event_type=reward_mining_staking_income",
             ),
         ]
         csv_factories = {

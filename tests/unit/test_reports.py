@@ -737,7 +737,7 @@ def test_tax_year_evidence_package_download_endpoint_contains_year_files(tmp_pat
         assert "03_Review_Entscheidungen/tax-year-2021-review-decisions.json" in manifest_paths
         assert "02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv" in manifest_paths
         wallet_fifo = json.loads(package.read("06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-delta.json").decode("utf-8"))
-        assert wallet_fifo["method_version"] == "wallet_asset_preview_v14"
+        assert wallet_fifo["method_version"] == "wallet_asset_preview_v17"
         filing_summary = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2021-filing-summary.json").decode("utf-8"))
         filing_checklist = package.read("02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv").decode("utf-8")
         evidence = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2021-evidence.json").decode("utf-8"))

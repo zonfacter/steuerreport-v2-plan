@@ -1,6 +1,7 @@
 # Runtime data and real tax evidence
 data/
 var/
+artifacts/
 *.duckdb
 *.duckdb.wal
 *.sqlite

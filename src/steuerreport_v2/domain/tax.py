@@ -23,6 +23,18 @@ from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 
 LOT_ACQUISITION_EVENT_TYPES = {"trade", "income", "reward", "staking", "mining"}
 FIAT_TAX_EXCLUDED_ASSETS = {"EUR"}
+STABLE_VALUE_ANCHOR_ASSETS = {
+    "EUR",
+    "USD",
+    "USDT",
+    "USDC",
+    "BUSD",
+    "FDUSD",
+    "TUSD",
+    "DAI",
+    "EURC",
+    "EURS",
+}
 
 
 class TaxService:
@@ -43,7 +55,11 @@ class TaxService:
                 continue
             event_value_eur = self._eur_value(event)
             if event.event_type == "trade" and event.quantity > 0:
-                lot = self._lot_from_buy(event)
+                event_value_eur = self._eur_value(
+                    event,
+                    prefer_received_asset=self._use_received_asset_value_for_quote_disposal(event),
+                )
+                lot = self._lot_from_buy(event, value_eur=event_value_eur)
                 lots_by_asset[event.asset].append(lot)
                 all_lots.append(lot)
                 if (
@@ -283,8 +299,8 @@ class TaxService:
             ),
         )
 
-    def _lot_from_buy(self, event: CanonicalEvent) -> TaxLot:
-        cost_basis = self._eur_value(event)
+    def _lot_from_buy(self, event: CanonicalEvent, *, value_eur: Decimal | None = None) -> TaxLot:
+        cost_basis = value_eur if value_eur is not None else self._eur_value(event)
         return self._lot_from_values(
             asset=event.asset,
             acquired_at=event.event_time,
@@ -525,24 +541,46 @@ class TaxService:
             and event.quote_quantity != 0
         )
 
+    def _use_received_asset_value_for_quote_disposal(self, event: CanonicalEvent) -> bool:
+        if event.quote_asset is None or event.quote_quantity is None:
+            return False
+        return (
+            event.quantity > 0
+            and event.quote_asset not in FIAT_TAX_EXCLUDED_ASSETS
+            and event.asset.upper() in STABLE_VALUE_ANCHOR_ASSETS
+        )
+
     def _available_quantity(self, lots: deque[TaxLot]) -> Decimal:
         return sum((lot.quantity_remaining for lot in lots), Decimal("0"))
 
-    def _eur_value(self, event: CanonicalEvent) -> Decimal:
+    def _eur_value(self, event: CanonicalEvent, *, prefer_received_asset: bool = False) -> Decimal:
+        if prefer_received_asset and event.quantity > 0:
+            received_value = self._asset_value_eur(event.asset, abs(event.quantity), event.event_time)
+            if received_value is not None:
+                return received_value
         if event.quote_quantity is not None and event.quote_asset is not None:
             if event.quote_asset == "EUR":
                 return abs(event.quote_quantity)
-            quote_price = self.price_lookup.at_or_before(
+            quote_value = self._asset_value_eur(
                 event.quote_asset,
+                abs(event.quote_quantity),
                 event.event_time,
             )
-            if quote_price is None:
+            if quote_value is None:
                 return Decimal("0")
-            return abs(event.quote_quantity) * quote_price.price_eur
-        price = self.price_lookup.at_or_before(event.asset, event.event_time)
-        if price is None:
+            return quote_value
+        value = self._asset_value_eur(event.asset, abs(event.quantity), event.event_time)
+        if value is None:
             return Decimal("0")
-        return abs(event.quantity) * price.price_eur
+        return value
+
+    def _asset_value_eur(self, asset: str, quantity: Decimal, at: datetime) -> Decimal | None:
+        if asset == "EUR":
+            return quantity
+        price = self.price_lookup.at_or_before(asset, at)
+        if price is None:
+            return None
+        return quantity * price.price_eur
 
     def _replace_tax_tables(
         self,

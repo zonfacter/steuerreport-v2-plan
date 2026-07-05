@@ -110,12 +110,13 @@ class _SolanaRawRouteDetails:
 
 
 class WalletFifoPreviewService:
-    METHOD_VERSION = "wallet_asset_preview_v14"
+    METHOD_VERSION = "wallet_asset_preview_v17"
     DEFAULT_SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
     DEFAULT_SOLANA_PROVENANCE_BATCH_DIR = Path("/workspace/steuerreport-v2-plan/var/solana_provenance_batches")
     MAIN_HELIUM_LEGACY_WALLET = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
     FAIRSPOT_STAKING_WALLET = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
     PRIMARY_SOLANA_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    MOONPAY_APPLE_PAY_SOLANA_SENDER = "Dw8phQHJuLhCMzUUNWTNkHcui847dMdoADdg8XDxsVtE"
     FAIRSPOT_EVIDENCE_URL = (
         "https://www.fairspot.host/hnt-export-mining-tax"
         "?account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
@@ -636,6 +637,16 @@ class WalletFifoPreviewService:
                         update={
                             "status": "resolved_by_solana_tiny_raw_credit",
                             "source_pool_id": "solana_tiny_raw_credit",
+                        }
+                    )
+                )
+                continue
+            if self._is_solana_helium_reward_claim_context(event=event, raw_evidence=raw_evidence):
+                resolved.append(
+                    trace.model_copy(
+                        update={
+                            "status": "resolved_by_solana_helium_reward_context",
+                            "source_pool_id": "helium_solana_reward_context",
                         }
                     )
                 )
@@ -2597,7 +2608,23 @@ class WalletFifoPreviewService:
                 action = "Sender-Ownership belegen oder konservativ offen lassen; nicht automatisch steuerneutral schließen."
             elif category == "unresolved_provenance" and group.source.lower() == "solana_rpc" and group.asset.upper() == "SOL":
                 category = "solana_external_or_unknown_origin"
-                if solana_batch.exists and solana_batch.failed_count == 0 and solana_batch.own_transfer_candidates_count == 0:
+                if self._solana_batch_documents_moonpay_apple_pay_onramp(
+                    solana_batch=solana_batch,
+                    group=group,
+                ):
+                    category = "fiat_onramp_purchase"
+                    closure_status = "documented_moonpay_apple_pay_onramp"
+                    requires_review = False
+                    tax_hint = (
+                        "Alchemy/RPC-Batch belegt Zufluss von der bekannten MoonPay-/Apple-Pay-"
+                        "Onramp-Adresse; als Fiat-Anschaffung dokumentieren, keine FIFO-Fortfuehrung "
+                        "aus einer Vorwallet behaupten."
+                    )
+                    action = (
+                        "MoonPay-/Apple-Pay-Zahlungsbelege als Anschaffungsnachweis beilegen; "
+                        "nicht als steuerneutralen Eigenwallet-Transfer behandeln."
+                    )
+                elif solana_batch.exists and solana_batch.failed_count == 0 and solana_batch.own_transfer_candidates_count == 0:
                     closure_status = "external_or_unknown_origin_documented"
                     tax_hint = "Alchemy/RPC-Batch fand keine eigene Senderwallet; Herkunft bleibt extern/unklar."
                     action = "Programm-/Service-/Exchange-Kontext belegen; nicht automatisch als Eigenwallet-Transfer behandeln."
@@ -2613,6 +2640,31 @@ class WalletFifoPreviewService:
                         f"/api/v1/tax-years/{year}/wallet-fifo-solana-raw-bmf-evidence-summary?asset=SOL",
                         f"/api/v1/tax-years/{year}/wallet-fifo-solana-raw-provenance-senders?asset=SOL",
                     ]
+                )
+            elif (
+                category == "unresolved_provenance"
+                and self._provenance_group_solana_helium_reward_context_count(
+                    year=year,
+                    group=group,
+                    canonical_events=canonical_events,
+                    raw_evidence_by_id=raw_evidence_by_id,
+                )
+                == group.events_count
+            ):
+                category = "solana_helium_reward_context"
+                closure_status = "documented_solana_helium_reward_context"
+                requires_review = False
+                tax_hint = (
+                    "Solana-Raw-Evidence belegt Helium/HNT-IOT-MOBILE Claim-/Staking-Reward-Kontext "
+                    "auf eigener Wallet; kein ungeklärter CEX-/Fremdtransfer."
+                )
+                action = (
+                    "Als dokumentierten Helium/Solana-Reward-Kontext im Jahresbeleg ausweisen; "
+                    "Reward-/Income-Behandlung bleibt in den Steuerjahreswerten separat nachvollziehbar."
+                )
+                evidence_refs.append(
+                    f"/api/v1/tax-years/{year}/wallet-fifo-provenance-events"
+                    f"?asset={group.asset}&pool_id={group.pool_id}"
                 )
             items.append(
                 WalletFifoYearProvenanceClosureItem(
@@ -2702,6 +2754,77 @@ class WalletFifoPreviewService:
             ):
                 return False
         return True
+
+    def _provenance_group_solana_helium_reward_context_count(
+        self,
+        *,
+        year: int,
+        group: WalletFifoProvenancePriorityGroup,
+        canonical_events: list[object],
+        raw_evidence_by_id: dict[str, WalletFifoOriginRawEvidence | None],
+    ) -> int:
+        if group.source.lower() != "solana_rpc" or group.asset.upper() not in {"HNT", "IOT", "MOBILE"}:
+            return 0
+        group_events = [
+            event
+            for event in canonical_events
+            if event.event_time.year == year
+            and event.source.lower() == "solana_rpc"
+            and event.asset.upper() == group.asset.upper()
+            and self._pool_id(event) == group.pool_id
+            and event.quantity > 0
+        ]
+        if not group_events:
+            return 0
+        documented = 0
+        for event in group_events:
+            raw_evidence = raw_evidence_by_id.get(event.raw_object_id or "")
+            if self._is_solana_helium_reward_claim_context(event=event, raw_evidence=raw_evidence):
+                documented += 1
+        return documented
+
+    def _solana_batch_documents_moonpay_apple_pay_onramp(
+        self,
+        *,
+        solana_batch: WalletFifoSolanaProvenanceBatchLatest,
+        group: WalletFifoProvenancePriorityGroup,
+    ) -> bool:
+        if (
+            group.source.lower() != "solana_rpc"
+            or group.asset.upper() != "SOL"
+            or not solana_batch.exists
+            or solana_batch.failed_count != 0
+            or solana_batch.own_transfer_candidates_count != 0
+            or solana_batch.classified_count < group.events_count
+        ):
+            return False
+        try:
+            payload = json.loads(Path(solana_batch.artifact_path).read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        classifications = payload.get("classifications")
+        if not isinstance(classifications, list) or len(classifications) < group.events_count:
+            return False
+        sender = self.MOONPAY_APPLE_PAY_SOLANA_SENDER
+        matching = [
+            item
+            for item in classifications
+            if isinstance(item, dict)
+            and str(item.get("asset") or "").upper() == "SOL"
+            and str(item.get("status") or "") == "external_or_unknown_origin"
+            and str(item.get("sender_owner") or "") == sender
+        ]
+        if len(matching) < group.events_count:
+            return False
+        matched_amount_total = sum(
+            (
+                Decimal(str(item.get("matched_amount") or item.get("expected_amount") or "0"))
+                for item in matching
+            ),
+            Decimal("0"),
+        )
+        tolerance = self._transfer_match_tolerance("SOL") * Decimal(str(max(1, group.events_count)))
+        return abs(matched_amount_total - group.quantity_total) <= tolerance
 
     def _provenance_group_legacy_hnt_cex_deposit_count(
         self,
@@ -3783,11 +3906,13 @@ class WalletFifoPreviewService:
             "cex_deposit_local_onchain_match": 1,
             "exchange_outflow_candidate": 1,
             "deposit_evidence_ready": 2,
+            "fiat_onramp_purchase": 2,
             "local_outflow_candidate": 3,
             "exchange_internal_context": 4,
             "solana_tiny_raw_credit": 5,
-            "raw_transaction_evidence_only": 6,
-            "missing_source_evidence": 7,
+            "solana_helium_reward_context": 6,
+            "raw_transaction_evidence_only": 7,
+            "missing_source_evidence": 8,
         }.get(status, 99)
 
     def _provenance_status_and_action(
@@ -3849,6 +3974,11 @@ class WalletFifoPreviewService:
                 "solana_tiny_raw_credit",
                 "Winziger SOL-Raw-Zufluss; als Dust-/Rent-/Programmkontext buendeln und nicht mit wertrelevanten Herkunftsluecken vermischen.",
             )
+        if raw_evidence_ready and self._is_solana_helium_reward_claim_context(event=event, raw_evidence=raw_evidence):
+            return (
+                "solana_helium_reward_context",
+                "Solana-Raw-Evidence belegt Helium/HNT-IOT-MOBILE Claim-/Staking-Reward-Kontext auf eigener Wallet; nicht als ungeklärten CEX-/Fremdtransfer behandeln.",
+            )
         if raw_evidence_ready:
             return (
                 "raw_transaction_evidence_only",
@@ -3872,6 +4002,33 @@ class WalletFifoPreviewService:
             and event.asset.upper() == "SOL"
             and event.quantity > 0
             and abs(event.quantity) <= Decimal("0.00001")
+        )
+
+    @staticmethod
+    def _is_solana_helium_reward_claim_context(
+        *,
+        event: CanonicalEvent | WalletFifoProvenanceEvent,
+        raw_evidence: WalletFifoOriginRawEvidence | None,
+    ) -> bool:
+        raw_source = (raw_evidence.source if raw_evidence else event.source) or ""
+        if (
+            raw_source.strip().lower() != "solana_rpc"
+            or event.source.strip().lower() != "solana_rpc"
+            or event.asset.upper() not in {"HNT", "IOT", "MOBILE"}
+            or event.quantity <= 0
+        ):
+            return False
+        payload = raw_evidence.payload if raw_evidence else {}
+        defi_label = str(payload.get("defi_label") or payload.get("defiLabel") or "").strip().lower()
+        payload_text = json.dumps(payload, ensure_ascii=False, default=str).lower()
+        helium_reward_instructions = (
+            "claimrewardsv0",
+            "setcurrentrewardswrapperv1",
+            "setcurrentrewardsv0",
+            "distributecompressionrewardsv0",
+        )
+        return defi_label in {"claim", "staking"} or any(
+            instruction in payload_text for instruction in helium_reward_instructions
         )
 
     def _provenance_group_status_and_action(
@@ -5666,9 +5823,15 @@ class WalletFifoPreviewService:
         payload = raw_evidence.payload if raw_evidence else {}
         source = event.source.strip().lower()
         operation = str(payload.get("Operation") or payload.get("operation") or "").strip().lower()
+        remark = str(payload.get("Remark") or payload.get("remark") or "").strip().lower()
         if source == "binance":
             if "index-auto-investment" in operation and "redeem positions" in operation:
                 return True
+            if "staking redemption" in operation:
+                return True
+            if "simple earn" in operation or "binance earn" in remark:
+                if "redemption" in operation:
+                    return True
             return False
         if source == "bitget":
             action = str(

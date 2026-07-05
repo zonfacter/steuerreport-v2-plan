@@ -129,6 +129,164 @@ def test_pipeline_rebuild_is_idempotent_for_canonical_events(tmp_path):
     assert second.balance_entries == first.balance_entries
 
 
+def test_pipeline_suppresses_solana_rpc_duplicate_reward_income_from_overlapping_sources(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    importer = CsvRawImporter(store)
+    base_row = {
+        "timestamp_utc": "2026-05-07T14:53:43+00:00",
+        "event_type": "token_transfer",
+        "asset": "HNT",
+        "quantity": "0.40107403",
+        "side": "in",
+        "tx_id": "same-hnt-reward-tx",
+        "wallet_address": "wallet-1",
+    }
+    importer.import_rows(
+        source="solana_rpc",
+        filename="wbr-wallet-solscan-safe.json",
+        file_hash="solscan-discovery",
+        rows=[
+            {
+                **base_row,
+                "defi_label": "transfer",
+                "source": "solscan_wallet_discovery",
+            }
+        ],
+    )
+    importer.import_rows(
+        source="solana_rpc",
+        filename="helium-reward-evidence.json",
+        file_hash="helium-reward-evidence",
+        rows=[
+            {
+                **base_row,
+                "source": "helium_solana_reward_rpc_evidence",
+                "logMessages": ["Program log: Instruction: SetCurrentRewardsWrapperV1"],
+            }
+        ],
+    )
+
+    PipelineService(store).rebuild_all()
+
+    with store.connect() as con:
+        rows = con.execute(
+            """
+            select event_type, asset, quantity, tx_id
+            from canonical_events
+            where tx_id = 'same-hnt-reward-tx'
+            order by event_type
+            """
+        ).fetchall()
+
+    assert rows == [
+        ("reward", "HNT", Decimal("0.401074030000000000"), "same-hnt-reward-tx"),
+        ("unknown", "HNT", Decimal("0E-18"), "same-hnt-reward-tx"),
+    ]
+
+
+def test_pipeline_carries_forward_solana_helium_claim_when_legacy_mining_matches(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    importer = CsvRawImporter(store)
+    importer.import_rows(
+        source="helium",
+        filename="legacy-iot-mining.csv",
+        file_hash="legacy-iot-mining",
+        rows=[
+            {
+                "time": "2024-01-31T23:59:59Z",
+                "asset": "IOT",
+                "amount": "1000",
+                "type": "mining",
+                "quote_asset": "EUR",
+                "quote_quantity": "10",
+                "account": "legacy-wallet",
+            }
+        ],
+    )
+    importer.import_rows(
+        source="solana_rpc",
+        filename="solana-iot-claim.json",
+        file_hash="solana-iot-claim",
+        rows=[
+            {
+                "timestamp_utc": "2024-02-01T00:00:00+00:00",
+                "event_type": "token_transfer",
+                "asset": "IOT",
+                "quantity": "980",
+                "side": "in",
+                "tx_id": "claim-iot-on-solana",
+                "wallet_address": "wallet-1",
+                "defi_label": "staking",
+            }
+        ],
+    )
+
+    PipelineService(store).rebuild_all()
+
+    with store.connect() as con:
+        events = con.execute(
+            """
+            select source, event_type, asset, quantity, tx_id
+            from canonical_events
+            order by source, event_time
+            """
+        ).fetchall()
+        lots = con.execute(
+            """
+            select e.source, e.event_type, l.asset, l.quantity_total, l.cost_basis_eur_total
+            from tax_lots l
+            join canonical_events e on e.event_id = l.source_event_id
+            order by e.source
+            """
+        ).fetchall()
+
+    assert events == [
+        ("helium", "mining", "IOT", Decimal("1000.000000000000000000"), None),
+        ("solana_rpc", "transfer", "IOT", Decimal("980.000000000000000000"), "claim-iot-on-solana"),
+    ]
+    assert lots == [
+        (
+            "helium",
+            "mining",
+            "IOT",
+            Decimal("1000.000000000000000000"),
+            Decimal("10.000000000000000000"),
+        )
+    ]
+
+
+def test_pipeline_keeps_solana_helium_reward_without_legacy_match_taxable(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="solana-hnt-reward.json",
+        file_hash="solana-hnt-reward-no-legacy",
+        rows=[
+            {
+                "timestamp_utc": "2026-05-07T14:53:43+00:00",
+                "event_type": "token_transfer",
+                "asset": "HNT",
+                "quantity": "3.5",
+                "side": "in",
+                "tx_id": "real-hnt-reward",
+                "wallet_address": "wallet-1",
+                "logMessages": ["Program log: Instruction: SetCurrentRewardsWrapperV1"],
+            }
+        ],
+    )
+
+    PipelineService(store).rebuild_all()
+
+    with store.connect() as con:
+        event = con.execute(
+            "select event_type, asset, quantity from canonical_events where tx_id = 'real-hnt-reward'"
+        ).fetchone()
+        lots = con.execute("select asset, quantity_total from tax_lots").fetchall()
+
+    assert event == ("reward", "HNT", Decimal("3.500000000000000000"))
+    assert lots == [("HNT", Decimal("3.500000000000000000"))]
+
+
 def test_rebuild_after_import_runs_full_pipeline(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(

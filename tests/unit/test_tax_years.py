@@ -1747,6 +1747,56 @@ def test_tax_year_correction_map_uses_local_readiness_snapshot_for_single_year(t
     assert "Snapshot" in report.methodology
 
 
+def test_tax_year_correction_map_ignores_stale_snapshot_when_live_summary_differs(tmp_path):
+    snapshot_dir = tmp_path / "var" / "bmf_filing_readiness"
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "latest_bmf_filing_readiness_2021_2025.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-06-22T00:00:00Z",
+                "years": [
+                    {
+                        "year": 2025,
+                        "filing_status": "conservative_appendix",
+                        "status_label": "Konservativ belegbar",
+                        "taxable_private_disposals_eur": "-923.64",
+                        "rewards_mining_staking_income_eur": "45.44",
+                        "derivative_pnl_eur": "0",
+                        "blocking_gap_codes": [],
+                        "review_gap_codes": ["wallet_fifo_delta_present"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="helium",
+        filename="stale-correction-map.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2025-01-01T00:00:00Z,HNT,10,buy,EUR,100\n"
+            "2025-06-01T00:00:00Z,HNT,-10,sell,EUR,40\n"
+            "2025-07-01T00:00:00Z,HNT,5,mining,EUR,15\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    TaxService(store).rebuild_fifo()
+
+    report = TaxYearService(store).year_correction_map(2025)
+    overview = TaxYearService(store).correction_map()
+    filing = TaxYearService(store).filing_matrix()
+
+    assert report.taxable_private_disposals_eur == Decimal("-60.000000000000000000000000000000000000")
+    assert report.rewards_mining_staking_income_eur == Decimal("15.000000000000000000")
+    assert "Snapshot" in report.methodology
+    row = next(item for item in overview.years if item.year == 2025)
+    assert row.taxable_private_disposals_eur == report.taxable_private_disposals_eur
+    filing_row = next(item for item in filing.rows if item.year == 2025)
+    assert filing_row.taxable_private_disposals_eur == report.taxable_private_disposals_eur
+
+
 def test_tax_year_filing_summary_surfaces_cex_fifo_anchor_status(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
@@ -1974,8 +2024,21 @@ def test_tax_year_bmf_closure_appendix_documents_conservative_provenance(tmp_pat
         assert "02_Steuerliche_CSVs/tax-year-2024-filing-checklist.csv" in names
         assert "02_Steuerliche_CSVs/tax-year-2024-correction-map.json" in names
         assert "02_Steuerliche_CSVs/tax-year-2024-correction-map.csv" in names
+        assert "01_Transaktionen/tax-year-2024-canonical-events.csv" in names
+        assert "01_Transaktionen/tax-year-2024-unknown-event-review.csv" in names
+        assert "01_Transaktionen/tax-year-2024-reward-mining-staking-events.csv" in names
         packaged_checklist_csv = package.read("02_Steuerliche_CSVs/tax-year-2024-filing-checklist.csv").decode("utf-8")
         assert "beilegen,BMF-Abschlussbeilage Herkunft" in packaged_checklist_csv
+        canonical_events_csv = package.read("01_Transaktionen/tax-year-2024-canonical-events.csv").decode("utf-8")
+        assert "Event_ID,Zeitpunkt_UTC,Quelle" in canonical_events_csv
+        assert "Export_Klassifizierung,Steuerwirkung_Hinweis" in canonical_events_csv
+        assert "manual-csv" in canonical_events_csv
+        unknown_review_csv = package.read("01_Transaktionen/tax-year-2024-unknown-event-review.csv").decode("utf-8")
+        assert "Export_Klassifizierung,Steuerwirkung_Hinweis" in unknown_review_csv
+        reward_events_csv = package.read(
+            "01_Transaktionen/tax-year-2024-reward-mining-staking-events.csv"
+        ).decode("utf-8")
+        assert "Steuerlicher_Hinweis" in reward_events_csv
         correction_map = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2024-correction-map.json").decode("utf-8"))
         assert correction_map["year"] == 2024
         correction_map_csv = package.read("02_Steuerliche_CSVs/tax-year-2024-correction-map.csv").decode("utf-8")
