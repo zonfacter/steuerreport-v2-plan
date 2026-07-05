@@ -4,8 +4,6 @@ import json
 import os
 import re
 import sqlite3
-import sys
-import importlib
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -23,11 +21,11 @@ from steuerreport_v2.contracts.jupiter import (
     JupiterTokenSearchResult,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.secrets import resolve_secret_value
 
 
 class JupiterTokenService:
     SEARCH_URL = "https://api.jup.ag/tokens/v2/search"
-    V1_TAX_ENGINE_SRC = "/workspace/steuerreport/src"
     V1_DB_PATH = Path("/root/.local/share/steuerreport/steuerreport.db")
     SOLANA_MINT_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
     MINT_KEY_HINTS = {
@@ -109,18 +107,7 @@ class JupiterTokenService:
         return ""
 
     def _secret_value(self, key: str) -> str:
-        try:
-            if self.V1_TAX_ENGINE_SRC in sys.path:
-                sys.path.remove(self.V1_TAX_ENGINE_SRC)
-            sys.path.insert(0, self.V1_TAX_ENGINE_SRC)
-            importlib.invalidate_caches()
-            from tax_engine.admin import resolve_secret_value  # type: ignore
-        except Exception:
-            return ""
-        try:
-            return str(resolve_secret_value(key) or "").strip()
-        except Exception:
-            return ""
+        return resolve_secret_value(self.store, key)
 
     def metadata_cache(self, limit: int = 200) -> JupiterTokenMetadataCacheResult:
         normalized_limit = min(max(int(limit), 1), 1000)

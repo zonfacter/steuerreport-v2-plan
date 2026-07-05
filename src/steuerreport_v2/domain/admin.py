@@ -18,6 +18,7 @@ from steuerreport_v2.contracts.admin import (
     V1CexCredentialTakeoverResult,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.secrets import redact_setting, upsert_secret
 from steuerreport_v2.domain.sources import SourceService
 
 
@@ -30,10 +31,10 @@ class AdminService:
 
     def upsert_setting(self, setting: AdminSettingWrite) -> AdminSetting:
         json.loads(setting.value_json)
-        return self.store.upsert_admin_setting(setting)
+        return redact_setting(self.store.upsert_admin_setting(setting))
 
     def list_settings(self) -> list[AdminSetting]:
-        return self.store.list_admin_settings()
+        return [redact_setting(setting) for setting in self.store.list_admin_settings()]
 
     def delete_setting(self, key: str) -> bool:
         return self.store.delete_admin_setting(key)
@@ -64,7 +65,7 @@ class AdminService:
             settings.append((f"secret.cex.{connector_id}.passphrase", passphrase))
         written_keys: list[str] = []
         for setting_key, value in settings:
-            self._write_v1_secret_setting(setting_key, value)
+            self._write_v2_secret_setting(setting_key, value)
             written_keys.append(setting_key)
         diagnostic = next(
             item
@@ -79,7 +80,7 @@ class AdminService:
             credential_status=diagnostic.credential_status,
             credential_issue=diagnostic.credential_issue,
             message=(
-                "CEX-Credentials wurden verschluesselt im V1-Secret-Store gespeichert."
+                "CEX-Credentials wurden im V2-Secret-Store gespeichert."
                 if diagnostic.credential_status == "configured"
                 else "CEX-Credentials wurden geschrieben, sind aber in der anschliessenden Diagnose noch nicht nutzbar."
             ),
@@ -90,31 +91,16 @@ class AdminService:
         if not api_key:
             raise ValueError("api_key_required")
         setting_key = "secret.jupiter.api_key"
-        self._write_v1_secret_setting(setting_key, api_key)
+        self._write_v2_secret_setting(setting_key, api_key)
         return ApiKeyWriteResult(
             provider="jupiter",
             status="ok",
             written_keys=[setting_key],
-            message="Jupiter API-Key wurde verschluesselt im V1-Secret-Store gespeichert.",
+            message="Jupiter API-Key wurde im V2-Secret-Store gespeichert.",
         )
 
-    def _write_v1_secret_setting(self, setting_key: str, value: str) -> None:
-        try:
-            response = httpx.post(
-                f"{self.V1_ADMIN_BASE_URL.rstrip('/')}/api/v1/admin/settings",
-                json={"setting_key": setting_key, "value": value, "is_secret": True},
-                timeout=10,
-            )
-            response.raise_for_status()
-            body = response.json()
-        except Exception as exc:
-            raise ValueError(f"v1_secret_write_failed:{type(exc).__name__}") from exc
-        if str(body.get("status")) == "error":
-            errors = body.get("errors") if isinstance(body.get("errors"), list) else []
-            code = "v1_secret_write_failed"
-            if errors and isinstance(errors[0], dict):
-                code = str(errors[0].get("code") or code)
-            raise ValueError(code)
+    def _write_v2_secret_setting(self, setting_key: str, value: str) -> None:
+        upsert_secret(self.store, setting_key, value)
 
     def v1_cex_credential_takeover_report(self) -> V1CexCredentialTakeoverReport:
         items = [self._v1_cex_takeover_item(connector_id) for connector_id in sorted(self.CEX_CONNECTORS)]

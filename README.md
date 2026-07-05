@@ -43,7 +43,11 @@ Der erste lauffaehige Schnitt muss Ende-zu-Ende funktionieren:
 
 ## Final-Release-Dokumentation
 
-Der aktuelle Abschlussstand ist in zwei Einstiegspunkten dokumentiert:
+Der aktuelle Abschlussstand hat einen kanonischen Einstiegspunkt:
+
+- `docs/000_START_HERE_BETRIEB_UND_RELEASE_2026-07-05.md`
+  - Welche Dokumente wirklich fuer Betrieb, KI-Handoff und Quellen-Setup
+    gelesen werden muessen. Alle anderen Docs sind Audit-/Arbeitsarchiv.
 
 - `docs/623_FINAL_RELEASE_DOKUMENTATION_MENSCH_2026-07-05.md`
   - Bedienung, Steuerjahr-Status, Belege, Finanzamtslogik und Grenzen.

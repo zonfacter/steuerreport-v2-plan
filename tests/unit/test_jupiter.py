@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 import sqlite3
-import sys
 
 from steuerreport_v2.api.app import create_app
+from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.contracts.jupiter import JupiterTokenSearchItem, JupiterTokenSearchResult
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.admin import AdminService
@@ -92,24 +92,13 @@ def test_jupiter_token_search_maps_api_response(tmp_path, monkeypatch):
     assert result.tokens[0].audit.mint_authority_disabled is True
 
 
-def test_jupiter_api_key_loads_from_v1_tax_engine_path(tmp_path, monkeypatch):
-    v1_src = tmp_path / "v1src"
-    package_dir = v1_src / "tax_engine"
-    package_dir.mkdir(parents=True)
-    (package_dir / "__init__.py").write_text("", encoding="utf-8")
-    (package_dir / "admin.py").write_text(
-        "def resolve_secret_value(key):\n"
-        "    return 'secret-from-v1' if key == 'secret.jupiter.api_key' else ''\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(JupiterTokenService, "V1_TAX_ENGINE_SRC", str(v1_src))
-    monkeypatch.delitem(sys.modules, "tax_engine", raising=False)
-    monkeypatch.delitem(sys.modules, "tax_engine.admin", raising=False)
-    monkeypatch.setattr(sys, "path", [item for item in sys.path if item != str(v1_src)])
-
+def test_jupiter_api_key_loads_from_v2_secret_store(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.upsert_admin_setting(
+        AdminSettingWrite(key="secret.jupiter.api_key", value_json='"secret-from-v2"')
+    )
 
-    assert JupiterTokenService(store)._api_key() == "secret-from-v1"
+    assert JupiterTokenService(store)._api_key() == "secret-from-v2"
 
 
 def test_jupiter_token_search_api_route(tmp_path, monkeypatch):
@@ -122,24 +111,23 @@ def test_jupiter_token_search_api_route(tmp_path, monkeypatch):
     assert response.data.status == "missing_api_key"
 
 
-def test_jupiter_api_key_endpoint_writes_secret_without_echo(tmp_path, monkeypatch):
+def test_jupiter_api_key_endpoint_writes_secret_without_echo(tmp_path):
     from steuerreport_v2.contracts.admin import ApiKeyWrite
 
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    written: list[tuple[str, str]] = []
-    monkeypatch.setattr(AdminService, "_write_v1_secret_setting", lambda _self, key, value: written.append((key, value)))
 
     response = _call_post_route(
         create_app(store),
         "/api/v1/admin/jupiter/api-key",
-        ApiKeyWrite(api_key="secret-jupiter-key"),
+        ApiKeyWrite(api_key="dummy-jupiter-no-echo"),
     )
 
     assert response.status == "ok"
     assert response.data.provider == "jupiter"
     assert response.data.written_keys == ["secret.jupiter.api_key"]
-    assert written == [("secret.jupiter.api_key", "secret-jupiter-key")]
-    assert "secret-jupiter-key" not in str(response.data)
+    stored = {setting.key: setting.value_json for setting in store.list_admin_settings()}
+    assert stored["secret.jupiter.api_key"] == '"dummy-jupiter-no-echo"'
+    assert "dummy-jupiter-no-echo" not in str(response.data)
 
 
 def test_jupiter_metadata_cache_collects_mints_from_existing_data(tmp_path, monkeypatch):

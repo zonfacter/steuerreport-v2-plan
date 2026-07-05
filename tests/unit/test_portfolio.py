@@ -4,6 +4,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 
 from steuerreport_v2.api.app import create_app
+from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.portfolio import PortfolioLiveBalanceSnapshot
@@ -1177,6 +1178,16 @@ def test_portfolio_snapshot_does_not_use_stale_cex_live_anchor(tmp_path):
 
 def test_portfolio_reconciliation_refresh_warns_when_connectors_return_no_snapshots(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    for key in (
+        "secret.cex.binance.api_key",
+        "secret.cex.binance.api_secret",
+        "secret.cex.bitget.api_key",
+        "secret.cex.bitget.api_secret",
+        "secret.cex.bitget.passphrase",
+        "secret.cex.pionex.api_key",
+        "secret.cex.pionex.api_secret",
+    ):
+        store.upsert_admin_setting(AdminSettingWrite(key=key, value_json='"test-secret"'))
     monkeypatch.setattr(PortfolioService, "_v1_cex_live_balance_snapshots", lambda _self, _connector_id, _fetched_at: [])
     monkeypatch.setattr(PortfolioService, "_v1_cex_live_balances", lambda _self, _connector_id: {})
     monkeypatch.setattr(PortfolioService, "_v1_solana_wallet_balances", lambda _self, _wallet: {})

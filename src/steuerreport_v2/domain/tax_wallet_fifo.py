@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import sys
 import time
 from uuid import uuid4
 
@@ -83,6 +82,7 @@ from steuerreport_v2.contracts.tax_wallet_fifo import (
     WalletFifoYearDelta,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.secrets import resolve_secret_value
 from steuerreport_v2.domain.tax import FIAT_TAX_EXCLUDED_ASSETS, LOT_ACQUISITION_EVENT_TYPES, TaxService
 
 
@@ -6118,50 +6118,24 @@ class WalletFifoPreviewService:
         return None
 
     def _solscan_api_key(self) -> str:
-        try:
-            settings = {setting.key: setting.value_json for setting in self.store.list_admin_settings()}
-            raw = settings.get("secret.solscan.api_key")
-            if raw:
-                value = json.loads(raw)
-                if value:
-                    return str(value).strip()
-        except Exception:
-            pass
+        value = resolve_secret_value(self.store, "secret.solscan.api_key")
+        if value:
+            return value
         for env_key in ("SOLSCAN_API_KEY", "SOLSCAN_PRO_API_KEY"):
             value = os.getenv(env_key)
             if value:
                 return value.strip()
-        try:
-            if "/workspace/steuerreport/src" not in sys.path:
-                sys.path.append("/workspace/steuerreport/src")
-            from tax_engine.admin import resolve_secret_value  # type: ignore
-
-            return str(resolve_secret_value("secret.solscan.api_key") or "").strip()
-        except Exception:
-            return ""
+        return ""
 
     def _alchemy_api_key(self) -> str:
-        try:
-            settings = {setting.key: setting.value_json for setting in self.store.list_admin_settings()}
-            raw = settings.get("secret.alchemy.api_key")
-            if raw:
-                value = json.loads(raw)
-                if value:
-                    return str(value).strip()
-        except Exception:
-            pass
+        value = resolve_secret_value(self.store, "secret.alchemy.api_key")
+        if value:
+            return value
         for env_key in ("ALCHEMY_API_KEY", "ALCHEMY_SOLANA_API_KEY"):
             value = os.getenv(env_key)
             if value:
                 return value.strip()
-        try:
-            if "/workspace/steuerreport/src" not in sys.path:
-                sys.path.append("/workspace/steuerreport/src")
-            from tax_engine.admin import resolve_secret_value  # type: ignore
-
-            return str(resolve_secret_value("secret.alchemy.api_key") or "").strip()
-        except Exception:
-            return ""
+        return ""
 
     def _fetch_solana_provenance_classification(
         self,

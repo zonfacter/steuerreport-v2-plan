@@ -3,11 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import json
-from pathlib import Path
 import re
-import sqlite3
-
-import httpx
 
 from steuerreport_v2.contracts.sources import (
     BinanceEvidenceAssetReport,
@@ -36,6 +32,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.price_lookup import fiat_price_point
 from steuerreport_v2.domain.portfolio import PortfolioService
+from steuerreport_v2.domain.secrets import resolve_secret_value, secret_metadata
 
 
 class SourceService:
@@ -55,8 +52,6 @@ class SourceService:
     }
     DUST_DELTA_VALUE_EUR = Decimal("5")
     LIVE_STALE_AFTER_DAYS = 3
-    V1_ADMIN_BASE_URL = "http://127.0.0.1:8000"
-    V1_DB_PATH = Path("/root/.local/share/steuerreport/steuerreport.db")
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
@@ -689,31 +684,13 @@ class SourceService:
         )
 
     def _cex_credential_diagnostic(self, connector_id: str) -> dict[str, object]:
-        meta = self._v1_secret_metadata(connector_id)
-        try:
-            response = httpx.post(
-                f"{self.V1_ADMIN_BASE_URL.rstrip('/')}/api/v1/admin/cex-credentials/load",
-                json={"connector_id": connector_id},
-                timeout=5,
-            )
-            response.raise_for_status()
-            body = response.json()
-        except Exception as exc:
-            return {
-                **meta,
-                "status": "error",
-                "issue": f"{type(exc).__name__}",
-            }
-        if str(body.get("status")) != "success":
-            return {
-                **meta,
-                "status": "error",
-                "issue": "v1_admin_status_error",
-            }
-        data = body.get("data") if isinstance(body.get("data"), dict) else {}
-        api_key = str(data.get("api_key") or "")
-        api_secret = str(data.get("api_secret") or "")
-        passphrase = str(data.get("passphrase") or "")
+        required_keys = self.CEX_REQUIRED_SECRET_KEYS.get(connector_id, ())
+        setting_keys = [f"secret.cex.{connector_id}.{suffix}" for suffix in required_keys]
+        meta = secret_metadata(self.store, setting_keys)
+        values = {key.rsplit(".", 1)[-1]: resolve_secret_value(self.store, key) for key in setting_keys}
+        api_key = values.get("api_key", "")
+        api_secret = values.get("api_secret", "")
+        passphrase = values.get("passphrase", "")
         requires_passphrase = "passphrase" in self.CEX_REQUIRED_SECRET_KEYS.get(connector_id, ())
         required_present = int(meta["keys_present"]) >= int(meta["keys_required"])
         if api_key and api_secret:
@@ -726,50 +703,6 @@ class SourceService:
 
     def _cex_credential_status(self, connector_id: str) -> str:
         return str(self._cex_credential_diagnostic(connector_id)["status"])
-
-    def _v1_secret_metadata(self, connector_id: str) -> dict[str, object]:
-        required_keys = self.CEX_REQUIRED_SECRET_KEYS.get(connector_id, ())
-        if not required_keys:
-            return {
-                "keys_present": 0,
-                "keys_required": 0,
-                "updated_at_latest": None,
-            }
-        if not self.V1_DB_PATH.exists():
-            return {
-                "keys_present": 0,
-                "keys_required": len(required_keys),
-                "updated_at_latest": None,
-            }
-        setting_keys = [f"secret.cex.{connector_id}.{suffix}" for suffix in required_keys]
-        placeholders = ", ".join(["?"] * len(setting_keys))
-        try:
-            with sqlite3.connect(self.V1_DB_PATH) as con:
-                rows = con.execute(
-                    f"""
-                    select setting_key, updated_at_utc
-                    from settings
-                    where setting_key in ({placeholders})
-                      and is_secret = 1
-                    """,
-                    setting_keys,
-                ).fetchall()
-        except sqlite3.Error:
-            return {
-                "keys_present": 0,
-                "keys_required": len(required_keys),
-                "updated_at_latest": None,
-            }
-        updated_values = [
-            self._parse_datetime(row[1])
-            for row in rows
-            if row[1] is not None
-        ]
-        return {
-            "keys_present": len({row[0] for row in rows}),
-            "keys_required": len(required_keys),
-            "updated_at_latest": max(updated_values) if updated_values else None,
-        }
 
     def _parse_datetime(self, value: object) -> datetime | None:
         if value is None:

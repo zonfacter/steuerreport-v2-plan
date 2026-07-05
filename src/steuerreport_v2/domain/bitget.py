@@ -8,7 +8,6 @@ import hashlib
 import hmac
 import json
 import os
-import sys
 import time
 import urllib.parse
 
@@ -23,6 +22,7 @@ from steuerreport_v2.contracts.bitget import (
 from steuerreport_v2.contracts.bitget_import import BitgetWithdrawalApiImportResult
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.domain.secrets import resolve_secret_value
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 
 
@@ -328,14 +328,7 @@ class BitgetWalletHistoryService:
         return str(api_key).strip(), str(api_secret).strip(), str(passphrase).strip()
 
     def _secret_value(self, key: str) -> str:
-        try:
-            if "/workspace/steuerreport/src" not in sys.path:
-                sys.path.append("/workspace/steuerreport/src")
-            from tax_engine.admin import resolve_secret_value  # type: ignore
-
-            return str(resolve_secret_value(key) or "").strip()
-        except Exception:
-            return ""
+        return resolve_secret_value(self.store, key)
 
     def _time_windows(self, since: datetime, until: datetime) -> list[tuple[datetime, datetime]]:
         windows: list[tuple[datetime, datetime]] = []

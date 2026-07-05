@@ -4,8 +4,8 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 import hashlib
 import json
+import os
 import re
-import sys
 from types import SimpleNamespace
 import urllib.parse
 import urllib.request
@@ -54,6 +54,7 @@ from steuerreport_v2.domain.account_aliases import (
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup, fiat_price_point
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.domain.secrets import resolve_secret_value
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
@@ -89,14 +90,14 @@ class PortfolioService:
     EXPECTED_ZERO_LIVE_DUST_QUANTITY = Decimal("0.000001")
     MIN_POSITION_QUANTITY = Decimal("0.000000000001")
     NON_VALUED_LIVE_RECEIPT_ASSETS = {"LDJUP"}
-    V1_CONNECTOR_BASE_URL = "http://127.0.0.1:8000"
+    V1_CONNECTOR_BASE_URL = os.environ.get("STEUERREPORT_V1_CONNECTOR_BASE_URL", "")
     V1_RECONCILIATION_EVIDENCE = {
         "Bitget": (
-            "V1 Secret-Store/API: docs/88_BITGET_2025_API_DEEP_PROBE_2026-05-09.md; "
-            "V1 aktueller All-Token-Abgleich: docs/200_ALL_TOKEN_CURRENT_BALANCE_RECONCILIATION_2026-05-10.md"
+            "Historischer V1-Referenzbeleg: docs/88_BITGET_2025_API_DEEP_PROBE_2026-05-09.md; "
+            "V1 All-Token-Abgleich als Altbeleg: docs/200_ALL_TOKEN_CURRENT_BALANCE_RECONCILIATION_2026-05-10.md"
         ),
         "Pionex": (
-            "V1 Secret-Store/API: docs/200_ALL_TOKEN_CURRENT_BALANCE_RECONCILIATION_2026-05-10.md; "
+            "Historischer V1-Referenzbeleg: docs/200_ALL_TOKEN_CURRENT_BALANCE_RECONCILIATION_2026-05-10.md; "
             "Pionex Gap-Analyse: docs/146_PIONEX_USDT_PLATFORM_GAP_CURRENT_2026-05-09.md und "
             "docs/167_PIONEX_USDT_FINAL_BLOCKER_AUDIT_2026-05-09.md"
         ),
@@ -105,6 +106,11 @@ class PortfolioService:
     PRICE_FRESH_DAYS = 3
     PRICE_STALE_DAYS = 14
     CEX_LIVE_CONNECTORS = {"binance", "bitget", "pionex"}
+    CEX_REQUIRED_SECRET_KEYS = {
+        "binance": ("api_key", "api_secret"),
+        "bitget": ("api_key", "api_secret", "passphrase"),
+        "pionex": ("api_key", "api_secret"),
+    }
     LIVE_STALE_AFTER_DAYS = 3
 
     def __init__(self, store: DuckDbStore) -> None:
@@ -714,7 +720,7 @@ class PortfolioService:
                             else "mismatch_expected_live_zero"
                         )
                         next_action = (
-                            "V1-Connector/Secret-Store-Abgleich in V2 nachziehen und die fehlende "
+                            "V2-Connector-/Export-Abgleich nachziehen und die fehlende "
                             "historische Abgangs-/Produktbuchung belegen; nicht als steuerwirksamen "
                             "Verkauf erfinden."
                         )
@@ -770,8 +776,8 @@ class PortfolioService:
                     severity="info",
                     evidence=group.note or "V2-Ledgerbestand; Live-Connector-Abgleich noch nicht in V2 persistiert.",
                     next_action=(
-                        "Bestehende V1-Connectoren fuer Binance/Solana/Helium-Kontext als V2-Read-Only-"
-                        "Reconciliation-Anker migrieren und Ergebnis je Asset speichern."
+                        "V2-Connectoren oder belegte Export-/On-chain-Artefakte als Read-Only-"
+                        "Reconciliation-Anker ausfuehren und Ergebnis je Asset speichern."
                     ),
                 )
             )
@@ -1007,7 +1013,7 @@ class PortfolioService:
                 if not balances:
                     balances = self._solscan_wallet_balances(self.PRIMARY_SOLANA_WALLET)
             else:
-                missing_configuration = not bool(self.V1_CONNECTOR_BASE_URL)
+                missing_configuration = not self._cex_credentials_configured(connector_id)
                 balances = self._v1_cex_live_balance_snapshots(connector_id, fetched_at)
                 if not balances:
                     balances = self._v1_cex_live_balances(connector_id)
@@ -1418,6 +1424,15 @@ class PortfolioService:
             balances[snapshot.asset] = balances.get(snapshot.asset, Decimal("0")) + snapshot.quantity
         return balances
 
+    def _cex_credentials_configured(self, connector_id: str) -> bool:
+        required = self.CEX_REQUIRED_SECRET_KEYS.get(connector_id, ())
+        if not required:
+            return False
+        return all(
+            bool(resolve_secret_value(self.store, f"secret.cex.{connector_id}.{suffix}"))
+            for suffix in required
+        )
+
     def _v1_cex_live_balance_snapshots(
         self,
         connector_id: str,
@@ -1581,14 +1596,7 @@ class PortfolioService:
             return Decimal("0")
 
     def _solscan_api_key(self) -> str:
-        try:
-            if "/workspace/steuerreport/src" not in sys.path:
-                sys.path.append("/workspace/steuerreport/src")
-            from tax_engine.admin import resolve_secret_value  # type: ignore
-
-            return str(resolve_secret_value("secret.solscan.api_key") or "").strip()
-        except Exception:
-            return ""
+        return resolve_secret_value(self.store, "secret.solscan.api_key")
 
     def _replace_live_balance_snapshots(
         self,

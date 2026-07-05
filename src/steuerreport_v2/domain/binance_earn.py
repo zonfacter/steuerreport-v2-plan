@@ -30,6 +30,7 @@ from steuerreport_v2.contracts.binance_earn_import import (
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.domain.secrets import resolve_secret_value
 from steuerreport_v2.domain.sources import SourceService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 
@@ -830,16 +831,7 @@ class BinanceEarnHistoryService:
         return str(api_key).strip(), str(secret_key).strip()
 
     def _secret_value(self, key: str) -> str:
-        try:
-            import sys
-
-            if "/workspace/steuerreport/src" not in sys.path:
-                sys.path.append("/workspace/steuerreport/src")
-            from tax_engine.admin import resolve_secret_value  # type: ignore
-
-            return str(resolve_secret_value(key) or "").strip()
-        except Exception:
-            return ""
+        return resolve_secret_value(self.store, key)
 
     def _endpoint_specs(self, account_type: str) -> list[dict[str, str]]:
         if account_type == "simple_earn_locked":
