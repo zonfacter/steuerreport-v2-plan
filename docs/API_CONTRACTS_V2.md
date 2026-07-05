@@ -1,5 +1,12 @@
 # API Contracts V2
 
+## Vollstaendige Endpoint-Referenz
+
+Dieses Dokument beschreibt wichtige API-Contracts fachlich. Die vollstaendige
+aus dem Code generierte Endpoint-Liste steht hier:
+
+- `docs/626_API_ENDPOINT_REFERENZ_VOLLSTAENDIG_2026-07-05.md`
+
 ## Allgemein
 
 Alle Endpunkte antworten im Standardformat:

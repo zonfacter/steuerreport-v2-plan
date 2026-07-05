@@ -53,6 +53,8 @@ Der aktuelle Abschlussstand ist in zwei Einstiegspunkten dokumentiert:
 - `docs/625_SYSTEM_SETUP_UND_LOKALE_KI_BETRIEB_2026-07-05.md`
   - Einrichtung, API/systemd-Betrieb, lokale KI-Endpunkte, KI-Jobs und
     Sicherheitsregeln.
+- `docs/626_API_ENDPOINT_REFERENZ_VOLLSTAENDIG_2026-07-05.md`
+  - Vollstaendige aus dem Code generierte Liste aller API-Endpunkte.
 
 ## V1 bleibt Referenz
 
