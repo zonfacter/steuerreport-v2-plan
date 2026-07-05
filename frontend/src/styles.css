@@ -1739,6 +1739,87 @@ p {
   overflow-wrap: anywhere;
 }
 
+.connectorSetupGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  padding: 0 14px;
+}
+
+.connectorSetupCard {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  color: #26372f;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  text-align: left;
+}
+
+.connectorSetupCard.ok {
+  border-color: #add3ba;
+}
+
+.connectorSetupCard.blocked {
+  border-color: #e4b6aa;
+}
+
+.connectorSetupCard.active {
+  box-shadow: 0 0 0 2px rgba(38, 55, 47, 0.18);
+}
+
+.connectorSetupCard strong,
+.connectorSetupCard em,
+.connectorSetupCard small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connectorSetupCard em,
+.connectorSetupCard small {
+  color: #5d685f;
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.connectorSetupHint {
+  align-items: start;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin: 0 14px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.connectorSetupHint.ok {
+  background: #fbfefc;
+  border-color: #add3ba;
+}
+
+.connectorSetupHint.blocked {
+  background: #fff7f4;
+  border-color: #e4b6aa;
+}
+
+.connectorSetupHint strong,
+.connectorSetupHint em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connectorSetupHint em {
+  color: #5d685f;
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
 .cockpitStatusStrip {
   background: #ffffff;
   border: 1px solid #d8d6cf;
@@ -2718,6 +2799,7 @@ th {
   .productReadinessGrid,
   .readinessCheckGrid,
   .sourceReadinessGrid,
+  .connectorSetupGrid,
   .cockpitOverviewGrid,
   .cockpitDataGrid,
   .cockpitStatusStrip,

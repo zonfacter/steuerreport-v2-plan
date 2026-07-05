@@ -3736,7 +3736,10 @@ function Content({
         />
         <KeyValuePanel title="Admin-Status" data={snapshot.admin ?? {}} />
         <V1CexCredentialTakeoverPanel report={snapshot.v1CexCredentialTakeover} onImportV1CexCredentials={onImportV1CexCredentials} />
-        <AdminCexCredentialForm onSaveCexCredentials={onSaveCexCredentials} />
+        <AdminCexCredentialForm
+          connectorDiagnostics={snapshot.sourceConnectorDiagnostics}
+          onSaveCexCredentials={onSaveCexCredentials}
+        />
         <JupiterTokenApiPanel
           query={jupiterTokenQuery}
           result={snapshot.jupiterTokenSearch}
@@ -12515,8 +12518,10 @@ function V1CexCredentialTakeoverPanel({
 }
 
 function AdminCexCredentialForm({
+  connectorDiagnostics,
   onSaveCexCredentials
 }: {
+  connectorDiagnostics: Snapshot["sourceConnectorDiagnostics"];
   onSaveCexCredentials: (connectorId: string, apiKey: string, apiSecret: string, passphrase: string) => void;
 }) {
   const [connectorId, setConnectorId] = useState("binance");
@@ -12524,10 +12529,22 @@ function AdminCexCredentialForm({
   const [apiSecret, setApiSecret] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const needsPassphrase = connectorId === "bitget";
+  const cexRows = (connectorDiagnostics?.diagnostics ?? []).filter((row) => row.connector_type === "cex");
+  const activeDiagnostic = cexRows.find((row) => row.connector_id === connectorId);
+  const missingCredentials = cexRows.filter((row) => row.credential_status !== "configured");
+  const selectConnector = (nextConnectorId: string) => {
+    setConnectorId(nextConnectorId);
+    setApiKey("");
+    setApiSecret("");
+    setPassphrase("");
+  };
   return (
     <div className="panel formPanel">
       <div className="panelToolbar">
-        <strong>CEX-Credentials speichern</strong>
+        <div>
+          <strong>CEX-Credentials speichern</strong>
+          <span>{missingCredentials.length} vorhandene CEX-Quelle(n) brauchen Credentials</span>
+        </div>
         <button
           type="button"
           onClick={() => onSaveCexCredentials(connectorId, apiKey, apiSecret, passphrase)}
@@ -12537,16 +12554,43 @@ function AdminCexCredentialForm({
           <span>Verschluesselt speichern</span>
         </button>
       </div>
+      <div className="connectorSetupGrid">
+        {cexRows.map((row) => {
+          const tone = row.credential_status === "configured" ? "ok" : "blocked";
+          return (
+            <button
+              key={String(row.connector_id)}
+              className={`connectorSetupCard ${tone} ${connectorId === row.connector_id ? "active" : ""}`}
+              type="button"
+              onClick={() => selectConnector(String(row.connector_id))}
+            >
+              <span className={`statusPill ${tone}`}>{sourceCredentialStatusLabel(row.credential_status)}</span>
+              <strong>{String(row.label ?? row.connector_id)}</strong>
+              <em>{sourceConnectorStatusLabel(row.status)}</em>
+              <small>
+                Secret-Keys {String(row.credential_keys_present ?? 0)}/{String(row.credential_keys_required ?? 0)}
+                {row.last_snapshot_at ? ` · Snapshot ${formatDateTime(row.last_snapshot_at)}` : " · kein Snapshot"}
+              </small>
+            </button>
+          );
+        })}
+      </div>
+      {activeDiagnostic ? (
+        <div className={`connectorSetupHint ${activeDiagnostic.credential_status === "configured" ? "ok" : "blocked"}`}>
+          <span className={`statusPill ${activeDiagnostic.credential_status === "configured" ? "ok" : "blocked"}`}>
+            {sourceCredentialStatusLabel(activeDiagnostic.credential_status)}
+          </span>
+          <strong>{String(activeDiagnostic.message ?? "-")}</strong>
+          <em>{String(activeDiagnostic.next_action ?? "-")}</em>
+        </div>
+      ) : null}
       <div className="formGrid">
         <label>
           Connector
           <select
             value={connectorId}
             onChange={(event) => {
-              setConnectorId(event.target.value);
-              setApiKey("");
-              setApiSecret("");
-              setPassphrase("");
+              selectConnector(event.target.value);
             }}
           >
             <option value="binance">Binance</option>
