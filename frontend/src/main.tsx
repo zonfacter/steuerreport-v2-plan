@@ -7952,6 +7952,121 @@ function equalizationAssetFlagLabel(flag: string): string {
   return flag;
 }
 
+function ReportFilingWorkflow({
+  exportAllowed,
+  activeYearsCount,
+  readyYearsCount,
+  reviewYearsCount,
+  packagesCount,
+  requiredEvidenceCount,
+  warningsCount,
+  evidenceStatus,
+  latestPackageCreatedAt,
+  parityReleaseReady,
+  parityBlockingGroups,
+  onDownload,
+  onRunReportAction,
+  onExportViewModeChange
+}: {
+  exportAllowed: boolean;
+  activeYearsCount: number;
+  readyYearsCount: number;
+  reviewYearsCount: number;
+  packagesCount: number;
+  requiredEvidenceCount: number;
+  warningsCount: number;
+  evidenceStatus: string;
+  latestPackageCreatedAt: string | null;
+  parityReleaseReady: boolean;
+  parityBlockingGroups: number;
+  onDownload: (path: string) => void;
+  onRunReportAction: (path: string, label: string) => void;
+  onExportViewModeChange: (mode: ExportViewMode) => void;
+}) {
+  const gateTone = exportAllowed ? "ok" : "blocked";
+  const evidenceTone = reportEvidenceTone(evidenceStatus);
+  return (
+    <section className="reportWorkflow">
+      <div className="reportWorkflowHeader">
+        <div>
+          <span className="heroKicker">Abgabe-Fahrplan</span>
+          <h3>{exportAllowed ? "Einreichung technisch freigegeben" : "Vor Einreichung Review klaeren"}</h3>
+          <p>Der Bereich trennt Steuererklaerungswerte, Jahresbelege, Vorjahres-/Review-Aufgaben und technische Exporte.</p>
+        </div>
+        <div className="reportWorkflowBadges">
+          <span className={`statusPill ${gateTone}`}>{exportAllowed ? "Export frei" : "Export blockiert"}</span>
+          <span className={`statusPill ${evidenceTone}`}>Belege {evidenceStatus}</span>
+        </div>
+      </div>
+      <div className="reportWorkflowGrid">
+        <div className={`reportWorkflowStep ${gateTone}`}>
+          <div className="reportWorkflowStepHead">
+            <ReceiptText size={18} />
+            <strong>1. Steuererklaerung</strong>
+          </div>
+          <p>
+            {readyYearsCount} von {activeYearsCount} aktiven Jahr(en) sind ohne Export-Blocker markiert.
+            {!parityReleaseReady && parityBlockingGroups > 0 ? ` V1/V2-Parity blockiert noch ${parityBlockingGroups} Gruppe(n).` : ""}
+          </p>
+          <div className="reportWorkflowMetrics">
+            <Metric title="Aktive Jahre" value={String(activeYearsCount)} />
+            <Metric title="Parity-Blocker" value={String(parityBlockingGroups)} />
+          </div>
+          <button type="button" onClick={() => onRunReportAction("/api/v1/export/elster-prep", "ELSTER-Prep")}>
+            <PackageCheck size={16} />
+            <span>ELSTER-Prep erzeugen</span>
+          </button>
+        </div>
+        <div className={`reportWorkflowStep ${evidenceTone}`}>
+          <div className="reportWorkflowStepHead">
+            <PackageCheck size={18} />
+            <strong>2. Belege beilegen</strong>
+          </div>
+          <p>{requiredEvidenceCount} Pflichtbeleg(e), {packagesCount} vorhandene PDF-/Exportpaket(e).</p>
+          <div className="reportWorkflowMetrics">
+            <Metric title="Pflichtbelege" value={String(requiredEvidenceCount)} />
+            <Metric title="Letztes Paket" value={latestPackageCreatedAt ? formatDateTime(latestPackageCreatedAt) : "-"} />
+          </div>
+          <button type="button" onClick={() => onDownload("/api/v1/export/evidence-package.zip")}>
+            <FileDown size={16} />
+            <span>Gesamt-Belegpaket</span>
+          </button>
+        </div>
+        <div className={`reportWorkflowStep ${warningsCount > 0 || reviewYearsCount > 0 ? "warning" : "ok"}`}>
+          <div className="reportWorkflowStepHead">
+            <AlertTriangle size={18} />
+            <strong>3. Review & Korrektur</strong>
+          </div>
+          <p>{warningsCount} Report-Warnung(en), {reviewYearsCount} Jahr(e) mit Review- oder Export-Hinweis.</p>
+          <div className="reportWorkflowMetrics">
+            <Metric title="Warnungen" value={String(warningsCount)} />
+            <Metric title="Review-Jahre" value={String(reviewYearsCount)} />
+          </div>
+          <button type="button" onClick={() => onExportViewModeChange("evidence")}>
+            <ClipboardCheck size={16} />
+            <span>Belege pruefen</span>
+          </button>
+        </div>
+        <div className="reportWorkflowStep ok">
+          <div className="reportWorkflowStepHead">
+            <Database size={18} />
+            <strong>4. Expertenexporte</strong>
+          </div>
+          <p>CSV, Audit JSON, FIFO- und Integritaetsdaten bleiben verfuegbar, aber unter Expertenmodus gebuendelt.</p>
+          <div className="reportWorkflowMetrics">
+            <Metric title="Audit" value="JSON" />
+            <Metric title="CSV/FIFO" value="Expert" />
+          </div>
+          <button type="button" onClick={() => onExportViewModeChange("expert")}>
+            <FileJson size={16} />
+            <span>Expertenmodus</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ReportCenterPanel({
   center,
   evidenceManifest,
@@ -7994,6 +8109,10 @@ function ReportCenterPanel({
   const evidenceHealth = center?.evidence_health ?? null;
   const indexGroups = evidencePackageIndex?.groups ?? [];
   const indexFiles = evidencePackageIndex?.files ?? [];
+  const reportReadyYears = years.filter((year) => !year.export_blocked && ["ready", "finished", "conservative_ready"].includes(String(year.filing_status ?? year.tax_state ?? "")));
+  const reportReviewYears = years.filter((year) => year.export_blocked || ["review", "blocked"].includes(String(year.filing_status ?? year.package_status ?? "")));
+  const reportActiveYears = years.filter((year) => Number(year.tax_lines_count ?? 0) > 0 || Number(year.rewards_mining_staking_income_eur ?? 0) !== 0);
+  const requiredEvidenceCount = requiredManifestFiles.length || years.reduce((total, year) => total + Number(year.required_evidence_count ?? 0), 0);
   const manifestGroups = manifestFiles.reduce<Array<{ key: string; label: string; files: EvidenceManifest["files"] }>>((groups, file) => {
     const key = file.group || "other";
     const existing = groups.find((group) => group.key === key);
@@ -8025,6 +8144,23 @@ function ReportCenterPanel({
           <Metric title="Aktualisiert" value={formatDateTime(center?.generated_at)} />
         </div>
       </section>
+
+      <ReportFilingWorkflow
+        exportAllowed={exportAllowed}
+        activeYearsCount={reportActiveYears.length}
+        readyYearsCount={reportReadyYears.length}
+        reviewYearsCount={reportReviewYears.length}
+        packagesCount={Number(center?.packages_count ?? 0)}
+        requiredEvidenceCount={requiredEvidenceCount}
+        warningsCount={warnings.length}
+        evidenceStatus={String(evidenceHealth?.status ?? "offen")}
+        latestPackageCreatedAt={center?.latest_package_created_at ?? null}
+        parityReleaseReady={readiness?.parity_release_ready === true}
+        parityBlockingGroups={Number(readiness?.parity_blocking_groups ?? 0)}
+        onDownload={onDownload}
+        onRunReportAction={onRunReportAction}
+        onExportViewModeChange={onExportViewModeChange}
+      />
 
       <div className="taxViewSwitch" role="tablist" aria-label="Belege und Export Ansicht">
         <button
