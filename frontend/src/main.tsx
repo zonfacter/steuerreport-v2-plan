@@ -3964,6 +3964,13 @@ function SourcesPage({
         onRefreshConfiguredSources={onRefreshConfiguredSources}
         sourceRefreshLoading={sourceRefreshLoading}
       />
+      <SourceSetupWizard
+        sources={sources}
+        connectorRows={connectorRows}
+        onNavigate={onNavigate}
+        onRefreshConfiguredSources={onRefreshConfiguredSources}
+        sourceRefreshLoading={sourceRefreshLoading}
+      />
       <div className="taxViewSwitch" role="tablist" aria-label="Quellen Ansicht">
         <button
           type="button"
@@ -5041,6 +5048,98 @@ function SourceCommandCenter({
             </button>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function SourceSetupWizard({
+  sources,
+  connectorRows,
+  onNavigate,
+  onRefreshConfiguredSources,
+  sourceRefreshLoading
+}: {
+  sources: Array<Record<string, unknown>>;
+  connectorRows: Array<Record<string, unknown>>;
+  onNavigate: (section: Section) => void;
+  onRefreshConfiguredSources: () => void;
+  sourceRefreshLoading: boolean;
+}) {
+  const missingCredentials = connectorRows.filter((row) => String(row.credential_status) === "missing");
+  const staleSources = sources.filter((source) => String(source.live_freshness ?? "") === "stale");
+  const missingLiveSources = sources.filter((source) => !source.last_live_at);
+  const openReconciliationSources = sources.filter((source) => Number(source.open_reconciliation_issues ?? 0) > 0 || source.display_warning);
+  const evidenceOpenSources = sources.filter((source) => {
+    const files = Array.isArray(source.last_evidence_files) ? source.last_evidence_files : [];
+    return files.length === 0;
+  });
+  const steps = [
+    {
+      title: "1. API-Zugriff",
+      status: missingCredentials.length > 0 ? "blocked" : "ok",
+      value: missingCredentials.length > 0 ? `${missingCredentials.length} fehlt` : "vollstaendig",
+      detail: missingCredentials.length > 0
+        ? missingCredentials.map((row) => String(row.label ?? row.source_id)).join(", ")
+        : "Alle erforderlichen Credential-Slots sind belegt.",
+      action: "Credentials verwalten",
+      onAction: () => onNavigate("admin")
+    },
+    {
+      title: "2. Live-Bestaende",
+      status: staleSources.length > 0 || missingLiveSources.length > 0 ? "warning" : "ok",
+      value: `${staleSources.length} veraltet`,
+      detail: staleSources.length > 0
+        ? staleSources.map((source) => `${String(source.label)} (${String(source.live_age_days ?? "-")} Tage)`).join(", ")
+        : missingLiveSources.length > 0
+          ? missingLiveSources.map((source) => String(source.label)).join(", ")
+          : "Live-Snapshots sind aktuell genug.",
+      action: sourceRefreshLoading ? "API-Abfrage laeuft" : "Live abfragen",
+      onAction: onRefreshConfiguredSources,
+      disabled: sourceRefreshLoading
+    },
+    {
+      title: "3. Ledger-Abgleich",
+      status: openReconciliationSources.length > 0 ? "warning" : "ok",
+      value: `${openReconciliationSources.length} offen`,
+      detail: openReconciliationSources.length > 0
+        ? openReconciliationSources.map((source) => String(source.label)).join(", ")
+        : "Keine offenen Quellen-Abgleiche im Ueberblick.",
+      action: "Abgleich ansehen",
+      onAction: () => onNavigate("sources")
+    },
+    {
+      title: "4. Belege",
+      status: evidenceOpenSources.length > 0 ? "warning" : "ok",
+      value: `${evidenceOpenSources.length} ohne Datei`,
+      detail: evidenceOpenSources.length > 0
+        ? evidenceOpenSources.map((source) => String(source.label)).join(", ")
+        : "Import-/API-Belege sind je Quelle referenziert.",
+      action: "Belege oeffnen",
+      onAction: () => onNavigate("export")
+    }
+  ];
+  return (
+    <section className="sourceSetupWizard">
+      <div className="sourceSetupHeader">
+        <div>
+          <span className="heroKicker">Setup-Wizard</span>
+          <h3>Quellen steuerlich verwendbar machen</h3>
+          <p>Diese Checkliste schreibt keine Steuerdaten. Sie zeigt nur, welche Voraussetzung fuer einen Blockpit-aehnlichen Quellenstatus noch fehlt.</p>
+        </div>
+      </div>
+      <div className="sourceSetupSteps">
+        {steps.map((step) => (
+          <div key={step.title} className={`sourceSetupStep ${step.status}`}>
+            <span className={`statusPill ${step.status}`}>{step.value}</span>
+            <strong>{step.title}</strong>
+            <p>{step.detail}</p>
+            <button type="button" disabled={step.disabled} onClick={step.onAction}>
+              <ExternalLink size={15} />
+              <span>{step.action}</span>
+            </button>
+          </div>
+        ))}
       </div>
     </section>
   );
