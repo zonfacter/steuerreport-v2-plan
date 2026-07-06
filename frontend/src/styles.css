@@ -3065,6 +3065,52 @@ p {
   padding: 0 14px;
 }
 
+.connectorSetupNextStep {
+  align-items: start;
+  background: #f8f7f3;
+  border: 1px solid #ece8e0;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin: 0 14px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.connectorSetupNextStep strong,
+.connectorSetupNextStep p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connectorSetupNextStep p {
+  color: #58655d;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 3px 0 0;
+}
+
+.connectorSetupNextStep button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  color: #26372f;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.connectorSetupNextStep button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .connectorSetupCard {
   background: #ffffff;
   border: 1px solid #d8d6cf;
@@ -4134,6 +4180,7 @@ th {
   .readinessCheckGrid,
   .sourceReadinessGrid,
   .connectorSetupGrid,
+  .connectorSetupNextStep,
   .cockpitOverviewGrid,
   .cockpitDataGrid,
   .cockpitStatusStrip,

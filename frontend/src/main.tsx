@@ -3814,6 +3814,8 @@ function Content({
         <AdminCexCredentialForm
           connectorDiagnostics={snapshot.sourceConnectorDiagnostics}
           onSaveCexCredentials={onSaveCexCredentials}
+          onRefreshConfiguredSources={onRefreshConfiguredSources}
+          sourceRefreshLoading={sourceRefreshLoading}
         />
         <JupiterTokenApiPanel
           query={jupiterTokenQuery}
@@ -13951,10 +13953,14 @@ function V1CexCredentialTakeoverPanel({
 
 function AdminCexCredentialForm({
   connectorDiagnostics,
-  onSaveCexCredentials
+  onSaveCexCredentials,
+  onRefreshConfiguredSources,
+  sourceRefreshLoading
 }: {
   connectorDiagnostics: Snapshot["sourceConnectorDiagnostics"];
   onSaveCexCredentials: (connectorId: string, apiKey: string, apiSecret: string, passphrase: string) => void;
+  onRefreshConfiguredSources: () => void;
+  sourceRefreshLoading: boolean;
 }) {
   const [connectorId, setConnectorId] = useState("binance");
   const [apiKey, setApiKey] = useState("");
@@ -13964,12 +13970,25 @@ function AdminCexCredentialForm({
   const cexRows = (connectorDiagnostics?.diagnostics ?? []).filter((row) => row.connector_type === "cex");
   const activeDiagnostic = cexRows.find((row) => row.connector_id === connectorId);
   const missingCredentials = cexRows.filter((row) => row.credential_status !== "configured");
+  const orderedRows = [
+    ...missingCredentials,
+    ...cexRows.filter((row) => row.credential_status === "configured")
+  ];
+  const firstMissing = missingCredentials[0];
   const selectConnector = (nextConnectorId: string) => {
     setConnectorId(nextConnectorId);
     setApiKey("");
     setApiSecret("");
     setPassphrase("");
   };
+  useEffect(() => {
+    const firstMissingId = firstMissing?.connector_id ? String(firstMissing.connector_id) : "";
+    if (firstMissingId && activeDiagnostic?.credential_status === "configured") {
+      selectConnector(firstMissingId);
+    }
+  }, [firstMissing?.connector_id, activeDiagnostic, connectorId]);
+  const selectedKeysRequired = Number(activeDiagnostic?.credential_keys_required ?? (needsPassphrase ? 3 : 2));
+  const selectedKeysPresent = Number(activeDiagnostic?.credential_keys_present ?? 0);
   return (
     <div className="panel formPanel">
       <div className="panelToolbar">
@@ -13986,8 +14005,28 @@ function AdminCexCredentialForm({
           <span>Verschluesselt speichern</span>
         </button>
       </div>
+      <div className="connectorSetupNextStep">
+        <span className={`statusPill ${missingCredentials.length > 0 ? "blocked" : "ok"}`}>
+          {missingCredentials.length > 0 ? `${missingCredentials.length} offen` : "vollstaendig"}
+        </span>
+        <div>
+          <strong>
+            {activeDiagnostic
+              ? `${String(activeDiagnostic.label ?? connectorId)}: ${sourceCredentialStatusLabel(activeDiagnostic.credential_status)}`
+              : "Connector auswaehlen"}
+          </strong>
+          <p>
+            Erforderliche Secret-Keys: {selectedKeysRequired}. Aktuell gespeichert: {selectedKeysPresent}.
+            Nach dem Speichern sollte direkt `Live abfragen` ausgefuehrt werden, damit Product-Readiness den neuen Snapshot sieht.
+          </p>
+        </div>
+        <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading || missingCredentials.length > 0}>
+          <RefreshCcw size={16} />
+          <span>{sourceRefreshLoading ? "Live-Abfrage laeuft" : "Live abfragen"}</span>
+        </button>
+      </div>
       <div className="connectorSetupGrid">
-        {cexRows.map((row) => {
+        {orderedRows.map((row) => {
           const tone = row.credential_status === "configured" ? "ok" : "blocked";
           return (
             <button
@@ -14003,6 +14042,7 @@ function AdminCexCredentialForm({
                 Secret-Keys {String(row.credential_keys_present ?? 0)}/{String(row.credential_keys_required ?? 0)}
                 {row.last_snapshot_at ? ` · Snapshot ${formatDateTime(row.last_snapshot_at)}` : " · kein Snapshot"}
               </small>
+              <small>{String(row.next_action ?? "")}</small>
             </button>
           );
         })}
@@ -14039,7 +14079,7 @@ function AdminCexCredentialForm({
           <input value={apiSecret} type="password" autoComplete="off" onChange={(event) => setApiSecret(event.target.value)} />
         </label>
         <label>
-          Passphrase
+          Passphrase {needsPassphrase ? "" : "(falls erforderlich)"}
           <input value={passphrase} type="password" autoComplete="off" onChange={(event) => setPassphrase(event.target.value)} />
         </label>
       </div>
