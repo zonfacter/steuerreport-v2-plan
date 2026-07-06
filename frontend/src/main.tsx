@@ -1775,6 +1775,7 @@ function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [loading, setLoading] = useState(false);
   const [loaderStatuses, setLoaderStatuses] = useState<LoaderStatus[]>([]);
+  const [showExpertNav, setShowExpertNav] = useState(false);
   const [sourceRefreshLoading, setSourceRefreshLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -3012,12 +3013,20 @@ function App() {
     <main className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <strong>Steuerreport V2</strong>
-          <span>DuckDB Ledger</span>
+          <strong>Steuerreport Cockpit</strong>
+          <span>BMF/FIFO · Portfolio · Belege</span>
         </div>
         <nav>
           {(["workflow", "evidence", "expert"] as const).map((group) => (
             <div className="navGroup" key={group}>
+              {group === "expert" && !showExpertNav ? (
+                <button className="expertToggle" type="button" onClick={() => setShowExpertNav(true)}>
+                  <Settings size={18} />
+                  <span>Expertenwerkzeuge anzeigen</span>
+                </button>
+              ) : null}
+              {group === "expert" && !showExpertNav ? null : (
+                <>
               <span className="navGroupLabel">
                 {group === "workflow" ? "Arbeitsablauf" : group === "evidence" ? "Belege" : "Werkzeuge"}
               </span>
@@ -3033,6 +3042,14 @@ function App() {
                   <span>{item.label}</span>
                 </button>
               ))}
+              {group === "expert" ? (
+                <button className="expertToggle" type="button" onClick={() => setShowExpertNav(false)}>
+                  <Settings size={18} />
+                  <span>Expertenwerkzeuge ausblenden</span>
+                </button>
+              ) : null}
+                </>
+              )}
             </div>
           ))}
         </nav>
@@ -3042,6 +3059,12 @@ function App() {
           <div>
             <h1>{activeLabel}</h1>
             <p>{activeDescription} · {API_BASE}</p>
+          </div>
+          <div className="topbarStatus">
+            <span className={`statusPill ${readinessTone(snapshot.productReadiness?.overall_status ?? "warning")}`}>
+              {snapshot.productReadiness ? readinessLabel(snapshot.productReadiness.overall_status) : "Status laedt"}
+            </span>
+            {snapshot.productReadiness?.next_action ? <em>{snapshot.productReadiness.next_action}</em> : null}
           </div>
           <button className="statusButton" type="button" onClick={refresh}>
             <RefreshCcw size={16} />
@@ -4663,6 +4686,14 @@ function CockpitDashboard({
 
       <ProductReadinessPanel report={readiness} onNavigate={onNavigate} />
 
+      <CockpitFilingJourney
+        summary={summary}
+        readiness={readiness}
+        onNavigate={onNavigate}
+        onRefreshConfiguredSources={onRefreshConfiguredSources}
+        sourceRefreshLoading={sourceRefreshLoading}
+      />
+
       <div className="cockpitMetricGrid">
         <Metric title="API-Livebestand" value={`${formatCurrency(summary?.portfolio_value_eur)} EUR`} />
         <Metric title="Offene Aufgaben" value={String(summary?.open_tasks ?? 0)} />
@@ -4824,6 +4855,110 @@ function sourceMeta(source: Record<string, unknown>): string {
   }
   parts.push(String(source.current_status ?? "-"));
   return parts.join(" · ");
+}
+
+function CockpitFilingJourney({
+  summary,
+  readiness,
+  onNavigate,
+  onRefreshConfiguredSources,
+  sourceRefreshLoading
+}: {
+  summary: Snapshot["cockpit"];
+  readiness: Snapshot["productReadiness"];
+  onNavigate: (section: Section) => void;
+  onRefreshConfiguredSources: () => void;
+  sourceRefreshLoading: boolean;
+}) {
+  const checks = readiness?.checks ?? [];
+  const checkByKey = new Map(checks.map((check) => [String(check.key), check]));
+  const sourcesCheck = checkByKey.get("sources_connected");
+  const reviewCheck = checkByKey.get("review_gate");
+  const taxYearsCheck = checkByKey.get("tax_years");
+  const evidenceCheck = checkByKey.get("evidence_package");
+  const liveCheck = checkByKey.get("portfolio_live");
+  const live = summary?.live_reconciliation;
+  const reviewStatus = reviewCheck?.status ?? (summary?.export_allowed ? "ok" : "blocked");
+  const steps = [
+    {
+      key: "sources",
+      title: "1. Quellen verbinden",
+      detail: sourcesCheck?.detail ?? "Wallets und Handelsplattformen pruefen.",
+      status: readinessTone(String(sourcesCheck?.status ?? "warning")),
+      target: "sources" as Section,
+      action: "Quellen oeffnen",
+      secondary: sourceRefreshLoading ? "API-Abfrage laeuft" : "Alle APIs abfragen",
+      secondaryAction: onRefreshConfiguredSources,
+      disabled: sourceRefreshLoading
+    },
+    {
+      key: "tax",
+      title: "2. Steuerjahr klaeren",
+      detail: taxYearsCheck?.detail ?? "Jahreszahlen, BMF-Methodik und Eingabehilfe kontrollieren.",
+      status: readinessTone(String(taxYearsCheck?.status ?? "warning")),
+      target: "tax" as Section,
+      action: "Steuerjahre"
+    },
+    {
+      key: "review",
+      title: "3. Review abschliessen",
+      detail: reviewCheck?.detail ?? live?.detail ?? "Offene fachliche Entscheidungen und Live-Abgleich pruefen.",
+      status: readinessTone(String(reviewStatus)),
+      target: "review" as Section,
+      action: "Review"
+    },
+    {
+      key: "export",
+      title: "4. Belege exportieren",
+      detail: evidenceCheck?.detail ?? "Finanzamtspaket, Evidence-Manifest und CSV/PDF bereitstellen.",
+      status: readinessTone(String(evidenceCheck?.status ?? "warning")),
+      target: "export" as Section,
+      action: "Export"
+    }
+  ];
+  const overall = readinessTone(readiness?.overall_status ?? "warning");
+  return (
+    <section className={`filingJourney ${overall}`}>
+      <div className="filingJourneyHeader">
+        <div>
+          <span className="heroKicker">Gefuehrter Abgabeablauf</span>
+          <h3>{readiness?.can_file_without_review ? "Der Steuerreport ist abgabefertig" : "Noch nicht abgabefertig"}</h3>
+          <p>
+            {readiness?.headline ?? "Die Website fuehrt von Quellen ueber Steuerjahr und Review bis zum Belegpaket."}
+          </p>
+        </div>
+        <div className="filingJourneyFacts">
+          <Metric title="Finale Abgabe" value={readiness?.can_file_without_review ? "ja" : "nein"} />
+          <Metric title="Vorbereitung" value={readiness?.can_prepare_tax_report ? "moeglich" : "offen"} />
+          <Metric title="Naechste Aktion" value={readiness?.next_action ?? "Status laden"} />
+        </div>
+      </div>
+      <div className="filingJourneySteps">
+        {steps.map((step) => (
+          <div className={`filingStep ${step.status}`} key={step.key}>
+            <span className={`statusPill ${step.status}`}>{step.status === "ok" ? "ok" : step.status === "blocked" ? "blockiert" : "pruefen"}</span>
+            <strong>{step.title}</strong>
+            <p>{String(step.detail)}</p>
+            <div className="filingStepActions">
+              <button type="button" onClick={() => onNavigate(step.target)}>
+                <ExternalLink size={15} />
+                <span>{step.action}</span>
+              </button>
+              {step.secondary ? (
+                <button type="button" className="secondary" disabled={step.disabled} onClick={step.secondaryAction}>
+                  <RefreshCcw size={15} />
+                  <span>{step.secondary}</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+      {liveCheck && String(liveCheck.status) !== "ok" ? (
+        <div className="notice inlineNotice reviewNotice">{String(liveCheck.detail ?? "Live-Daten sollten vor Abgabe aktualisiert werden.")}</div>
+      ) : null}
+    </section>
+  );
 }
 
 function SourceCommandCenter({
