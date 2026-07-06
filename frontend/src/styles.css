@@ -1062,6 +1062,147 @@ p {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.sourceSetupBlockers {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.sourceSetupBlockers.ok {
+  border-color: #add3ba;
+}
+
+.sourceSetupBlockers.warning {
+  border-color: #e2c56c;
+}
+
+.sourceSetupBlockers.blocked {
+  border-color: #e4b6aa;
+}
+
+.sourceSetupBlockerHeader {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sourceSetupBlockerHeader h3 {
+  color: #17201b;
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.sourceSetupBlockerHeader p {
+  color: #58655d;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sourceSetupBlockerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.sourceSetupBlockerActions button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  color: #26372f;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 38px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.sourceSetupBlockerActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sourceSetupBlockerMetrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.sourceSetupBlockerGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.sourceSetupBlockerCard {
+  background: #f8f7f3;
+  border: 1px solid #ece8e0;
+  border-radius: 8px;
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.sourceSetupBlockerCard.ok {
+  border-color: #add3ba;
+}
+
+.sourceSetupBlockerCard.warning {
+  border-color: #e2c56c;
+}
+
+.sourceSetupBlockerCard.blocked {
+  border-color: #e4b6aa;
+}
+
+.sourceSetupBlockerCard strong,
+.sourceSetupBlockerCard p,
+.sourceSetupBlockerCard em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sourceSetupBlockerCard strong {
+  color: #17201b;
+  font-size: 15px;
+}
+
+.sourceSetupBlockerCard p,
+.sourceSetupBlockerCard em {
+  color: #58655d;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.sourceSetupBlockerCard em {
+  font-style: normal;
+}
+
+.sourceSetupBlockerFacts {
+  background: #ffffff;
+  border: 1px solid #ece8e0;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 10px;
+}
+
 .sourceSetupWizard {
   background: #ffffff;
   border: 1px solid #d8d6cf;
@@ -4001,6 +4142,9 @@ th {
   .sourceCommandHeader,
   .sourceCommandMetrics,
   .sourceCommandGrid,
+  .sourceSetupBlockerHeader,
+  .sourceSetupBlockerMetrics,
+  .sourceSetupBlockerFacts,
   .sourceDetailGrid,
   .sourceStatusRows,
   .taxYearHero,

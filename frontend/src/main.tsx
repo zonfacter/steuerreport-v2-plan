@@ -2054,10 +2054,10 @@ function App() {
         sources: [
           "health",
           "sourcesOverview",
+          "sourceConnectorDiagnostics",
           ...(sourceViewMode !== "overview"
             ? ["sourceDetail", "sourceReconciliation", "sourceReconciliationEvidence", "binanceEarnHistoryPreflight", "binanceEarnHistoryApiPreview"]
             : []),
-          ...(sourceViewMode === "expert" ? ["sourceConnectorDiagnostics"] : [])
         ],
         import: [
           "health",
@@ -4000,6 +4000,12 @@ function SourcesPage({
         onRefreshConfiguredSources={onRefreshConfiguredSources}
         sourceRefreshLoading={sourceRefreshLoading}
       />
+      <SourceSetupBlockers
+        connectorDiagnostics={connectorDiagnostics}
+        onNavigate={onNavigate}
+        onRefreshConfiguredSources={onRefreshConfiguredSources}
+        sourceRefreshLoading={sourceRefreshLoading}
+      />
       <SourceSetupWizard
         sources={sources}
         connectorRows={connectorRows}
@@ -5085,6 +5091,95 @@ function SourceCommandCenter({
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function SourceSetupBlockers({
+  connectorDiagnostics,
+  onNavigate,
+  onRefreshConfiguredSources,
+  sourceRefreshLoading
+}: {
+  connectorDiagnostics: Snapshot["sourceConnectorDiagnostics"];
+  onNavigate: (section: Section) => void;
+  onRefreshConfiguredSources: () => void;
+  sourceRefreshLoading: boolean;
+}) {
+  const rows = connectorDiagnostics?.diagnostics ?? [];
+  const missingCredentials = rows.filter((row) => String(row.credential_status) === "missing");
+  const staleSnapshots = rows.filter((row) => Number(row.last_snapshot_age_days ?? 0) > 3 || String(row.status) === "stale_snapshot");
+  const tone = missingCredentials.length > 0 ? "blocked" : staleSnapshots.length > 0 ? "warning" : "ok";
+  if (!connectorDiagnostics) {
+    return (
+      <section className="sourceSetupBlockers warning">
+        <div>
+          <span className="heroKicker">Quellen-Setup</span>
+          <h3>Connector-Diagnose wird geladen</h3>
+          <p>Die Uebersicht zeigt danach, welche API-Zugaenge und Live-Snapshots fuer Product-Readiness fehlen.</p>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className={`sourceSetupBlockers ${tone}`}>
+      <div className="sourceSetupBlockerHeader">
+        <div>
+          <span className="heroKicker">Product-Readiness: Quellen</span>
+          <h3>
+            {missingCredentials.length > 0
+              ? `${missingCredentials.length} CEX-Credential-Set(s) fehlen`
+              : staleSnapshots.length > 0
+                ? `${staleSnapshots.length} Live-Snapshot(s) veraltet`
+                : "Quellen-Setup ohne Blocker"}
+          </h3>
+          <p>
+            Diese Karte zeigt nur Secret-Metadaten und Snapshot-Alter. Secret-Werte werden nicht angezeigt und es werden keine Steuerdaten veraendert.
+          </p>
+        </div>
+        <div className="sourceSetupBlockerActions">
+          <button type="button" onClick={() => onNavigate("admin")}>
+            <Settings size={16} />
+            <span>Credentials oeffnen</span>
+          </button>
+          <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading}>
+            <RefreshCcw size={16} />
+            <span>{sourceRefreshLoading ? "Abfrage laeuft" : "Live abfragen"}</span>
+          </button>
+        </div>
+      </div>
+      <div className="sourceSetupBlockerMetrics">
+        <Metric title="Credentials fehlen" value={String(connectorDiagnostics.missing_credentials)} />
+        <Metric title="Snapshots veraltet" value={String(connectorDiagnostics.stale_snapshots)} />
+        <Metric title="Snapshots fehlen" value={String(connectorDiagnostics.missing_snapshots)} />
+        <Metric title="Geprueft" value={String(rows.length)} />
+      </div>
+      <div className="sourceSetupBlockerGrid">
+        {rows.map((row) => {
+          const credentialMissing = String(row.credential_status) === "missing";
+          const stale = Number(row.last_snapshot_age_days ?? 0) > 3 || String(row.status) === "stale_snapshot";
+          const rowTone = credentialMissing ? "blocked" : stale ? "warning" : "ok";
+          return (
+            <div key={`source-setup-blocker-${String(row.source_id ?? row.connector_id)}`} className={`sourceSetupBlockerCard ${rowTone}`}>
+              <span className={`statusPill ${rowTone}`}>
+                {credentialMissing ? "Credentials fehlen" : stale ? "Live veraltet" : "ok"}
+              </span>
+              <strong>{String(row.label ?? row.source_id ?? row.connector_id)}</strong>
+              <p>{String(row.message ?? row.next_action ?? "-")}</p>
+              <div className="sourceSetupBlockerFacts">
+                <StatusRow label="Connector" value={String(row.connector_id ?? "-")} />
+                <StatusRow label="Typ" value={String(row.connector_type ?? "-")} />
+                <StatusRow label="Secrets" value={`${String(row.credential_keys_present ?? 0)}/${String(row.credential_keys_required ?? 0)}`} />
+                <StatusRow label="Snapshot" value={row.last_snapshot_at ? formatDateTime(row.last_snapshot_at) : "-"} />
+                <StatusRow label="Alter" value={row.last_snapshot_age_days === null || row.last_snapshot_age_days === undefined ? "-" : `${String(row.last_snapshot_age_days)} Tage`} />
+                <StatusRow label="Wert" value={`${formatCurrency(row.last_snapshot_value_eur)} EUR`} />
+              </div>
+              <em>{String(row.next_action ?? "")}</em>
+            </div>
+          );
+        })}
+      </div>
+      <div className="footer">{connectorDiagnostics.methodology}</div>
     </section>
   );
 }
