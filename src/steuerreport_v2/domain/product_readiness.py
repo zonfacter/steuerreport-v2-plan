@@ -46,18 +46,19 @@ class ProductReadinessService:
         blocking_items = sum(check.count for check in checks if check.status == "blocker")
         review_items = sum(check.count for check in checks if check.status == "warning")
 
+        conservative_ready_years = list(bmf_report.conservative_appendix_years) if bmf_report is not None else []
         return ProductReadinessReport(
             generated_at=generated_at,
             overall_status=overall,
             can_prepare_tax_report=overall in {"ready", "review"},
-            can_file_without_review=overall == "ready" and review_gate.allow_export,
+            can_file_without_review=overall == "ready" and review_gate.allow_export and not conservative_ready_years,
             headline=self._headline(overall),
             next_action=first_action.next_action,
             next_action_path=first_action.action_path or "/api/v1/cockpit/summary",
             checks=checks,
             sources=source_rows,
             ready_years=list(bmf_report.ready_years) if bmf_report is not None else [],
-            conservative_ready_years=list(bmf_report.conservative_appendix_years) if bmf_report is not None else [],
+            conservative_ready_years=conservative_ready_years,
             review_years=list(bmf_report.review_years) if bmf_report is not None else [],
             blocked_years=list(bmf_report.blocked_years) if bmf_report is not None else [],
             setup_required_sources=sum(1 for source in source_rows if source.status == "blocker"),
@@ -66,8 +67,10 @@ class ProductReadinessService:
             methodology=(
                 "Read-only Produkt-Readiness fuer vorhandene V2-Quellen. Der Bericht aggregiert "
                 "Quellenuebersicht, Connector-Diagnose, Review-Gate und den vorhandenen "
-                "BMF-Filing-Readiness-Snapshot. Es werden keine Connectoren abgefragt, keine "
-                "Importe gestartet und keine Steuer-/FIFO-Daten veraendert."
+                "BMF-Filing-Readiness-Snapshot. Konservativ abgabefaehige Jahre gelten als "
+                "nutzbar, bleiben aber nicht als 'ohne Review' markiert. Es werden keine "
+                "Connectoren abgefragt, keine Importe gestartet und keine Steuer-/FIFO-Daten "
+                "veraendert."
             ),
         )
 
@@ -263,6 +266,16 @@ class ProductReadinessService:
                 count=blocked,
             )
         if review + conservative > 0:
+            if review == 0:
+                return ProductReadinessCheck(
+                    key="tax_years",
+                    label="Steuerjahre",
+                    status="info",
+                    detail=f"{conservative} Steuerjahr(e) sind konservativ abgabefaehig; keine blockierten oder offenen Review-Jahre.",
+                    next_action="Jahrespakete und konservative Anlagen fuer die Abgabe bereithalten.",
+                    action_path="/api/v1/tax-methodology/bmf-filing-readiness",
+                    count=0,
+                )
             return ProductReadinessCheck(
                 key="tax_years",
                 label="Steuerjahre",

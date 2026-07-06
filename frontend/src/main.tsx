@@ -4968,18 +4968,26 @@ function CockpitFilingJourney({
     }
   ];
   const overall = readinessTone(readiness?.overall_status ?? "warning");
+  const conservativeReadyCount = readiness?.conservative_ready_years?.length ?? 0;
+  const canFileWithAppendix = readiness?.overall_status === "ready" && !readiness?.can_file_without_review && conservativeReadyCount > 0;
   return (
     <section className={`filingJourney ${overall}`}>
       <div className="filingJourneyHeader">
         <div>
           <span className="heroKicker">Gefuehrter Abgabeablauf</span>
-          <h3>{readiness?.can_file_without_review ? "Der Steuerreport ist abgabefertig" : "Noch nicht abgabefertig"}</h3>
+          <h3>
+            {readiness?.can_file_without_review
+              ? "Der Steuerreport ist abgabefertig"
+              : canFileWithAppendix
+                ? "Abgabe mit konservativen Anlagen vorbereitet"
+                : "Noch nicht abgabefertig"}
+          </h3>
           <p>
             {readiness?.headline ?? "Die Website fuehrt von Quellen ueber Steuerjahr und Review bis zum Belegpaket."}
           </p>
         </div>
         <div className="filingJourneyFacts">
-          <Metric title="Finale Abgabe" value={readiness?.can_file_without_review ? "ja" : "nein"} />
+          <Metric title="Finale Abgabe" value={readiness?.can_file_without_review ? "ohne Review" : canFileWithAppendix ? "mit Anlage" : "offen"} />
           <Metric title="Vorbereitung" value={readiness?.can_prepare_tax_report ? "moeglich" : "offen"} />
           <Metric title="Naechste Aktion" value={readiness?.next_action ?? "Status laden"} />
         </div>
@@ -5350,7 +5358,7 @@ function ProductReadinessPanel({
         </button>
       </div>
       <div className="productReadinessGrid">
-        <Metric title="Abgabe ohne Review" value={report.can_file_without_review ? "ja" : "nein"} />
+        <Metric title="Abgabe" value={report.can_file_without_review ? "ohne Review" : (report.conservative_ready_years ?? []).length > 0 ? "mit Anlage" : "offen"} />
         <Metric title="Vorbereitung moeglich" value={report.can_prepare_tax_report ? "ja" : "nein"} />
         <Metric title="Setup-Quellen" value={String(report.setup_required_sources ?? 0)} />
         <Metric title="Review/Blocker" value={`${report.review_items_count ?? 0}/${report.blocking_items_count ?? 0}`} />
@@ -5401,8 +5409,11 @@ function readinessTone(status: string | undefined): "ok" | "warning" | "blocked"
   if (normalized === "ready" || normalized === "ok") {
     return "ok";
   }
-  if (normalized === "review" || normalized === "warning" || normalized === "info") {
+  if (normalized === "review" || normalized === "warning") {
     return "warning";
+  }
+  if (normalized === "info") {
+    return "neutral";
   }
   if (normalized === "blocked" || normalized === "blocker" || normalized === "setup_required") {
     return "blocked";

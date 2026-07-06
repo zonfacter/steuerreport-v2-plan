@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -74,3 +75,22 @@ def test_product_readiness_api_route_returns_report(tmp_path):
     assert payload["overall_status"] in {"ready", "review", "blocked", "setup_required"}
     assert "checks" in payload
     assert "sources" in payload
+
+
+def test_product_readiness_treats_conservative_ready_years_as_info(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = ProductReadinessService(store)
+
+    check = service._tax_years_check(
+        "available",
+        SimpleNamespace(
+            blocked_years=[],
+            review_years=[],
+            conservative_appendix_years=[2021, 2022, 2023, 2024, 2025],
+            ready_years=[],
+        ),
+    )
+
+    assert check.status == "info"
+    assert check.count == 0
+    assert "konservativ abgabefaehig" in check.detail
