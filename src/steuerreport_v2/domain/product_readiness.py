@@ -321,7 +321,7 @@ class ProductReadinessService:
                 action_path="/api/v1/sources/overview",
                 count=max(warnings, 1),
             )
-        if overview_health_status == "warning" or warnings > 0:
+        if warnings > 0 or delta_warnings > 0:
             return ProductReadinessCheck(
                 key="portfolio_live",
                 label="Live-Abgleich",

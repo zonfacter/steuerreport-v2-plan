@@ -848,6 +848,8 @@ class SourceService:
         if group.source_group == "Binance" and reconciliation.status == "reconciled_with_dust":
             return None
         if group.source_group == "Binance" and self._has_product_live_snapshots("binance"):
+            if not self._has_material_asset_reconciliation_delta(group, reconciliation):
+                return None
             return (
                 "Anzeige nutzt gespeicherte Binance-API-Snapshots inklusive "
                 "Spot/Earn/Product. Ledger-Delta bleibt offen und darf nicht als "
@@ -878,6 +880,16 @@ class SourceService:
                 [connector_id, connector_id],
             ).fetchone()
         return row is not None
+
+    def _has_material_asset_reconciliation_delta(
+        self,
+        group: object,
+        reconciliation: SourceReconciliationStatus,
+    ) -> bool:
+        return any(
+            row.severity in {"blocker", "warning"}
+            for row in self._reconciliation_asset_rows(group, reconciliation)
+        )
 
     def _reconciliation_asset_rows(
         self,
