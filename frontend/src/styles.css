@@ -179,6 +179,22 @@ p {
   border-color: #e4b6aa;
 }
 
+.loadingPanel.compact {
+  background: #f8f7f3;
+  gap: 0;
+  padding: 10px 12px;
+}
+
+.loadingPanel.compact .loadingPanelHeader {
+  align-items: center;
+}
+
+.loadingPanel.compact .loadingPercent {
+  color: #245637;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
 .loadingPanelHeader {
   align-items: start;
   display: flex;

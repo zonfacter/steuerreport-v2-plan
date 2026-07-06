@@ -1775,6 +1775,8 @@ function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [loading, setLoading] = useState(false);
   const [loaderStatuses, setLoaderStatuses] = useState<LoaderStatus[]>([]);
+  const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
+  const [lastLoadFailureCount, setLastLoadFailureCount] = useState(0);
   const [showExpertNav, setShowExpertNav] = useState(false);
   const [sourceRefreshLoading, setSourceRefreshLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2158,10 +2160,13 @@ function App() {
         failures.push(`${loader.label}: ${result.reason instanceof Error ? result.reason.message : "fehlgeschlagen"}`);
       });
       setSnapshot((current) => ({ ...current, ...nextSnapshot }));
+      setLastRefreshAt(new Date().toISOString());
+      setLastLoadFailureCount(failures.length);
       if (failures.length > 0) {
         setError(`Teilweise geladen. Fehlgeschlagen: ${failures.slice(0, 4).join(" | ")}${failures.length > 4 ? ` | +${failures.length - 4} weitere` : ""}`);
       }
     } catch (caught) {
+      setLastLoadFailureCount(1);
       setError(caught instanceof Error ? caught.message : "Unbekannter API-Fehler");
     } finally {
       setLoading(false);
@@ -3073,7 +3078,13 @@ function App() {
         </header>
         {error ? <div className="error">{error}</div> : null}
         {notice ? <div className="notice">{notice}</div> : null}
-        <LoadingStatusPanel loading={loading} statuses={loaderStatuses} />
+        <LoadingStatusPanel
+          loading={loading}
+          statuses={loaderStatuses}
+          activeLabel={activeLabel}
+          lastRefreshAt={lastRefreshAt}
+          lastLoadFailureCount={lastLoadFailureCount}
+        />
         <Content
           active={active}
           snapshot={snapshot}
@@ -3150,8 +3161,20 @@ function App() {
   );
 }
 
-function LoadingStatusPanel({ loading, statuses }: { loading: boolean; statuses: LoaderStatus[] }) {
-  if (statuses.length === 0) {
+function LoadingStatusPanel({
+  loading,
+  statuses,
+  activeLabel,
+  lastRefreshAt,
+  lastLoadFailureCount
+}: {
+  loading: boolean;
+  statuses: LoaderStatus[];
+  activeLabel: string;
+  lastRefreshAt: string | null;
+  lastLoadFailureCount: number;
+}) {
+  if (statuses.length === 0 && !lastRefreshAt) {
     return null;
   }
   const done = statuses.filter((item) => item.status === "ok" || item.status === "error").length;
@@ -3160,14 +3183,24 @@ function LoadingStatusPanel({ loading, statuses }: { loading: boolean; statuses:
   const slowStatuses = statuses
     .filter((item) => item.status === "ok" && Number(item.duration_ms ?? 0) >= 5000)
     .sort((left, right) => Number(right.duration_ms ?? 0) - Number(left.duration_ms ?? 0));
-  if (!loading && failed === 0 && slowStatuses.length === 0) {
-    return null;
-  }
-  const progress = Math.round((done / statuses.length) * 100);
+  const progress = statuses.length > 0 ? Math.round((done / statuses.length) * 100) : 100;
   const slowSummary = slowStatuses
     .slice(0, 3)
     .map((item) => `${item.label} ${formatDurationMs(item.duration_ms)}`)
     .join(" · ");
+  if (!loading && failed === 0 && slowStatuses.length === 0) {
+    return (
+      <section className="loadingPanel compact" aria-live="polite">
+        <div className="loadingPanelHeader">
+          <div>
+            <strong>Datenstand {lastRefreshAt ? formatDateTime(lastRefreshAt) : "-"}</strong>
+            <span>{activeLabel}: {done || statuses.length} Datenpaket(e) geladen{lastLoadFailureCount > 0 ? `, ${lastLoadFailureCount} fehlgeschlagen` : ""}.</span>
+          </div>
+          <span className="loadingPercent">bereit</span>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className={`loadingPanel ${failed > 0 ? "hasFailures" : ""}`} aria-live="polite">
       <div className="loadingPanelHeader">
