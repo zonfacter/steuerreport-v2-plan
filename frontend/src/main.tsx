@@ -5402,7 +5402,7 @@ function DashboardPortfolioStatus({
         <div className="panelToolbar">
           <strong>Bestandsabgleich</strong>
           <span className={`statusPill ${review?.allow_export ? "ok" : "blocked"}`}>
-            {review?.allow_export ? "Export frei" : "Export blockiert"}
+            {review?.allow_export ? "Review frei" : "Review blockiert"}
           </span>
         </div>
         <div className="statusRows">
@@ -6297,7 +6297,7 @@ function ReviewPanel({
           </select>
         </div>
         <div className="reviewSummary">
-          <Metric title="Export" value={review?.allow_export ? "erlaubt" : "blockiert"} />
+          <Metric title="Review-Gate" value={review?.allow_export ? "frei" : "blockiert"} />
           <Metric title="Aktuell offen" value={String(review?.issues_current_open ?? review?.issues_open ?? 0)} />
           <Metric title="Historisch" value={String(review?.issues_historical_open ?? 0)} />
           <Metric title="Gesamt sichtbar" value={String(review?.issues_open_total ?? review?.issues_open ?? 0)} />
@@ -7985,6 +7985,29 @@ function equalizationAssetFlagLabel(flag: string): string {
   return flag;
 }
 
+type GateStatusItem = {
+  label: string;
+  status: string;
+  tone: "ok" | "warning" | "blocked";
+  detail: string;
+};
+
+function GateStatusLegend({ items }: { items: GateStatusItem[] }) {
+  return (
+    <section className="gateStatusLegend" aria-label="Status-Erklaerung">
+      {items.map((item) => (
+        <div key={item.label} className={`gateStatusItem ${item.tone}`}>
+          <span className={`statusPill ${item.tone}`}>{item.status}</span>
+          <div>
+            <strong>{item.label}</strong>
+            <p>{item.detail}</p>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function ReportFilingWorkflow({
   exportAllowed,
   activeYearsCount,
@@ -8018,12 +8041,17 @@ function ReportFilingWorkflow({
 }) {
   const gateTone = exportAllowed ? "ok" : "blocked";
   const evidenceTone = reportEvidenceTone(evidenceStatus);
+  const blockedReason = !exportAllowed && !parityReleaseReady && parityBlockingGroups > 0
+    ? "Parity klaeren"
+    : !exportAllowed
+      ? "Export-Gate klaeren"
+      : "Einreichung technisch freigegeben";
   return (
     <section className="reportWorkflow">
       <div className="reportWorkflowHeader">
         <div>
           <span className="heroKicker">Abgabe-Fahrplan</span>
-          <h3>{exportAllowed ? "Einreichung technisch freigegeben" : "Vor Einreichung Review klaeren"}</h3>
+          <h3>{blockedReason}</h3>
           <p>Der Bereich trennt Steuererklaerungswerte, Jahresbelege, Vorjahres-/Review-Aufgaben und technische Exporte.</p>
         </div>
         <div className="reportWorkflowBadges">
@@ -8146,6 +8174,38 @@ function ReportCenterPanel({
   const reportReviewYears = years.filter((year) => year.export_blocked || ["review", "blocked"].includes(String(year.filing_status ?? year.package_status ?? "")));
   const reportActiveYears = years.filter((year) => Number(year.tax_lines_count ?? 0) > 0 || Number(year.rewards_mining_staking_income_eur ?? 0) !== 0);
   const requiredEvidenceCount = requiredManifestFiles.length || years.reduce((total, year) => total + Number(year.required_evidence_count ?? 0), 0);
+  const reviewGateOpenIssues = Number(readiness?.review_issues_open_total ?? readiness?.review_issues_open ?? 0);
+  const reviewGateBlockingIssues = Number(readiness?.review_blocking_issues_open ?? 0);
+  const parityBlockingGroups = Number(readiness?.parity_blocking_groups ?? 0);
+  const parityReleaseReady = readiness?.parity_release_ready === true;
+  const gateStatuses: GateStatusItem[] = [
+    {
+      label: "Review-Gate",
+      status: reviewGateBlockingIssues === 0 ? "frei" : "blockiert",
+      tone: reviewGateBlockingIssues === 0 ? "ok" : "blocked",
+      detail: `${reviewGateOpenIssues} offene Review-Issue(s), davon ${reviewGateBlockingIssues} blockierend. Das ist die fachliche Datenpruefung.`
+    },
+    {
+      label: "V1/V2-Parity",
+      status: parityReleaseReady ? "releasebereit" : "blockiert",
+      tone: parityReleaseReady ? "ok" : "blocked",
+      detail: `${parityBlockingGroups} blockierende Parity-Gruppe(n). Parity ist Teil der technischen Export-Freigabe.`
+    },
+    {
+      label: "Export-Readiness",
+      status: exportAllowed ? "freigegeben" : "blockiert",
+      tone: exportAllowed ? "ok" : "blocked",
+      detail: exportAllowed
+        ? "Review-Gate und Parity erlauben die finale Exporterzeugung."
+        : "Export bleibt blockiert, solange Review-Gate oder Parity nicht frei sind."
+    },
+    {
+      label: "Belege",
+      status: String(evidenceHealth?.status ?? "offen"),
+      tone: reportEvidenceTone(String(evidenceHealth?.status ?? "offen")),
+      detail: `${requiredEvidenceCount} Pflichtbeleg(e) im aktuellen Report-Center-Kontext.`
+    }
+  ];
   const manifestGroups = manifestFiles.reduce<Array<{ key: string; label: string; files: EvidenceManifest["files"] }>>((groups, file) => {
     const key = file.group || "other";
     const existing = groups.find((group) => group.key === key);
@@ -8178,6 +8238,8 @@ function ReportCenterPanel({
         </div>
       </section>
 
+      <GateStatusLegend items={gateStatuses} />
+
       <ReportFilingWorkflow
         exportAllowed={exportAllowed}
         activeYearsCount={reportActiveYears.length}
@@ -8188,8 +8250,8 @@ function ReportCenterPanel({
         warningsCount={warnings.length}
         evidenceStatus={String(evidenceHealth?.status ?? "offen")}
         latestPackageCreatedAt={center?.latest_package_created_at ?? null}
-        parityReleaseReady={readiness?.parity_release_ready === true}
-        parityBlockingGroups={Number(readiness?.parity_blocking_groups ?? 0)}
+        parityReleaseReady={parityReleaseReady}
+        parityBlockingGroups={parityBlockingGroups}
         onDownload={onDownload}
         onRunReportAction={onRunReportAction}
         onExportViewModeChange={onExportViewModeChange}
