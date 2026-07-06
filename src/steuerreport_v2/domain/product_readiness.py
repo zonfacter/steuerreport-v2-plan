@@ -147,6 +147,8 @@ class ProductReadinessService:
             return "Credentials in Administration hinterlegen."
         if status == "warning" and source is not None and source.open_reconciliation_issues > 0:
             return "Ledger-vs-Live-Abgleich der Quelle pruefen."
+        if status == "warning" and source is not None and source.display_warning:
+            return "Live-Delta im Quellen-Drilldown pruefen; keine automatische FIFO-Korrektur buchen."
         if status == "warning":
             return "Live-Snapshot oder Quellenwarnung pruefen."
         if status == "info":
@@ -195,8 +197,11 @@ class ProductReadinessService:
                 key="sources_connected",
                 label="Quellen verbunden",
                 status="warning",
-                detail=f"{warnings} vorhandene Quelle(n) brauchen Live-/Reconciliation-Pruefung.",
-                next_action="Quellenstatus und Live-Abgleich pruefen.",
+                detail=(
+                    f"{warnings} vorhandene Quelle(n) haben frische Daten, aber ein "
+                    "erklaerungsbeduerftiges Live-/Ledger-Delta."
+                ),
+                next_action="Quellen-Drilldown und Live-Abgleich pruefen.",
                 action_path="/api/v1/sources/overview",
                 count=warnings,
             )
@@ -303,6 +308,7 @@ class ProductReadinessService:
         overview_health_status: str,
     ) -> ProductReadinessCheck:
         warnings = sum(1 for source in sources if source.live_status in {"missing", "stale", "missing_snapshot"})
+        delta_warnings = sum(1 for source in sources if source.status == "warning")
         if overview_health_status == "blocked":
             return ProductReadinessCheck(
                 key="portfolio_live",
@@ -318,10 +324,13 @@ class ProductReadinessService:
                 key="portfolio_live",
                 label="Live-Abgleich",
                 status="warning",
-                detail=f"{warnings} Quelle(n) haben keinen frischen Live-Status.",
-                next_action="Konfigurierte Quellen per API abfragen.",
+                detail=(
+                    f"{warnings} Quelle(n) haben keinen frischen Live-Status; "
+                    f"{delta_warnings} Quelle(n) haben ein erklaerungsbeduerftiges Live-/Ledger-Delta."
+                ),
+                next_action="Quellen-Drilldown und Reconciliation-Report pruefen.",
                 action_path="/api/v1/portfolio/reconciliation",
-                count=warnings,
+                count=max(warnings, delta_warnings),
             )
         return ProductReadinessCheck(
             key="portfolio_live",

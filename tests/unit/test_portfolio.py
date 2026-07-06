@@ -1490,7 +1490,7 @@ def test_portfolio_snapshot_uses_primary_solana_live_anchor(tmp_path, monkeypatc
     assert snapshot.total_value_eur == Decimal("125.000000000000000000000000000000000000")
 
 
-def test_portfolio_snapshot_uses_binance_live_product_anchor_without_changing_reconciliation(
+def test_portfolio_snapshot_uses_binance_live_product_anchor_in_reconciliation(
     tmp_path,
     monkeypatch,
 ):
@@ -1570,9 +1570,13 @@ def test_portfolio_snapshot_uses_binance_live_product_anchor_without_changing_re
         ("Binance Spot", "EUR"): Decimal("0.500000000000000000"),
     }
     assert snapshot.missing_price_assets == []
-    binance = next(row for row in report.rows if row.source_group == "Binance")
-    assert binance.ledger_value_eur == Decimal("10000.000000000000000000")
-    assert binance.status == "ledger_current_needs_live_anchor"
+    binance_rows = {row.asset: row for row in report.rows if row.source_group == "Binance"}
+    assert binance_rows["EUR"].ledger_value_eur == Decimal("10000.000000000000000000")
+    assert binance_rows["EUR"].external_value_eur == Decimal("0.500000000000000000")
+    assert binance_rows["EUR"].status == "product_live_anchor_delta"
+    assert binance_rows["JUP"].ledger_quantity == Decimal("0")
+    assert binance_rows["JUP"].external_quantity == Decimal("25.000000000000000000")
+    assert binance_rows["JUP"].status == "product_live_anchor_delta"
 
 
 def test_portfolio_jup_wallet_history_imports_v1_solana_rows(tmp_path, monkeypatch):

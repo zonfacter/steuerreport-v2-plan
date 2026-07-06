@@ -113,6 +113,13 @@ class PortfolioService:
         "bitget": ("api_key", "api_secret", "passphrase"),
         "pionex": ("api_key", "api_secret"),
     }
+    LIVE_CONNECTOR_BY_SOURCE_GROUP = {
+        "Binance": "binance",
+        "Bitget": "bitget",
+        "Pionex": "pionex",
+        "Jup Wallet GmHY...3yu": "jup_wallet",
+        "Solana Wallet 6K9n7y...qEwP": "solana_wallet",
+    }
     LIVE_STALE_AFTER_DAYS = 3
 
     def __init__(self, store: DuckDbStore) -> None:
@@ -871,6 +878,73 @@ class PortfolioService:
                     )
                 continue
 
+            connector_id = self.LIVE_CONNECTOR_BY_SOURCE_GROUP.get(group.source_group)
+            if connector_id is not None and self._connector_live_snapshot_is_current(connector_id):
+                external_balances = self._stored_live_balance_snapshots(connector_id)
+                if external_balances:
+                    ledger_assets = {item.asset: item for item in group.asset_summary}
+                    all_assets = sorted(set(ledger_assets) | set(external_balances))
+                    for asset_name in all_assets:
+                        ledger_asset = ledger_assets.get(asset_name)
+                        ledger_quantity = ledger_asset.quantity if ledger_asset is not None else Decimal("0")
+                        ledger_value = ledger_asset.value_eur if ledger_asset is not None else Decimal("0")
+                        external_quantity = external_balances.get(asset_name)
+                        external_value = self._portfolio_value(asset_name, external_quantity, prices)
+                        delta_quantity = None if external_quantity is None else external_quantity - ledger_quantity
+                        delta_value = None if external_value is None else external_value - ledger_value
+                        reconciled = self._is_live_delta_reconciled(delta_quantity, delta_value)
+                        material_delta = (
+                            delta_value is not None
+                            and abs(delta_value) >= Decimal("5")
+                        )
+                        product_snapshot = (
+                            group.source_group == "Binance"
+                            and self._has_product_live_snapshots("binance")
+                        )
+                        if reconciled:
+                            status = "live_anchor_reconciled"
+                            severity = "info"
+                            next_action = (
+                                "Live-Anker und V2-Ledger stimmen innerhalb der "
+                                "Reconciliation-Toleranz ueberein."
+                            )
+                        elif product_snapshot:
+                            status = "product_live_anchor_delta"
+                            severity = "warning" if material_delta else "info"
+                            next_action = (
+                                "Binance-Livebestand enthaelt Spot- und Earn-/Produktkonten; "
+                                "Delta assetgenau pruefen und nicht automatisch als FIFO-"
+                                "Korrektur buchen."
+                            )
+                        else:
+                            status = "live_anchor_delta" if external_quantity is not None else "ledger_only_not_in_live_snapshot"
+                            severity = "warning" if material_delta else "info"
+                            next_action = (
+                                "Gespeicherten Live-Snapshot gegen V2-Ledger pruefen; "
+                                "Abweichungen nur mit API-/Export-/On-chain-Beleg korrigieren."
+                            )
+                        rows.append(
+                            PortfolioReconciliationRow(
+                                source_group=group.source_group,
+                                source_type=group.source_type,
+                                asset=asset_name,
+                                ledger_quantity=ledger_quantity,
+                                ledger_value_eur=ledger_value,
+                                external_quantity=external_quantity,
+                                external_value_eur=external_value,
+                                delta_quantity=delta_quantity,
+                                delta_value_eur=delta_value,
+                                status=status,
+                                severity=severity,
+                                evidence=(
+                                    f"{group.note or 'V2-Ledgerbestand'}; "
+                                    f"Live-Anker: {self._snapshot_source_for_connector(connector_id)}"
+                                ),
+                                next_action=next_action,
+                            )
+                        )
+                    continue
+
             live_unverified_value += group.value_eur
             rows.append(
                 PortfolioReconciliationRow(
@@ -960,6 +1034,25 @@ class PortfolioService:
                 [connector_id, connector_id],
             ).fetchall()
         return {str(row[0]).upper(): row[1] or Decimal("0") for row in rows}
+
+    def _has_product_live_snapshots(self, connector_id: str) -> bool:
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select 1
+                from portfolio_live_balance_snapshots
+                where connector_id = ?
+                  and coalesce(account_type, '') not in ('', 'spot')
+                  and fetched_at = (
+                    select max(fetched_at)
+                    from portfolio_live_balance_snapshots
+                    where connector_id = ?
+                  )
+                limit 1
+                """,
+                [connector_id, connector_id],
+            ).fetchone()
+        return row is not None
 
     def _apply_live_balance_anchor(
         self,
