@@ -1997,29 +1997,10 @@ function App() {
         "taxPaymentOverview",
         "taxYearFilingMatrix",
         "taxFilingClosureOverview",
-        "taxYearsCorrectionMap",
         "taxBmfFinalizationMatrix",
-        "taxBmfSubmissionGuide",
-        "taxBmfPriorFilingComparison",
         "taxBmfPriorFilingDeclaredAmounts",
-        "taxBmfAmendmentWorklist",
-        "taxYearDetail",
         "taxDeclarationGuide",
         "taxYearFilingSummary",
-        "taxYearTurnoverAudit",
-        "taxYearGainEvidenceReview",
-        "taxYearGainEvidencePriceDeltas",
-        "taxYearGainEvidenceEventDeltas",
-        "taxYearGainEvidenceAcquisitionEventDeltas",
-        "taxYearsTurnoverAuditSummary",
-        "taxSolanaProgramIncomeReview",
-        "taxHeliumSwapContext",
-        "taxHeliumSwapEvidenceReview",
-        "taxHeliumSwapAlchemyAudit",
-        "taxStablecoinFifoReview",
-        "taxStablecoinQuoteLegReview",
-        "taxSolanaStablecoinSwapContext",
-        "taxSolanaStablecoinFxReview",
         "taxYearEvidence",
         "taxHoldingPeriods",
         "taxLossRealizationPlanner",
@@ -2027,6 +2008,25 @@ function App() {
         "derivativeSummary",
         ...(taxViewMode !== "guided"
           ? [
+              "taxYearsCorrectionMap",
+              "taxBmfSubmissionGuide",
+              "taxBmfPriorFilingComparison",
+              "taxBmfAmendmentWorklist",
+              "taxYearDetail",
+              "taxYearTurnoverAudit",
+              "taxYearGainEvidenceReview",
+              "taxYearGainEvidencePriceDeltas",
+              "taxYearGainEvidenceEventDeltas",
+              "taxYearGainEvidenceAcquisitionEventDeltas",
+              "taxYearsTurnoverAuditSummary",
+              "taxSolanaProgramIncomeReview",
+              "taxHeliumSwapContext",
+              "taxHeliumSwapEvidenceReview",
+              "taxHeliumSwapAlchemyAudit",
+              "taxStablecoinFifoReview",
+              "taxStablecoinQuoteLegReview",
+              "taxSolanaStablecoinSwapContext",
+              "taxSolanaStablecoinFxReview",
               "taxMethodologySummary",
               "taxBmfActionPlan",
               "taxYearMethodology",
@@ -2149,7 +2149,13 @@ function App() {
           throw caught;
         }
       };
-      const results = await Promise.allSettled(loaders.map((loader) => runLoader(loader)));
+      const results: PromiseSettledResult<unknown>[] = [];
+      const maxParallelLoaders = active === "tax" ? 3 : 6;
+      for (let offset = 0; offset < loaders.length; offset += maxParallelLoaders) {
+        const batch = loaders.slice(offset, offset + maxParallelLoaders);
+        const batchResults = await Promise.allSettled(batch.map((loader) => runLoader(loader)));
+        results.push(...batchResults);
+      }
       const nextSnapshot: Partial<Snapshot> = {};
       const failures: string[] = [];
       results.forEach((result, index) => {
