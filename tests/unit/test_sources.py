@@ -797,7 +797,7 @@ def test_source_overview_documents_bitget_complete_export_dust_delta(tmp_path):
     detail = SourceService(store).detail("bitget")
 
     assert bitget.open_reconciliation_issues == 0
-    assert bitget.current_status == "ledger_residual_expected_zero"
+    assert bitget.current_status == "complete_export_strategy_reference_live_zero"
     assert detail is not None
     assert detail.reconciliation.status == "complete_export_strategy_reference_live_zero"
     assert detail.reconciliation.severity == "info"

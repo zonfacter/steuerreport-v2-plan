@@ -420,6 +420,7 @@ class SourceService:
                     group.source_group == "Binance"
                     and reconciliation.status == "reconciled_with_dust"
                 )
+                or reconciliation.status == "complete_export_strategy_reference_live_zero"
             )
             else group.current_status
         )

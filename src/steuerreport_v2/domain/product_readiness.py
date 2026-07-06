@@ -118,6 +118,8 @@ class ProductReadinessService:
             return "blocker"
         if source is not None and (source.open_reconciliation_issues > 0 or source.open_price_issues > 0):
             return "warning"
+        if source is not None and source.current_status == "complete_export_strategy_reference_live_zero":
+            return "ok"
         if source is not None and source.display_warning:
             return "warning"
         if diagnostic is not None and diagnostic.status in self.LIVE_WARNING_STATUSES:
