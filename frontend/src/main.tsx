@@ -2099,6 +2099,7 @@ function App() {
           "health",
           "reportCenter",
           "exportReadiness",
+          "parityReleaseReadiness",
           "review",
           "reviewDecisions",
           ...(exportViewMode !== "packages" ? ["reportEvidenceManifest", "reportEvidencePackageIndex"] : []),
@@ -3765,10 +3766,12 @@ function Content({
           readiness={snapshot.exportReadiness}
           priceQuality={snapshot.priceQuality}
           reviewDecisions={snapshot.reviewDecisions ?? []}
+          parityReleaseReadiness={snapshot.parityReleaseReadiness}
           exportViewMode={exportViewMode}
           onExportViewModeChange={onExportViewModeChange}
           onCreatePdfExport={onCreatePdfExport}
           onRunReportAction={onRunReportAction}
+          onAddParityDecision={onAddParityDecision}
           onDownload={onDownload}
         />
         {exportViewMode === "expert" ? (
@@ -8008,6 +8011,83 @@ function GateStatusLegend({ items }: { items: GateStatusItem[] }) {
   );
 }
 
+function ParityBlockerFocus({
+  rows,
+  onAddParityDecision,
+  onDownload
+}: {
+  rows: Array<Record<string, unknown>>;
+  onAddParityDecision: (scope: string, decisionStatus: string) => void;
+  onDownload: (path: string) => void;
+}) {
+  if (rows.length === 0) {
+    return (
+      <section className="parityBlockerFocus ok">
+        <div>
+          <span className="heroKicker">Parity-Blocker</span>
+          <h3>Keine blockierende Parity-Gruppe offen</h3>
+          <p>Der Legacy-Vergleich verhindert den Export aktuell nicht.</p>
+        </div>
+        <span className="statusPill ok">frei</span>
+      </section>
+    );
+  }
+  const primary = rows[0];
+  const scope = String(primary.scope ?? "");
+  const metrics = Array.isArray(primary.metrics) ? primary.metrics.join(", ") : String(primary.metrics ?? "-");
+  return (
+    <section className="parityBlockerFocus blocked">
+      <div className="parityBlockerHeader">
+        <div>
+          <span className="heroKicker">Offener Parity-Blocker</span>
+          <h3>{String(primary.year ?? "-")} · {String(primary.asset ?? "-")} · {String(primary.status ?? "-")}</h3>
+          <p>
+            Diese Legacy-Vergleichsgruppe blockiert die Export-Readiness, obwohl das Review-Gate frei ist.
+            Fachlich muss entschieden werden, ob V1 falsch war, V2 Daten fehlen, manuelle Evidenz noetig ist oder die Differenz akzeptiert wird.
+          </p>
+        </div>
+        <span className="statusPill blocked">{rows.length} offen</span>
+      </div>
+      <div className="parityBlockerFacts">
+        <StatusRow label="Scope" value={scope} />
+        <StatusRow label="Entscheidung" value={String(primary.decision_status ?? "unreviewed")} />
+        <StatusRow label="Metriken" value={metrics} />
+        <StatusRow label="Issue Count" value={String(primary.issue_count ?? 0)} />
+        <StatusRow label="V1 Summe" value={`${formatCurrency(primary.v1_total_eur)} EUR`} />
+        <StatusRow label="V2 Summe" value={`${formatCurrency(primary.v2_total_eur)} EUR`} />
+        <StatusRow label="Absolute Differenz" value={`${formatCurrency(primary.absolute_difference_eur)} EUR`} />
+        <StatusRow label="Max. Differenz" value={`${formatCurrency(primary.max_absolute_difference)} EUR`} />
+      </div>
+      <div className="parityBlockerActions">
+        <button type="button" onClick={() => onDownload(`/api/v1/parity/group-detail?scope=${encodeURIComponent(scope)}`)}>
+          <FileJson size={16} />
+          <span>Details JSON</span>
+        </button>
+        <button type="button" onClick={() => onDownload("/api/v1/export/parity-diagnostics.csv")}>
+          <FileDown size={16} />
+          <span>Parity CSV</span>
+        </button>
+        <button type="button" onClick={() => onAddParityDecision(scope, "v1_known_wrong")}>
+          <Scale size={16} />
+          <span>V1 falsch</span>
+        </button>
+        <button type="button" onClick={() => onAddParityDecision(scope, "v2_missing_data")}>
+          <Database size={16} />
+          <span>V2 Datenluecke</span>
+        </button>
+        <button type="button" onClick={() => onAddParityDecision(scope, "needs_manual_evidence")}>
+          <ReceiptText size={16} />
+          <span>Evidenz noetig</span>
+        </button>
+        <button type="button" onClick={() => onAddParityDecision(scope, "accepted_difference")}>
+          <Check size={16} />
+          <span>Akzeptieren</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function ReportFilingWorkflow({
   exportAllowed,
   activeYearsCount,
@@ -8135,10 +8215,12 @@ function ReportCenterPanel({
   readiness,
   priceQuality,
   reviewDecisions,
+  parityReleaseReadiness,
   exportViewMode,
   onExportViewModeChange,
   onCreatePdfExport,
   onRunReportAction,
+  onAddParityDecision,
   onDownload
 }: {
   center: Snapshot["reportCenter"];
@@ -8147,10 +8229,12 @@ function ReportCenterPanel({
   readiness: Record<string, unknown> | undefined;
   priceQuality: Snapshot["priceQuality"];
   reviewDecisions: Snapshot["reviewDecisions"];
+  parityReleaseReadiness: Snapshot["parityReleaseReadiness"];
   exportViewMode: ExportViewMode;
   onExportViewModeChange: (mode: ExportViewMode) => void;
   onCreatePdfExport: (label: string, estimatedPages: string) => void;
   onRunReportAction: (path: string, label: string) => void;
+  onAddParityDecision: (scope: string, decisionStatus: string) => void;
   onDownload: (path: string) => void;
 }) {
   const [label, setLabel] = useState("steuerreport-v2-final");
@@ -8170,6 +8254,7 @@ function ReportCenterPanel({
   const evidenceHealth = center?.evidence_health ?? null;
   const indexGroups = evidencePackageIndex?.groups ?? [];
   const indexFiles = evidencePackageIndex?.files ?? [];
+  const parityBlockingRows = parityReleaseReadiness?.blocking_groups_top ?? [];
   const reportReadyYears = years.filter((year) => !year.export_blocked && ["ready", "finished", "conservative_ready"].includes(String(year.filing_status ?? year.tax_state ?? "")));
   const reportReviewYears = years.filter((year) => year.export_blocked || ["review", "blocked"].includes(String(year.filing_status ?? year.package_status ?? "")));
   const reportActiveYears = years.filter((year) => Number(year.tax_lines_count ?? 0) > 0 || Number(year.rewards_mining_staking_income_eur ?? 0) !== 0);
@@ -8239,6 +8324,12 @@ function ReportCenterPanel({
       </section>
 
       <GateStatusLegend items={gateStatuses} />
+
+      <ParityBlockerFocus
+        rows={parityBlockingRows}
+        onAddParityDecision={onAddParityDecision}
+        onDownload={onDownload}
+      />
 
       <ReportFilingWorkflow
         exportAllowed={exportAllowed}
