@@ -1625,6 +1625,30 @@ def test_portfolio_jup_wallet_history_imports_v1_solana_rows(tmp_path, monkeypat
     assert balance == Decimal("10.000000000000000000")
 
 
+def test_portfolio_jup_wallet_history_prefers_redacted_alchemy_rpc(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    monkeypatch.setenv("ALCHEMY_API_KEY", "alchemy-secret")
+    monkeypatch.setattr(PortfolioService, "_solana_rpc", lambda *_args, **_kwargs: [])
+
+    payload = PortfolioService(store)._solana_wallet_history_direct(
+        wallet_address=PortfolioService.KNOWN_JUP_WALLET,
+        before_signature=None,
+        max_signatures=1,
+        warning="test",
+    )
+
+    assert payload["rpc_url"] == "https://solana-mainnet.g.alchemy.com/v2/***"
+    assert "alchemy-secret" not in str(payload)
+
+
+def test_portfolio_normalizes_jlwsol_live_asset_alias(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = PortfolioService(store)
+
+    assert service._canonical_solana_asset_symbol("2UQSYO...2FVU") == "JLWSOL"
+    assert service._canonical_solana_asset_symbol("2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU") == "JLWSOL"
+
+
 def test_price_points_are_listed_newest_first(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     older = store.add_price_point(

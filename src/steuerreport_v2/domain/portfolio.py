@@ -85,6 +85,7 @@ class PortfolioService:
         "JUPYIWRYJFSKUPIHA7HKER8VUTAEFOSYBKEDZNSDVCN": "JUP",
         "HNTYVP6YFM1HG25TN9WGLQM12B8TQMCKNKRDU1OXWUX": "HNT",
         "EPJFWDD5AUFQSSQEM2QN1XZYBAPC8G4WEGGKZWYTDT1V": "USDC",
+        "2UQSYO1FXXQKDTCPXNLOFWY88PXCVNFH2L8FPSE62FVU": "JLWSOL",
     }
     EXPECTED_ZERO_SOURCES = {"Bitget", "Pionex"}
     EXPECTED_ZERO_BLOCKER_VALUE_EUR = Decimal("10")
@@ -1438,7 +1439,7 @@ class PortfolioService:
             rows.extend(self._solana_transaction_rows(wallet_address, signature, tx))
         return {
             "wallet_address": wallet_address,
-            "rpc_url": self.SOLANA_RPC_URL,
+            "rpc_url": self._redacted_solana_rpc_url(self._solana_rpc_urls()[0]),
             "signature_count": len(signature_values),
             "first_signature": signature_values[0] if signature_values else None,
             "last_signature": signature_values[-1] if signature_values else None,
@@ -1450,7 +1451,7 @@ class PortfolioService:
     def _solana_rpc(self, method: str, params: list[object], timeout_seconds: int) -> object:
         errors: list[str] = []
         with httpx.Client(timeout=timeout_seconds) as client:
-            for rpc_url in self.SOLANA_RPC_URLS:
+            for rpc_url in self._solana_rpc_urls():
                 try:
                     response = client.post(
                         rpc_url,
@@ -1459,13 +1460,49 @@ class PortfolioService:
                     response.raise_for_status()
                     payload = response.json()
                     if isinstance(payload, dict) and payload.get("error"):
-                        errors.append(f"{rpc_url}: {payload['error']}")
+                        errors.append(f"{self._redacted_solana_rpc_url(rpc_url)}: {payload['error']}")
                         continue
                     return payload.get("result") if isinstance(payload, dict) else None
                 except Exception as exc:
-                    errors.append(f"{rpc_url}: {exc}")
+                    errors.append(f"{self._redacted_solana_rpc_url(rpc_url)}: {exc}")
                     continue
         raise RuntimeError("; ".join(errors[-3:]))
+
+    def _solana_rpc_urls(self) -> list[str]:
+        urls: list[str] = []
+        alchemy_key = self._alchemy_api_key()
+        if alchemy_key:
+            urls.append(f"https://solana-mainnet.g.alchemy.com/v2/{alchemy_key}")
+        for env_key in ("SOLANA_RPC_URL", "SOLANA_RPC_URLS"):
+            value = os.environ.get(env_key, "").strip()
+            if not value:
+                continue
+            urls.extend(item.strip() for item in value.split(",") if item.strip())
+        urls.extend(self.SOLANA_RPC_URLS)
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for url in urls:
+            if url in seen:
+                continue
+            seen.add(url)
+            deduped.append(url)
+        return deduped
+
+    def _alchemy_api_key(self) -> str:
+        value = resolve_secret_value(self.store, "secret.alchemy.api_key")
+        if value:
+            return value
+        for env_key in ("ALCHEMY_API_KEY", "ALCHEMY_SOLANA_API_KEY"):
+            value = os.environ.get(env_key, "").strip()
+            if value:
+                return value
+        return ""
+
+    def _redacted_solana_rpc_url(self, rpc_url: str) -> str:
+        marker = "alchemy.com/v2/"
+        if marker in rpc_url:
+            return rpc_url.split(marker, 1)[0] + marker + "***"
+        return rpc_url
 
     def _solana_transaction_rows(
         self,
@@ -1607,6 +1644,7 @@ class PortfolioService:
                 symbol = str(row.get("symbol") or row.get("asset") or "").strip().upper()
                 if not symbol:
                     continue
+                symbol = self._canonical_solana_asset_symbol(symbol)
                 balances[symbol] = balances.get(symbol, Decimal("0")) + self._decimal_from_payload(row.get("quantity"))
         return {asset: quantity for asset, quantity in balances.items() if quantity != 0}
 
@@ -1673,6 +1711,7 @@ class PortfolioService:
             asset = str(row.get("asset") or "").strip().upper()
             if not asset:
                 continue
+            asset = self._canonical_solana_asset_symbol(asset)
             try:
                 quantity = Decimal(str(row.get("quantity") or "0"))
             except Exception:
@@ -1834,6 +1873,14 @@ class PortfolioService:
                     for snapshot in snapshots
                 ],
             )
+
+    def _canonical_solana_asset_symbol(self, asset: str) -> str:
+        normalized = str(asset or "").strip().upper()
+        if normalized in self.SOLANA_MINT_SYMBOLS:
+            return self.SOLANA_MINT_SYMBOLS[normalized]
+        if normalized == "2UQSYO...2FVU":
+            return "JLWSOL"
+        return normalized
 
     def _portfolio_value(
         self,
