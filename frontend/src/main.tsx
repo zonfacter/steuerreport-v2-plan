@@ -9051,6 +9051,75 @@ function TaxPanel({
     finalizationRows: taxBmfFinalizationMatrix?.years ?? []
   });
   const activeTaxProductRow = taxProductRows.find((row) => row.year === activeYearValue);
+  const atAGlanceEntryItems: TaxAtAGlanceItem[] = [
+    {
+      label: "Anlage SO G/V",
+      value: `${formatCurrency(activePaymentRow?.private_disposals_gain_loss_eur ?? taxYearFilingSummary?.taxable_private_disposals_eur)} EUR`,
+      detail: String(activePaymentRow?.where_to_enter ?? "In die Eingabehilfe fuer das Steuerjahr uebernehmen."),
+      tone: yearDecisionTone
+    },
+    {
+      label: "Rewards / Mining / Staking",
+      value: `${formatCurrency(activePaymentRow?.rewards_mining_staking_income_eur ?? taxYearFilingSummary?.rewards_mining_staking_income_eur)} EUR`,
+      detail: "Nur als Reward/Mining/Staking klassifizierte Zufluesse, Handel bleibt getrennt.",
+      tone: "ok"
+    },
+    {
+      label: "Derivate",
+      value: `${formatCurrency(activePaymentRow?.derivative_pnl_eur ?? taxYearFilingSummary?.derivative_pnl_eur)} EUR`,
+      detail: "Separat ausweisen, falls im Jahr vorhanden.",
+      tone: Number(activePaymentRow?.derivative_pnl_eur ?? taxYearFilingSummary?.derivative_pnl_eur ?? 0) === 0 ? "ok" : "warning"
+    },
+    {
+      label: "Steuerfrei archivieren",
+      value: `${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`,
+      detail: "Nicht in die steuerpflichtige Summe mischen, aber fuer Haltefrist und Nachweis aufbewahren.",
+      tone: "ok"
+    }
+  ];
+  const atAGlanceEvidenceItems: TaxAtAGlanceItem[] = [
+    ...primaryEvidenceItems.slice(0, 4).map((item) => ({
+      label: String(item.label ?? item.evidence_id ?? "Beleg"),
+      value: item.required ? "Pflicht" : "Nachweis",
+      detail: String(item.note ?? item.endpoint ?? "Beleg im Jahrespaket enthalten."),
+      endpoint: item.endpoint ? String(item.endpoint) : undefined,
+      tone: item.required ? "warning" as const : "ok" as const
+    })),
+    ...proofLines.slice(0, 4).map((line) => ({
+      label: String(line.label ?? line.source_topic ?? "Nachweis"),
+      value: String(line.topic ?? "Beleg"),
+      detail: String(line.target ?? line.action ?? line.done_when ?? ""),
+      endpoint: line.evidence_ref ? String(line.evidence_ref) : undefined,
+      tone: String(line.topic) === "review" ? "warning" as const : "ok" as const
+    }))
+  ].slice(0, 6);
+  const atAGlanceReviewItems: TaxAtAGlanceItem[] = [
+    ...(taxYearFilingSummary?.warnings ?? []).slice(0, 4).map((warning) => ({
+      label: "Filing-Warnung",
+      value: "pruefen",
+      detail: String(warning),
+      tone: "warning" as const
+    })),
+    ...checklistWarnings.slice(0, 4).map((item) => ({
+      label: String(item.label ?? "Checkliste"),
+      value: String(item.severity ?? "warning"),
+      detail: String(item.done_when ?? item.action ?? item.evidence_ref ?? ""),
+      endpoint: item.evidence_ref ? String(item.evidence_ref) : undefined,
+      tone: "warning" as const
+    })),
+    ...blockingMethodologyGaps.slice(0, 4).map((gap) => ({
+      label: String(gap.label ?? gap.topic ?? "Methodik"),
+      value: "blockiert",
+      detail: String(gap.recommendation ?? gap.detail ?? gap.status ?? ""),
+      tone: "blocked" as const
+    })),
+    ...yearReviewDecisions.slice(0, 4).map((decision) => ({
+      label: String(decision.label ?? decision.topic ?? "Review"),
+      value: String(decision.status ?? "review"),
+      detail: String(decision.reason ?? decision.decision ?? decision.action ?? ""),
+      tone: String(decision.status ?? "").includes("ready") ? "ok" as const : "warning" as const
+    }))
+  ].slice(0, 6);
   return (
     <Stack>
       <section className="taxYearHero">
@@ -9112,6 +9181,21 @@ function TaxPanel({
           <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
         </div>
       </section>
+
+      <TaxFilingAtAGlance
+        year={activeYearValue}
+        tone={yearDecisionTone}
+        headline={activeTaxProductRow?.statusLabel ?? yearDecisionHeadline}
+        summary={taxYearFilingSummary?.plain_language_summary ?? yearDecisionText}
+        entries={atAGlanceEntryItems}
+        evidence={atAGlanceEvidenceItems}
+        reviews={atAGlanceReviewItems}
+        generatedAt={taxYearFilingSummary?.generated_at ?? taxDeclarationGuide?.generated_at}
+        filingEndpoint={`/api/v1/tax-years/${activeYearValue}/filing-summary`}
+        guideEndpoint={`/api/v1/tax-years/${activeYearValue}/declaration-guide`}
+        evidencePackageEndpoint={`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`}
+        onDownload={onDownload}
+      />
 
       <TaxProductCommandCenter
         rows={taxProductRows}
@@ -11927,6 +12011,140 @@ type TaxProductYearRow = {
   checklistEndpoint: string;
   evidencePackageEndpoint: string;
 };
+
+type TaxAtAGlanceItem = {
+  label: string;
+  value: string;
+  detail: string;
+  endpoint?: string;
+  tone?: "ok" | "warning" | "blocked";
+};
+
+function TaxFilingAtAGlance({
+  year,
+  tone,
+  headline,
+  summary,
+  entries,
+  evidence,
+  reviews,
+  generatedAt,
+  filingEndpoint,
+  guideEndpoint,
+  evidencePackageEndpoint,
+  onDownload
+}: {
+  year: string;
+  tone: "ok" | "warning" | "blocked";
+  headline: string;
+  summary: string;
+  entries: TaxAtAGlanceItem[];
+  evidence: TaxAtAGlanceItem[];
+  reviews: TaxAtAGlanceItem[];
+  generatedAt?: string | null;
+  filingEndpoint: string;
+  guideEndpoint: string;
+  evidencePackageEndpoint: string;
+  onDownload: (path: string) => void;
+}) {
+  return (
+    <section className={`taxAtAGlancePanel ${tone}`}>
+      <div className="taxAtAGlanceHeader">
+        <div>
+          <span className="heroKicker">Steuererklaerung auf einen Blick</span>
+          <h3>{year}: {headline}</h3>
+          <p>{summary}</p>
+        </div>
+        <div className="taxAtAGlanceMeta">
+          <span className={`statusPill ${tone}`}>{tone === "ok" ? "bereit" : tone === "blocked" ? "blockiert" : "pruefen"}</span>
+          <span>Stand {generatedAt ? formatDateTime(generatedAt) : "-"}</span>
+        </div>
+      </div>
+      <div className="taxAtAGlanceGrid">
+        <TaxAtAGlanceColumn
+          title="Eintragen"
+          icon={<ReceiptText size={18} />}
+          emptyText="Noch keine Eingabewerte geladen."
+          items={entries}
+          onDownload={onDownload}
+        />
+        <TaxAtAGlanceColumn
+          title="Beilegen"
+          icon={<PackageCheck size={18} />}
+          emptyText="Keine Pflichtbelege fuer die Top-Ansicht gefunden."
+          items={evidence}
+          onDownload={onDownload}
+        />
+        <TaxAtAGlanceColumn
+          title="Pruefen"
+          icon={<ClipboardCheck size={18} />}
+          emptyText="Keine offenen Pruefpunkte im Jahreskopf."
+          items={reviews}
+          onDownload={onDownload}
+        />
+      </div>
+      <div className="taxAtAGlanceActions">
+        <button type="button" onClick={() => onDownload(filingEndpoint)}>
+          <FileJson size={16} />
+          <span>Eingabehilfe</span>
+        </button>
+        <button type="button" onClick={() => onDownload(guideEndpoint)}>
+          <ReceiptText size={16} />
+          <span>ELSTER-Hilfe</span>
+        </button>
+        <button type="button" onClick={() => onDownload(evidencePackageEndpoint)}>
+          <PackageCheck size={16} />
+          <span>Belegpaket</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function TaxAtAGlanceColumn({
+  title,
+  icon,
+  items,
+  emptyText,
+  onDownload
+}: {
+  title: string;
+  icon: React.ReactNode;
+  items: TaxAtAGlanceItem[];
+  emptyText: string;
+  onDownload: (path: string) => void;
+}) {
+  return (
+    <div className="taxAtAGlanceColumn">
+      <div className="taxAtAGlanceColumnHeader">
+        <span>{icon}</span>
+        <strong>{title}</strong>
+      </div>
+      <div className="taxAtAGlanceItems">
+        {items.length === 0 ? (
+          <span className="taxAtAGlanceEmpty">{emptyText}</span>
+        ) : (
+          items.map((item, index) => (
+            <div key={`${title}-${index}`} className={`taxAtAGlanceItem ${item.tone ?? "ok"}`}>
+              <div>
+                <strong>{item.label}</strong>
+                <span>{item.detail}</span>
+              </div>
+              <div className="taxAtAGlanceValue">
+                <em>{item.value}</em>
+                {item.endpoint ? (
+                  <button type="button" onClick={() => onDownload(item.endpoint ?? "")} title="Nachweis oeffnen">
+                    <FileDown size={14} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 function TaxProductCommandCenter({
   rows,
