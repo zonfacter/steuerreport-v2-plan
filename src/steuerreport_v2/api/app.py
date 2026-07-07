@@ -2152,7 +2152,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax/legacy-helium-overview")
     def tax_legacy_helium_overview(limit: int = 200) -> ApiResponse[LegacyHeliumOverviewReport]:
-        return ApiResponse(data=WalletFifoPreviewService(db).legacy_helium_overview(limit=limit))
+        return ApiResponse(
+            data=cached_response(
+                f"tax:legacy-helium-overview:{limit}",
+                60,
+                lambda: WalletFifoPreviewService(db).legacy_helium_overview(limit=limit),
+            )
+        )
 
     @app.get("/api/v1/tax-years/summary")
     def tax_years_summary() -> ApiResponse[TaxYearsSummary]:
@@ -2199,18 +2205,30 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(
             data=cached_response(
                 "tax-years:reward-trading-separation",
-                10,
+                60,
                 lambda: TaxYearService(db).reward_trading_separation(),
             )
         )
 
     @app.get("/api/v1/tax-years/correction-map")
     def tax_years_correction_map() -> ApiResponse[TaxYearsCorrectionMap]:
-        return ApiResponse(data=TaxYearService(db).correction_map())
+        return ApiResponse(
+            data=cached_response(
+                "tax-years:correction-map",
+                60,
+                lambda: TaxYearService(db).correction_map(),
+            )
+        )
 
     @app.get("/api/v1/tax-years/turnover-audit-summary")
     def tax_years_turnover_audit_summary(limit: int = 20) -> ApiResponse[TaxYearsTurnoverAuditSummary]:
-        return ApiResponse(data=TaxYearService(db).turnover_audit_summary(limit=limit))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:turnover-audit-summary:{limit}",
+                60,
+                lambda: TaxYearService(db).turnover_audit_summary(limit=limit),
+            )
+        )
 
     @app.get("/api/v1/tax-years/solana-program-income-review")
     def tax_years_solana_program_income_review(limit: int = 200) -> ApiResponse[TaxSolanaProgramIncomeReview]:
@@ -2242,7 +2260,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-methodology/summary")
     def tax_methodology_summary(year: int | None = None) -> ApiResponse[TaxMethodologySummary]:
-        return ApiResponse(data=TaxMethodologyService(db).summary(year=year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-methodology:summary:{year or 'all'}",
+                60,
+                lambda: TaxMethodologyService(db).summary(year=year),
+            )
+        )
 
     @app.get("/api/v1/tax-methodology/bmf-action-plan")
     def tax_methodology_bmf_action_plan(
@@ -2250,10 +2274,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         include_gain_evidence: bool = False,
     ) -> ApiResponse[TaxBmfActionPlan]:
         return ApiResponse(
-            data=TaxMethodologyService(db).bmf_action_plan(
-                year=year,
-                include_gain_evidence=include_gain_evidence,
-                prefer_snapshot=True,
+            data=cached_response(
+                f"tax-methodology:bmf-action-plan:{year or 'all'}:{include_gain_evidence}",
+                60,
+                lambda: TaxMethodologyService(db).bmf_action_plan(
+                    year=year,
+                    include_gain_evidence=include_gain_evidence,
+                    prefer_snapshot=True,
+                ),
             )
         )
 
@@ -2564,7 +2592,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}/methodology")
     def tax_year_methodology(year: int) -> ApiResponse[TaxMethodologyReport]:
-        return ApiResponse(data=TaxMethodologyService(db).report(year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:methodology:{year}",
+                60,
+                lambda: TaxMethodologyService(db).report(year),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/compliance-status")
     def tax_year_compliance_status(year: int) -> ApiResponse[TaxYearComplianceStatus]:
@@ -2572,7 +2606,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-delta")
     def tax_year_wallet_fifo_delta(year: int) -> ApiResponse[WalletFifoPreviewReport]:
-        return ApiResponse(data=WalletFifoPreviewService(db).preview(year=year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:wallet-fifo-delta:{year}",
+                60,
+                lambda: WalletFifoPreviewService(db).preview(year=year),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-gaps")
     def tax_year_wallet_fifo_gaps(year: int, limit: int = 80) -> ApiResponse[WalletFifoGapDiagnosisReport]:
@@ -2961,7 +3001,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         year: int,
         limit: int = 50,
     ) -> ApiResponse[WalletFifoYearProvenanceClosureReport]:
-        return ApiResponse(data=WalletFifoPreviewService(db).provenance_closure_report(year=year, limit=limit))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:wallet-fifo-provenance-closure:{year}:{limit}",
+                60,
+                lambda: WalletFifoPreviewService(db).provenance_closure_report(year=year, limit=limit),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-provenance-events")
     def tax_year_wallet_fifo_provenance_events(
@@ -3179,7 +3225,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}/income-guide")
     def tax_year_income_guide(year: int) -> ApiResponse[TaxIncomeReport]:
-        return ApiResponse(data=TaxYearService(db).income_report(year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:income-guide:{year}",
+                60,
+                lambda: TaxYearService(db).income_report(year),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/solana-program-income-review")
     def tax_year_solana_program_income_review(year: int, limit: int = 200) -> ApiResponse[TaxSolanaProgramIncomeReview]:
@@ -3211,11 +3263,23 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}/drivers")
     def tax_year_drivers(year: int, limit: int = 50) -> ApiResponse[TaxYearDriverReport]:
-        return ApiResponse(data=TaxYearService(db).driver_report(year, limit=limit))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:drivers:{year}:{limit}",
+                60,
+                lambda: TaxYearService(db).driver_report(year, limit=limit),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/gain-loss-reality-check")
     def tax_year_gain_loss_reality_check(year: int, limit: int = 40) -> ApiResponse[TaxYearGainLossRealityCheck]:
-        return ApiResponse(data=TaxYearService(db).gain_loss_reality_check(year, limit=limit))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:gain-loss-reality-check:{year}:{limit}",
+                60,
+                lambda: TaxYearService(db).gain_loss_reality_check(year, limit=limit),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/gain-evidence-review")
     def tax_year_gain_evidence_review(year: int, limit: int = 80) -> ApiResponse[TaxYearGainEvidenceReview]:
@@ -3287,7 +3351,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}/turnover-audit")
     def tax_year_turnover_audit(year: int, limit: int = 20) -> ApiResponse[TaxYearTurnoverAudit]:
-        return ApiResponse(data=TaxYearService(db).turnover_audit(year, limit=limit))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:turnover-audit:{year}:{limit}",
+                60,
+                lambda: TaxYearService(db).turnover_audit(year, limit=limit),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/evidence")
     def tax_year_evidence(year: int) -> ApiResponse[TaxYearEvidenceReport]:
@@ -3305,7 +3375,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}/external-inflows")
     def tax_year_external_inflows(year: int, limit: int = 200) -> ApiResponse[TaxExternalInflowReport]:
-        return ApiResponse(data=TaxYearService(db).external_inflow_report(year, limit=limit))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:external-inflows:{year}:{limit}",
+                60,
+                lambda: TaxYearService(db).external_inflow_report(year, limit=limit),
+            )
+        )
 
     @app.post("/api/v1/derivatives/rebuild")
     def rebuild_derivatives() -> ApiResponse[DerivativeRunResult]:
