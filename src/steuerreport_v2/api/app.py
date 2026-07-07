@@ -2261,22 +2261,44 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         include_reward_recheck: bool = False,
     ) -> ApiResponse[TaxBmfFinalizationMatrix]:
         return ApiResponse(
-            data=TaxMethodologyService(db).bmf_finalization_matrix(
-                include_reward_recheck=include_reward_recheck,
+            data=cached_response(
+                f"tax-methodology:bmf-finalization-matrix:{include_reward_recheck}",
+                60,
+                lambda: TaxMethodologyService(db).bmf_finalization_matrix(
+                    include_reward_recheck=include_reward_recheck,
+                ),
             )
         )
 
     @app.get("/api/v1/tax-methodology/bmf-submission-guide")
     def tax_methodology_bmf_submission_guide() -> ApiResponse[TaxBmfSubmissionGuide]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_submission_guide())
+        return ApiResponse(
+            data=cached_response(
+                "tax-methodology:bmf-submission-guide",
+                300,
+                lambda: TaxMethodologyService(db).bmf_submission_guide(),
+            )
+        )
 
     @app.get("/api/v1/tax-methodology/bmf-prior-filing-comparison")
     def tax_methodology_bmf_prior_filing_comparison() -> ApiResponse[TaxBmfPriorFilingComparison]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_prior_filing_comparison())
+        return ApiResponse(
+            data=cached_response(
+                "tax-methodology:bmf-prior-filing-comparison",
+                300,
+                lambda: TaxMethodologyService(db).bmf_prior_filing_comparison(),
+            )
+        )
 
     @app.get("/api/v1/tax-methodology/bmf-amendment-worklist")
     def tax_methodology_bmf_amendment_worklist() -> ApiResponse[TaxBmfAmendmentWorklist]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_amendment_worklist())
+        return ApiResponse(
+            data=cached_response(
+                "tax-methodology:bmf-amendment-worklist",
+                300,
+                lambda: TaxMethodologyService(db).bmf_amendment_worklist(),
+            )
+        )
 
     def render_bmf_amendment_worklist_csv(*, service: TaxMethodologyService | None = None) -> str:
         worklist = (service or TaxMethodologyService(db)).bmf_amendment_worklist()
@@ -2340,7 +2362,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def tax_methodology_write_bmf_prior_filing_declared_amounts(
         payload: TaxBmfPriorFilingDeclaredAmountsWrite,
     ) -> ApiResponse[TaxBmfPriorFilingDeclaredAmountsWriteResult]:
-        return ApiResponse(data=TaxMethodologyService(db).write_bmf_prior_filing_declared_amounts(payload))
+        result = TaxMethodologyService(db).write_bmf_prior_filing_declared_amounts(payload)
+        clear_response_cache()
+        return ApiResponse(data=result)
 
     @app.get("/api/v1/tax-years/reward-bmf-recheck")
     def tax_years_reward_bmf_recheck() -> ApiResponse[TaxRewardBmfRecheckReport]:
@@ -2348,19 +2372,43 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}")
     def tax_year_detail(year: int) -> ApiResponse[TaxYearDetail]:
-        return ApiResponse(data=TaxYearService(db).detail(year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:detail:{year}",
+                60,
+                lambda: TaxYearService(db).detail(year),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/declaration-guide")
     def tax_year_declaration_guide(year: int) -> ApiResponse[TaxDeclarationGuide]:
-        return ApiResponse(data=TaxYearService(db).declaration_guide(year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:declaration-guide:{year}",
+                60,
+                lambda: TaxYearService(db).declaration_guide(year),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/filing-summary")
     def tax_year_filing_summary(year: int) -> ApiResponse[TaxYearFilingSummary]:
-        return ApiResponse(data=TaxYearService(db).filing_summary(year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:filing-summary:{year}",
+                60,
+                lambda: TaxYearService(db).filing_summary(year),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/correction-map")
     def tax_year_correction_map(year: int) -> ApiResponse[TaxYearCorrectionMap]:
-        return ApiResponse(data=TaxYearService(db).year_correction_map(year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:correction-map:{year}",
+                60,
+                lambda: TaxYearService(db).year_correction_map(year),
+            )
+        )
 
     def render_tax_year_correction_map_csv(year: int, *, service: TaxYearService | None = None) -> str:
         correction_map = (service or TaxYearService(db)).year_correction_map(year)
