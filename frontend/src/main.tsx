@@ -1991,7 +1991,7 @@ function App() {
         priceEventQuoteEvidenceReview: { key: "priceEventQuoteEvidenceReview", label: "Event-Quote-Evidenz", load: () => getApi<Snapshot["priceEventQuoteEvidenceReview"]>("/api/v1/prices/quality/event-quote-evidence-review") },
         priceRequirements: { key: "priceRequirements", label: "Preis-Anforderungen", load: () => getApi<Snapshot["priceRequirements"]>("/api/v1/prices/requirements") }
       };
-      const taxLoaderKeys = [
+      const taxCoreLoaderKeys = [
         "health",
         "taxYearsSummary",
         "taxPaymentOverview",
@@ -2006,48 +2006,67 @@ function App() {
         "taxLossRealizationPlanner",
         "taxSummary",
         "derivativeSummary",
-        ...(taxViewMode !== "guided"
-          ? [
-              "taxYearsCorrectionMap",
-              "taxBmfSubmissionGuide",
-              "taxBmfPriorFilingComparison",
-              "taxBmfAmendmentWorklist",
-              "taxYearDetail",
-              "taxYearTurnoverAudit",
-              "taxYearGainEvidenceReview",
-              "taxYearGainEvidencePriceDeltas",
-              "taxYearGainEvidenceEventDeltas",
-              "taxYearGainEvidenceAcquisitionEventDeltas",
-              "taxYearsTurnoverAuditSummary",
-              "taxSolanaProgramIncomeReview",
-              "taxHeliumSwapContext",
-              "taxHeliumSwapEvidenceReview",
-              "taxHeliumSwapAlchemyAudit",
-              "taxStablecoinFifoReview",
-              "taxStablecoinQuoteLegReview",
-              "taxSolanaStablecoinSwapContext",
-              "taxSolanaStablecoinFxReview",
-              "taxMethodologySummary",
-              "taxBmfActionPlan",
-              "taxYearMethodology",
-              "taxYearWalletFifoDelta",
-              "taxYearWalletFifoGaps",
-              "taxYearWalletFifoOriginTrace",
-              "taxYearCexDepositTransferEvidence",
-              "taxYearCexSenderOwnershipLatest",
-              "taxYearCexExchangeOutflowEvidence",
-              "taxYearCexExchangeOutflowAnchorFeasibility",
-              "taxYearWalletFifoProvenanceClosure",
-              "taxYearWalletFifoSolanaOrigin",
-              "taxLegacyHeliumOverview",
-              "taxIncomeGuide",
-              "taxRewardTradingSeparation",
-              "taxYearDrivers",
-              "taxYearGainLossRealityCheck",
-              "taxExternalInflows",
-              "taxUnmatchedDisposals"
-            ]
-          : [])
+      ];
+      const taxEvidenceLoaderKeys = [
+        "taxYearsCorrectionMap",
+        "taxBmfSubmissionGuide",
+        "taxBmfPriorFilingComparison",
+        "taxBmfAmendmentWorklist",
+        "taxYearDetail",
+        "taxYearTurnoverAudit",
+        "taxYearsTurnoverAuditSummary",
+        "taxMethodologySummary",
+        "taxBmfActionPlan",
+        "taxYearMethodology",
+        "taxYearWalletFifoDelta",
+        "taxYearWalletFifoProvenanceClosure",
+        "taxLegacyHeliumOverview",
+        "taxIncomeGuide",
+        "taxRewardTradingSeparation",
+        "taxYearDrivers",
+        "taxYearGainLossRealityCheck",
+        "taxExternalInflows"
+      ];
+      const taxExpertLoaderKeys = [
+        "taxYearGainEvidenceReview",
+        "taxYearGainEvidencePriceDeltas",
+        "taxYearGainEvidenceEventDeltas",
+        "taxYearGainEvidenceAcquisitionEventDeltas",
+        "taxSolanaProgramIncomeReview",
+        "taxHeliumSwapContext",
+        "taxHeliumSwapEvidenceReview",
+        "taxHeliumSwapAlchemyAudit",
+        "taxStablecoinFifoReview",
+        "taxStablecoinQuoteLegReview",
+        "taxSolanaStablecoinSwapContext",
+        "taxSolanaStablecoinFxReview",
+        "taxYearWalletFifoGaps",
+        "taxYearWalletFifoOriginTrace",
+        "taxYearCexDepositTransferEvidence",
+        "taxYearCexSenderOwnershipLatest",
+        "taxYearCexExchangeOutflowEvidence",
+        "taxYearCexExchangeOutflowAnchorFeasibility",
+        "taxYearWalletFifoProvenancePriorities",
+        "taxYearWalletFifoRawProvenanceBreakdown",
+        "taxYearWalletFifoExchangeEvidenceGaps",
+        "taxYearWalletFifoSolanaProvenanceClassification",
+        "taxYearWalletFifoSolanaProvenanceBatchLatest",
+        "taxYearWalletFifoSolanaRawProvenanceSenders",
+        "taxYearWalletFifoSolanaRawProvenancePriorities",
+        "taxYearWalletFifoSolanaRawBmfEvidenceSummary",
+        "taxYearWalletFifoSolanaRawBmfEvidenceDrilldown",
+        "taxYearWalletFifoSolanaSenderClusters",
+        "taxYearWalletFifoSolanaSenderClusterOutflows",
+        "taxYearWalletFifoSolanaOrigin",
+        "taxUnmatchedDisposals",
+        "taxLots",
+        "taxLines",
+        "derivativeLines"
+      ];
+      const taxLoaderKeys = [
+        ...taxCoreLoaderKeys,
+        ...(taxViewMode !== "guided" ? taxEvidenceLoaderKeys : []),
+        ...(taxViewMode === "expert" ? taxExpertLoaderKeys : [])
       ];
       const loaderKeysBySection: Record<Section, string[]> = {
         dashboard: ["health", "cockpit", "productReadiness"],
@@ -12195,6 +12214,7 @@ function TaxPanel({
         />
       </section>
 
+      {taxViewMode === "expert" ? (
       <section className="cockpitDataGrid">
         <div className="panel">
           <div className="panelToolbar">
@@ -12377,6 +12397,7 @@ function TaxPanel({
           {taxYearGainEvidenceReview?.ascii_table ?? "Gewinn-Belegcheck wird geladen."}
         </pre>
       </section>
+      ) : null}
 
       <section className="cockpitDataGrid">
         <TablePanel
