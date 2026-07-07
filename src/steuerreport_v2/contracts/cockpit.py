@@ -70,6 +70,19 @@ class CockpitLiveReconciliation(BaseModel):
     detail: str
 
 
+class CockpitPortfolioPerformance(BaseModel):
+    display_value_eur: Decimal = Decimal("0")
+    display_value_basis: str = "calculated_ledger"
+    live_value_eur: Decimal | None = None
+    calculated_value_eur: Decimal = Decimal("0")
+    open_cost_basis_eur: Decimal = Decimal("0")
+    unrealized_return_eur: Decimal = Decimal("0")
+    unrealized_return_pct: Decimal | None = None
+    net_fiat_invested_eur: Decimal = Decimal("0")
+    cost_basis_status: str = "empty"
+    detail: str
+
+
 class CockpitEvidenceHealth(BaseModel):
     status: str
     traces_count: int = 0
@@ -110,6 +123,7 @@ class CockpitSummary(BaseModel):
     open_tasks: int
     top_assets: list[CockpitTopAsset] = Field(default_factory=list)
     top_sources: list[CockpitTopSource] = Field(default_factory=list)
+    portfolio_performance: CockpitPortfolioPerformance
     price_coverage: CockpitPriceCoverage
     live_reconciliation: CockpitLiveReconciliation
     evidence_health: CockpitEvidenceHealth

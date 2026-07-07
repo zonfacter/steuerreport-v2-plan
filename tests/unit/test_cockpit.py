@@ -58,6 +58,9 @@ def test_cockpit_summary_aggregates_portfolio_review_and_sources(tmp_path):
     assert summary.top_assets[0].value_basis == "current_ledger"
     assert summary.top_sources[0].source_group == "Binance"
     assert summary.top_sources[0].ledger_value_eur == summary.top_sources[0].value_eur
+    assert summary.portfolio_performance.display_value_eur == summary.portfolio_value_eur
+    assert summary.portfolio_performance.calculated_value_eur == summary.portfolio_value_eur
+    assert summary.portfolio_performance.display_value_basis == "calculated_ledger"
     assert summary.price_coverage.missing_assets == []
     assert summary.price_coverage.coverage_pct == Decimal("100.00")
     assert summary.live_reconciliation.stored_live_connectors == 0
@@ -76,6 +79,53 @@ def test_cockpit_summary_aggregates_portfolio_review_and_sources(tmp_path):
         "Belegstatus pruefen",
         "Review-Issues bearbeiten",
     ]
+
+
+def test_cockpit_summary_reports_portfolio_performance_from_fifo_lots_and_eur_trades(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    _build_portfolio(store)
+    with store.connect() as con:
+        con.execute(
+            """
+            insert into tax_lots (
+                lot_id, asset, acquired_at, quantity_total, quantity_remaining,
+                cost_basis_eur_total, source_event_id, created_at
+            )
+            values
+                ('lot-btc', 'BTC', ?, 1, 0.1, 40000, 'event-btc', ?),
+                ('lot-usdt', 'USDT', ?, 1000, 100, 900, 'event-usdt', ?)
+            """,
+            [
+                datetime(2026, 1, 1, tzinfo=timezone.utc),
+                datetime(2026, 1, 2, tzinfo=timezone.utc),
+                datetime(2026, 1, 1, tzinfo=timezone.utc),
+                datetime(2026, 1, 2, tzinfo=timezone.utc),
+            ],
+        )
+        con.execute(
+            """
+            insert into canonical_events (
+                event_id, source, source_ref, event_time, event_type, asset,
+                quantity, quote_asset, quote_quantity, fee_asset, fee_quantity,
+                tx_id, wallet, account, confidence, raw_object_id
+            )
+            values
+                ('trade-buy', 'binance', 'buy', ?, 'trade', 'BTC', 0.1, 'EUR', 4500, null, null, null, null, 'Spot', 1, null),
+                ('trade-sell', 'binance', 'sell', ?, 'trade', 'ETH', -1, 'EUR', 500, null, null, null, null, 'Spot', 1, null)
+            """,
+            [
+                datetime(2026, 1, 1, tzinfo=timezone.utc),
+                datetime(2026, 1, 3, tzinfo=timezone.utc),
+            ],
+        )
+
+    summary = CockpitService(store).summary()
+
+    assert summary.portfolio_performance.open_cost_basis_eur == Decimal("4090.000000000000000000")
+    assert summary.portfolio_performance.unrealized_return_eur == Decimal("1000.000000000000000000000000000000000000")
+    assert summary.portfolio_performance.unrealized_return_pct == Decimal("24.45")
+    assert summary.portfolio_performance.net_fiat_invested_eur == Decimal("4000.000000000000000000")
+    assert summary.portfolio_performance.cost_basis_status == "available"
 
 
 def test_cockpit_evidence_health_complete_after_canonical_review_decision(tmp_path):

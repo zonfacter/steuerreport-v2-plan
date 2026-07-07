@@ -2814,6 +2814,180 @@ p {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
+.blockpitPortfolioCommand {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+  overflow: hidden;
+}
+
+.portfolioCommandMain {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.portfolioCommandHeader {
+  align-items: start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.portfolioCommandHeader h3 {
+  color: #17201b;
+  font-size: 42px;
+  line-height: 1.05;
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.portfolioCommandMetrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.portfolioCommandMetrics .metric {
+  box-shadow: none;
+  min-height: 92px;
+  padding: 12px;
+}
+
+.portfolioCommandMetrics .metric strong {
+  font-size: 17px;
+}
+
+.portfolioReturnBand {
+  align-items: center;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 13px;
+}
+
+.portfolioReturnBand.ok {
+  background: #eef7f1;
+  border-color: #add3ba;
+}
+
+.portfolioReturnBand.warning {
+  background: #f7f3e6;
+  border-color: #e2c56c;
+}
+
+.portfolioReturnBand.blocked {
+  background: #fbf0ed;
+  border-color: #e4b6aa;
+}
+
+.portfolioReturnBand div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.portfolioReturnBand strong {
+  color: #17201b;
+}
+
+.portfolioReturnBand span {
+  color: #4d5a52;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.portfolioCommandActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.portfolioCommandActions button {
+  align-items: center;
+  background: #26372f;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 11px;
+}
+
+.portfolioCommandActions button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.portfolioCommandSide {
+  background: #f6f8f4;
+  border-left: 1px solid #ece8e0;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.portfolioMiniPanel {
+  display: grid;
+  min-width: 0;
+}
+
+.portfolioMiniPanel + .portfolioMiniPanel {
+  border-top: 1px solid #ece8e0;
+}
+
+.portfolioMiniList {
+  display: grid;
+  gap: 0;
+}
+
+.portfolioMiniList button {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #ece8e0;
+  color: #17201b;
+  cursor: pointer;
+  display: grid;
+  gap: 3px 10px;
+  grid-template-columns: minmax(56px, 0.5fr) minmax(0, 1fr);
+  min-width: 0;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.portfolioMiniList button:hover {
+  background: #eef4ef;
+}
+
+.portfolioMiniList strong,
+.portfolioMiniList span,
+.portfolioMiniList em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.portfolioMiniList span {
+  justify-self: end;
+}
+
+.portfolioMiniList em {
+  color: #677169;
+  font-size: 12px;
+  font-style: normal;
+  grid-column: 1 / -1;
+}
+
 .productReadinessPanel {
   display: grid;
   gap: 14px;
@@ -4188,6 +4362,9 @@ th {
   .holdingTimelineGrid,
   .holdingLotStrip,
   .cockpitHero,
+  .blockpitPortfolioCommand,
+  .portfolioCommandMetrics,
+  .portfolioReturnBand,
   .cockpitMetricGrid,
   .productReadinessHeader,
   .productReadinessGrid,
@@ -4238,7 +4415,8 @@ th {
   }
 
   .taxFilingDecisionActions,
-  .portfolioDecisionActions {
+  .portfolioDecisionActions,
+  .portfolioCommandSide {
     border-left: 0;
     border-top: 1px solid #ece8e0;
   }

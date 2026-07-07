@@ -120,6 +120,18 @@ type Snapshot = {
     open_tasks: number;
     top_assets: Array<Record<string, unknown>>;
     top_sources: Array<Record<string, unknown>>;
+    portfolio_performance: {
+      display_value_eur: string;
+      display_value_basis: string;
+      live_value_eur: string | null;
+      calculated_value_eur: string;
+      open_cost_basis_eur: string;
+      unrealized_return_eur: string;
+      unrealized_return_pct: string | null;
+      net_fiat_invested_eur: string;
+      cost_basis_status: string;
+      detail: string;
+    };
     price_coverage: {
       priced_assets: number;
       total_assets: number;
@@ -4760,6 +4772,13 @@ function CockpitDashboard({
         </div>
       </section>
 
+      <CockpitPortfolioCommand
+        summary={summary}
+        onNavigate={onNavigate}
+        onRefreshConfiguredSources={onRefreshConfiguredSources}
+        sourceRefreshLoading={sourceRefreshLoading}
+      />
+
       <ProductReadinessPanel report={readiness} onNavigate={onNavigate} />
 
       <CockpitFilingJourney
@@ -4931,6 +4950,108 @@ function sourceMeta(source: Record<string, unknown>): string {
   }
   parts.push(String(source.current_status ?? "-"));
   return parts.join(" · ");
+}
+
+function CockpitPortfolioCommand({
+  summary,
+  onNavigate,
+  onRefreshConfiguredSources,
+  sourceRefreshLoading
+}: {
+  summary: Snapshot["cockpit"];
+  onNavigate: (section: Section) => void;
+  onRefreshConfiguredSources: () => void;
+  sourceRefreshLoading: boolean;
+}) {
+  const performance = summary?.portfolio_performance;
+  const live = summary?.live_reconciliation;
+  const assets = summary?.top_assets ?? [];
+  const sources = summary?.top_sources ?? [];
+  const unrealizedReturn = parseNumber(performance?.unrealized_return_eur);
+  const unrealizedTone = unrealizedReturn < 0 ? "blocked" : unrealizedReturn > 0 ? "ok" : "warning";
+  const valueBasisLabel = performance?.display_value_basis === "live_api" ? "Live API" : "Ledger berechnet";
+  const liveTone = live?.status === "ok" ? "ok" : live?.status === "warning" ? "warning" : "blocked";
+  const costBasisLabel = performance?.cost_basis_status === "available" ? "FIFO-Kostenbasis" : "Kostenbasis pruefen";
+  return (
+    <section className="blockpitPortfolioCommand">
+      <div className="portfolioCommandMain">
+        <div className="portfolioCommandHeader">
+          <div>
+            <span className="heroKicker">Portfolio Values & Performance</span>
+            <h3>{formatCurrency(performance?.display_value_eur ?? summary?.portfolio_value_eur)} EUR</h3>
+            <p>
+              {valueBasisLabel} · Stand {summary?.generated_at ? formatDateTime(summary.generated_at) : "-"}
+            </p>
+          </div>
+          <span className={`statusPill ${liveTone}`}>
+            {live?.status === "ok" ? "synchron" : live?.status === "warning" ? "Abgleich pruefen" : "Sync offen"}
+          </span>
+        </div>
+        <div className="portfolioCommandMetrics">
+          <Metric title="Live Portfolio" value={performance?.live_value_eur ? `${formatCurrency(performance.live_value_eur)} EUR` : "-"} />
+          <Metric title="Calculated Value" value={`${formatCurrency(performance?.calculated_value_eur)} EUR`} />
+          <Metric title={costBasisLabel} value={`${formatCurrency(performance?.open_cost_basis_eur)} EUR`} />
+          <Metric
+            title="Unrealized Return"
+            value={`${formatCurrency(performance?.unrealized_return_eur)} EUR${performance?.unrealized_return_pct ? ` · ${formatPercent(performance.unrealized_return_pct)}` : ""}`}
+          />
+          <Metric title="Net EUR invested" value={`${formatCurrency(performance?.net_fiat_invested_eur)} EUR`} />
+        </div>
+        <div className={`portfolioReturnBand ${unrealizedTone}`}>
+          <div>
+            <strong>{unrealizedReturn < 0 ? "Buchverlust sichtbar" : unrealizedReturn > 0 ? "Buchgewinn sichtbar" : "Performance neutral"}</strong>
+            <span>{performance?.detail ?? "Performance-Kennzahlen werden aus Cockpit-Daten geladen."}</span>
+          </div>
+          <div className="portfolioCommandActions">
+            <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading}>
+              <RefreshCcw size={16} />
+              <span>{sourceRefreshLoading ? "Sync laeuft" : "Sync all"}</span>
+            </button>
+            <button type="button" onClick={() => onNavigate("portfolio")}>
+              <WalletCards size={16} />
+              <span>Holdings</span>
+            </button>
+            <button type="button" onClick={() => onNavigate("tax")}>
+              <ReceiptText size={16} />
+              <span>Tax Optimizer</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="portfolioCommandSide">
+        <div className="portfolioMiniPanel">
+          <div className="panelToolbar">
+            <strong>Holdings</strong>
+            <span>{assets.length}</span>
+          </div>
+          <div className="portfolioMiniList">
+            {assets.slice(0, 5).map((asset) => (
+              <button key={String(asset.asset)} type="button" onClick={() => onNavigate("portfolio")}>
+                <strong>{String(asset.asset)}</strong>
+                <span>{formatCurrency(asset.value_eur)} EUR</span>
+                <em>{formatPercent(asset.share_pct)} · {String(asset.price_status ?? "-")}</em>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="portfolioMiniPanel">
+          <div className="panelToolbar">
+            <strong>Integrations</strong>
+            <span>{sources.length}</span>
+          </div>
+          <div className="portfolioMiniList">
+            {sources.slice(0, 4).map((source) => (
+              <button key={String(source.source_group)} type="button" onClick={() => onNavigate("sources")}>
+                <strong>{String(source.source_group)}</strong>
+                <span>{formatCurrency(source.live_value_eur ?? source.value_eur)} EUR</span>
+                <em>{source.last_live_at ? formatDateTime(source.last_live_at) : String(source.current_status ?? "-")}</em>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function CockpitFilingJourney({

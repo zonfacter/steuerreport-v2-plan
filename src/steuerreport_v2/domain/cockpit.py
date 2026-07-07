@@ -9,6 +9,7 @@ from steuerreport_v2.contracts.cockpit import (
     CockpitLiveReconciliation,
     CockpitMetric,
     CockpitPipelineStatus,
+    CockpitPortfolioPerformance,
     CockpitPriceCoverage,
     CockpitQuickAction,
     CockpitSummary,
@@ -90,6 +91,15 @@ class CockpitService:
             ),
             Decimal("0"),
         )
+        portfolio_performance = self._portfolio_performance(
+            display_value_eur=cockpit_value_eur,
+            display_value_basis=(
+                "live_api"
+                if any(asset.value_basis == "live_api" for asset in top_assets)
+                else "calculated_ledger"
+            ),
+            calculated_value_eur=sources.total_value_eur,
+        )
 
         return CockpitSummary(
             generated_at=generated_at,
@@ -131,6 +141,7 @@ class CockpitService:
                 )
                 for item in sources.groups[:5]
             ],
+            portfolio_performance=portfolio_performance,
             price_coverage=price_coverage,
             live_reconciliation=live,
             evidence_health=evidence_health,
@@ -792,6 +803,90 @@ class CockpitService:
             status_counts=status_counts,
             coverage_pct=coverage_pct,
         )
+
+    def _portfolio_performance(
+        self,
+        *,
+        display_value_eur: Decimal,
+        display_value_basis: str,
+        calculated_value_eur: Decimal,
+    ) -> CockpitPortfolioPerformance:
+        open_cost_basis = self._open_cost_basis_eur()
+        net_fiat_invested = self._net_fiat_invested_eur()
+        unrealized_return = display_value_eur - open_cost_basis
+        unrealized_pct: Decimal | None = None
+        if open_cost_basis != 0:
+            unrealized_pct = (unrealized_return / open_cost_basis * Decimal("100")).quantize(
+                Decimal("0.01"),
+                rounding=ROUND_HALF_UP,
+            )
+        if open_cost_basis == 0 and display_value_eur == 0:
+            cost_basis_status = "empty"
+        elif open_cost_basis == 0:
+            cost_basis_status = "missing_or_transfer_only"
+        else:
+            cost_basis_status = "available"
+        return CockpitPortfolioPerformance(
+            display_value_eur=display_value_eur,
+            display_value_basis=display_value_basis,
+            live_value_eur=display_value_eur if display_value_basis == "live_api" else None,
+            calculated_value_eur=calculated_value_eur,
+            open_cost_basis_eur=open_cost_basis,
+            unrealized_return_eur=unrealized_return,
+            unrealized_return_pct=unrealized_pct,
+            net_fiat_invested_eur=net_fiat_invested,
+            cost_basis_status=cost_basis_status,
+            detail=(
+                "Display-Wert nutzt gespeicherte Live-API-Snapshots, wenn vorhanden; "
+                "Calculated Value bleibt der transaktionsbasierte Ledger-Wert. "
+                "Kostenbasis stammt aus offenen FIFO-Lots, Net EUR invested aus "
+                "EUR-Quote-Trades."
+            ),
+        )
+
+    def _open_cost_basis_eur(self) -> Decimal:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select quantity_total, quantity_remaining, cost_basis_eur_total
+                from tax_lots
+                where quantity_remaining > 0
+                """
+            ).fetchall()
+        total = Decimal("0")
+        for quantity_total, quantity_remaining, cost_basis_total in rows:
+            if not quantity_total:
+                continue
+            total += cost_basis_total * quantity_remaining / quantity_total
+        return total
+
+    def _net_fiat_invested_eur(self) -> Decimal:
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select
+                    coalesce(sum(
+                        case
+                            when event_type = 'trade'
+                             and quantity > 0
+                             and upper(coalesce(quote_asset, '')) = 'EUR'
+                            then abs(coalesce(quote_quantity, 0))
+                            else 0
+                        end
+                    ), 0) as fiat_buys,
+                    coalesce(sum(
+                        case
+                            when event_type = 'trade'
+                             and quantity < 0
+                             and upper(coalesce(quote_asset, '')) = 'EUR'
+                            then abs(coalesce(quote_quantity, 0))
+                            else 0
+                        end
+                    ), 0) as fiat_sells
+                from canonical_events
+                """
+            ).fetchone()
+        return (row[0] or Decimal("0")) - (row[1] or Decimal("0"))
 
     def _current_missing_price_assets(self) -> list[str]:
         portfolio = PortfolioService(self.store)
