@@ -4825,6 +4825,13 @@ function CockpitDashboard({
         sourceRefreshLoading={sourceRefreshLoading}
       />
 
+      <CockpitPriorityStrip
+        summary={summary}
+        activeTaxYear={dashboardTaxYear}
+        activeTaxRow={dashboardTaxRow}
+        onNavigate={onNavigate}
+      />
+
       <CockpitPortfolioCommand
         summary={summary}
         onNavigate={onNavigate}
@@ -4990,6 +4997,96 @@ function CockpitDashboard({
         </div>
       </div>
     </Stack>
+  );
+}
+
+function CockpitPriorityStrip({
+  summary,
+  activeTaxYear,
+  activeTaxRow,
+  onNavigate
+}: {
+  summary: Snapshot["cockpit"];
+  activeTaxYear: string;
+  activeTaxRow: TaxProductYearRow | undefined;
+  onNavigate: (section: Section) => void;
+}) {
+  const primaryTask = summary?.tasks?.[0];
+  const assets = summary?.top_assets ?? [];
+  const topPerformanceAsset = assets
+    .filter((asset) => asset.unrealized_return_eur !== undefined && asset.unrealized_return_eur !== null)
+    .sort((left, right) => Math.abs(parseNumber(right.unrealized_return_eur)) - Math.abs(parseNumber(left.unrealized_return_eur)))[0];
+  const live = summary?.live_reconciliation;
+  const taskTone = primaryTask?.priority === "high" ? "blocked" : primaryTask ? "warning" : "ok";
+  const liveTone = live?.status === "ok" ? "ok" : live?.status === "warning" ? "warning" : "blocked";
+  const performanceTone = assetPerformanceTone(topPerformanceAsset ?? {});
+  const items = [
+    {
+      key: "task",
+      tone: taskTone,
+      icon: taskTone === "ok" ? <Check size={18} /> : <AlertTriangle size={18} />,
+      title: primaryTask?.title ?? "Keine priorisierte Aufgabe",
+      value: primaryTask?.count !== null && primaryTask?.count !== undefined ? String(primaryTask.count) : summary?.export_allowed ? "frei" : "offen",
+      detail: primaryTask?.detail ?? "Review-Gate ist frei; naechster Schritt ist Jahrespaket oder Export pruefen.",
+      target: primaryTask?.target ?? "export"
+    },
+    {
+      key: "tax",
+      tone: activeTaxRow?.tone ?? "warning",
+      icon: <ReceiptText size={18} />,
+      title: `Steuerjahr ${activeTaxYear}`,
+      value: `${formatCurrency(activeTaxRow?.taxablePrivateDisposalsEur)} EUR`,
+      detail: activeTaxRow?.nextAction ?? "Eingabehilfe und Belegpaket werden vorbereitet.",
+      target: "tax"
+    },
+    {
+      key: "performance",
+      tone: performanceTone,
+      icon: <WalletCards size={18} />,
+      title: topPerformanceAsset ? `${String(topPerformanceAsset.asset)} Performance` : "Portfolio Performance",
+      value: `${formatCurrency(topPerformanceAsset?.unrealized_return_eur)} EUR`,
+      detail: topPerformanceAsset
+        ? `Kostenbasis ${formatCurrency(topPerformanceAsset.open_cost_basis_eur)} EUR · ${topPerformanceAsset.unrealized_return_pct !== null && topPerformanceAsset.unrealized_return_pct !== undefined ? formatPercent(topPerformanceAsset.unrealized_return_pct) : "ohne Prozentwert"}`
+        : "Top-Asset-Performance wird geladen.",
+      target: "portfolio"
+    },
+    {
+      key: "live",
+      tone: liveTone,
+      icon: <RefreshCcw size={18} />,
+      title: "Live-Abgleich",
+      value: live?.status === "ok" ? "synchron" : live?.status === "warning" ? "pruefen" : "offen",
+      detail: `${live?.blocker_count ?? 0} Blocker · ${live?.warning_count ?? 0} Warnungen · ${live?.latest_live_snapshot_at ? formatDateTime(live.latest_live_snapshot_at) : "kein Snapshot"}`,
+      target: "portfolio"
+    }
+  ] satisfies Array<{
+    key: string;
+    tone: "ok" | "warning" | "blocked";
+    icon: React.ReactNode;
+    title: string;
+    value: string;
+    detail: string;
+    target: Section;
+  }>;
+  return (
+    <section className="cockpitPriorityStrip" aria-label="Wichtige Hinweise">
+      <div className="priorityStripHeader">
+        <span className="heroKicker">Im Blick behalten</span>
+        <strong>Prioritaeten</strong>
+      </div>
+      <div className="priorityItemGrid">
+        {items.map((item) => (
+          <button key={item.key} className={`priorityItem ${item.tone}`} type="button" onClick={() => onNavigate(item.target)}>
+            <span>{item.icon}</span>
+            <div>
+              <strong>{item.title}</strong>
+              <em>{item.detail}</em>
+            </div>
+            <b>{item.value}</b>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 

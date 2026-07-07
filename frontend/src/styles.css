@@ -895,6 +895,96 @@ p {
   opacity: 0.72;
 }
 
+.cockpitPriorityStrip {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.priorityStripHeader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.priorityStripHeader strong {
+  color: #17201b;
+  font-size: 16px;
+}
+
+.priorityItemGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.priorityItem {
+  align-items: start;
+  background: #f9faf8;
+  border: 1px solid #e2dfd6;
+  border-left: 4px solid #add3ba;
+  border-radius: 8px;
+  color: #17201b;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  min-width: 0;
+  padding: 12px;
+  text-align: left;
+}
+
+.priorityItem.warning {
+  border-left-color: #e2c56c;
+}
+
+.priorityItem.blocked {
+  border-left-color: #e4b6aa;
+}
+
+.priorityItem > span {
+  color: #365c4c;
+  grid-row: span 2;
+  margin-top: 2px;
+}
+
+.priorityItem div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.priorityItem strong,
+.priorityItem em,
+.priorityItem b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.priorityItem strong {
+  color: #17201b;
+  font-size: 14px;
+}
+
+.priorityItem em {
+  color: #5d685f;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.priorityItem b {
+  color: #17201b;
+  font-size: 15px;
+  grid-column: 2;
+}
+
 .sourcesHero {
   align-items: end;
   background: linear-gradient(135deg, #ffffff 0%, #f5f7f2 52%, #eef4f5 100%);
@@ -4490,6 +4580,7 @@ th {
   .holdingLotStrip,
   .cockpitHero,
   .blockpitWorkspaceGrid,
+  .priorityItemGrid,
   .blockpitPortfolioCommand,
   .portfolioCommandMetrics,
   .portfolioReturnBand,
