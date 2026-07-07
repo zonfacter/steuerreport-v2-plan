@@ -9641,6 +9641,32 @@ function TaxPanel({
         onDownload={onDownload}
       />
 
+      {taxViewMode === "guided" ? (
+        <section className="toolSafetyPanel ok">
+          <div>
+            <span className="heroKicker">Detailberichte bei Bedarf laden</span>
+            <h2>BMF-Nachweise bleiben verfuegbar</h2>
+            <p>
+              Die Eingabehilfe laedt zuerst die schnellen Kernzahlen. BMF-Abgabehilfe,
+              Alt-Erklaerungsvergleich, Korrektur-Worklist und forensische FIFO-Details
+              werden in den naechsten Ansichten nachgeladen, damit der Steuer-Tab nicht
+              durch schwere Jahresreports blockiert.
+            </p>
+          </div>
+          <div className="toolSafetyFacts">
+            <strong>Fuer Abgabe und Pruefung</strong>
+            <button type="button" onClick={() => onTaxViewModeChange("details")}>
+              <ReceiptText size={16} />
+              <span>BMF & Nachweise laden</span>
+            </button>
+            <button type="button" onClick={() => onTaxViewModeChange("expert")}>
+              <Database size={16} />
+              <span>Expertenmodus laden</span>
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {taxBmfSubmissionGuide ? (
         <div className="panel declarationGuidePanel">
           <div className="panelToolbar">

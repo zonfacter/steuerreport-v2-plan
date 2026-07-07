@@ -2116,7 +2116,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax/holding-periods")
     def tax_holding_periods(min_value_eur: Decimal = Decimal("1")) -> ApiResponse[TaxHoldingPeriodReport]:
-        return ApiResponse(data=TaxService(db).holding_period_report(min_value_eur=min_value_eur))
+        return ApiResponse(
+            data=cached_response(
+                f"tax:holding-periods:{min_value_eur}",
+                60,
+                lambda: TaxService(db).holding_period_report(min_value_eur=min_value_eur),
+            )
+        )
 
     @app.get("/api/v1/tax/loss-realization-planner")
     def tax_loss_realization_planner(
@@ -2125,10 +2131,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         limit: int = 100,
     ) -> ApiResponse[TaxLossRealizationPlanner]:
         return ApiResponse(
-            data=TaxYearService(db).loss_realization_planner(
-                min_loss_eur=min_loss_eur,
-                min_value_eur=min_value_eur,
-                limit=limit,
+            data=cached_response(
+                f"tax:loss-realization-planner:{min_loss_eur}:{min_value_eur}:{limit}",
+                60,
+                lambda: TaxYearService(db).loss_realization_planner(
+                    min_loss_eur=min_loss_eur,
+                    min_value_eur=min_value_eur,
+                    limit=limit,
+                ),
             )
         )
 
@@ -2146,11 +2156,23 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/summary")
     def tax_years_summary() -> ApiResponse[TaxYearsSummary]:
-        return ApiResponse(data=TaxYearService(db).summary())
+        return ApiResponse(
+            data=cached_response(
+                "tax-years:summary",
+                60,
+                lambda: TaxYearService(db).summary(),
+            )
+        )
 
     @app.get("/api/v1/tax-years/payment-overview")
     def tax_years_payment_overview() -> ApiResponse[TaxPaymentOverview]:
-        return ApiResponse(data=TaxYearService(db).payment_overview())
+        return ApiResponse(
+            data=cached_response(
+                "tax-years:payment-overview",
+                60,
+                lambda: TaxYearService(db).payment_overview(),
+            )
+        )
 
     @app.get("/api/v1/tax-years/filing-matrix")
     def tax_years_filing_matrix() -> ApiResponse[TaxYearFilingMatrix]:
@@ -3269,7 +3291,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}/evidence")
     def tax_year_evidence(year: int) -> ApiResponse[TaxYearEvidenceReport]:
-        return ApiResponse(data=TaxYearService(db).evidence_report(year))
+        return ApiResponse(
+            data=cached_response(
+                f"tax-years:evidence:{year}",
+                60,
+                lambda: TaxYearService(db).evidence_report(year),
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/bmf-closure-appendix")
     def tax_year_bmf_closure_appendix(year: int) -> ApiResponse[TaxYearBmfClosureAppendix]:
