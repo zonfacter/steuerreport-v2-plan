@@ -2955,6 +2955,7 @@ p {
 .portfolioMiniList button {
   background: transparent;
   border: 0;
+  border-left: 3px solid transparent;
   border-top: 1px solid #ece8e0;
   color: #17201b;
   cursor: pointer;
@@ -2964,6 +2965,18 @@ p {
   min-width: 0;
   padding: 10px 14px;
   text-align: left;
+}
+
+.portfolioMiniList button.ok {
+  border-left-color: #1f7a4d;
+}
+
+.portfolioMiniList button.warning {
+  border-left-color: #b17817;
+}
+
+.portfolioMiniList button.blocked {
+  border-left-color: #a63d3d;
 }
 
 .portfolioMiniList button:hover {

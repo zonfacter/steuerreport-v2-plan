@@ -5026,10 +5026,21 @@ function CockpitPortfolioCommand({
           </div>
           <div className="portfolioMiniList">
             {assets.slice(0, 5).map((asset) => (
-              <button key={String(asset.asset)} type="button" onClick={() => onNavigate("portfolio")}>
+              <button
+                key={String(asset.asset)}
+                type="button"
+                className={assetPerformanceTone(asset)}
+                onClick={() => onNavigate("portfolio")}
+              >
                 <strong>{String(asset.asset)}</strong>
                 <span>{formatCurrency(asset.value_eur)} EUR</span>
-                <em>{formatPercent(asset.share_pct)} · {String(asset.price_status ?? "-")}</em>
+                <em>
+                  {formatPercent(asset.share_pct)} · KB {formatCurrency(asset.open_cost_basis_eur)} EUR · G/V{" "}
+                  {formatCurrency(asset.unrealized_return_eur)} EUR
+                  {asset.unrealized_return_pct !== null && asset.unrealized_return_pct !== undefined
+                    ? ` · ${formatPercent(asset.unrealized_return_pct)}`
+                    : ""}
+                </em>
               </button>
             ))}
           </div>
@@ -5052,6 +5063,17 @@ function CockpitPortfolioCommand({
       </div>
     </section>
   );
+}
+
+function assetPerformanceTone(asset: Record<string, unknown>): "ok" | "warning" | "blocked" {
+  const status = String(asset.performance_status ?? "");
+  if (status === "gain" || status === "flat") {
+    return "ok";
+  }
+  if (status === "loss") {
+    return "blocked";
+  }
+  return "warning";
 }
 
 function CockpitFilingJourney({

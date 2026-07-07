@@ -587,6 +587,7 @@ class CockpitService:
 
     def _top_current_assets(self) -> list[CockpitTopAsset]:
         prices = PortfolioService(self.store)._latest_prices()
+        cost_basis_by_asset = self._open_cost_basis_by_asset()
         asset_totals: dict[str, dict[str, object]] = {}
         with self.store.connect() as con:
             for connector_id in self.CONNECTOR_BY_SOURCE.values():
@@ -655,6 +656,11 @@ class CockpitService:
                 ),
                 accounts=len(item["connectors"]),  # type: ignore[arg-type]
                 value_basis="live_api",
+                **self._asset_performance_fields(
+                    asset,
+                    item["value_eur"],  # type: ignore[arg-type]
+                    cost_basis_by_asset,
+                ),
                 price_sources=sorted(item["price_sources"]),  # type: ignore[arg-type]
                 priced_at_latest=item["priced_at_latest"],  # type: ignore[arg-type]
             )
@@ -670,6 +676,7 @@ class CockpitService:
         groups: list[object],
         total: Decimal,
     ) -> list[CockpitTopAsset]:
+        cost_basis_by_asset = self._open_cost_basis_by_asset()
         assets: dict[str, dict[str, object]] = {}
         for group in groups:
             for asset in group.asset_summary:
@@ -693,6 +700,11 @@ class CockpitService:
                 price_status="ledger",
                 accounts=int(item["accounts"]),
                 value_basis="current_ledger",
+                **self._asset_performance_fields(
+                    asset,
+                    item["value_eur"],  # type: ignore[arg-type]
+                    cost_basis_by_asset,
+                ),
             )
             for asset, item in sorted(
                 assets.items(),
@@ -845,20 +857,57 @@ class CockpitService:
         )
 
     def _open_cost_basis_eur(self) -> Decimal:
+        return sum(self._open_cost_basis_by_asset().values(), Decimal("0"))
+
+    def _open_cost_basis_by_asset(self) -> dict[str, Decimal]:
         with self.store.connect() as con:
             rows = con.execute(
                 """
-                select quantity_total, quantity_remaining, cost_basis_eur_total
+                select upper(asset), quantity_total, quantity_remaining, cost_basis_eur_total
                 from tax_lots
                 where quantity_remaining > 0
                 """
             ).fetchall()
-        total = Decimal("0")
-        for quantity_total, quantity_remaining, cost_basis_total in rows:
+        totals: dict[str, Decimal] = {}
+        for asset, quantity_total, quantity_remaining, cost_basis_total in rows:
             if not quantity_total:
                 continue
-            total += cost_basis_total * quantity_remaining / quantity_total
-        return total
+            symbol = str(asset).upper()
+            totals[symbol] = totals.get(symbol, Decimal("0")) + (
+                cost_basis_total * quantity_remaining / quantity_total
+            )
+        return totals
+
+    def _asset_performance_fields(
+        self,
+        asset: str,
+        value_eur: Decimal,
+        cost_basis_by_asset: dict[str, Decimal],
+    ) -> dict[str, object]:
+        open_cost_basis = cost_basis_by_asset.get(str(asset).upper(), Decimal("0"))
+        unrealized_return = value_eur - open_cost_basis
+        unrealized_pct: Decimal | None = None
+        if open_cost_basis != 0:
+            unrealized_pct = (unrealized_return / open_cost_basis * Decimal("100")).quantize(
+                Decimal("0.01"),
+                rounding=ROUND_HALF_UP,
+            )
+        if open_cost_basis == 0 and value_eur == 0:
+            performance_status = "empty"
+        elif open_cost_basis == 0:
+            performance_status = "missing_or_transfer_only"
+        elif unrealized_return < 0:
+            performance_status = "loss"
+        elif unrealized_return > 0:
+            performance_status = "gain"
+        else:
+            performance_status = "flat"
+        return {
+            "open_cost_basis_eur": open_cost_basis,
+            "unrealized_return_eur": unrealized_return,
+            "unrealized_return_pct": unrealized_pct,
+            "performance_status": performance_status,
+        }
 
     def _net_fiat_invested_eur(self) -> Decimal:
         with self.store.connect() as con:

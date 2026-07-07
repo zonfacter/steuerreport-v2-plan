@@ -25,6 +25,10 @@ class CockpitTopAsset(BaseModel):
     price_status: str
     accounts: int
     value_basis: str = "ledger"
+    open_cost_basis_eur: Decimal = Decimal("0")
+    unrealized_return_eur: Decimal = Decimal("0")
+    unrealized_return_pct: Decimal | None = None
+    performance_status: str = "unknown"
     price_sources: list[str] = Field(default_factory=list)
     priced_at_latest: datetime | None = None
 

@@ -120,12 +120,20 @@ def test_cockpit_summary_reports_portfolio_performance_from_fifo_lots_and_eur_tr
         )
 
     summary = CockpitService(store).summary()
+    assets = {asset.asset: asset for asset in summary.top_assets}
 
     assert summary.portfolio_performance.open_cost_basis_eur == Decimal("4090.000000000000000000")
     assert summary.portfolio_performance.unrealized_return_eur == Decimal("1000.000000000000000000000000000000000000")
     assert summary.portfolio_performance.unrealized_return_pct == Decimal("24.45")
     assert summary.portfolio_performance.net_fiat_invested_eur == Decimal("4000.000000000000000000")
     assert summary.portfolio_performance.cost_basis_status == "available"
+    assert assets["BTC"].open_cost_basis_eur == Decimal("4000.000000000000000000")
+    assert assets["BTC"].unrealized_return_eur == Decimal("1000.000000000000000000000000000000000000")
+    assert assets["BTC"].unrealized_return_pct == Decimal("25.00")
+    assert assets["BTC"].performance_status == "gain"
+    assert assets["USDT"].open_cost_basis_eur == Decimal("90.000000000000000000")
+    assert assets["USDT"].unrealized_return_eur == Decimal("0E-36")
+    assert assets["USDT"].performance_status == "flat"
 
 
 def test_cockpit_evidence_health_complete_after_canonical_review_decision(tmp_path):
