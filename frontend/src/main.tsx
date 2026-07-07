@@ -9123,9 +9123,9 @@ function ReportCenterPanel({
               <span className={reportTone(year.csv_status)}>CSV {String(year.csv_status ?? "-")}</span>
             </div>
             <div className="reportYearActions">
-              <button type="button" onClick={() => onDownload(String(year.filing_endpoint ?? `/api/v1/tax-years/${String(year.year)}/filing-summary`))}>
-                <FileJson size={16} />
-                Erklärung
+              <button type="button" onClick={() => onDownload(humanReadableFilingEndpoint(String(year.filing_endpoint ?? taxYearFilingSummaryHtmlPath(year.year))))}>
+                <ReceiptText size={16} />
+                Eingabehilfe
               </button>
               <button type="button" onClick={() => onDownload(String(year.evidence_endpoint ?? `/api/v1/tax-years/${String(year.year)}/evidence`))}>
                 <FileJson size={16} />
@@ -9779,7 +9779,9 @@ function TaxPanel({
     ? String(activePaymentRow.what_to_do)
     : taxYearFilingSummary?.plain_language_summary ?? "Jahreswerte werden geladen. Die Ansicht zeigt danach die eintragbaren Betraege und Belege.";
   const nextChecklistItem = checklistWarnings[0] ?? paymentChecklist[0];
-  const nextChecklistEvidence = String(nextChecklistItem?.evidence_ref ?? `/api/v1/tax-years/${activeYearValue}/filing-summary`);
+  const nextChecklistEvidence = humanReadableFilingEndpoint(
+    String(nextChecklistItem?.evidence_ref ?? taxYearFilingSummaryHtmlPath(activeYearValue))
+  );
   const walletFifoUnmatched = Number(taxYearWalletFifoDelta?.unmatched_count ?? 0);
   const walletFifoTransfers = taxYearWalletFifoDelta?.transfer_traces ?? [];
   const walletFifoProvenanceGroups = taxYearWalletFifoProvenancePriorities?.groups ?? [];
@@ -10004,9 +10006,9 @@ function TaxPanel({
             {yearNeedsReview ? <AlertTriangle size={18} /> : <Check size={18} />}
             <span>{String(nextChecklistItem?.label ?? "Eingabehilfe oeffnen")}</span>
           </button>
-          <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/filing-summary`)}>
-            <FileJson size={18} />
-            <span>Eingabehilfe JSON</span>
+          <button type="button" onClick={() => onDownload(taxYearFilingSummaryHtmlPath(activeYearValue))}>
+            <ReceiptText size={18} />
+            <span>Eingabehilfe Website</span>
           </button>
           <button type="button" onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`)}>
             <PackageCheck size={18} />
@@ -10030,7 +10032,7 @@ function TaxPanel({
         evidence={atAGlanceEvidenceItems}
         reviews={atAGlanceReviewItems}
         generatedAt={taxYearFilingSummary?.generated_at ?? taxDeclarationGuide?.generated_at}
-        filingEndpoint={`/api/v1/tax-years/${activeYearValue}/filing-summary`}
+        filingEndpoint={taxYearFilingSummaryHtmlPath(activeYearValue)}
         guideEndpoint={`/api/v1/tax-years/${activeYearValue}/declaration-guide`}
         evidencePackageEndpoint={`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`}
         onDownload={onDownload}
@@ -12066,9 +12068,9 @@ function TaxPanel({
           ))}
         </div>
         <div className="declarationActionBand">
-          <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/filing-summary`)}>
-            <FileJson size={16} />
-            Jahres-Erklaerung JSON
+          <button type="button" onClick={() => onDownload(taxYearFilingSummaryHtmlPath(activeYearValue))}>
+            <ReceiptText size={16} />
+            Eingabehilfe Website
           </button>
           <button type="button" onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/filing-checklist.csv`)}>
             <FileDown size={16} />
@@ -12952,7 +12954,7 @@ function TaxFilingAtAGlance({
       </div>
       <div className="taxAtAGlanceActions">
         <button type="button" onClick={() => onDownload(filingEndpoint)}>
-          <FileJson size={16} />
+          <ReceiptText size={16} />
           <span>Eingabehilfe</span>
         </button>
         <button type="button" onClick={() => onDownload(guideEndpoint)}>
@@ -13197,11 +13199,15 @@ function buildTaxProductYearRows({
             ?? "Jahresdetails pruefen"
         ),
         filingEndpoint: String(
-          closure?.filing_summary_endpoint
-            ?? submission?.filing_summary_endpoint
-            ?? finalization?.filing_summary_endpoint
-            ?? matrix?.filing_summary_endpoint
-            ?? `/api/v1/tax-years/${year}/filing-summary`
+          humanReadableFilingEndpoint(
+            String(
+              closure?.filing_summary_endpoint
+                ?? submission?.filing_summary_endpoint
+                ?? finalization?.filing_summary_endpoint
+                ?? matrix?.filing_summary_endpoint
+                ?? taxYearFilingSummaryHtmlPath(year)
+            )
+          )
         ),
         checklistEndpoint: String(
           closure?.filing_checklist_csv_endpoint
@@ -13232,6 +13238,14 @@ function taxProductTone(status: string): "ok" | "warning" | "blocked" {
     return "blocked";
   }
   return "warning";
+}
+
+function taxYearFilingSummaryHtmlPath(year: unknown): string {
+  return `/api/v1/tax-years/${encodeURIComponent(String(year))}/filing-summary.html`;
+}
+
+function humanReadableFilingEndpoint(endpoint: string): string {
+  return endpoint.replace(/\/filing-summary($|\?)/, "/filing-summary.html$1");
 }
 
 function PriorFilingDeclaredAmountsForm({

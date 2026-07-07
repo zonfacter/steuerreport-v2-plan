@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import html
 import io
 import json
 from pathlib import Path
@@ -2450,6 +2451,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
         )
 
+    @app.get("/api/v1/tax-years/{year}/filing-summary.html")
+    def tax_year_filing_summary_html(year: int) -> Response:
+        summary = cached_response(
+            f"tax-years:filing-summary:{year}",
+            60,
+            lambda: TaxYearService(db).filing_summary(year),
+        )
+        return Response(
+            content=render_tax_year_filing_summary_html(summary),
+            media_type="text/html; charset=utf-8",
+        )
+
     @app.get("/api/v1/tax-years/{year}/correction-map")
     def tax_year_correction_map(year: int) -> ApiResponse[TaxYearCorrectionMap]:
         return ApiResponse(
@@ -2459,6 +2472,179 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 lambda: TaxYearService(db).year_correction_map(year),
             )
         )
+
+    def html_escape(value: object) -> str:
+        return html.escape("" if value is None else str(value), quote=True)
+
+    def html_eur(value: Decimal | None) -> str:
+        if value is None:
+            return "-"
+        return f"{value.quantize(Decimal('0.01'))} EUR"
+
+    def render_tax_year_filing_summary_html(summary: TaxYearFilingSummary) -> str:
+        lines = "\n".join(
+            f"""
+            <tr>
+              <td>{line.order}</td>
+              <td>{html_escape(line.label)}</td>
+              <td class="amount">{html_eur(line.amount_eur)}</td>
+              <td>{html_escape(line.tax_treatment)}</td>
+              <td>{html_escape(line.declaration_target)}</td>
+              <td>{html_escape(line.note)}</td>
+            </tr>
+            """
+            for line in summary.lines
+        )
+        checklist = "\n".join(
+            f"""
+            <tr>
+              <td>{item.order}</td>
+              <td><span class="pill">{html_escape(item.category)}</span></td>
+              <td>{html_escape(item.label)}</td>
+              <td class="amount">{html_eur(item.amount_eur)}</td>
+              <td>{html_escape(item.action)}</td>
+              <td>{html_escape(item.done_when)}</td>
+            </tr>
+            """
+            for item in summary.checklist
+        )
+        warnings = "\n".join(f"<li>{html_escape(item)}</li>" for item in summary.warnings)
+        warnings_block = (
+            f"""
+            <section class="panel warning">
+              <h2>Hinweise</h2>
+              <ul>{warnings}</ul>
+            </section>
+            """
+            if summary.warnings
+            else ""
+        )
+        return f"""<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steuerjahr {summary.year} Eingabehilfe</title>
+    <style>
+      :root {{
+        color: #17201b;
+        background: #f6f8f4;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }}
+      body {{ margin: 0; }}
+      main {{ display: grid; gap: 16px; margin: 0 auto; max-width: 1180px; padding: 28px; }}
+      .hero, .panel {{
+        background: #ffffff;
+        border: 1px solid #d8d6cf;
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
+      }}
+      .hero {{ display: grid; gap: 14px; padding: 24px; }}
+      .kicker {{ color: #5d685f; font-size: 12px; font-weight: 800; text-transform: uppercase; }}
+      h1, h2 {{ margin: 0; }}
+      h1 {{ font-size: 34px; line-height: 1.1; }}
+      h2 {{ font-size: 19px; }}
+      p {{ color: #4d5a52; line-height: 1.45; margin: 0; }}
+      .metrics {{ display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }}
+      .metric {{
+        background: #f9faf8;
+        border: 1px solid #e2dfd6;
+        border-radius: 8px;
+        display: grid;
+        gap: 5px;
+        padding: 12px;
+      }}
+      .metric span {{ color: #5d685f; font-size: 12px; font-weight: 700; }}
+      .metric strong {{ font-size: 18px; overflow-wrap: anywhere; }}
+      .actions {{ display: flex; flex-wrap: wrap; gap: 10px; }}
+      a.button {{
+        align-items: center;
+        background: #26372f;
+        border-radius: 6px;
+        color: #ffffff;
+        display: inline-flex;
+        font-weight: 700;
+        min-height: 38px;
+        padding: 8px 12px;
+        text-decoration: none;
+      }}
+      .panel {{ display: grid; gap: 12px; padding: 18px; }}
+      .panel.warning {{ border-color: #e2c56c; }}
+      .table-wrap {{ overflow-x: auto; }}
+      table {{ border-collapse: collapse; min-width: 900px; width: 100%; }}
+      th, td {{ border-bottom: 1px solid #ece8e0; padding: 10px; text-align: left; vertical-align: top; }}
+      th {{ color: #5d685f; font-size: 12px; text-transform: uppercase; }}
+      td {{ font-size: 13px; }}
+      .amount {{ font-variant-numeric: tabular-nums; white-space: nowrap; }}
+      .pill {{ background: #eef4ef; border: 1px solid #cfd8cf; border-radius: 999px; padding: 4px 8px; }}
+      pre {{
+        background: #17201b;
+        border-radius: 8px;
+        color: #f7f8f5;
+        overflow-x: auto;
+        padding: 14px;
+        white-space: pre;
+      }}
+      @media (max-width: 760px) {{
+        main {{ padding: 16px; }}
+        .metrics {{ grid-template-columns: 1fr; }}
+        h1 {{ font-size: 28px; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <span class="kicker">Steuererklaerung Eingabehilfe</span>
+        <h1>Steuerjahr {summary.year}</h1>
+        <p>{html_escape(summary.plain_language_summary)}</p>
+        <div class="metrics">
+          <div class="metric"><span>Anlage SO G/V</span><strong>{html_eur(summary.taxable_private_disposals_eur)}</strong></div>
+          <div class="metric"><span>Rewards / Mining / Staking</span><strong>{html_eur(summary.rewards_mining_staking_income_eur)}</strong></div>
+          <div class="metric"><span>Derivate</span><strong>{html_eur(summary.derivative_pnl_eur)}</strong></div>
+          <div class="metric"><span>Steuerfrei archivieren</span><strong>{html_eur(summary.tax_free_private_disposals_eur)}</strong></div>
+        </div>
+        <div class="actions">
+          <a class="button" href="/api/v1/export/tax-years/{summary.year}/filing-checklist.csv">Checkliste CSV</a>
+          <a class="button" href="/api/v1/export/tax-years/{summary.year}/evidence-package.zip">Jahres-Belegpaket</a>
+          <a class="button" href="/api/v1/tax-years/{summary.year}/declaration-guide">JSON fuer KI/API</a>
+        </div>
+      </section>
+      {warnings_block}
+      <section class="panel">
+        <h2>Was muss eingetragen oder belegt werden?</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Bereich</th><th>Betrag</th><th>Behandlung</th><th>Ziel</th><th>Hinweis</th></tr>
+            </thead>
+            <tbody>{lines}</tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Finanzamt-Checkliste</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Kategorie</th><th>Punkt</th><th>Betrag</th><th>Aktion</th><th>Erledigt wenn</th></tr>
+            </thead>
+            <tbody>{checklist}</tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Kopierbare Kurzuebersicht</h2>
+        <pre>{html_escape(summary.ascii_table)}</pre>
+      </section>
+      <section class="panel">
+        <h2>Methodik</h2>
+        <p>{html_escape(summary.methodology)}</p>
+      </section>
+    </main>
+  </body>
+</html>
+"""
 
     def render_tax_year_correction_map_csv(year: int, *, service: TaxYearService | None = None) -> str:
         correction_map = (service or TaxYearService(db)).year_correction_map(year)

@@ -2288,6 +2288,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/{year}/filing-summary"
     )
+    filing_html_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/filing-summary.html"
+    )
     correction_map_route = next(
         route
         for route in app.routes
@@ -2433,6 +2438,10 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert detail_route.endpoint(2021).status == "ok"
     assert guide_route.endpoint(2021).status == "ok"
     assert filing_route.endpoint(2021).status == "ok"
+    filing_html_response = filing_html_route.endpoint(2021)
+    assert filing_html_response.media_type == "text/html; charset=utf-8"
+    assert "Steuerjahr 2021" in filing_html_response.body.decode("utf-8")
+    assert "Finanzamt-Checkliste" in filing_html_response.body.decode("utf-8")
     assert correction_map_route.endpoint(2021).status == "ok"
     assert income_route.endpoint(2021).status == "ok"
     assert drivers_route.endpoint(2021).status == "ok"
