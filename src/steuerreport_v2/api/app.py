@@ -481,7 +481,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/product/readiness")
     def product_readiness() -> ApiResponse[ProductReadinessReport]:
         return ApiResponse(
-            data=cached_response("product:readiness", 10, lambda: ProductReadinessService(db).report())
+            data=cached_response("product:readiness", 60, lambda: ProductReadinessService(db).report())
         )
 
     @app.get("/api/v1/admin/settings")
@@ -1877,7 +1877,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/review/gates")
     def review_gates() -> ApiResponse[ReviewGate]:
         return ApiResponse(
-            data=cached_response("review:gates", 10, lambda: ReviewService(db).gate())
+            data=cached_response("review:gates", 60, lambda: ReviewService(db).gate())
         )
 
     @app.get("/api/v1/review/tasks")
@@ -3345,12 +3345,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/export/readiness")
     def export_readiness() -> ApiResponse[ExportReadiness]:
-        return ApiResponse(data=ExportService(db).readiness())
+        return ApiResponse(
+            data=cached_response("export:readiness", 60, lambda: ExportService(db).readiness())
+        )
 
     @app.get("/api/v1/reports/center")
     def report_center() -> ApiResponse[ReportCenterStatus]:
         return ApiResponse(
-            data=cached_response("reports:center", 10, lambda: ReportCenterService(db).center())
+            data=cached_response("reports:center", 60, lambda: ReportCenterService(db).center())
         )
 
     @app.get("/api/v1/export/evidence-manifest.json")
