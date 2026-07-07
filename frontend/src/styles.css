@@ -781,6 +781,120 @@ p {
   border-color: #e4b6aa;
 }
 
+.blockpitWorkspaceGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.workspaceCard {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
+  color: #17201b;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  min-height: 154px;
+  min-width: 0;
+  padding: 15px;
+  text-align: left;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.workspaceCard:hover {
+  box-shadow: 0 8px 22px rgba(30, 40, 34, 0.1);
+  transform: translateY(-1px);
+}
+
+.workspaceCard.ok {
+  border-color: #add3ba;
+}
+
+.workspaceCard.warning {
+  border-color: #e2c56c;
+}
+
+.workspaceCard.blocked {
+  border-color: #e4b6aa;
+}
+
+.workspaceCardHeader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.workspaceCardHeader svg {
+  color: #365c4c;
+  flex: 0 0 auto;
+}
+
+.workspaceCard strong {
+  color: #17201b;
+  font-size: 16px;
+}
+
+.workspaceCard em {
+  color: #17201b;
+  font-size: 24px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.workspaceCard p {
+  color: #5d685f;
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspaceSyncBar {
+  align-items: center;
+  background: #f6f8f4;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.workspaceSyncBar > span {
+  color: #5d685f;
+  font-size: 12px;
+  font-weight: 800;
+  margin-right: auto;
+  text-transform: uppercase;
+}
+
+.workspaceSyncBar button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cfd8cf;
+  border-radius: 6px;
+  color: #26372f;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
+.workspaceSyncBar button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
 .sourcesHero {
   align-items: end;
   background: linear-gradient(135deg, #ffffff 0%, #f5f7f2 52%, #eef4f5 100%);
@@ -4375,6 +4489,7 @@ th {
   .holdingTimelineGrid,
   .holdingLotStrip,
   .cockpitHero,
+  .blockpitWorkspaceGrid,
   .blockpitPortfolioCommand,
   .portfolioCommandMetrics,
   .portfolioReturnBand,
@@ -4432,6 +4547,15 @@ th {
   .portfolioCommandSide {
     border-left: 0;
     border-top: 1px solid #ece8e0;
+  }
+
+  .workspaceSyncBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspaceSyncBar > span {
+    margin-right: 0;
   }
 
   .presetRow {

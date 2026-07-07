@@ -4814,14 +4814,23 @@ function CockpitDashboard({
         </div>
       </section>
 
+      <BlockpitWorkspaceOverview
+        summary={summary}
+        readiness={readiness}
+        activeTaxYear={dashboardTaxYear}
+        activeTaxRow={dashboardTaxRow}
+        sources={sources}
+        onNavigate={onNavigate}
+        onRefreshConfiguredSources={onRefreshConfiguredSources}
+        sourceRefreshLoading={sourceRefreshLoading}
+      />
+
       <CockpitPortfolioCommand
         summary={summary}
         onNavigate={onNavigate}
         onRefreshConfiguredSources={onRefreshConfiguredSources}
         sourceRefreshLoading={sourceRefreshLoading}
       />
-
-      <ProductReadinessPanel report={readiness} onNavigate={onNavigate} />
 
       <TaxProductCommandCenter
         rows={taxProductRows}
@@ -4830,6 +4839,8 @@ function CockpitDashboard({
         onSelectYear={onSelectedTaxYearChange}
         onDownload={onDownload}
       />
+
+      <ProductReadinessPanel report={readiness} onNavigate={onNavigate} />
 
       <CockpitFilingJourney
         summary={summary}
@@ -4979,6 +4990,89 @@ function CockpitDashboard({
         </div>
       </div>
     </Stack>
+  );
+}
+
+function BlockpitWorkspaceOverview({
+  summary,
+  readiness,
+  activeTaxYear,
+  activeTaxRow,
+  sources,
+  onNavigate,
+  onRefreshConfiguredSources,
+  sourceRefreshLoading
+}: {
+  summary: Snapshot["cockpit"];
+  readiness: Snapshot["productReadiness"];
+  activeTaxYear: string;
+  activeTaxRow: TaxProductYearRow | undefined;
+  sources: Array<Record<string, unknown>>;
+  onNavigate: (section: Section) => void;
+  onRefreshConfiguredSources: () => void;
+  sourceRefreshLoading: boolean;
+}) {
+  const live = summary?.live_reconciliation;
+  const priceCoverage = summary?.price_coverage;
+  const reviewTone = summary?.export_allowed ? "ok" : "blocked";
+  const liveTone = live?.status === "ok" ? "ok" : live?.status === "warning" ? "warning" : "blocked";
+  const readinessToneValue = readinessTone(readiness?.overall_status ?? "warning");
+  const sourceCount = sources.length;
+  const openTasks = summary?.open_tasks ?? 0;
+  return (
+    <section className="blockpitWorkspaceGrid" aria-label="Arbeitsbereiche">
+      <button className={`workspaceCard ${liveTone}`} type="button" onClick={() => onNavigate("portfolio")}>
+        <div className="workspaceCardHeader">
+          <WalletCards size={20} />
+          <span className={`statusPill ${liveTone}`}>{live?.status === "ok" ? "synchron" : "abgleichen"}</span>
+        </div>
+        <strong>Portfolio</strong>
+        <em>{formatCurrency(summary?.portfolio_value_eur)} EUR</em>
+        <p>{priceCoverage ? `${formatPercent(priceCoverage.coverage_pct)} Preisdeckung` : "Bewertung wird geladen"} · {live?.stored_live_connectors ?? 0} Live-Connectoren</p>
+      </button>
+
+      <button className={`workspaceCard ${activeTaxRow?.tone ?? "warning"}`} type="button" onClick={() => onNavigate("tax")}>
+        <div className="workspaceCardHeader">
+          <ReceiptText size={20} />
+          <span className={`statusPill ${activeTaxRow?.tone ?? "warning"}`}>{activeTaxRow?.statusLabel ?? "laedt"}</span>
+        </div>
+        <strong>Steuern {activeTaxYear}</strong>
+        <em>{formatCurrency(activeTaxRow?.taxablePrivateDisposalsEur)} EUR</em>
+        <p>{activeTaxRow?.nextAction ?? "Eingabehilfe und Jahrespaket werden geladen."}</p>
+      </button>
+
+      <button className={`workspaceCard ${liveTone}`} type="button" onClick={() => onNavigate("sources")}>
+        <div className="workspaceCardHeader">
+          <Database size={20} />
+          <span className={`statusPill ${liveTone}`}>{sourceCount} Quellen</span>
+        </div>
+        <strong>Quellen</strong>
+        <em>{live?.latest_live_snapshot_at ? formatDateTime(live.latest_live_snapshot_at) : "kein Snapshot"}</em>
+        <p>{live?.blocker_count ?? 0} Blocker · {live?.warning_count ?? 0} Warnungen · {sourceRefreshLoading ? "Sync laeuft" : "API-Sync bereit"}</p>
+      </button>
+
+      <button className={`workspaceCard ${reviewTone}`} type="button" onClick={() => onNavigate(openTasks > 0 ? "review" : "export")}>
+        <div className="workspaceCardHeader">
+          <ClipboardCheck size={20} />
+          <span className={`statusPill ${readinessToneValue}`}>{readiness ? readinessLabel(readiness.overall_status) : "laedt"}</span>
+        </div>
+        <strong>Review & Export</strong>
+        <em>{summary?.export_allowed ? "freigegeben" : "blockiert"}</em>
+        <p>{summary?.review?.detail ?? "Review-Gate wird geladen"} · {openTasks} Aufgabe(n)</p>
+      </button>
+
+      <div className="workspaceSyncBar">
+        <span>Direktaktionen</span>
+        <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading}>
+          <RefreshCcw size={16} />
+          {sourceRefreshLoading ? "Quellen werden abgefragt" : "Alle Quellen per API abfragen"}
+        </button>
+        <button type="button" onClick={() => onNavigate("export")}>
+          <PackageCheck size={16} />
+          Belegpakete
+        </button>
+      </div>
+    </section>
   );
 }
 
