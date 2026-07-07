@@ -2081,7 +2081,15 @@ function App() {
         ...(taxViewMode === "expert" ? taxExpertLoaderKeys : [])
       ];
       const loaderKeysBySection: Record<Section, string[]> = {
-        dashboard: ["health", "cockpit", "productReadiness"],
+        dashboard: [
+          "health",
+          "cockpit",
+          "productReadiness",
+          "taxYearsSummary",
+          "taxPaymentOverview",
+          "taxYearFilingMatrix",
+          "taxFilingClosureOverview"
+        ],
         sources: [
           "health",
           "sourcesOverview",
@@ -2161,6 +2169,7 @@ function App() {
                 : item
             )
           );
+          setSnapshot((current) => ({ ...current, [loader.key]: value as never }));
           return value;
         } catch (caught) {
           const durationMs = performance.now() - startedAt;
@@ -2181,7 +2190,7 @@ function App() {
         }
       };
       const results: PromiseSettledResult<unknown>[] = [];
-      const maxParallelLoaders = active === "tax" ? 3 : 6;
+      const maxParallelLoaders = active === "tax" ? 3 : active === "dashboard" ? 3 : 6;
       for (let offset = 0; offset < loaders.length; offset += maxParallelLoaders) {
         const batch = loaders.slice(offset, offset + maxParallelLoaders);
         const batchResults = await Promise.allSettled(batch.map((loader) => runLoader(loader)));
@@ -3430,6 +3439,13 @@ function Content({
         summary={snapshot.cockpit}
         readiness={snapshot.productReadiness}
         database={snapshot.health}
+        taxYearsSummary={snapshot.taxYearsSummary}
+        taxPaymentOverview={snapshot.taxPaymentOverview}
+        taxYearFilingMatrix={snapshot.taxYearFilingMatrix}
+        taxFilingClosureOverview={snapshot.taxFilingClosureOverview}
+        selectedTaxYear={selectedTaxYear}
+        onSelectedTaxYearChange={onSelectedTaxYearChange}
+        onDownload={onDownload}
         onNavigate={onNavigate}
         onRebuildPipeline={onRebuildPipeline}
         onRefreshConfiguredSources={onRefreshConfiguredSources}
@@ -4681,6 +4697,13 @@ function CockpitDashboard({
   summary,
   readiness,
   database,
+  taxYearsSummary,
+  taxPaymentOverview,
+  taxYearFilingMatrix,
+  taxFilingClosureOverview,
+  selectedTaxYear,
+  onSelectedTaxYearChange,
+  onDownload,
   onNavigate,
   onRebuildPipeline,
   onRefreshConfiguredSources,
@@ -4689,6 +4712,13 @@ function CockpitDashboard({
   summary: Snapshot["cockpit"];
   readiness: Snapshot["productReadiness"];
   database: Record<string, unknown> | undefined;
+  taxYearsSummary: Snapshot["taxYearsSummary"];
+  taxPaymentOverview: Snapshot["taxPaymentOverview"];
+  taxYearFilingMatrix: Snapshot["taxYearFilingMatrix"];
+  taxFilingClosureOverview: Snapshot["taxFilingClosureOverview"];
+  selectedTaxYear: string;
+  onSelectedTaxYearChange: (year: string) => void;
+  onDownload: (path: string) => void;
   onNavigate: (section: Section) => void;
   onRebuildPipeline: () => void;
   onRefreshConfiguredSources: () => void;
@@ -4700,6 +4730,18 @@ function CockpitDashboard({
   const priceCoverage = summary?.price_coverage;
   const live = summary?.live_reconciliation;
   const evidenceHealth = summary?.evidence_health;
+  const taxProductRows = buildTaxProductYearRows({
+    years: taxYearsSummary?.years ?? [],
+    paymentRows: taxPaymentOverview?.rows ?? [],
+    filingMatrixRows: taxYearFilingMatrix?.rows ?? [],
+    filingClosureRows: taxFilingClosureOverview?.rows ?? [],
+    submissionRows: [],
+    finalizationRows: []
+  });
+  const dashboardTaxYear = taxProductRows.some((row) => row.year === selectedTaxYear)
+    ? selectedTaxYear
+    : taxProductRows.at(-1)?.year ?? selectedTaxYear;
+  const dashboardTaxRow = taxProductRows.find((row) => row.year === dashboardTaxYear);
   const primaryTask = tasks[0];
   const hasLiveBlockers = (live?.blocker_count ?? 0) > 0 || live?.status === "blocked";
   const hasWarnings = hasLiveBlockers || (live?.warning_count ?? 0) > 0 || tasks.length > 0;
@@ -4780,6 +4822,14 @@ function CockpitDashboard({
       />
 
       <ProductReadinessPanel report={readiness} onNavigate={onNavigate} />
+
+      <TaxProductCommandCenter
+        rows={taxProductRows}
+        activeYear={dashboardTaxYear}
+        activeRow={dashboardTaxRow}
+        onSelectYear={onSelectedTaxYearChange}
+        onDownload={onDownload}
+      />
 
       <CockpitFilingJourney
         summary={summary}
