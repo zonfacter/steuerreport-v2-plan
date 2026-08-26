@@ -1,10 +1,12 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.import_coverage import ImportCoverageService
 from steuerreport_v2.domain.import_policy import ImportPolicyService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+from steuerreport_v2.paths import USERTRANSFER_ROOT
 
 
 def test_import_coverage_detects_pionex_and_binance_files(tmp_path):
@@ -69,8 +71,12 @@ def test_import_coverage_respects_time_budget(tmp_path):
     assert summary.scan_truncated is True
 
 
+@pytest.mark.skipif(
+    not USERTRANSFER_ROOT.is_dir(),
+    reason="requires the private local usertransfer evidence tree",
+)
 def test_import_policy_classifies_known_usertransfer_tree():
-    summary = ImportPolicyService().audit("/workspace/steuerreport/usertransfer")
+    summary = ImportPolicyService().audit(str(USERTRANSFER_ROOT))
 
     assert summary.files_total >= 150
     assert summary.unclassified == 0

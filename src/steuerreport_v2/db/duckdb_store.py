@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
+import os
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -23,6 +24,7 @@ from steuerreport_v2.contracts.imports import (
 from steuerreport_v2.contracts.parity import V1ReferenceMetric, V1ReferenceMetricCreate
 from steuerreport_v2.contracts.prices import PricePoint, PricePointCreate
 from steuerreport_v2.contracts.review import ReviewDecision, ReviewDecisionCreate
+from steuerreport_v2.paths import PROJECT_ROOT
 
 SCHEMA_VERSION = 1
 
@@ -57,8 +59,12 @@ class _LockedDuckDbConnection:
 
 
 class DuckDbStore:
-    def __init__(self, path: str | Path = "data/steuerreport_v2.duckdb") -> None:
-        self.path = Path(path)
+    def __init__(self, path: str | Path | None = None) -> None:
+        configured_path = path or os.environ.get(
+            "STEUERREPORT_V2_DB",
+            PROJECT_ROOT / "data/steuerreport_v2.duckdb",
+        )
+        self.path = Path(configured_path).expanduser()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._schema_lock = threading.Lock()
         self._connection_lock = threading.RLock()

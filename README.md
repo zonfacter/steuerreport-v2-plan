@@ -88,18 +88,35 @@ Ledger und nachvollziehbare Review-Entscheidungen.
 
 ## Lokal starten
 
+Ein frischer Checkout kann an einem beliebigen Ort liegen. Die folgenden
+Variablen machen Projekt, DuckDB und private Importablage explizit; die Werte in
+`.env.example` sind Beispiele und werden nicht automatisch geladen:
+
+```bash
+git clone https://github.com/zonfacter/steuerreport-v2-plan.git
+cd steuerreport-v2-plan
+export STEUERREPORT_V2_ROOT="$PWD"
+export STEUERREPORT_V2_DB="$PWD/data/steuerreport_v2.duckdb"
+export STEUERREPORT_USERTRANSFER_ROOT="/pfad/zur/privaten/usertransfer-ablage"
+python3 -m pip install -e '.[dev]'
+```
+
+Das Repository enthaelt keine echte DuckDB, API-Keys, Steuer-PDFs oder privaten
+Rohimporte. Fuer eine bestehende Installation muessen `data/`, `var/`,
+`artifacts/` und die private Usertransfer-Ablage getrennt gesichert und
+wiederhergestellt werden.
+
 Backend:
 
 ```bash
-cd /workspace/steuerreport-v2-plan
 python3 -m uvicorn steuerreport_v2.api.app:app --reload --host 0.0.0.0 --port 8010
 ```
 
 Frontend:
 
 ```bash
-cd /workspace/steuerreport-v2-plan/frontend
-npm install --no-bin-links
+cd frontend
+npm ci
 npm run dev
 ```
 
@@ -120,14 +137,13 @@ bash scripts/stop_v2.sh
 Produktionsbuild Frontend:
 
 ```bash
-cd /workspace/steuerreport-v2-plan/frontend
+cd frontend
 npm run build
 ```
 
 Tests:
 
 ```bash
-cd /workspace/steuerreport-v2-plan
 python3 -m pytest tests/unit
 ```
 
@@ -150,7 +166,10 @@ python3 scripts/generate_api_endpoint_reference_v2.py --check
 
 Die GitHub-CI unter `.github/workflows/ci.yml` fuehrt Unit-Tests, Ruff,
 OpenAPI-/Endpoint-Driftchecks und den Frontend-Build bei Pushes und Pull
-Requests erneut aus.
+Requests erneut aus. Vier lokale Integrationspruefungen gegen den privaten
+Usertransfer-/Solscan-/Blockpit-/RPC-Belegbestand werden auf einem Clone ohne
+diese Dateien sichtbar als `skipped` gemeldet; sie bleiben auf dem
+Produktivhost ausfuehrbar.
 
 Die API hat derzeit keine eigene Authentifizierung. Sie ist fuer das
 vertrauenswuerdige LAN ausgelegt und darf fuer eine Android-/iOS-App erst hinter

@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.admin import AdminSettingWrite
@@ -12,10 +14,25 @@ from steuerreport_v2.contracts.review import ReviewDecisionCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.review import ReviewService
+from steuerreport_v2.domain.solscan_preflight import (
+    DEFAULT_BLOCKPIT_SOLANA_FILE,
+    DEFAULT_RPC_EVIDENCE_ARTIFACT,
+    DEFAULT_SOLSCAN_FILE,
+)
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
+
+
+LOCAL_IOT_EVIDENCE_AVAILABLE = all(
+    Path(path).is_file()
+    for path in (
+        DEFAULT_BLOCKPIT_SOLANA_FILE,
+        DEFAULT_RPC_EVIDENCE_ARTIFACT,
+        DEFAULT_SOLSCAN_FILE,
+    )
+)
 
 
 def _build_balance(store: DuckDbStore, content: str) -> None:
@@ -600,6 +617,10 @@ def test_review_decisions_api_roundtrip(tmp_path):
     assert decisions[0]["affected_ids"] == ["event-a"]
 
 
+@pytest.mark.skipif(
+    not LOCAL_IOT_EVIDENCE_AVAILABLE,
+    reason="requires private Solscan, Blockpit, and RPC evidence files",
+)
 def test_review_decision_suggestions_include_verified_iot_evidence(tmp_path):
     client = TestClient(create_app(DuckDbStore(tmp_path / "steuerreport_v2.duckdb")))
 
@@ -699,6 +720,10 @@ def test_review_decision_suggestions_include_spam_token_documentation(tmp_path):
     )
 
 
+@pytest.mark.skipif(
+    not LOCAL_IOT_EVIDENCE_AVAILABLE,
+    reason="requires private Solscan, Blockpit, and RPC evidence files",
+)
 def test_review_tasks_link_solscan_evidence_trace(tmp_path):
     client = TestClient(create_app(DuckDbStore(tmp_path / "steuerreport_v2.duckdb")))
 
@@ -822,6 +847,10 @@ def test_review_evidence_trace_canonicalize_api_dry_run(tmp_path):
     assert store.list_review_decisions()[0].evidence_ref == "var/staging_audits/legacy-rpc.json"
 
 
+@pytest.mark.skipif(
+    not LOCAL_IOT_EVIDENCE_AVAILABLE,
+    reason="requires private Solscan, Blockpit, and RPC evidence files",
+)
 def test_review_decision_suggestion_acceptance_is_idempotent(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     client = TestClient(create_app(store))

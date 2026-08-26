@@ -13,6 +13,19 @@ from steuerreport_v2.domain.blockpit_solana_preflight import BlockpitSolanaPrefl
 from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
 
 
+def test_blockpit_solana_preflight_returns_empty_report_for_missing_file(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+
+    report = BlockpitSolanaPreflightService(store).inspect(
+        file_path=str(tmp_path / "missing-blockpit.csv"),
+    )
+
+    assert report.filtered_rows == 0
+    assert report.classes == []
+    assert report.combined_readiness.required_opening_balance == {}
+    assert report.target_changed is False
+
+
 def test_blockpit_solana_preflight_reports_missing_prices_and_opening_balance(tmp_path):
     csv_path = tmp_path / "blockpit.csv"
     csv_path.write_text(

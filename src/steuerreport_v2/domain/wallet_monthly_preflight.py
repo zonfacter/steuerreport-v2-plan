@@ -10,10 +10,12 @@ from steuerreport_v2.contracts.wallet_monthly import (
     WalletMonthlyPeriodTotal,
     WalletMonthlyPreflightReport,
 )
+from steuerreport_v2.paths import USERTRANSFER_ROOT
 
 
-DEFAULT_WALLET_MONTHLY_FILE = Path(
-    "/workspace/steuerreport/usertransfer/Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv"
+DEFAULT_WALLET_MONTHLY_FILE = (
+    USERTRANSFER_ROOT
+    / "Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv"
 )
 DEFAULT_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
 
@@ -35,20 +37,21 @@ class WalletMonthlyPreflightService:
         asset_upper = asset.upper()
         path = Path(file_path)
 
-        with path.open(newline="", encoding="utf-8-sig") as handle:
-            for row in csv.DictReader(handle):
-                period_raw = str(row.get("Period Start (UTC)") or "").strip()
-                if not period_raw:
-                    continue
-                period = datetime.strptime(period_raw, "%d.%m.%y")
-                quantity = self._asset_quantity(row, asset_upper)
-                if quantity == 0:
-                    continue
-                rows += 1
-                gateway = str(row.get("Gateway Address") or "").strip()
-                if gateway:
-                    gateways.add(gateway)
-                by_period[period] += quantity
+        if path.is_file():
+            with path.open(newline="", encoding="utf-8-sig") as handle:
+                for row in csv.DictReader(handle):
+                    period_raw = str(row.get("Period Start (UTC)") or "").strip()
+                    if not period_raw:
+                        continue
+                    period = datetime.strptime(period_raw, "%d.%m.%y")
+                    quantity = self._asset_quantity(row, asset_upper)
+                    if quantity == 0:
+                        continue
+                    rows += 1
+                    gateway = str(row.get("Gateway Address") or "").strip()
+                    if gateway:
+                        gateways.add(gateway)
+                    by_period[period] += quantity
 
         monthly_totals = [
             WalletMonthlyPeriodTotal(

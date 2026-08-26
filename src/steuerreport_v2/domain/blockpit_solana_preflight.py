@@ -29,14 +29,15 @@ from steuerreport_v2.domain.wallet_monthly_preflight import (
     DEFAULT_WALLET_MONTHLY_FILE,
     WalletMonthlyPreflightService,
 )
+from steuerreport_v2.paths import PROJECT_ROOT, USERTRANSFER_ROOT, resolve_project_path
 
 
 DEFAULT_BLOCKPIT_SOLANA_FILE = (
-    Path("/workspace/steuerreport/usertransfer")
+    USERTRANSFER_ROOT
     / "blockpit"
     / "blockpit 09052026 Transactions.csv"
 )
-DEFAULT_PRICE_CONFIG = Path("/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json")
+DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
 DEFAULT_ALLOWED_ASSETS = {
     "ADA",
     "BNB",
@@ -129,11 +130,11 @@ class BlockpitSolanaPreflightService:
             ),
             price_source_status=self._price_source_status(
                 missing_price_assets,
-                Path(price_config_path),
+                resolve_project_path(price_config_path),
             ),
             historical_price_requirements=self._historical_price_requirements(
                 rows,
-                Path(price_config_path),
+                resolve_project_path(price_config_path),
             ),
             importable_classes=[
                 item.row_class for item in classes if item.status == "importable"
@@ -675,6 +676,8 @@ class BlockpitSolanaPreflightService:
         allowed_assets: set[str],
         exclude_classes: set[str],
     ) -> tuple[list[dict[str, str]], int, dict[str, int], dict[str, int]]:
+        if not path.is_file():
+            return [], 0, {}, {}
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             reader = csv.DictReader(handle, delimiter=";")
             rows: list[dict[str, str]] = []

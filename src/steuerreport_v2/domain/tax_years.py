@@ -105,6 +105,7 @@ from steuerreport_v2.domain.tax_time import (
     reporting_year_sql,
 )
 from steuerreport_v2.domain.valuation import PriceCoverageService
+from steuerreport_v2.paths import PROJECT_ROOT
 
 
 INCOME_EVENT_TYPES = {"income", "reward", "staking", "mining"}
@@ -120,7 +121,7 @@ STABLECOIN_LIKE_ASSETS = {
 }
 HELIUM_REWARD_ASSETS = ("HNT", "IOT", "MOBILE")
 HELIUM_SWAP_ALCHEMY_AUDIT_PATH = (
-    Path("/workspace/steuerreport-v2-plan")
+    PROJECT_ROOT
     / "var"
     / "helium_swap_alchemy_audits"
     / "latest_all_years_helium_swap_alchemy_audit.json"

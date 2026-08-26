@@ -21,6 +21,7 @@ from steuerreport_v2.contracts.bmf_event_price_remediation import (
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.bmf_event_evidence import BmfFifoEventEvidenceService
+from steuerreport_v2.paths import resolve_project_path
 from steuerreport_v2.domain.tax import STABLE_VALUE_ANCHOR_ASSETS
 
 
@@ -100,7 +101,7 @@ class BmfEventPriceRemediationService:
             requirements.values(),
             key=lambda item: (item.price_date, item.asset),
         )
-        config = self._price_config(Path(request.config_path))
+        config = self._price_config(resolve_project_path(request.config_path))
         token_risk_statuses = self._token_risk_statuses()
         jobs: list[BmfEventPriceRemediationJob] = []
         pending_points: list[tuple[int, PricePointCreate]] = []

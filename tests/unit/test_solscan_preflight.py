@@ -13,6 +13,21 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.solscan_preflight import SolscanPreflightService
 
 
+def test_solscan_evidence_trace_marks_missing_source_files(tmp_path):
+    report = SolscanPreflightService().evidence_trace(
+        file_path=str(tmp_path / "missing-solscan.csv"),
+        blockpit_file_path=str(tmp_path / "missing-blockpit.csv"),
+        rpc_evidence_path=str(tmp_path / "missing-rpc.json"),
+    )
+
+    assert report.status == "source_missing"
+    assert report.preflight.solscan.rows == 0
+    assert report.preflight.blockpit.rows == 0
+    assert report.trace_steps[0].status == "missing"
+    assert report.trace_steps[1].status == "missing"
+    assert report.target_changed is False
+
+
 def test_solscan_preflight_compares_iot_signatures_with_blockpit(tmp_path):
     solscan = tmp_path / "export-solscan.csv"
     blockpit = tmp_path / "blockpit.csv"

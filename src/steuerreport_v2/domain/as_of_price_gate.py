@@ -25,10 +25,12 @@ from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.stichtag_token_valuation import (
     StichtagTokenValuationService,
 )
+from steuerreport_v2.paths import PROJECT_ROOT as DEFAULT_PROJECT_ROOT
+from steuerreport_v2.paths import resolve_project_path
 
 
 class AsOfPriceGateService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = DEFAULT_PROJECT_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/price_gate_runs"
 
@@ -44,7 +46,7 @@ class AsOfPriceGateService:
         as_of: datetime | None = None,
         as_of_date: date | None = None,
         materiality_threshold_eur: Decimal = Decimal("1"),
-        config_path: str = "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json",
+        config_path: str = "configs/crypto_price_sources.json",
     ) -> AsOfPriceGateReport:
         valuation_at = self._resolve_as_of(as_of=as_of, as_of_date=as_of_date)
         if materiality_threshold_eur < 0:
@@ -59,7 +61,7 @@ class AsOfPriceGateService:
             materiality_threshold_eur,
         )
         valuation_date = divorce_service._local_date(valuation_at)
-        provider_sources = self._provider_sources(config_path)
+        provider_sources = self._provider_sources(resolve_project_path(config_path))
         positions_by_asset: defaultdict[str, list[object]] = defaultdict(list)
         for position in portfolio.positions:
             value = abs(position.value_eur or Decimal("0"))
@@ -279,7 +281,9 @@ class AsOfPriceGateService:
             else "defillama"
         )
         backfill_service = ExternalPriceBackfillService(self.store)
-        provider_sources = self._provider_sources(request.config_path)
+        provider_sources = self._provider_sources(
+            resolve_project_path(request.config_path)
+        )
         price_date = valuation_at.date()
         usd_eur = backfill_service._usd_eur_rate(
             request.v1_fx_db_path, price_date.isoformat()
@@ -426,7 +430,7 @@ class AsOfPriceGateService:
 
     @staticmethod
     def _provider_sources(
-        config_path: str,
+        config_path: str | Path,
     ) -> dict[str, tuple[str | None, str | None]]:
         payload = json.loads(Path(config_path).read_text(encoding="utf-8"))
         return {

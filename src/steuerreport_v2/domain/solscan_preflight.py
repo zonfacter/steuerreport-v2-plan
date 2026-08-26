@@ -23,29 +23,30 @@ from steuerreport_v2.contracts.solscan import (
     SolscanTokenMovementSummary,
     SolscanTokenPreflightReport,
 )
+from steuerreport_v2.paths import PROJECT_ROOT, USERTRANSFER_ROOT
 
 
 DEFAULT_SOLSCAN_FILE = (
-    Path("/workspace/steuerreport/usertransfer")
+    USERTRANSFER_ROOT
     / "legacy_daten"
     / "Steuer-2022"
     / "export-solscan.csv"
 )
 DEFAULT_BLOCKPIT_SOLANA_FILE = (
-    Path("/workspace/steuerreport/usertransfer")
+    USERTRANSFER_ROOT
     / "blockpit"
     / "blockpit 09052026 Transactions.csv"
 )
 DEFAULT_SOLANA_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
 DEFAULT_IOT_TOKEN_ADDRESS = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns"
 DEFAULT_RPC_EVIDENCE_ARTIFACT = (
-    Path("/workspace/steuerreport-v2-plan")
+    PROJECT_ROOT
     / "var"
     / "staging_audits"
     / "solscan_iot_rpc_probe_all_verified_2026-05-23.json"
 )
 DEFAULT_HELIUM_REWARD_EVIDENCE_ARTIFACT = (
-    Path("/workspace/steuerreport-v2-plan")
+    PROJECT_ROOT
     / "var"
     / "staging_audits"
     / "helium_solana_reward_evidence_wbr_20260619_2140_combined.json"
@@ -206,8 +207,12 @@ class SolscanPreflightService:
             rpc_evidence_path=rpc_evidence_path,
         )
         rpc = preflight.rpc_evidence
+        solscan_available = Path(file_path).is_file()
+        blockpit_available = Path(blockpit_file_path).is_file()
         status = "needs_evidence"
-        if preflight.blockpit_missing_signatures == 0:
+        if not solscan_available or not blockpit_available:
+            status = "source_missing"
+        elif preflight.blockpit_missing_signatures == 0:
             status = "covered"
         elif rpc.status == "verified" and rpc.quantity_delta_sum == 0:
             status = "rpc_verified"
@@ -242,7 +247,9 @@ class SolscanPreflightService:
                     step_id="solscan_csv_coverage",
                     label="Solscan CSV Coverage",
                     status=(
-                        "covered"
+                        "missing"
+                        if not solscan_available
+                        else "covered"
                         if preflight.blockpit_missing_signatures == 0
                         else "gap_detected"
                     ),
@@ -255,7 +262,7 @@ class SolscanPreflightService:
                 SolscanEvidenceTraceStep(
                     step_id="blockpit_source_export",
                     label="Blockpit Referenzexport",
-                    status="available",
+                    status="available" if blockpit_available else "missing",
                     evidence_ref=preflight.blockpit_file_path,
                     note=(
                         "Dient als steuerlicher Referenzsatz fuer fehlende "
@@ -498,6 +505,8 @@ class SolscanPreflightService:
         max_year: int | None,
     ) -> list[dict[str, object]]:
         movements: list[dict[str, object]] = []
+        if not path.is_file():
+            return movements
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             for row in csv.DictReader(handle):
                 if str(row.get("TokenAddress") or "") != token_address:
@@ -535,6 +544,8 @@ class SolscanPreflightService:
     ) -> SolscanFileCoverage:
         all_times: list[datetime] = []
         token_times: list[datetime] = []
+        if not path.is_file():
+            return SolscanFileCoverage()
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             for row in csv.DictReader(handle):
                 event_time = datetime.fromtimestamp(
@@ -561,6 +572,8 @@ class SolscanPreflightService:
         max_year: int | None,
     ) -> list[dict[str, object]]:
         movements: list[dict[str, object]] = []
+        if not path.is_file():
+            return movements
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             for row in csv.DictReader(handle, delimiter=";"):
                 if row.get("Integration Name") != "Solana":

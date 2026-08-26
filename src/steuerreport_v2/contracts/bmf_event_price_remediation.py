@@ -33,9 +33,7 @@ class BmfEventPriceRemediationRunRequest(BaseModel):
     )
     max_jobs: int = Field(default=250, ge=1, le=1000)
     timeout_seconds: int = Field(default=20, ge=3, le=60)
-    config_path: str = (
-        "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json"
-    )
+    config_path: str = "configs/crypto_price_sources.json"
 
 
 class BmfEventPriceRemediationJob(BaseModel):

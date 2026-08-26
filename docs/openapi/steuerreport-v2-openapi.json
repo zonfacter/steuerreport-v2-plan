@@ -12507,7 +12507,7 @@
             "title": "Confidence"
           },
           "config_path": {
-            "default": "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json",
+            "default": "configs/crypto_price_sources.json",
             "title": "Config Path",
             "type": "string"
           },
@@ -19761,7 +19761,7 @@
       "BmfEventPriceRemediationRunRequest": {
         "properties": {
           "config_path": {
-            "default": "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json",
+            "default": "configs/crypto_price_sources.json",
             "title": "Config Path",
             "type": "string"
           },
@@ -24099,7 +24099,7 @@
             "title": "Confidence"
           },
           "config_path": {
-            "default": "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json",
+            "default": "configs/crypto_price_sources.json",
             "title": "Config Path",
             "type": "string"
           },
@@ -28101,7 +28101,7 @@
             "title": "Confidence"
           },
           "config_path": {
-            "default": "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json",
+            "default": "configs/crypto_price_sources.json",
             "title": "Config Path",
             "type": "string"
           },

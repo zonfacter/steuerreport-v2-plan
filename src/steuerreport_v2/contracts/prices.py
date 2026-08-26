@@ -96,9 +96,7 @@ class V1FxCacheImportResult(BaseModel):
 
 
 class ExternalPriceBackfillRequest(BaseModel):
-    config_path: str = (
-        "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json"
-    )
+    config_path: str = "configs/crypto_price_sources.json"
     v1_fx_db_path: str = "/root/.local/share/steuerreport/steuerreport.db"
     provider: str = "auto"
     assets: list[str] = Field(default_factory=list)
@@ -135,9 +133,7 @@ class ExternalPriceBackfillResult(BaseModel):
 
 
 class CurrentPortfolioPriceBackfillRequest(BaseModel):
-    config_path: str = (
-        "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json"
-    )
+    config_path: str = "configs/crypto_price_sources.json"
     provider: str = "coingecko"
     assets: list[str] = Field(default_factory=list)
     max_requests: int = 50
@@ -225,9 +221,7 @@ class AsOfPriceGateBackfillRequest(BaseModel):
     as_of: datetime | None = None
     as_of_date: date | None = None
     materiality_threshold_eur: Decimal = Field(default=Decimal("1"), ge=0)
-    config_path: str = (
-        "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json"
-    )
+    config_path: str = "configs/crypto_price_sources.json"
     v1_fx_db_path: str = "/root/.local/share/steuerreport/steuerreport.db"
     provider: str = "defillama"
     assets: list[str] = Field(default_factory=list)

@@ -13,9 +13,9 @@ from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.review import ReviewService
+from steuerreport_v2.paths import PROJECT_ROOT
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_PACKAGE = PROJECT_ROOT / "configs/binance_small_assets_price_evidence_20260710.json"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/binance_small_assets_price_evidence"

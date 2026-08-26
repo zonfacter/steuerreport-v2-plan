@@ -21,12 +21,13 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.valuation import PriceCoverageService
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
+from steuerreport_v2.paths import PROJECT_ROOT, resolve_project_path
 
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 DEFILLAMA_COINS_BASE_URL = "https://coins.llama.fi"
 FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
-DEFAULT_CONFIG = Path("/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json")
-EXAMPLE_CONFIG = Path("/workspace/steuerreport/configs/crypto_price_sources.example.json")
+DEFAULT_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
+EXAMPLE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.example.json"
 
 
 @dataclass(frozen=True)
@@ -371,7 +372,7 @@ class ExternalPriceBackfillService:
         )
 
     def _load_assets(self, config_path: str) -> list[_PriceAsset]:
-        path = Path(config_path).expanduser()
+        path = resolve_project_path(config_path)
         if not path.exists():
             path = EXAMPLE_CONFIG
         payload = json.loads(path.read_text(encoding="utf-8"))

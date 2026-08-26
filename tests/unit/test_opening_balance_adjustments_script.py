@@ -3,12 +3,16 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_scoped_opening_adjustment_does_not_delete_base_opening_source(tmp_path):
@@ -62,7 +66,7 @@ def test_scoped_opening_adjustment_does_not_delete_base_opening_source(tmp_path)
             "--assets",
             "SOL",
         ],
-        cwd="/workspace/steuerreport-v2-plan",
+        cwd=PROJECT_ROOT,
         text=True,
         capture_output=True,
         check=True,
@@ -117,14 +121,14 @@ def test_scoped_opening_adjustment_is_idempotent(tmp_path):
     ]
     first = subprocess.run(
         command,
-        cwd="/workspace/steuerreport-v2-plan",
+        cwd=PROJECT_ROOT,
         text=True,
         capture_output=True,
         check=True,
     )
     second = subprocess.run(
         command,
-        cwd="/workspace/steuerreport-v2-plan",
+        cwd=PROJECT_ROOT,
         text=True,
         capture_output=True,
         check=True,

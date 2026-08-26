@@ -24,8 +24,8 @@ from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+from steuerreport_v2.paths import PROJECT_ROOT
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_WALLET = PortfolioService.KNOWN_JUP_WALLET
 DEFAULT_FX_DB = Path("/root/.local/share/steuerreport/ai_readonly/steuerreport_ai_readonly.sqlite")

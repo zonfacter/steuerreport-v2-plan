@@ -17,16 +17,15 @@ from steuerreport_v2.importers.source_profiles import (
     normalize_column_name,
     profile_for_source,
 )
+from steuerreport_v2.paths import PROJECT_ROOT
 
-DEFAULT_PRICE_CONFIG = Path("/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json")
-DEFAULT_SOLANA_OWNERSHIP_CONFIG = Path(
-    "/workspace/steuerreport-v2-plan/configs/solana_v1_ownership_scope.json"
+DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
+DEFAULT_SOLANA_OWNERSHIP_CONFIG = PROJECT_ROOT / "configs/solana_v1_ownership_scope.json"
+DEFAULT_FAIRSPOT_STAKING_RECONCILIATION_CONFIG = (
+    PROJECT_ROOT / "configs/fairspot_hnt_staking_reconciliation.json"
 )
-DEFAULT_FAIRSPOT_STAKING_RECONCILIATION_CONFIG = Path(
-    "/workspace/steuerreport-v2-plan/configs/fairspot_hnt_staking_reconciliation.json"
-)
-DEFAULT_SOLANA_STAKING_POSITION_RECONCILIATIONS_CONFIG = Path(
-    "/workspace/steuerreport-v2-plan/configs/solana_staking_position_reconciliations.json"
+DEFAULT_SOLANA_STAKING_POSITION_RECONCILIATIONS_CONFIG = (
+    PROJECT_ROOT / "configs/solana_staking_position_reconciliations.json"
 )
 
 

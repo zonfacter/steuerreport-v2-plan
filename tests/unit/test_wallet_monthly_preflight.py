@@ -9,6 +9,17 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.wallet_monthly_preflight import WalletMonthlyPreflightService
 
 
+def test_wallet_monthly_preflight_returns_empty_report_for_missing_file(tmp_path):
+    report = WalletMonthlyPreflightService().inspect(
+        file_path=str(tmp_path / "missing-wallet-month.csv"),
+    )
+
+    assert report.rows == 0
+    assert report.monthly_totals == []
+    assert report.covers_required_quantity is False
+    assert report.target_changed is False
+
+
 def test_wallet_monthly_preflight_covers_required_iot_quantity(tmp_path):
     source = tmp_path / "wallet-month.csv"
     source.write_text(
