@@ -10,6 +10,13 @@
       "aliases": ["BTC"]
     },
     {
+      "symbol": "BCH",
+      "coingecko_id": "bitcoin-cash",
+      "yahoo_ticker": "BCH-USD",
+      "store_keys": ["BCH"],
+      "aliases": ["BCH", "BITCOIN CASH"]
+    },
+    {
       "symbol": "ETH",
       "coingecko_id": "ethereum",
       "yahoo_ticker": "ETH-USD",
@@ -19,6 +26,7 @@
     {
       "symbol": "USDT",
       "coingecko_id": "tether",
+      "defillama_id": "solana:Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
       "coinmarketcap_id": "825",
       "yahoo_ticker": "USDT-USD",
       "store_keys": ["USDT", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"],
@@ -27,6 +35,7 @@
     {
       "symbol": "USDC",
       "coingecko_id": "usd-coin",
+      "defillama_id": "solana:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       "coinmarketcap_id": "3408",
       "yahoo_ticker": "USDC-USD",
       "store_keys": ["USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
@@ -63,6 +72,13 @@
       "yahoo_ticker": "ADA-USD",
       "store_keys": ["ADA"],
       "aliases": ["ADA"]
+    },
+    {
+      "symbol": "DOT",
+      "coingecko_id": "polkadot",
+      "yahoo_ticker": "DOT-USD",
+      "store_keys": ["DOT"],
+      "aliases": ["DOT", "POLKADOT"]
     },
     {
       "symbol": "XRP",
@@ -152,7 +168,8 @@
     },
     {
       "symbol": "SOL",
-      "coingecko_id": "solana",
+      "coingecko_id": "wrapped-solana",
+      "defillama_id": "solana:So11111111111111111111111111111111111111112",
       "coinmarketcap_id": "5426",
       "yahoo_ticker": "SOL-USD",
       "store_keys": ["SOL", "So11111111111111111111111111111111111111112"],
@@ -160,13 +177,21 @@
     },
     {
       "symbol": "JLWSOL",
-      "coingecko_id": "solana",
+      "defillama_id": "solana:2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU",
       "store_keys": ["JLWSOL", "2UQSYO1FXXQKDTCPXNLOFWY88PXCVNFH2L8FPSE62FVU"],
       "aliases": ["JLWSOL", "JUPITER LEND WSOL", "2UQSYO1FXXQKDTCPXNLOFWY88PXCVNFH2L8FPSE62FVU"]
     },
     {
+      "symbol": "SPCXX",
+      "coingecko_id": "spacex-xstocks",
+      "defillama_id": "solana:Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "store_keys": ["SPCXX", "XS3OZWBHVQIS4NYCF4YKWMEIA2EC84WSIVRCYCTQPH8", "XS3OZW...QPH8"],
+      "aliases": ["SPCXX", "SPACEX XSTOCK", "XS3OZWBHVQIS4NYCF4YKWMEIA2EC84WSIVRCYCTQPH8", "XS3OZW...QPH8"]
+    },
+    {
       "symbol": "HNT",
       "coingecko_id": "helium",
+      "defillama_id": "solana:hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux",
       "yahoo_ticker": "HNT-USD",
       "store_keys": ["HNT", "HNTYVP6YFM1HG25TN9WGLQM12B8TQMCKNKRDU1OXWUX"],
       "aliases": ["HNT", "HNTYVP6YFM1HG25TN9WGLQM12B8TQMCKNKRDU1OXWUX"]
@@ -174,6 +199,7 @@
     {
       "symbol": "IOT",
       "coingecko_id": "helium-iot",
+      "defillama_id": "solana:iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns",
       "coinmarketcap_id": "24686",
       "store_keys": ["IOT", "IOTEVVZLEYWOTN1QDWNPDDXPWSZN3ZFHEOT3MFL9FNS"],
       "aliases": ["IOT", "IOTEVVZLEYWOTN1QDWNPDDXPWSZN3ZFHEOT3MFL9FNS"]
@@ -181,6 +207,7 @@
     {
       "symbol": "MOBILE",
       "coingecko_id": "helium-mobile",
+      "defillama_id": "solana:mb1eu7TzEc71KxDpsmsKoucSSuuoGLv1drys1oP2jh6",
       "store_keys": ["MOBILE", "MB1EU7TZEC71KXDPSMSKOUCSSUUOGLV1DRYS1OP2JH6"],
       "aliases": ["MOBILE", "MB1EU7TZEC71KXDPSMSKOUCSSUUOGLV1DRYS1OP2JH6"]
     },
@@ -207,6 +234,7 @@
     {
       "symbol": "JUP",
       "coingecko_id": "jupiter-exchange-solana",
+      "defillama_id": "solana:JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
       "coinmarketcap_id": "29210",
       "store_keys": ["JUP", "JUPYIWRYJFSKUPIHA7HKER8VUTAEFOSYBKEDZNSDVCN"],
       "aliases": ["JUP", "JUPYIWRYJFSKUPIHA7HKER8VUTAEFOSYBKEDZNSDVCN"]
@@ -214,56 +242,65 @@
     {
       "symbol": "POPCAT",
       "coingecko_id": "popcat",
+      "defillama_id": "solana:7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
       "store_keys": ["POPCAT", "7GCIHGDB8FE6KNJN2MYTKZZCRJQY3T9GHDC8UHYMW2HR"],
       "aliases": ["POPCAT", "7GCIHGDB8FE6KNJN2MYTKZZCRJQY3T9GHDC8UHYMW2HR"]
     },
     {
       "symbol": "MANEKI",
       "coingecko_id": "maneki",
+      "defillama_id": "solana:25hAyBQfoDhfWx9ay6rarbgvWGwDdNqcHsXS3jQ3mTDJ",
       "store_keys": ["MANEKI", "25hAyBQfoDhfWx9ay6rarbgvWGwDdNqcHsXS3jQ3mTDJ"],
       "aliases": ["MANEKI", "25hAyBQfoDhfWx9ay6rarbgvWGwDdNqcHsXS3jQ3mTDJ"]
     },
     {
       "symbol": "WBTC",
-      "coingecko_id": "wrapped-bitcoin",
+      "coingecko_id": "wrapped-btc-wormhole",
+      "defillama_id": "solana:3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
       "store_keys": ["WBTC", "3NZ9JMVBmGAqocybic2C7LqcJScmgsAz6VQQtdzcqmJh"],
       "aliases": ["WBTC", "WRAPPED BITCOIN", "3NZ9JMVBmGAqocybic2C7LqcJScmgsAz6VQQtdzcqmJh"]
     },
     {
       "symbol": "CBDC",
-      "coingecko_id": "cbdc",
+      "coingecko_id": "central-bank-digital-currency-memecoin",
+      "defillama_id": "solana:2KFZCkfxj1Us8YRQZa5vktSxy3GPzFZvVhWj91n8Fv2J",
       "store_keys": ["CBDC", "2KfzCkfxj1Us8YrQZa5vktSxy3GPzFZvVhWj91n8Fv2j"],
       "aliases": ["CBDC", "2KfzCkfxj1Us8YrQZa5vktSxy3GPzFZvVhWj91n8Fv2j"]
     },
     {
       "symbol": "ZEUS",
       "coingecko_id": "zeus-network",
+      "defillama_id": "solana:ZEUS1aR7aX8DFFJf5QjWj2ftDDdNTroMNGo8YoQm3Gq",
       "store_keys": ["ZEUS", "ZEUS1AR7AX8DFFJF5QJWJ2FTDDDNTROMNGO8YOQM3GQ"],
       "aliases": ["ZEUS", "ZEUS1AR7AX8DFFJF5QJWJ2FTDDDNTROMNGO8YOQM3GQ"]
     },
     {
       "symbol": "JUPSOL",
       "coingecko_id": "jupiter-staked-sol",
+      "defillama_id": "solana:jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v",
       "store_keys": ["JUPSOL", "JUPSOLAHXQIZZTSFEWMTRRGPNYFM8F6SZDOSWBJX93V"],
       "aliases": ["JUPSOL", "JUPSOLAHXQIZZTSFEWMTRRGPNYFM8F6SZDOSWBJX93V"]
     },
     {
       "symbol": "SHARK",
-      "coingecko_id": "sharky",
+      "coingecko_id": "sharky-fi",
+      "defillama_id": "solana:SHARKSYJjqaNyxVfrpnBN9pjgkhwDhatnMyicWPnr1s",
       "store_keys": ["SHARK", "SHARKSYJJQANYXVFRPNBN9PJGKHWDHATNMYICWPNR1S"],
       "aliases": ["SHARK", "SHARKSYJJQANYXVFRPNBN9PJGKHWDHATNMYICWPNR1S"]
     },
     {
       "symbol": "UPT",
       "coingecko_id": "uprock",
+      "defillama_id": "solana:UPTx1d24aBWuRgwxVnFmX4gNraj3QGFzL3QqBgxtWQG",
       "store_keys": ["UPT", "UPTX1D24ABWURGWXVNFMX4GNRAJ3QGFZL3QQBGXTWQG"],
       "aliases": ["UPT", "UPTX1D24ABWURGWXVNFMX4GNRAJ3QGFZL3QQBGXTWQG"]
     },
     {
       "symbol": "CWIF",
-      "coingecko_id": "catwifhat",
-      "store_keys": ["CWIF", "7ATgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"],
-      "aliases": ["CWIF", "CATWIFHAT", "7ATgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"]
+      "coingecko_id": "catwifhat-2",
+      "defillama_id": "solana:7atgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1",
+      "store_keys": ["CWIF", "7atgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"],
+      "aliases": ["CWIF", "CATWIFHAT", "7atgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"]
     },
     {
       "symbol": "VET",

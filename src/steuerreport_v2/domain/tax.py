@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import pandas as pd
 
 from steuerreport_v2.contracts.events import CanonicalEvent
+from steuerreport_v2.contracts.service_swap_tax_mapping import (
+    ServiceSwapTaxMappingRecord,
+)
 from steuerreport_v2.contracts.tax import (
     TaxLine,
     TaxHoldingPeriodBucket,
@@ -19,7 +24,19 @@ from steuerreport_v2.contracts.tax import (
     TaxUnmatchedDisposal,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.binance_earn_fifo import (
+    locked_redemption_clawback_reward_event_ids,
+)
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.fifo_methods import (
+    GLOBAL_ASSET_FIFO_SCOPE,
+    WALLET_DEPOT_FIFO_SCOPE,
+    active_fifo_scope,
+)
+from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
+from steuerreport_v2.domain.service_swap_tax_mapping import (
+    ServiceSwapTaxMappingService,
+)
 
 LOT_ACQUISITION_EVENT_TYPES = {"trade", "income", "reward", "staking", "mining"}
 FIAT_TAX_EXCLUDED_ASSETS = {"EUR"}
@@ -37,19 +54,112 @@ STABLE_VALUE_ANCHOR_ASSETS = {
 }
 
 
+@dataclass(frozen=True)
+class _ServiceSwapOperation:
+    event_time: datetime
+    sequence: int
+    kind: str
+    mapping: ServiceSwapTaxMappingRecord
+    event: CanonicalEvent
+    quantity: Decimal = Decimal("0")
+
+
 class TaxService:
-    def __init__(self, store: DuckDbStore) -> None:
+    def __init__(
+        self,
+        store: DuckDbStore,
+        *,
+        service_swap_tax_mapping_config_path: Path | None = None,
+        service_swap_evidence_dir: Path | None = None,
+    ) -> None:
         self.store = store
         self.price_lookup = HistoricalPriceLookup(store)
+        self.service_swap_tax_mapping = ServiceSwapTaxMappingService(
+            store,
+            config_path=service_swap_tax_mapping_config_path,
+            evidence_dir=service_swap_evidence_dir,
+        )
 
     def rebuild_fifo(self) -> TaxRunResult:
+        if active_fifo_scope(self.store) == WALLET_DEPOT_FIFO_SCOPE:
+            return self._rebuild_wallet_fifo()
+        return self._rebuild_global_fifo()
+
+    def crypto_to_crypto_valuation_events(self) -> list[CanonicalEvent]:
+        """Return economic positive swap events after service-route normalization."""
+        events = self.store.list_canonical_events()
+        return [
+            operation
+            for operation in self._rebuild_operations(events)
+            if isinstance(operation, CanonicalEvent)
+            and operation.event_type == "trade"
+            and operation.quantity > 0
+            and operation.quote_asset is not None
+            and operation.quote_asset.upper() not in FIAT_TAX_EXCLUDED_ASSETS
+            and operation.quote_quantity is not None
+            and operation.quote_quantity != 0
+        ]
+
+    def _rebuild_global_fifo(self) -> TaxRunResult:
+        result = self.preview_global_fifo()
+        self._replace_tax_tables(result.lots, result.tax_lines, result.unmatched)
+        return result
+
+    def preview_global_fifo(
+        self,
+        *,
+        received_asset_first: bool = False,
+    ) -> TaxRunResult:
+        """Calculate global FIFO in memory without replacing productive tax tables."""
         lots_by_asset: defaultdict[str, deque[TaxLot]] = defaultdict(deque)
         all_lots: list[TaxLot] = []
         tax_lines: list[TaxLine] = []
         unmatched: list[TaxUnmatchedDisposal] = []
+        moonpay_cost_basis_by_event = (
+            MoonpayReceiptService(self.store).ready_cost_basis_by_event()
+        )
 
-        for event in self.store.list_canonical_events():
+        events = self.store.list_canonical_events()
+        clawback_reward_event_ids = locked_redemption_clawback_reward_event_ids(
+            self.store, events
+        )
+        for operation in self._rebuild_operations(events):
+            if isinstance(operation, _ServiceSwapOperation):
+                created_lots, created_lines, missing = (
+                    self._process_service_swap_operation(
+                        operation=operation,
+                        lots_by_asset=lots_by_asset,
+                    )
+                )
+                all_lots.extend(created_lots)
+                tax_lines.extend(created_lines)
+                unmatched.extend(missing)
+                continue
+            event = operation
             if event.asset in FIAT_TAX_EXCLUDED_ASSETS:
+                continue
+            moonpay_evidence = moonpay_cost_basis_by_event.get(event.event_id)
+            if moonpay_evidence is not None:
+                lot = self._lot_from_values(
+                    asset=event.asset,
+                    acquired_at=event.event_time,
+                    quantity=event.quantity,
+                    cost_basis_eur_total=moonpay_evidence.cost_basis_eur
+                    or Decimal("0"),
+                    source_event_id=event.event_id,
+                )
+                lots_by_asset[event.asset].append(lot)
+                all_lots.append(lot)
+                continue
+            if self._is_binance_locked_redemption_loss(event):
+                missing = self._consume_fifo_without_tax_line(
+                    event=event,
+                    lots=lots_by_asset[event.asset],
+                    reward_event_ids=clawback_reward_event_ids.get(
+                        event.event_id, frozenset()
+                    ),
+                )
+                unmatched.extend(missing)
                 continue
             if not self._is_tax_relevant_event(event):
                 continue
@@ -57,7 +167,10 @@ class TaxService:
             if event.event_type == "trade" and event.quantity > 0:
                 event_value_eur = self._eur_value(
                     event,
-                    prefer_received_asset=self._use_received_asset_value_for_quote_disposal(event),
+                    prefer_received_asset=self._use_received_asset_value_for_quote_disposal(
+                        event,
+                        received_asset_first=received_asset_first,
+                    ),
                 )
                 lot = self._lot_from_buy(event, value_eur=event_value_eur)
                 lots_by_asset[event.asset].append(lot)
@@ -82,11 +195,16 @@ class TaxService:
                 tax_lines.extend(created)
                 unmatched.extend(missing)
                 if self._is_taxable_quote_acquisition(event):
+                    quote_asset = str(event.quote_asset)
                     lot = self._lot_from_values(
-                        asset=str(event.quote_asset),
+                        asset=quote_asset,
                         acquired_at=event.event_time,
-                        quantity=abs(event.quote_quantity or Decimal("0")),
-                        cost_basis_eur_total=event_value_eur,
+                        quantity=self._net_acquired_quantity(
+                            event=event,
+                            acquired_asset=quote_asset,
+                            gross_quantity=abs(event.quote_quantity or Decimal("0")),
+                        ),
+                        cost_basis_eur_total=self._disposal_value_eur(event),
                         source_event_id=event.event_id,
                     )
                     lots_by_asset[lot.asset].append(lot)
@@ -97,7 +215,6 @@ class TaxService:
                 lots_by_asset[event.asset].append(lot)
                 all_lots.append(lot)
 
-        self._replace_tax_tables(all_lots, tax_lines, unmatched)
         return TaxRunResult(
             lots=all_lots,
             tax_lines=tax_lines,
@@ -105,15 +222,227 @@ class TaxService:
             unmatched=unmatched,
         )
 
+    def _rebuild_wallet_fifo(self) -> TaxRunResult:
+        from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
+        from steuerreport_v2.domain.wallet_fifo_persistence import wallet_fifo_tax_rows
+        from steuerreport_v2.domain.wallet_fifo_runs import WalletFifoParallelRunService
+
+        as_of = datetime.now(timezone.utc)
+        fingerprint = WalletFifoParallelRunService(self.store).input_fingerprint(as_of)
+        state = WalletFifoPreviewService(self.store).replay(as_of=as_of)
+        if state.unmatched:
+            raise ValueError(
+                "Wallet-/Depot-FIFO-Rebuild abgebrochen: "
+                f"{len(state.unmatched)} unmatched Abgaenge muessen zuerst geprueft werden."
+            )
+        lots, tax_lines = wallet_fifo_tax_rows(state)
+        self._replace_tax_tables(
+            lots,
+            tax_lines,
+            [],
+            fifo_method=WALLET_DEPOT_FIFO_SCOPE,
+            input_fingerprint_digest=fingerprint.digest,
+        )
+        return TaxRunResult(
+            lots=lots,
+            tax_lines=tax_lines,
+            unmatched_disposals=0,
+            unmatched=[],
+        )
+
+    def _rebuild_operations(
+        self,
+        events: list[CanonicalEvent],
+    ) -> list[CanonicalEvent | _ServiceSwapOperation]:
+        mappings = self.service_swap_tax_mapping.ready_mappings(events=events)
+        events_by_id = {event.event_id: event for event in events}
+        mapped_event_ids = {
+            event_id
+            for mapping in mappings
+            for event_id in (
+                mapping.source_event_id,
+                mapping.funding_event_id,
+                mapping.deposit_event_id,
+                *mapping.deposit_mirror_event_ids,
+            )
+        }
+        operations: list[
+            tuple[datetime, int, int, CanonicalEvent | _ServiceSwapOperation]
+        ] = [
+            (self._normalize_datetime(event.event_time), 0, index, event)
+            for index, event in enumerate(events)
+            if event.event_id not in mapped_event_ids
+        ]
+        next_sequence = len(events)
+        for mapping in mappings:
+            source_event = events_by_id[mapping.source_event_id]
+            funding_event = events_by_id[mapping.funding_event_id]
+            for offset, operation in enumerate(
+                (
+                    _ServiceSwapOperation(
+                        event_time=self._database_datetime(
+                            mapping.source_event_time
+                        ),
+                        sequence=next_sequence,
+                        kind="direct_cost",
+                        mapping=mapping,
+                        event=source_event,
+                        quantity=mapping.source_direct_cost_quantity,
+                    ),
+                    _ServiceSwapOperation(
+                        event_time=self._database_datetime(
+                            mapping.funding_event_time
+                        ),
+                        sequence=next_sequence + 1,
+                        kind="direct_cost",
+                        mapping=mapping,
+                        event=funding_event,
+                        quantity=mapping.funding_direct_cost_quantity,
+                    ),
+                    _ServiceSwapOperation(
+                        event_time=self._database_datetime(mapping.swap_event_time),
+                        sequence=next_sequence + 2,
+                        kind="swap",
+                        mapping=mapping,
+                        event=source_event,
+                    ),
+                )
+            ):
+                operations.append(
+                    (
+                        self._normalize_datetime(operation.event_time),
+                        1,
+                        next_sequence + offset,
+                        operation,
+                    )
+                )
+            next_sequence += 3
+        operations.sort(key=lambda item: (item[0], item[1], item[2]))
+        return [operation for _time, _priority, _sequence, operation in operations]
+
+    def _process_service_swap_operation(
+        self,
+        *,
+        operation: _ServiceSwapOperation,
+        lots_by_asset: defaultdict[str, deque[TaxLot]],
+    ) -> tuple[list[TaxLot], list[TaxLine], list[TaxUnmatchedDisposal]]:
+        mapping = operation.mapping
+        if operation.kind == "direct_cost":
+            if operation.quantity <= 0:
+                return [], [], []
+            cost_value = self._required_asset_value_eur(
+                mapping.direct_cost_asset,
+                operation.quantity,
+                operation.event_time,
+                mapping_id=mapping.mapping_id,
+            )
+            fee_event = operation.event.model_copy(
+                update={
+                    "event_time": operation.event_time,
+                    "event_type": "trade",
+                    "asset": mapping.direct_cost_asset,
+                    "quantity": -operation.quantity,
+                    "quote_asset": "EUR",
+                    "quote_quantity": cost_value,
+                    "fee_asset": None,
+                    "fee_quantity": None,
+                }
+            )
+            lines, missing = self._consume_fifo_asset(
+                asset=mapping.direct_cost_asset,
+                quantity=operation.quantity,
+                disposed_at=operation.event_time,
+                proceeds_total=cost_value,
+                event=fee_event,
+                lots=lots_by_asset[mapping.direct_cost_asset],
+            )
+            return [], lines, missing
+        if operation.kind != "swap":
+            raise ValueError(f"unsupported_service_swap_operation:{operation.kind}")
+        output_value = self._required_asset_value_eur(
+            mapping.acquired_asset,
+            mapping.acquired_quantity,
+            operation.event_time,
+            mapping_id=mapping.mapping_id,
+        )
+        direct_cost_value = sum(
+            (
+                self._required_asset_value_eur(
+                    mapping.direct_cost_asset,
+                    quantity,
+                    event_time,
+                    mapping_id=mapping.mapping_id,
+                )
+                for quantity, event_time in (
+                    (
+                        mapping.source_direct_cost_quantity,
+                        mapping.source_event_time,
+                    ),
+                    (
+                        mapping.funding_direct_cost_quantity,
+                        mapping.funding_event_time,
+                    ),
+                )
+            ),
+            Decimal("0"),
+        )
+        swap_event = operation.event.model_copy(
+            update={
+                "event_time": operation.event_time,
+                "event_type": "trade",
+                "asset": mapping.source_asset,
+                "quantity": -mapping.source_quantity,
+                "quote_asset": mapping.acquired_asset,
+                "quote_quantity": mapping.acquired_quantity,
+                "fee_asset": None,
+                "fee_quantity": None,
+                "tx_id": mapping.swap_tx_id,
+            }
+        )
+        lines, missing = self._consume_fifo_asset(
+            asset=mapping.source_asset,
+            quantity=mapping.source_quantity,
+            disposed_at=operation.event_time,
+            proceeds_total=max(output_value - direct_cost_value, Decimal("0")),
+            event=swap_event,
+            lots=lots_by_asset[mapping.source_asset],
+        )
+        lot = self._lot_from_values(
+            asset=mapping.acquired_asset,
+            acquired_at=operation.event_time,
+            quantity=mapping.acquired_quantity,
+            cost_basis_eur_total=output_value,
+            source_event_id=mapping.deposit_event_id,
+        )
+        lots_by_asset[mapping.acquired_asset].append(lot)
+        return [lot], lines, missing
+
+    def _required_asset_value_eur(
+        self,
+        asset: str,
+        quantity: Decimal,
+        at: datetime,
+        *,
+        mapping_id: str,
+    ) -> Decimal:
+        value = self._asset_value_eur(asset, quantity, at)
+        if value is None:
+            raise RuntimeError(
+                f"service_swap_tax_mapping_price_missing:{mapping_id}:{asset}:{at.isoformat()}"
+            )
+        return value
+
     def latest_summary(self) -> TaxRunSummary | None:
         with self.store.connect() as con:
             row = con.execute(
                 """
-                select run_id, tax_lines_count, unmatched_disposals, created_at
+                select run_id, tax_lines_count, unmatched_disposals, created_at,
+                       coalesce(fifo_method, ?), input_fingerprint_digest
                 from tax_run_summaries
                 order by created_at desc
                 limit 1
-                """
+                """,
+                [GLOBAL_ASSET_FIFO_SCOPE],
             ).fetchone()
         if row is None:
             return None
@@ -122,6 +451,8 @@ class TaxService:
             tax_lines_count=row[1],
             unmatched_disposals=row[2],
             created_at=row[3],
+            fifo_method=row[4],
+            input_fingerprint_digest=row[5],
         )
 
     def list_tax_lines(self) -> list[TaxLine]:
@@ -129,13 +460,17 @@ class TaxService:
             rows = con.execute(
                 """
                 select
-                    l.tax_line_id, l.asset, lot.acquired_at, l.disposed_at, l.quantity,
+                    l.tax_line_id, l.asset, coalesce(l.acquired_at, lot.acquired_at),
+                    l.disposed_at, l.quantity,
                     acquisition_cost_eur, disposal_proceeds_eur, gain_loss_eur,
-                    holding_days, l.source_event_id, l.lot_id
+                    holding_days, l.source_event_id, l.lot_id, l.pool_id,
+                    l.acquisition_source_event_id, l.origin_lot_id,
+                    coalesce(l.fifo_method, ?)
                 from tax_lines l
                 join tax_lots lot on lot.lot_id = l.lot_id
                 order by l.disposed_at, l.tax_line_id
-                """
+                """,
+                [GLOBAL_ASSET_FIFO_SCOPE],
             ).fetchall()
         return [
             TaxLine(
@@ -150,6 +485,10 @@ class TaxService:
                 holding_days=row[8],
                 source_event_id=row[9],
                 lot_id=row[10],
+                pool_id=row[11],
+                acquisition_source_event_id=row[12],
+                origin_lot_id=row[13],
+                fifo_method=row[14],
             )
             for row in rows
         ]
@@ -160,10 +499,12 @@ class TaxService:
                 """
                 select
                     lot_id, asset, acquired_at, quantity_total,
-                    quantity_remaining, cost_basis_eur_total, source_event_id
+                    quantity_remaining, cost_basis_eur_total, source_event_id,
+                    pool_id, origin_lot_id, coalesce(fifo_method, ?)
                 from tax_lots
                 order by acquired_at, lot_id
-                """
+                """,
+                [GLOBAL_ASSET_FIFO_SCOPE],
             ).fetchall()
         return [
             TaxLot(
@@ -174,6 +515,9 @@ class TaxService:
                 quantity_remaining=row[4],
                 cost_basis_eur_total=row[5],
                 source_event_id=row[6],
+                pool_id=row[7],
+                origin_lot_id=row[8],
+                fifo_method=row[9],
             )
             for row in rows
         ]
@@ -304,7 +648,11 @@ class TaxService:
         return self._lot_from_values(
             asset=event.asset,
             acquired_at=event.event_time,
-            quantity=event.quantity,
+            quantity=self._net_acquired_quantity(
+                event=event,
+                acquired_asset=event.asset,
+                gross_quantity=event.quantity,
+            ),
             cost_basis_eur_total=cost_basis,
             source_event_id=event.event_id,
         )
@@ -345,6 +693,10 @@ class TaxService:
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
+
+    @classmethod
+    def _database_datetime(cls, value: datetime) -> datetime:
+        return cls._normalize_datetime(value).replace(tzinfo=None)
 
     @staticmethod
     def _remaining_cost_basis(lot: TaxLot, quantity: Decimal | None = None) -> Decimal:
@@ -429,6 +781,61 @@ class TaxService:
             and event.quote_quantity is not None
         )
 
+    @staticmethod
+    def _is_binance_locked_redemption_loss(event: CanonicalEvent) -> bool:
+        return (
+            event.source.strip().lower() == "binance_simple_earn_api"
+            and event.event_type == "fee"
+            and event.quantity < 0
+            and str(event.source_ref or "").startswith(
+                "locked_redemption_loss:"
+            )
+        )
+
+    def _consume_fifo_without_tax_line(
+        self,
+        *,
+        event: CanonicalEvent,
+        lots: deque[TaxLot],
+        reward_event_ids: frozenset[str],
+    ) -> list[TaxUnmatchedDisposal]:
+        quantity = abs(event.quantity)
+        quantity_remaining = quantity
+        eligible_lots = [
+            lot for lot in lots if lot.source_event_id in reward_event_ids
+        ]
+        available_before = sum(
+            (lot.quantity_remaining for lot in eligible_lots), Decimal("0")
+        )
+        for lot in eligible_lots:
+            if quantity_remaining <= 0:
+                break
+            used_quantity = min(quantity_remaining, lot.quantity_remaining)
+            lot.quantity_remaining -= used_quantity
+            quantity_remaining -= used_quantity
+            if lot.quantity_remaining == 0:
+                lots.remove(lot)
+        if quantity_remaining == 0:
+            return []
+        return [
+            TaxUnmatchedDisposal(
+                unmatched_id=str(uuid4()),
+                source_event_id=event.event_id,
+                source=event.source,
+                source_ref=event.source_ref,
+                raw_object_id=event.raw_object_id,
+                event_time=event.event_time,
+                event_type=event.event_type,
+                account=event.account,
+                asset=event.asset,
+                quantity=quantity,
+                matched_quantity=quantity - quantity_remaining,
+                missing_quantity=quantity_remaining,
+                available_before=available_before,
+                proceeds_total_eur=Decimal("0"),
+            )
+        ]
+
     def _consume_fifo(
         self,
         event: CanonicalEvent,
@@ -438,7 +845,7 @@ class TaxService:
             asset=event.asset,
             quantity=abs(event.quantity),
             disposed_at=event.event_time,
-            proceeds_total=self._eur_value(event),
+            proceeds_total=self._disposal_value_eur(event),
             event=event,
             lots=lots,
         )
@@ -541,13 +948,21 @@ class TaxService:
             and event.quote_quantity != 0
         )
 
-    def _use_received_asset_value_for_quote_disposal(self, event: CanonicalEvent) -> bool:
+    def _use_received_asset_value_for_quote_disposal(
+        self,
+        event: CanonicalEvent,
+        *,
+        received_asset_first: bool = False,
+    ) -> bool:
         if event.quote_asset is None or event.quote_quantity is None:
             return False
         return (
             event.quantity > 0
             and event.quote_asset not in FIAT_TAX_EXCLUDED_ASSETS
-            and event.asset.upper() in STABLE_VALUE_ANCHOR_ASSETS
+            and (
+                received_asset_first
+                or event.asset.upper() in STABLE_VALUE_ANCHOR_ASSETS
+            )
         )
 
     def _available_quantity(self, lots: deque[TaxLot]) -> Decimal:
@@ -574,6 +989,41 @@ class TaxService:
             return Decimal("0")
         return value
 
+    def _disposal_value_eur(self, event: CanonicalEvent) -> Decimal:
+        value = self._eur_value(event)
+        if (
+            event.event_type == "trade"
+            and event.quantity < 0
+            and event.quote_asset
+            and event.fee_asset
+            and event.fee_quantity
+            and event.quote_asset.upper() == event.fee_asset.upper()
+        ):
+            fee_value = self._asset_value_eur(
+                event.fee_asset,
+                abs(event.fee_quantity),
+                event.event_time,
+            )
+            if fee_value is not None:
+                return max(value - fee_value, Decimal("0"))
+        return value
+
+    @staticmethod
+    def _net_acquired_quantity(
+        *,
+        event: CanonicalEvent,
+        acquired_asset: str,
+        gross_quantity: Decimal,
+    ) -> Decimal:
+        if (
+            gross_quantity > 0
+            and event.fee_asset
+            and event.fee_quantity
+            and event.fee_asset.upper() == acquired_asset.upper()
+        ):
+            return max(gross_quantity - abs(event.fee_quantity), Decimal("0"))
+        return gross_quantity
+
     def _asset_value_eur(self, asset: str, quantity: Decimal, at: datetime) -> Decimal | None:
         if asset == "EUR":
             return quantity
@@ -587,9 +1037,13 @@ class TaxService:
         lots: list[TaxLot],
         tax_lines: list[TaxLine],
         unmatched_disposals: list[TaxUnmatchedDisposal],
+        *,
+        fifo_method: str = GLOBAL_ASSET_FIFO_SCOPE,
+        input_fingerprint_digest: str | None = None,
     ) -> None:
         created_at = datetime.now(timezone.utc)
         with self.store.connect() as con:
+            con.execute("begin transaction")
             con.execute("delete from tax_lots")
             con.execute("delete from tax_lines")
             con.execute("delete from tax_run_summaries")
@@ -605,6 +1059,9 @@ class TaxService:
                             str(lot.quantity_remaining),
                             str(lot.cost_basis_eur_total),
                             lot.source_event_id,
+                            lot.pool_id,
+                            lot.origin_lot_id,
+                            lot.fifo_method,
                             created_at,
                         )
                         for lot in lots
@@ -617,6 +1074,9 @@ class TaxService:
                         "quantity_remaining",
                         "cost_basis_eur_total",
                         "source_event_id",
+                        "pool_id",
+                        "origin_lot_id",
+                        "fifo_method",
                         "created_at",
                     ],
                 )
@@ -626,14 +1086,16 @@ class TaxService:
                     insert into tax_lots (
                         lot_id, asset, acquired_at, quantity_total,
                         quantity_remaining, cost_basis_eur_total,
-                        source_event_id, created_at
+                        source_event_id, pool_id, origin_lot_id,
+                        fifo_method, created_at
                     )
                     select
                         lot_id, asset, acquired_at,
                         cast(quantity_total as decimal(38, 18)),
                         cast(quantity_remaining as decimal(38, 18)),
                         cast(cost_basis_eur_total as decimal(38, 18)),
-                        source_event_id, created_at
+                        source_event_id, pool_id, origin_lot_id,
+                        fifo_method, created_at
                     from tax_lots_to_insert
                     """
                 )
@@ -641,11 +1103,19 @@ class TaxService:
             con.execute(
                 """
                 insert into tax_run_summaries (
-                    run_id, tax_lines_count, unmatched_disposals, created_at
+                    run_id, tax_lines_count, unmatched_disposals, created_at,
+                    fifo_method, input_fingerprint_digest
                 )
-                values (?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?)
                 """,
-                [str(uuid4()), len(tax_lines), len(unmatched_disposals), created_at],
+                [
+                    str(uuid4()),
+                    len(tax_lines),
+                    len(unmatched_disposals),
+                    created_at,
+                    fifo_method,
+                    input_fingerprint_digest,
+                ],
             )
             if tax_lines:
                 line_frame = pd.DataFrame(
@@ -661,6 +1131,11 @@ class TaxService:
                             line.holding_days,
                             line.source_event_id,
                             line.lot_id,
+                            line.pool_id,
+                            line.acquired_at,
+                            line.acquisition_source_event_id,
+                            line.origin_lot_id,
+                            line.fifo_method,
                             created_at,
                         )
                         for line in tax_lines
@@ -676,6 +1151,11 @@ class TaxService:
                         "holding_days",
                         "source_event_id",
                         "lot_id",
+                        "pool_id",
+                        "acquired_at",
+                        "acquisition_source_event_id",
+                        "origin_lot_id",
+                        "fifo_method",
                         "created_at",
                     ],
                 )
@@ -686,7 +1166,9 @@ class TaxService:
                         tax_line_id, asset, disposed_at, quantity,
                         acquisition_cost_eur, disposal_proceeds_eur,
                         gain_loss_eur, holding_days, source_event_id,
-                        lot_id, created_at
+                        lot_id, pool_id, acquired_at,
+                        acquisition_source_event_id, origin_lot_id,
+                        fifo_method, created_at
                     )
                     select
                         tax_line_id, asset, disposed_at,
@@ -694,7 +1176,9 @@ class TaxService:
                         cast(acquisition_cost_eur as decimal(38, 18)),
                         cast(disposal_proceeds_eur as decimal(38, 18)),
                         cast(gain_loss_eur as decimal(38, 18)),
-                        holding_days, source_event_id, lot_id, created_at
+                        holding_days, source_event_id, lot_id, pool_id,
+                        acquired_at, acquisition_source_event_id, origin_lot_id,
+                        fifo_method, created_at
                     from tax_lines_to_insert
                     """
                 )
@@ -761,3 +1245,36 @@ class TaxService:
                     """
                 )
                 con.unregister("tax_unmatched_to_insert")
+            counts = con.execute(
+                """
+                select
+                    (select count(*) from tax_lots),
+                    (select count(*) from tax_lines),
+                    (select count(*) from tax_unmatched_disposals),
+                    (select count(*) from tax_run_summaries),
+                    (
+                        select count(*)
+                        from tax_lines line
+                        left join tax_lots lot on lot.lot_id = line.lot_id
+                        where lot.lot_id is null
+                    ),
+                    (select count(*) from tax_lots where coalesce(fifo_method, '') <> ?),
+                    (select count(*) from tax_lines where coalesce(fifo_method, '') <> ?)
+                """,
+                [fifo_method, fifo_method],
+            ).fetchone()
+            expected = (
+                len(lots),
+                len(tax_lines),
+                len(unmatched_disposals),
+                1,
+                0,
+                0,
+                0,
+            )
+            if tuple(int(value) for value in counts) != expected:
+                raise ValueError(
+                    "Atomarer Tax-Tabellentausch hat die internen "
+                    f"Integritaetschecks nicht bestanden: {counts} != {expected}."
+                )
+            con.execute("commit")

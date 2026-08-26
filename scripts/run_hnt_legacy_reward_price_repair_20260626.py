@@ -18,10 +18,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from steuerreport_v2.contracts.prices import PricePointCreate
-from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.pipeline import PipelineService
-from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.contracts.prices import PricePointCreate  # noqa: E402
+from steuerreport_v2.db.duckdb_store import DuckDbStore  # noqa: E402
+from steuerreport_v2.domain.pipeline import PipelineService  # noqa: E402
+from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup  # noqa: E402
 
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_V1_FX_DB = Path("/root/.local/share/steuerreport/steuerreport.db")

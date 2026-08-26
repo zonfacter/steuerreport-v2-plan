@@ -98,11 +98,16 @@ class HistoricalPriceLookup:
         return normalized.startswith(DERIVED_PRICE_SOURCE_PREFIXES)
 
     @classmethod
-    def _selection_key(cls, point: PricePoint) -> tuple[datetime, int, Decimal, str]:
+    def _selection_key(
+        cls,
+        point: PricePoint,
+    ) -> tuple[datetime, int, Decimal, str, Decimal, str]:
         return (
             point.priced_at,
             cls._source_priority(point.source),
             point.confidence,
+            point.source,
+            point.price_eur,
             point.price_id,
         )
 

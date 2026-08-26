@@ -19,7 +19,7 @@ from steuerreport_v2.contracts.reports import (
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.exports import ExportService
 from steuerreport_v2.domain.review import ReviewService
-from steuerreport_v2.domain.tax_years import TaxYearService
+from steuerreport_v2.domain.tax_time import event_reporting_year_sql, reporting_year_sql
 from steuerreport_v2.domain.valuation import PriceCoverageService
 
 
@@ -266,21 +266,22 @@ class ReportCenterService:
     ) -> list[ReportYearCard]:
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 with years as (
                     select year from range(2020, 2027) as t(year)
                     union
-                    select distinct date_part('year', disposed_at)::integer as year from tax_lines
+                    select distinct {reporting_year_sql('disposed_at')} as year from tax_lines
                     union
-                    select distinct date_part('year', event_time)::integer as year
-                    from canonical_events
-                    where event_type in ('reward', 'staking', 'mining', 'income')
+                    select distinct {event_reporting_year_sql('event', 'raw')} as year
+                    from canonical_events event
+                    left join raw_objects raw on raw.raw_object_id = event.raw_object_id
+                    where event.event_type in ('reward', 'staking', 'mining', 'income')
                     union
-                    select distinct date_part('year', event_time)::integer as year from derivative_lines
+                    select distinct {reporting_year_sql('event_time')} as year from derivative_lines
                 ),
                 taxable as (
                     select
-                        date_part('year', disposed_at)::integer as year,
+                        {reporting_year_sql('disposed_at')} as year,
                         count(*)::integer as tax_lines_count,
                         coalesce(sum(gain_loss_eur), 0) as realized_gain_loss_eur
                     from tax_lines
@@ -289,7 +290,7 @@ class ReportCenterService:
                 ),
                 tax_free as (
                     select
-                        date_part('year', disposed_at)::integer as year,
+                        {reporting_year_sql('disposed_at')} as year,
                         count(*)::integer as tax_free_lines_count,
                         coalesce(sum(gain_loss_eur), 0) as tax_free_gain_loss_eur
                     from tax_lines
@@ -298,10 +299,11 @@ class ReportCenterService:
                 ),
                 income as (
                     select
-                        date_part('year', e.event_time)::integer as year,
+                        {event_reporting_year_sql('e', 'raw')} as year,
                         count(*)::integer as income_events_count,
                         coalesce(sum(l.cost_basis_eur_total), 0) as rewards_income_eur
                     from canonical_events e
+                    left join raw_objects raw on raw.raw_object_id = e.raw_object_id
                     left join tax_lots l on l.source_event_id = e.event_id
                     where e.event_type in ('reward', 'mining')
                       and upper(e.asset) in ('HNT', 'IOT', 'MOBILE')
@@ -309,23 +311,24 @@ class ReportCenterService:
                 ),
                 derivatives as (
                     select
-                        date_part('year', event_time)::integer as year,
+                        {reporting_year_sql('event_time')} as year,
                         count(*)::integer as derivative_lines_count,
                         coalesce(sum(value_eur), 0) as derivative_pnl_eur
                     from derivative_lines
                     group by year
                 ),
                 activity as (
-                    select date_part('year', disposed_at)::integer as year, count(*)::integer as events
+                    select {reporting_year_sql('disposed_at')} as year, count(*)::integer as events
                     from tax_lines
                     group by year
                     union all
-                    select date_part('year', event_time)::integer as year, count(*)::integer as events
-                    from canonical_events
-                    where event_type in ('reward', 'staking', 'mining', 'income')
+                    select {event_reporting_year_sql('event', 'raw')} as year, count(*)::integer as events
+                    from canonical_events event
+                    left join raw_objects raw on raw.raw_object_id = event.raw_object_id
+                    where event.event_type in ('reward', 'staking', 'mining', 'income')
                     group by year
                     union all
-                    select date_part('year', event_time)::integer as year, count(*)::integer as events
+                    select {reporting_year_sql('event_time')} as year, count(*)::integer as events
                     from derivative_lines
                     group by year
                 ),

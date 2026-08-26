@@ -1,17 +1,22 @@
 import sqlite3
 from datetime import datetime, timezone
 from decimal import Decimal
+import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
+import httpx
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.exports import PdfExportRequest
+from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
 from steuerreport_v2.domain.exports import ExportService
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
@@ -53,7 +58,7 @@ def test_net_flows_endpoint_filters_by_year(tmp_path):
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["year"] == 2021
-    assert data["available_years"] == [2020, 2021]
+    assert data["available_years"] == [2021]
     assert len(data["edges"]) == 1
     assert data["edges"][0]["source_node"] == "external"
     assert data["edges"][0]["target_node"] == "pionex-demo"
@@ -182,6 +187,106 @@ def test_pipeline_suppresses_solana_rpc_duplicate_reward_income_from_overlapping
         ("reward", "HNT", Decimal("0.401074030000000000"), "same-hnt-reward-tx"),
         ("unknown", "HNT", Decimal("0E-18"), "same-hnt-reward-tx"),
     ]
+
+
+def test_pipeline_carries_exact_defi_position_principal_without_taxable_roundtrip(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    wallet = "wallet-1"
+    position_mint = "PositionMint111111111111111111111111111111"
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="solana_rpc",
+            filename="defi-position-principal.json",
+            file_hash="unit:defi-position-principal-pipeline",
+        )
+    )
+    raw = store.add_raw_objects(
+        batch.batch_id,
+        [
+            RawObjectCreate(
+                row_number=1,
+                payload_json=json.dumps(
+                    {
+                        "event_type": "swap_in_aggregated",
+                        "raw_row": str(
+                            {
+                                "from_asset": "HNT_MINT",
+                                "from_quantity": "800",
+                                "jupiter_aggregated": True,
+                                "to_asset": position_mint,
+                                "to_quantity": "1",
+                            }
+                        ),
+                    }
+                ),
+            ),
+            RawObjectCreate(
+                row_number=2,
+                payload_json=json.dumps(
+                    {
+                        "event_type": "swap_in_aggregated",
+                        "raw_row": str(
+                            {
+                                "from_asset": position_mint,
+                                "from_quantity": "1",
+                                "jupiter_aggregated": True,
+                                "to_asset": "HNT_MINT",
+                                "to_quantity": "800",
+                            }
+                        ),
+                    }
+                ),
+            ),
+        ],
+    )
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2023, 1, 1, tzinfo=timezone.utc),
+                event_type="income",
+                asset="HNT",
+                quantity=Decimal("1000"),
+                account=wallet,
+            ),
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2023, 8, 1, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("-800"),
+                account=wallet,
+                tx_id="position-lock",
+                raw_object_id=raw[0].raw_object_id,
+            ),
+            CanonicalEventCreate(
+                source="solana_rpc",
+                event_time=datetime(2024, 4, 25, tzinfo=timezone.utc),
+                event_type="income",
+                asset="HNT",
+                quantity=Decimal("800"),
+                account=wallet,
+                tx_id="position-return",
+                raw_object_id=raw[1].raw_object_id,
+            ),
+        ]
+    )
+
+    changed = PipelineService(store)._carry_forward_solana_defi_position_principal()
+    tax = TaxService(store).rebuild_fifo()
+
+    assert changed == 2
+    with store.connect() as con:
+        rows = con.execute(
+            """
+            select tx_id, event_type from canonical_events
+            where tx_id in ('position-lock', 'position-return') order by tx_id
+            """
+        ).fetchall()
+    assert rows == [("position-lock", "transfer"), ("position-return", "transfer")]
+    assert tax.tax_lines == []
+    assert len(tax.lots) == 1
+    assert tax.lots[0].quantity_remaining == Decimal("1000.000000000000000000")
 
 
 def test_pipeline_carries_forward_solana_helium_claim_when_legacy_mining_matches(tmp_path):
@@ -860,6 +965,133 @@ def test_current_portfolio_price_backfill_imports_live_price(tmp_path, monkeypat
     latest = store.latest_price_points()["HNT"]
     assert latest.price_eur == Decimal("3.210000000000000000")
     assert latest.source == "coingecko:simple-price:eur"
+
+
+def test_current_portfolio_price_backfill_prefers_exact_defillama_mint(
+    tmp_path,
+    monkeypatch,
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="manual-test",
+            source_ref="jlwsol-balance",
+            event_time=datetime(2026, 5, 24, 12, tzinfo=timezone.utc),
+            event_type="transfer",
+            asset="JLWSOL",
+            quantity=Decimal("2"),
+            account="wallet",
+        )
+    )
+    BalanceLedgerBuilder(store).rebuild()
+    mint_id = "solana:2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU"
+    config = tmp_path / "prices.json"
+    config.write_text(
+        json.dumps(
+            {
+                "assets": [
+                    {
+                        "symbol": "JLWSOL",
+                        "defillama_id": mint_id,
+                        "store_keys": ["JLWSOL"],
+                        "aliases": ["JLWSOL"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        ExternalPriceBackfillService,
+        "_fetch_defillama_current_prices_usd",
+        lambda self, client, token_ids: {mint_id: Decimal("75")},
+    )
+    monkeypatch.setattr(
+        ExternalPriceBackfillService,
+        "_fetch_frankfurter_usd_eur",
+        lambda self, client: (Decimal("0.90"), "2026-05-22"),
+    )
+    client = TestClient(create_app(store))
+
+    response = client.post(
+        "/api/v1/prices/backfill/current-portfolio",
+        json={
+            "config_path": str(config),
+            "assets": ["JLWSOL"],
+            "max_requests": 5,
+            "dry_run": False,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["imported_prices"] == 1
+    assert body["jobs"][0]["provider_id"] == mint_id
+    assert body["jobs"][0]["price_eur"] == "67.50"
+    assert (
+        body["jobs"][0]["source"]
+        == "defillama_token_current:usd_eur:frankfurter_latest:2026-05-22"
+    )
+    latest = store.latest_price_points()["JLWSOL"]
+    assert latest.price_eur == Decimal("67.500000000000000000")
+
+
+def test_current_portfolio_price_backfill_uses_current_frankfurter_v1_endpoint(
+    tmp_path,
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = ExternalPriceBackfillService(store)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "api.frankfurter.dev"
+        assert request.url.path == "/v1/latest"
+        assert request.url.params["from"] == "USD"
+        assert request.url.params["to"] == "EUR"
+        return httpx.Response(
+            200,
+            json={
+                "amount": 1.0,
+                "base": "USD",
+                "date": "2026-07-17",
+                "rates": {"EUR": 0.87451},
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        rate, rate_date = service._fetch_frankfurter_usd_eur(client)
+
+    assert rate == Decimal("0.87451")
+    assert rate_date == "2026-07-17"
+
+
+def test_production_price_config_binds_ambiguous_tokens_to_exact_solana_mints():
+    payload = json.loads(
+        (
+            Path(__file__).resolve().parents[2]
+            / "configs"
+            / "crypto_price_sources.json"
+        ).read_text(encoding="utf-8")
+    )
+    by_symbol = {item["symbol"]: item for item in payload["assets"]}
+
+    assert by_symbol["CBDC"]["coingecko_id"] == "central-bank-digital-currency-memecoin"
+    assert (
+        by_symbol["CBDC"]["defillama_id"]
+        == "solana:2KFZCkfxj1Us8YRQZa5vktSxy3GPzFZvVhWj91n8Fv2J"
+    )
+    assert by_symbol["CWIF"]["coingecko_id"] == "catwifhat-2"
+    assert (
+        by_symbol["CWIF"]["defillama_id"]
+        == "solana:7atgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"
+    )
+    assert "coingecko_id" not in by_symbol["JLWSOL"]
+    assert (
+        by_symbol["JLWSOL"]["defillama_id"]
+        == "solana:2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU"
+    )
+    assert by_symbol["SHARK"]["coingecko_id"] == "sharky-fi"
+    assert by_symbol["WBTC"]["coingecko_id"] == "wrapped-btc-wormhole"
 
 
 def test_latest_prices_endpoint_lists_effective_prices(tmp_path):

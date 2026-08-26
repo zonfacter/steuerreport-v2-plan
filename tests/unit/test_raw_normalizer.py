@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import json
 
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
@@ -78,6 +79,38 @@ def test_binance_profile_maps_utc_time_operation_and_change(tmp_path):
     assert events[0].asset == "BTC"
     assert events[0].quantity == Decimal("+0.5")
     assert events[0].account == "binance"
+
+
+def test_binance_filename_timezone_is_converted_to_utc(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="Binance-Transaction-History-202605061835(UTC+2)_test.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "21-12-25 18:22:42,Spot,Withdraw,USDT,-201,Withdraw fee is included\n"
+        ),
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    assert events[0].event_time == datetime(2021, 12, 25, 16, 22, 42, tzinfo=timezone.utc)
+
+
+def test_binance_timezone_column_is_converted_to_utc(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="binance.csv",
+        content=(
+            "Date(UTC+2),Account,Operation,Coin,Change\n"
+            "2022-01-19 14:52:45,Spot,Withdraw,USDT,-1246.38419\n"
+        ),
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    assert events[0].event_time == datetime(2022, 1, 19, 12, 52, 45, tzinfo=timezone.utc)
 
 
 def test_binance_withdrawal_api_normalizes_as_zero_quantity_evidence(tmp_path):
@@ -196,6 +229,61 @@ def test_helium_raw_export_derives_hnt_quantity_and_transaction_hash(tmp_path):
     assert events[0].account == main_wallet
 
 
+def test_helium_documented_staking_return_is_split_into_principal_and_reward(
+    tmp_path,
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    main_wallet = RawNormalizer.HELIUM_MAIN_LEGACY_WALLET
+    tx_id = "staking-return-tx"
+    content = (
+        "block;date;type;transaction_hash;hnt_amount;hnt_fee;mobile_amount;"
+        "usd_oracle_price;usd_amount;usd_fee;payer;payee\n"
+        f"1684084;31.12.2022 21:57;payment_v2;{tx_id};73,9345895;0;0;"
+        f"1,52;112,38;0;staking-wallet;{main_wallet}\n"
+    )
+    batch = CsvRawImporter(store).import_text(
+        source="helium",
+        filename="helium-main.csv",
+        content=content,
+    )
+    config_path = tmp_path / "fairspot-staking.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "review_status": "approved_evidence_overlay",
+                "main_wallet": main_wallet,
+                "primary_source": {"file_hash": batch.file_hash},
+                "return_splits": [
+                    {
+                        "tx_id": tx_id,
+                        "received_quantity": "73.9345895",
+                        "principal_quantity": "56.2836845",
+                        "reward_quantity": "17.650905",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    normalizer = RawNormalizer(
+        store,
+        fairspot_staking_config_path=config_path,
+    )
+
+    first = normalizer.normalize_batch(batch.batch_id)
+    second = normalizer.normalize_batch(batch.batch_id)
+
+    assert len(first) == 2
+    assert {event.event_type for event in first} == {"transfer", "reward"}
+    principal = next(event for event in first if event.event_type == "transfer")
+    reward = next(event for event in first if event.event_type == "reward")
+    assert principal.quantity == Decimal("56.2836845")
+    assert reward.quantity == Decimal("17.650905")
+    assert principal.quantity + reward.quantity == Decimal("73.9345895")
+    assert principal.tx_id == reward.tx_id == tx_id
+    assert {event.event_id for event in first} == {event.event_id for event in second}
+
+
 def test_helium_raw_export_derives_legacy_scientific_hnt_before_mobile_column(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
@@ -275,6 +363,329 @@ def test_solana_rpc_helium_reward_instruction_maps_incoming_hnt_to_reward(tmp_pa
     assert by_tx["reward-tx"].event_type == "reward"
     assert by_tx["reward-tx"].quantity == Decimal("3.488129")
     assert by_tx["normal-transfer-tx"].event_type == "income"
+
+
+def test_solana_documented_staking_return_is_split_into_principal_and_reward(
+    tmp_path,
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    wallet = RawNormalizer.HELIUM_MAIN_LEGACY_WALLET
+    tx_id = "solana-staking-return"
+    file_hash = "sha256:solana-staking-return"
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="solana-staking.json",
+        file_hash=file_hash,
+        rows=[
+            {
+                "timestamp_utc": "2026-01-02T04:18:08Z",
+                "event_type": "transfer",
+                "asset": "SHARK",
+                "quantity": "963.536668",
+                "side": "in",
+                "tx_id": tx_id,
+                "wallet_address": wallet,
+                "movement_classification": "defi_position_transfer",
+                "classification_reason": "position_withdraw_instruction",
+            }
+        ],
+    )
+    config_path = tmp_path / "solana-staking.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "review_status": "approved_evidence_overlay",
+                "positions": [
+                    {
+                        "wallet": wallet,
+                        "asset": "SHARK",
+                        "position_return": {
+                            "tx_id": tx_id,
+                            "source_file_hash": file_hash,
+                            "received_quantity": "963.536668",
+                            "principal_quantity": "677.465346",
+                            "reward_quantity": "286.071322",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    normalizer = RawNormalizer(
+        store,
+        solana_staking_config_path=config_path,
+    )
+
+    first = normalizer.normalize_batch(batch.batch_id)
+    second = normalizer.normalize_batch(batch.batch_id)
+
+    principal = next(event for event in first if event.event_type == "transfer")
+    reward = next(event for event in first if event.event_type == "reward")
+    assert principal.quantity == Decimal("677.465346")
+    assert reward.quantity == Decimal("286.071322")
+    assert principal.quantity + reward.quantity == Decimal("963.536668")
+    assert {event.event_id for event in first} == {event.event_id for event in second}
+
+
+def test_solana_rpc_spacex_xstock_mint_alias_keeps_swap_as_trade(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    tx_id = "spacex-xstock-swap"
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="jup-wallet-spcxx.json",
+        file_hash="jup-wallet-spcxx",
+        rows=[
+            {
+                "timestamp_utc": "2026-06-12T16:26:50+00:00",
+                "event_type": "sol_transfer",
+                "asset": "SOL",
+                "quantity": "3.002167496",
+                "side": "out",
+                "tx_id": tx_id,
+                "wallet_address": "wallet",
+            },
+            {
+                "timestamp_utc": "2026-06-12T16:26:50+00:00",
+                "event_type": "token_transfer",
+                "asset": "XS3OZW...QPH8",
+                "quantity": "1.18234846",
+                "side": "in",
+                "tx_id": tx_id,
+                "wallet_address": "wallet",
+            },
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    trade = next(event for event in events if event.event_type == "trade")
+    assert trade.asset == "SPCXX"
+    assert trade.quantity == Decimal("1.18234846")
+    assert trade.quote_asset == "SOL"
+    assert trade.quote_quantity == Decimal("3.002167496")
+    assert not any(event.event_type == "income" for event in events)
+
+
+def test_solana_rpc_helium_vsr_position_receipt_keeps_principal_transfer_tax_neutral(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    receipt = "5MFEM7LYTSGP2X3TVJXHXLENXSLRW6DQR3PSPJXVUETF"
+    tx_id = "helium-vsr-position-deposit"
+    rows = [
+        {
+            "timestamp_utc": "2023-08-01T06:43:43+00:00",
+            "event_type": "swap_out_aggregated",
+            "asset": "MOBILE",
+            "quantity": "64729.546356",
+            "side": "out",
+            "fee_asset": "SOL",
+            "fee": "0.00001",
+            "tx_id": tx_id,
+            "wallet_address": "wallet",
+        },
+        {
+            "timestamp_utc": "2023-08-01T06:43:43+00:00",
+            "event_type": "swap_in_aggregated",
+            "asset": receipt,
+            "quantity": "1",
+            "side": "in",
+            "tx_id": tx_id,
+            "wallet_address": "wallet",
+        },
+    ]
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="helium-vsr-position.json",
+        file_hash="helium-vsr-position",
+        rows=rows,
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    principal = next(event for event in events if event.asset == "MOBILE")
+    receipt_event = next(event for event in events if event.asset == receipt)
+    assert principal.event_type == "transfer"
+    assert principal.quantity == Decimal("-64729.546356")
+    assert principal.fee_asset == "SOL"
+    assert principal.fee_quantity == Decimal("0.00001")
+    assert receipt_event.event_type == "unknown"
+    assert receipt_event.quantity == 0
+
+
+def _solana_raw_transaction(wallet, *, payer, native_delta_lamports, fee_lamports=5000):
+    start = 1_000_000_000
+    return {
+        "transaction": {
+            "message": {
+                "accountKeys": [
+                    {"pubkey": payer, "signer": True},
+                    *([] if payer == wallet else [{"pubkey": wallet, "signer": False}]),
+                ]
+            }
+        },
+        "meta": {
+            "err": None,
+            "fee": fee_lamports,
+            "preBalances": [start, start],
+            "postBalances": [start - (fee_lamports if payer != wallet else -native_delta_lamports), start + native_delta_lamports],
+            "preTokenBalances": [],
+            "postTokenBalances": [],
+        },
+    }
+
+
+def test_solana_rpc_native_reconciliation_charges_only_actual_fee_payer(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    wallet = "wallet"
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="third-party-paid.json",
+        file_hash="third-party-paid",
+        rows=[
+            {
+                "timestamp_utc": "2025-01-01T00:00:00Z",
+                "event_type": "token_transfer",
+                "asset": "HNT",
+                "quantity": "1",
+                "side": "in",
+                "fee_asset": "SOL",
+                "fee": "0.000005",
+                "tx_id": "third-party-paid",
+                "wallet_address": wallet,
+                "raw_row": _solana_raw_transaction(
+                    wallet,
+                    payer="third-party",
+                    native_delta_lamports=0,
+                ),
+            }
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    assert len(events) == 1
+    assert events[0].fee_asset is None
+    assert events[0].fee_quantity is None
+
+
+def test_solana_rpc_native_reconciliation_adds_exact_non_fee_lamport_effect(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    wallet = "wallet"
+    raw_transaction = {
+        "transaction": {"message": {"accountKeys": [{"pubkey": wallet, "signer": True}]}},
+        "meta": {
+            "err": None,
+            "fee": 5000,
+            "preBalances": [1_000_000_000],
+            "postBalances": [999_985_000],
+            "preTokenBalances": [],
+            "postTokenBalances": [],
+        },
+    }
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="wallet-paid.json",
+        file_hash="wallet-paid",
+        rows=[
+            {
+                "timestamp_utc": "2025-01-01T00:00:00Z",
+                "event_type": "token_transfer",
+                "asset": "HNT",
+                "quantity": "1",
+                "side": "in",
+                "fee_asset": "SOL",
+                "fee": "0.000005",
+                "tx_id": "wallet-paid",
+                "wallet_address": wallet,
+                "raw_row": raw_transaction,
+            }
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+    effect = sum(
+        (RawNormalizer._canonical_event_asset_effect(event, "SOL") for event in events),
+        Decimal("0"),
+    )
+
+    assert effect == Decimal("-0.000015")
+    assert sum(event.fee_asset == "SOL" for event in events) == 1
+    correction = next(event for event in events if event.asset == "SOL")
+    assert correction.event_type == "transfer"
+    assert correction.quantity == Decimal("-0.000010")
+
+
+def test_solana_rpc_native_reconciliation_does_not_guess_unowned_token_account(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    wallet = "wallet"
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="unowned.json",
+        file_hash="unowned",
+        rows=[
+            {
+                "timestamp_utc": "2025-01-01T00:00:00Z",
+                "event_type": "solana_tx",
+                "asset": "SOL",
+                "quantity": "0",
+                "fee_asset": "SOL",
+                "fee": "0.000005",
+                "tx_id": "unowned",
+                "wallet_address": wallet,
+                "raw_row": {
+                    "transaction": {
+                        "message": {"accountKeys": [{"pubkey": "other", "signer": True}]}
+                    },
+                    "meta": {
+                        "fee": 5000,
+                        "preBalances": [1_000_000_000],
+                        "postBalances": [999_995_000],
+                        "preTokenBalances": [],
+                        "postTokenBalances": [],
+                    },
+                },
+            }
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    assert len(events) == 1
+    assert events[0].event_type == "unknown"
+    assert events[0].quantity == 0
+    assert events[0].fee_asset == "SOL"
+    assert events[0].fee_quantity == Decimal("0.000005")
+    assert events[0].account == wallet
+
+
+def test_solana_rpc_native_reconciliation_neutralizes_verified_outside_scope_txid(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    wallet = "wallet"
+    row = {
+        "timestamp_utc": "2025-01-01T00:00:00Z",
+        "event_type": "solana_tx",
+        "asset": "SOL",
+        "quantity": "0",
+        "fee_asset": "SOL",
+        "fee": "0.000005",
+        "tx_id": "verified-unowned",
+        "wallet_address": wallet,
+    }
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="verified-unowned.json",
+        file_hash="verified-unowned",
+        rows=[row],
+    )
+    normalizer = RawNormalizer(store)
+    normalizer._solana_unowned_txids = {"verified-unowned"}
+
+    events = normalizer.normalize_batch(batch.batch_id)
+
+    assert len(events) == 1
+    assert events[0].quantity == 0
+    assert events[0].fee_asset is None
+    assert events[0].account == "solana_rpc_unowned_evidence"
 
 
 def test_helium_raw_assert_location_uses_hnt_fee_not_mobile_oracle_column(tmp_path):
@@ -498,7 +909,7 @@ def test_pionex_raw_trading_details_sell_uses_executed_qty_as_negative_base_amou
     assert events[0].source_ref == "s_1"
 
 
-def test_pionex_raw_trading_details_skips_canceled_fills(tmp_path):
+def test_pionex_raw_trading_details_keeps_executed_canceled_orders(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
         source="pionex",
@@ -506,17 +917,21 @@ def test_pionex_raw_trading_details_skips_canceled_fills(tmp_path):
         content=(
             "date(UTC+0),symbol,side,executed_qty,amount,fee,fee_coin,state,tax_id\n"
             "2022-09-10 15:58:52,HNT_USDT,SELL,0.394,2.286776,0.001143,USDT,CANCELED,s_16\n"
+            "2022-09-10 15:59:00,HNT_USDT,SELL,0,0,0,USDT,CANCELED,s-empty\n"
             "2022-09-10 15:59:52,HNT_USDT,SELL,0.394,2.286776,0.001143,USDT,FILLED,s_17\n"
         ),
     )
 
     events, report = RawNormalizer(store).normalize_batch_with_report(batch.batch_id)
 
-    assert len(events) == 1
-    assert report.raw_objects == 1
-    assert report.created_events == 1
+    assert len(events) == 2
+    assert report.raw_objects == 2
+    assert report.created_events == 2
     assert report.skipped_raw_objects == 0
-    assert events[0].source_ref == "s_17"
+    by_source_ref = {event.source_ref: event for event in events}
+    assert set(by_source_ref) == {"s_16", "s_17"}
+    assert by_source_ref["s_16"].quantity == Decimal("-0.394")
+    assert by_source_ref["s_16"].quote_quantity == Decimal("2.286776")
 
 
 def test_pionex_cointracker_buy_side_maps_received_asset_and_sent_quote(tmp_path):
@@ -855,6 +1270,37 @@ def test_binance_small_assets_exchange_bnb_allocates_dust_quote(tmp_path):
     )
 
 
+def test_binance_small_assets_exchange_ignores_derived_price_feedback(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    priced_at = datetime(2021, 4, 28, 7, 14, 15, tzinfo=timezone.utc)
+    for asset, price in (("COTI", "0.4"), ("WRX", "400")):
+        store.add_price_point(
+            PricePointCreate(
+                asset=asset,
+                price_eur=Decimal(price),
+                priced_at=priced_at,
+                source="derived:event_quote",
+            )
+        )
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="Binance-Transaction-History.xlsx",
+        content=(
+            "Time,Account,Operation,Coin,Change\n"
+            "21-04-28 07:14:15,Spot,Small Assets Exchange BNB,COTI,-100\n"
+            "21-04-28 07:14:15,Spot,Small Assets Exchange BNB,BNB,0.08\n"
+            "21-04-28 07:14:15,Spot,Small Assets Exchange BNB,WRX,-1\n"
+        ),
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    coti = next(event for event in events if event.asset == "COTI")
+    wrx = next(event for event in events if event.asset == "WRX")
+    assert coti.quote_quantity == Decimal("0.08") * (Decimal("100") / Decimal("101"))
+    assert wrx.quote_quantity == Decimal("0.08") * (Decimal("1") / Decimal("101"))
+
+
 def test_binance_transaction_related_pair_creates_quote_trade(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
@@ -1135,8 +1581,194 @@ def test_binance_simple_earn_api_maps_subscription_redemption_and_reward(tmp_pat
         ("transfer", "Binance Earn Flexible JUP001", Decimal("10")),
         ("transfer", "Binance Earn Flexible JUP001", Decimal("-4")),
         ("reward", "Binance Earn Flexible JUP001", Decimal("0.5")),
+        ("transfer", "Spot", Decimal("-10")),
+        ("transfer", "Spot", Decimal("4")),
     ]
     assert events[0].source_ref == "flexible_subscription:JUP001:sub-1"
+    assert events[3].source_ref == "flexible_subscription:JUP001:sub-1:spot_mirror"
+    assert events[4].source_ref == "flexible_redemption:JUP001:red-1:spot_mirror"
+
+
+def test_binance_simple_earn_api_uses_existing_split_spot_counterpart(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    transaction_batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="transaction-history.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "25-01-01 00:00:00,Spot,Simple Earn Flexible Subscription,JUP,-3.5,Binance Earn\n"
+            "25-01-02 00:00:00,Spot,Simple Earn Flexible Redemption,JUP,4,Binance Earn\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(transaction_batch.batch_id)
+    api_batch = CsvRawImporter(store).import_rows(
+        source="binance_simple_earn_api",
+        filename="simple-earn.json",
+        file_hash="sha256:simple-earn-existing-counterpart-test",
+        rows=[
+            {
+                "record_type": "flexible_redemption",
+                "asset": "JUP",
+                "amount": "4",
+                "time_iso": "2025-01-02T00:00:00Z",
+                "account_type": "simple_earn_flexible",
+                "product_id": "JUP001",
+                "redeem_id": "red-existing",
+                "source_ref": "flexible_redemption:JUP001:red-existing",
+            }
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(api_batch.batch_id)
+
+    assert [(event.event_type, event.account, event.quantity) for event in events] == [
+        ("transfer", "Binance Earn Flexible JUP001", Decimal("-4")),
+    ]
+
+
+def test_binance_simple_earn_api_uses_delayed_exact_spot_counterpart(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    transaction_batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="transaction-history.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "24-04-04 00:38:38,Spot,Simple Earn Locked Redemption,SOL,1.3832922,Binance Earn\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(transaction_batch.batch_id)
+    api_batch = CsvRawImporter(store).import_rows(
+        source="binance_simple_earn_api",
+        filename="simple-earn.json",
+        file_hash="sha256:simple-earn-delayed-counterpart-test",
+        rows=[
+            {
+                "record_type": "locked_redemption",
+                "asset": "SOL",
+                "amount": "1.3832922",
+                "time_iso": "2024-04-02T16:56:17Z",
+                "account_type": "simple_earn_locked",
+                "product_id": "Sol*120",
+                "redeem_id": "red-delayed",
+                "source_ref": "locked_redemption:SOL:Sol*120:red-delayed",
+            }
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(api_batch.batch_id)
+
+    assert [(event.event_type, event.account, event.quantity) for event in events] == [
+        ("transfer", "Binance Earn Locked Sol*120", Decimal("-1.3832922")),
+    ]
+
+
+def test_binance_simple_earn_api_does_not_fill_partial_spot_counterpart(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    transaction_batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="transaction-history.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "25-01-02 00:00:00,Spot,Simple Earn Flexible Redemption,JUP,3,Binance Earn\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(transaction_batch.batch_id)
+    api_batch = CsvRawImporter(store).import_rows(
+        source="binance_simple_earn_api",
+        filename="simple-earn.json",
+        file_hash="sha256:simple-earn-partial-counterpart-test",
+        rows=[
+            {
+                "record_type": "flexible_redemption",
+                "asset": "JUP",
+                "amount": "4",
+                "time_iso": "2025-01-02T00:00:00Z",
+                "account_type": "simple_earn_flexible",
+                "product_id": "JUP001",
+                "redeem_id": "red-partial",
+                "source_ref": "flexible_redemption:JUP001:red-partial",
+            }
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(api_batch.batch_id)
+
+    assert [(event.account, event.quantity) for event in events] == [
+        ("Binance Earn Flexible JUP001", Decimal("-4")),
+    ]
+
+
+def test_binance_simple_earn_api_does_not_fill_delayed_partial_spot_counterpart(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    transaction_batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="transaction-history.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "25-01-03 00:00:00,Spot,Simple Earn Flexible Redemption,JUP,3,Binance Earn\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(transaction_batch.batch_id)
+    api_batch = CsvRawImporter(store).import_rows(
+        source="binance_simple_earn_api",
+        filename="simple-earn.json",
+        file_hash="sha256:simple-earn-delayed-partial-counterpart-test",
+        rows=[
+            {
+                "record_type": "flexible_redemption",
+                "asset": "JUP",
+                "amount": "4",
+                "time_iso": "2025-01-02T00:00:00Z",
+                "account_type": "simple_earn_flexible",
+                "product_id": "JUP001",
+                "redeem_id": "red-delayed-partial",
+                "source_ref": "flexible_redemption:JUP001:red-delayed-partial",
+            }
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(api_batch.batch_id)
+
+    assert [(event.account, event.quantity) for event in events] == [
+        ("Binance Earn Flexible JUP001", Decimal("-4")),
+    ]
+
+
+def test_binance_simple_earn_api_does_not_match_delayed_regular_trade(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    transaction_batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="transaction-history.csv",
+        content=(
+            "Time,Account,Operation,Coin,Change,Remark\n"
+            "25-01-03 00:00:00,Spot,Transaction Buy,JUP,4,\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(transaction_batch.batch_id)
+    api_batch = CsvRawImporter(store).import_rows(
+        source="binance_simple_earn_api",
+        filename="simple-earn.json",
+        file_hash="sha256:simple-earn-delayed-trade-test",
+        rows=[
+            {
+                "record_type": "flexible_redemption",
+                "asset": "JUP",
+                "amount": "4",
+                "time_iso": "2025-01-02T00:00:00Z",
+                "account_type": "simple_earn_flexible",
+                "product_id": "JUP001",
+                "redeem_id": "red-unmatched",
+                "source_ref": "flexible_redemption:JUP001:red-unmatched",
+            }
+        ],
+    )
+
+    events = RawNormalizer(store).normalize_batch(api_batch.batch_id)
+
+    assert [(event.account, event.quantity) for event in events] == [
+        ("Binance Earn Flexible JUP001", Decimal("-4")),
+        ("Spot", Decimal("4")),
+    ]
 
 
 def test_binance_simple_earn_locked_auto_subscription_is_non_balance_renewal(tmp_path):

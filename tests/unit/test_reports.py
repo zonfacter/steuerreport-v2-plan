@@ -1,8 +1,9 @@
+import csv
 import json
 from hashlib import sha256
 from datetime import datetime, timezone
 from decimal import Decimal
-from io import BytesIO
+from io import BytesIO, StringIO
 from zipfile import ZipFile
 
 from steuerreport_v2.contracts.exports import PdfExportRequest
@@ -12,6 +13,7 @@ from steuerreport_v2.contracts.valuation import PriceCoverageReport
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.exports import ExportService
 from steuerreport_v2.domain.reports import ReportCenterService
+from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 from steuerreport_v2.domain.valuation import PriceQualityService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
@@ -73,8 +75,14 @@ def test_report_center_collects_existing_export_surfaces(tmp_path):
         "tax-income-guide",
         "tax-external-inflows",
     }
-    assert any(artifact.artifact_id == "tax-payment-overview" for artifact in center.artifacts)
-    evidence = next(artifact for artifact in center.artifacts if artifact.artifact_id == "evidence-package")
+    assert any(
+        artifact.artifact_id == "tax-payment-overview" for artifact in center.artifacts
+    )
+    evidence = next(
+        artifact
+        for artifact in center.artifacts
+        if artifact.artifact_id == "evidence-package"
+    )
     assert evidence.status == "available"
     assert evidence.endpoint == "/api/v1/export/evidence-package.zip"
     fairspot_timeline = next(
@@ -82,17 +90,27 @@ def test_report_center_collects_existing_export_surfaces(tmp_path):
         for artifact in center.csv_exports
         if artifact.artifact_id == "hnt-fairspot-timeline"
     )
-    assert "account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp" in str(fairspot_timeline.endpoint)
+    assert "account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp" in str(
+        fairspot_timeline.endpoint
+    )
     assert center.years
     year_2021 = next(year for year in center.years if year.year == 2021)
     assert year_2021.filing_endpoint == "/api/v1/tax-years/2021/filing-summary"
     assert year_2021.evidence_endpoint == "/api/v1/tax-years/2021/evidence"
-    assert year_2021.evidence_package_endpoint == "/api/v1/export/tax-years/2021/evidence-package.zip"
+    assert (
+        year_2021.evidence_package_endpoint
+        == "/api/v1/export/tax-years/2021/evidence-package.zip"
+    )
     assert year_2021.wallet_fifo_endpoint == "/api/v1/tax-years/2021/wallet-fifo-delta"
-    assert year_2021.wallet_fifo_gaps_endpoint == "/api/v1/tax-years/2021/wallet-fifo-gaps?limit=80"
+    assert (
+        year_2021.wallet_fifo_gaps_endpoint
+        == "/api/v1/tax-years/2021/wallet-fifo-gaps?limit=80"
+    )
     assert year_2021.filing_status == "empty"
     assert year_2021.filing_status_label == "Keine V2-Eingabewerte"
-    assert "/api/v1/export/tax-payment-overview.json" in year_2021.required_evidence_refs
+    assert (
+        "/api/v1/export/tax-payment-overview.json" in year_2021.required_evidence_refs
+    )
     assert "/api/v1/export/evidence-package.zip" in year_2021.required_evidence_refs
     assert year_2021.required_evidence_count == len(year_2021.required_evidence_refs)
     assert year_2021.expected_package_files_count >= 5
@@ -184,7 +202,9 @@ def test_export_readiness_reuses_supplied_price_coverage(tmp_path, monkeypatch):
         missing_assets=[],
         missing=[],
     )
-    monkeypatch.setattr(review_module, "PriceCoverageService", FailingPriceCoverageService)
+    monkeypatch.setattr(
+        review_module, "PriceCoverageService", FailingPriceCoverageService
+    )
 
     readiness = ExportService(store).readiness(price_coverage=coverage)
 
@@ -265,27 +285,83 @@ def test_evidence_package_index_maps_manifest_files_to_zip_paths(tmp_path):
     assert package_index.label == "steuerreport-v2-evidence-package-index"
     assert package_index.files_count == 31
     assert paths_by_id["evidence-manifest"] == "00_Manifest/evidence-manifest.json"
-    assert paths_by_id["token-risk-documentation"] == "03_Review_Entscheidungen/token-risk-documentation.csv"
-    assert paths_by_id["tax-payment-overview"] == "02_Steuerliche_CSVs/tax-payment-overview.json"
+    assert (
+        paths_by_id["token-risk-documentation"]
+        == "03_Review_Entscheidungen/token-risk-documentation.csv"
+    )
+    assert (
+        paths_by_id["tax-payment-overview"]
+        == "02_Steuerliche_CSVs/tax-payment-overview.json"
+    )
     assert paths_by_id["tax-lines"] == "02_Steuerliche_CSVs/tax-lines.csv"
     assert paths_by_id["tax-income-guide"] == "02_Steuerliche_CSVs/tax-income-guide.csv"
-    assert paths_by_id["tax-external-inflows"] == "02_Steuerliche_CSVs/tax-external-inflows.csv"
-    assert paths_by_id["tax-solana-stablecoin-swap-evidence"] == "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-evidence.csv"
-    assert paths_by_id["tax-solana-stablecoin-swap-fifo-lines"] == "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-fifo-lines.csv"
-    assert paths_by_id["tax-helium-swap-context"] == "06_Solana_FIFO_Belege/tax-helium-swap-context.csv"
-    assert paths_by_id["tax-helium-swap-evidence-review"] == "06_Solana_FIFO_Belege/tax-helium-swap-evidence-review.csv"
-    assert paths_by_id["tax-helium-swap-alchemy-audit"] == "06_Solana_FIFO_Belege/tax-helium-swap-alchemy-audit.json"
-    assert paths_by_id["solana-tx-alchemy-audit"] == "06_Solana_FIFO_Belege/solana-tx-alchemy-audit.json"
-    assert paths_by_id["solana-failed-tx-tax-impact"] == "06_Solana_FIFO_Belege/solana-failed-tx-tax-impact.json"
-    assert paths_by_id["all-transaction-evidence-matrix"] == "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json"
-    assert paths_by_id["all-transaction-evidence-closure"] == "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json"
-    assert paths_by_id["all-transaction-open-detail-review"] == "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json"
-    assert paths_by_id["all-transaction-decision-candidates"] == "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json"
-    assert paths_by_id["hnt-fairspot-events"] == "05_HNT_Fairspot/hnt-fairspot-events.csv"
-    assert paths_by_id["solscan-evidence-trace"] == "06_Solana_FIFO_Belege/solscan-evidence-trace.json"
-    assert paths_by_id["helium-solana-reward-rpc-evidence"] == "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json"
-    assert any(group.folder == "05_HNT_Fairspot" and group.required_count == 2 for group in package_index.groups)
-    assert any(group.folder == "06_Solana_FIFO_Belege" and group.required_count == 2 for group in package_index.groups)
+    assert (
+        paths_by_id["tax-external-inflows"]
+        == "02_Steuerliche_CSVs/tax-external-inflows.csv"
+    )
+    assert (
+        paths_by_id["tax-solana-stablecoin-swap-evidence"]
+        == "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-evidence.csv"
+    )
+    assert (
+        paths_by_id["tax-solana-stablecoin-swap-fifo-lines"]
+        == "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-fifo-lines.csv"
+    )
+    assert (
+        paths_by_id["tax-helium-swap-context"]
+        == "06_Solana_FIFO_Belege/tax-helium-swap-context.csv"
+    )
+    assert (
+        paths_by_id["tax-helium-swap-evidence-review"]
+        == "06_Solana_FIFO_Belege/tax-helium-swap-evidence-review.csv"
+    )
+    assert (
+        paths_by_id["tax-helium-swap-alchemy-audit"]
+        == "06_Solana_FIFO_Belege/tax-helium-swap-alchemy-audit.json"
+    )
+    assert (
+        paths_by_id["solana-tx-alchemy-audit"]
+        == "06_Solana_FIFO_Belege/solana-tx-alchemy-audit.json"
+    )
+    assert (
+        paths_by_id["solana-failed-tx-tax-impact"]
+        == "06_Solana_FIFO_Belege/solana-failed-tx-tax-impact.json"
+    )
+    assert (
+        paths_by_id["all-transaction-evidence-matrix"]
+        == "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json"
+    )
+    assert (
+        paths_by_id["all-transaction-evidence-closure"]
+        == "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json"
+    )
+    assert (
+        paths_by_id["all-transaction-open-detail-review"]
+        == "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json"
+    )
+    assert (
+        paths_by_id["all-transaction-decision-candidates"]
+        == "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json"
+    )
+    assert (
+        paths_by_id["hnt-fairspot-events"] == "05_HNT_Fairspot/hnt-fairspot-events.csv"
+    )
+    assert (
+        paths_by_id["solscan-evidence-trace"]
+        == "06_Solana_FIFO_Belege/solscan-evidence-trace.json"
+    )
+    assert (
+        paths_by_id["helium-solana-reward-rpc-evidence"]
+        == "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json"
+    )
+    assert any(
+        group.folder == "05_HNT_Fairspot" and group.required_count == 2
+        for group in package_index.groups
+    )
+    assert any(
+        group.folder == "06_Solana_FIFO_Belege" and group.required_count == 2
+        for group in package_index.groups
+    )
     assert "schreibt aber keine Steuerdaten" in package_index.methodology
 
 
@@ -318,9 +394,17 @@ def test_evidence_manifest_and_index_include_cex_fifo_anchor_year_files(tmp_path
     paths_by_id = {file.file_id: file.path for file in package_index.files}
 
     assert files_by_id["tax-year-2025-cex-exchange-outflow-evidence"].required is True
-    assert files_by_id["tax-year-2025-cex-exchange-outflow-evidence"].group == "solana_fifo"
-    assert files_by_id["tax-year-2025-cex-exchange-outflow-anchor-feasibility"].required is True
-    assert files_by_id["tax-year-2025-cex-exchange-outflow-anchor-feasibility"].endpoint == (
+    assert (
+        files_by_id["tax-year-2025-cex-exchange-outflow-evidence"].group
+        == "solana_fifo"
+    )
+    assert (
+        files_by_id["tax-year-2025-cex-exchange-outflow-anchor-feasibility"].required
+        is True
+    )
+    assert files_by_id[
+        "tax-year-2025-cex-exchange-outflow-anchor-feasibility"
+    ].endpoint == (
         "/api/v1/tax-years/2025/cex-exchange-outflow-anchor-feasibility"
         "?source_exchange=bitget&target_cex=binance&network=SOL"
     )
@@ -330,7 +414,10 @@ def test_evidence_manifest_and_index_include_cex_fifo_anchor_year_files(tmp_path
     assert paths_by_id["tax-year-2025-cex-exchange-outflow-anchor-feasibility"] == (
         "06_Solana_FIFO_Belege/tax-year-2025-cex-exchange-outflow-anchor-feasibility.json"
     )
-    assert any(group.folder == "06_Solana_FIFO_Belege" and group.required_count == 4 for group in package_index.groups)
+    assert any(
+        group.folder == "06_Solana_FIFO_Belege" and group.required_count == 4
+        for group in package_index.groups
+    )
 
 
 def test_report_center_shows_created_pdf_package(tmp_path):
@@ -340,7 +427,11 @@ def test_report_center_shows_created_pdf_package(tmp_path):
     )
 
     center = ReportCenterService(store).center()
-    pdf = next(artifact for artifact in center.artifacts if artifact.artifact_id == "pdf-package")
+    pdf = next(
+        artifact
+        for artifact in center.artifacts
+        if artifact.artifact_id == "pdf-package"
+    )
 
     assert center.packages_count == 1
     assert center.created_pdf_packages_count == 1
@@ -359,11 +450,15 @@ def test_report_center_blocks_pdf_when_export_gate_blocks(tmp_path):
     BalanceLedgerBuilder(store).rebuild()
 
     center = ReportCenterService(store).center()
-    pdf_action = next(action for action in center.actions if action.action_id == "create-pdf")
+    pdf_action = next(
+        action for action in center.actions if action.action_id == "create-pdf"
+    )
 
     assert center.export_allowed is False
     assert pdf_action.enabled is False
-    assert any(warning.code == "export_gate_blocked" for warning in center.quality_warnings)
+    assert any(
+        warning.code == "export_gate_blocked" for warning in center.quality_warnings
+    )
 
 
 def test_report_center_warns_about_quality_risks(tmp_path):
@@ -422,7 +517,8 @@ def test_report_center_warns_about_external_solana_inflows(tmp_path):
 
     center = ReportCenterService(store).center()
     warning = next(
-        item for item in center.quality_warnings
+        item
+        for item in center.quality_warnings
         if item.code == "external_solana_inflows_need_evidence"
     )
 
@@ -437,8 +533,7 @@ def test_report_center_routes_are_registered():
     app = create_app()
 
     assert any(
-        getattr(route, "path", None) == "/api/v1/reports/center"
-        for route in app.routes
+        getattr(route, "path", None) == "/api/v1/reports/center" for route in app.routes
     )
     assert any(
         getattr(route, "path", None) == "/api/v1/export/evidence-manifest.json"
@@ -453,7 +548,8 @@ def test_report_center_routes_are_registered():
         for route in app.routes
     )
     assert any(
-        getattr(route, "path", None) == "/api/v1/export/tax-years/{year}/evidence-package.zip"
+        getattr(route, "path", None)
+        == "/api/v1/export/tax-years/{year}/evidence-package.zip"
         for route in app.routes
     )
     assert any(
@@ -466,7 +562,9 @@ def test_evidence_manifest_download_endpoint(tmp_path):
     from steuerreport_v2.api.app import create_app
 
     store = _store_with_priced_deposit(tmp_path)
-    response = _call_get_route(create_app(store), "/api/v1/export/evidence-manifest.json")
+    response = _call_get_route(
+        create_app(store), "/api/v1/export/evidence-manifest.json"
+    )
 
     assert response.status_code == 200
     assert "filename=evidence-manifest.json" in response.headers["content-disposition"]
@@ -475,7 +573,9 @@ def test_evidence_manifest_download_endpoint(tmp_path):
     assert "audit-json" in file_ids
     assert "tax-payment-overview" in file_ids
     assert "hnt-fairspot-events" in file_ids
-    hnt_file = next(file for file in payload["files"] if file["file_id"] == "hnt-fairspot-events")
+    hnt_file = next(
+        file for file in payload["files"] if file["file_id"] == "hnt-fairspot-events"
+    )
     assert hnt_file["group"] == "hnt"
     assert hnt_file["group_label"] == "HNT und Fairspot"
 
@@ -484,40 +584,100 @@ def test_evidence_package_index_download_endpoint(tmp_path):
     from steuerreport_v2.api.app import create_app
 
     store = _store_with_priced_deposit(tmp_path)
-    response = _call_get_route(create_app(store), "/api/v1/export/evidence-package-index.json")
+    response = _call_get_route(
+        create_app(store), "/api/v1/export/evidence-package-index.json"
+    )
 
     assert response.status_code == 200
-    assert "filename=evidence-package-index.json" in response.headers["content-disposition"]
+    assert (
+        "filename=evidence-package-index.json"
+        in response.headers["content-disposition"]
+    )
     payload = json.loads(response.body.decode("utf-8"))
     assert payload["files_count"] == 31
-    assert any(file["path"] == "03_Review_Entscheidungen/token-risk-documentation.csv" for file in payload["files"])
-    assert any(file["path"] == "02_Steuerliche_CSVs/tax-payment-overview.json" for file in payload["files"])
-    assert any(file["path"] == "05_HNT_Fairspot/hnt-fairspot-events.csv" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-evidence.csv" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-fifo-lines.csv" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/tax-helium-swap-context.csv" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/tax-helium-swap-evidence-review.csv" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/tax-helium-swap-alchemy-audit.json" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/solana-tx-alchemy-audit.json" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/solana-failed-tx-tax-impact.json" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/solscan-evidence-trace.json" for file in payload["files"])
-    assert any(file["path"] == "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json" for file in payload["files"])
+    assert any(
+        file["path"] == "03_Review_Entscheidungen/token-risk-documentation.csv"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "02_Steuerliche_CSVs/tax-payment-overview.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "05_HNT_Fairspot/hnt-fairspot-events.csv"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-evidence.csv"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"]
+        == "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-fifo-lines.csv"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/tax-helium-swap-context.csv"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/tax-helium-swap-evidence-review.csv"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/tax-helium-swap-alchemy-audit.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/solana-tx-alchemy-audit.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/solana-failed-tx-tax-impact.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/solscan-evidence-trace.json"
+        for file in payload["files"]
+    )
+    assert any(
+        file["path"] == "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json"
+        for file in payload["files"]
+    )
     assert any(group["folder"] == "02_Steuerliche_CSVs" for group in payload["groups"])
-    assert any(group["folder"] == "06_Solana_FIFO_Belege" for group in payload["groups"])
+    assert any(
+        group["folder"] == "06_Solana_FIFO_Belege" for group in payload["groups"]
+    )
 
 
 def test_tax_payment_overview_json_download_endpoint(tmp_path):
     from steuerreport_v2.api.app import create_app
 
     store = _store_with_priced_deposit(tmp_path)
-    response = _call_get_route(create_app(store), "/api/v1/export/tax-payment-overview.json")
+    response = _call_get_route(
+        create_app(store), "/api/v1/export/tax-payment-overview.json"
+    )
 
     assert response.status_code == 200
-    assert "filename=tax-payment-overview.json" in response.headers["content-disposition"]
+    assert (
+        "filename=tax-payment-overview.json" in response.headers["content-disposition"]
+    )
     payload = json.loads(response.body.decode("utf-8"))
     assert "ascii_table" in payload
     assert "rows" in payload
@@ -603,7 +763,9 @@ def test_tax_income_csv_export_can_filter_single_year(tmp_path):
     text = response.body.decode("utf-8")
 
     assert response.status_code == 200
-    assert "filename=tax-income-guide-2024.csv" in response.headers["content-disposition"]
+    assert (
+        "filename=tax-income-guide-2024.csv" in response.headers["content-disposition"]
+    )
     assert "2024,JUP" in text
     assert "2021,USDT" not in text
 
@@ -616,7 +778,9 @@ def test_evidence_package_download_endpoint_contains_required_files(tmp_path):
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
-    assert "filename=steuerreport-v2-evidence-" in response.headers["content-disposition"]
+    assert (
+        "filename=steuerreport-v2-evidence-" in response.headers["content-disposition"]
+    )
     with ZipFile(BytesIO(response.body)) as package:
         names = set(package.namelist())
         assert {
@@ -651,42 +815,94 @@ def test_evidence_package_download_endpoint_contains_required_files(tmp_path):
             "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json",
         } <= names
         assert len(names) == 33
-        package_index = json.loads(package.read("00_Manifest/package-index.json").decode("utf-8"))
+        package_index = json.loads(
+            package.read("00_Manifest/package-index.json").decode("utf-8")
+        )
         assert package_index["label"] == "steuerreport-v2-evidence-package-index"
         assert package_index["files_count"] == 31
         indexed_files = {file["path"]: file for file in package_index["files"]}
         indexed_paths = set(indexed_files)
         assert "02_Steuerliche_CSVs/tax-payment-overview.json" in indexed_paths
         assert "05_HNT_Fairspot/hnt-fairspot-events.csv" in indexed_paths
-        assert "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-evidence.csv" in indexed_paths
-        assert "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-fifo-lines.csv" in indexed_paths
+        assert (
+            "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-evidence.csv"
+            in indexed_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-solana-stablecoin-swap-fifo-lines.csv"
+            in indexed_paths
+        )
         assert "06_Solana_FIFO_Belege/tax-helium-swap-context.csv" in indexed_paths
-        assert "06_Solana_FIFO_Belege/tax-helium-swap-evidence-review.csv" in indexed_paths
-        assert "06_Solana_FIFO_Belege/tax-helium-swap-alchemy-audit.json" in indexed_paths
+        assert (
+            "06_Solana_FIFO_Belege/tax-helium-swap-evidence-review.csv" in indexed_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-helium-swap-alchemy-audit.json" in indexed_paths
+        )
         assert "06_Solana_FIFO_Belege/solana-tx-alchemy-audit.json" in indexed_paths
         assert "06_Solana_FIFO_Belege/solana-failed-tx-tax-impact.json" in indexed_paths
-        assert "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json" in indexed_paths
-        assert "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json" in indexed_paths
-        assert "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json" in indexed_paths
-        assert "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json" in indexed_paths
+        assert (
+            "06_Solana_FIFO_Belege/all-transaction-evidence-matrix.json"
+            in indexed_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/all-transaction-evidence-closure.json"
+            in indexed_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/all-transaction-open-detail-review.json"
+            in indexed_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/all-transaction-decision-candidates.json"
+            in indexed_paths
+        )
         assert "06_Solana_FIFO_Belege/solscan-evidence-trace.json" in indexed_paths
-        assert "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json" in indexed_paths
-        payment_overview = json.loads(package.read("02_Steuerliche_CSVs/tax-payment-overview.json").decode("utf-8"))
+        assert (
+            "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json"
+            in indexed_paths
+        )
+        payment_overview = json.loads(
+            package.read("02_Steuerliche_CSVs/tax-payment-overview.json").decode(
+                "utf-8"
+            )
+        )
         assert "ascii_table" in payment_overview
         assert payment_overview["rows"]
         hnt_events_content = package.read("05_HNT_Fairspot/hnt-fairspot-events.csv")
-        assert indexed_files["05_HNT_Fairspot/hnt-fairspot-events.csv"]["size_bytes"] == len(hnt_events_content)
-        assert indexed_files["05_HNT_Fairspot/hnt-fairspot-events.csv"]["sha256"] == sha256(hnt_events_content).hexdigest()
-        assert len(indexed_files["05_HNT_Fairspot/hnt-fairspot-events.csv"]["sha256"]) == 64
-        solscan_trace = json.loads(package.read("06_Solana_FIFO_Belege/solscan-evidence-trace.json").decode("utf-8"))
+        assert indexed_files["05_HNT_Fairspot/hnt-fairspot-events.csv"][
+            "size_bytes"
+        ] == len(hnt_events_content)
+        assert (
+            indexed_files["05_HNT_Fairspot/hnt-fairspot-events.csv"]["sha256"]
+            == sha256(hnt_events_content).hexdigest()
+        )
+        assert (
+            len(indexed_files["05_HNT_Fairspot/hnt-fairspot-events.csv"]["sha256"])
+            == 64
+        )
+        solscan_trace = json.loads(
+            package.read("06_Solana_FIFO_Belege/solscan-evidence-trace.json").decode(
+                "utf-8"
+            )
+        )
         assert solscan_trace["import_effect"] == "none"
         assert solscan_trace["target_changed"] is False
-        reward_evidence = json.loads(package.read("06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json").decode("utf-8"))
+        reward_evidence = json.loads(
+            package.read(
+                "06_Solana_FIFO_Belege/helium-solana-reward-rpc-evidence.json"
+            ).decode("utf-8")
+        )
         assert reward_evidence["import_effect"] == "none"
         assert reward_evidence["target_changed"] is False
         assert reward_evidence["summary"]["reward_totals"]["HNT"] == "3.48812900"
-        assert any(group["folder"] == "05_HNT_Fairspot" for group in package_index["groups"])
-        assert any(group["folder"] == "06_Solana_FIFO_Belege" for group in package_index["groups"])
+        assert any(
+            group["folder"] == "05_HNT_Fairspot" for group in package_index["groups"]
+        )
+        assert any(
+            group["folder"] == "06_Solana_FIFO_Belege"
+            for group in package_index["groups"]
+        )
         readme = package.read("README.txt").decode("utf-8")
         assert "schreibt keine Steuerdaten" in readme
         assert "05_HNT_Fairspot" in readme
@@ -701,13 +917,21 @@ def test_tax_year_evidence_package_download_endpoint_contains_year_files(tmp_pat
     route = next(
         route
         for route in app.routes
-        if getattr(route, "path", None) == "/api/v1/export/tax-years/{year}/evidence-package.zip"
+        if getattr(route, "path", None)
+        == "/api/v1/export/tax-years/{year}/evidence-package.zip"
     )
     response = route.endpoint(2021)
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
-    assert "filename=steuerreport-v2-tax-year-2021-evidence.zip" in response.headers["content-disposition"]
+    assert (
+        "filename=steuerreport-v2-tax-year-2021-evidence.zip"
+        in response.headers["content-disposition"]
+    )
+    assert response.headers["x-steuerreport-cache"] == "miss"
+    cached_response = route.endpoint(2021)
+    assert cached_response.headers["x-steuerreport-cache"] == "hit"
+    assert cached_response.body == response.body
     with ZipFile(BytesIO(response.body)) as package:
         names = set(package.namelist())
         assert {
@@ -723,27 +947,154 @@ def test_tax_year_evidence_package_download_endpoint_contains_year_files(tmp_pat
             "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-withdrawal-gaps.json",
             "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-evidence.json",
             "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-anchor-feasibility.json",
+            "00_Manifest/tax-year-2021-bmf-compliance-matrix.json",
+            "00_Manifest/tax-year-2021-time-precision-audit.json",
+            "00_Manifest/tax-year-2021-latest-source-registry.json",
+            "06_Solana_FIFO_Belege/tax-year-2021-latest-wallet-fifo-run.json",
+            "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-method-delta-explanation.json",
+            "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-method-delta-events.csv",
+            "06_Solana_FIFO_Belege/tax-year-2021-solana-program-settlement-evidence.json",
+            "06_Solana_FIFO_Belege/tax-year-2021-solana-service-swap-evidence.json",
+            "07_Stichtag_Bewertung/tax-year-2021-latest-valuation-gate.json",
         } <= names
-        manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
+        manifest = json.loads(
+            package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8")
+        )
         assert manifest["year"] == 2021
         assert manifest["label"] == "steuerreport-v2-tax-year-2021-evidence-package"
         assert manifest["files"]
         manifest_paths = {file["path"] for file in manifest["files"]}
-        assert "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-delta.json" in manifest_paths
-        assert "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-gaps.json" in manifest_paths
-        assert "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-withdrawal-gaps.json" in manifest_paths
-        assert "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-evidence.json" in manifest_paths
-        assert "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-anchor-feasibility.json" in manifest_paths
-        assert "03_Review_Entscheidungen/tax-year-2021-review-decisions.json" in manifest_paths
-        assert "02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv" in manifest_paths
-        wallet_fifo = json.loads(package.read("06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-delta.json").decode("utf-8"))
-        assert wallet_fifo["method_version"] == "wallet_asset_preview_v17"
-        filing_summary = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2021-filing-summary.json").decode("utf-8"))
-        filing_checklist = package.read("02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv").decode("utf-8")
-        evidence = json.loads(package.read("02_Steuerliche_CSVs/tax-year-2021-evidence.json").decode("utf-8"))
-        review_decisions = json.loads(package.read("03_Review_Entscheidungen/tax-year-2021-review-decisions.json").decode("utf-8"))
-        cex_evidence = json.loads(package.read("06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-evidence.json").decode("utf-8"))
-        cex_anchor = json.loads(package.read("06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-anchor-feasibility.json").decode("utf-8"))
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-delta.json"
+            in manifest_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-gaps.json"
+            in manifest_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-withdrawal-gaps.json"
+            in manifest_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-evidence.json"
+            in manifest_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-anchor-feasibility.json"
+            in manifest_paths
+        )
+        assert (
+            "03_Review_Entscheidungen/tax-year-2021-review-decisions.json"
+            in manifest_paths
+        )
+        assert (
+            "02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv" in manifest_paths
+        )
+        assert "00_Manifest/tax-year-2021-bmf-compliance-matrix.json" in manifest_paths
+        assert "00_Manifest/tax-year-2021-time-precision-audit.json" in manifest_paths
+        assert "00_Manifest/tax-year-2021-latest-source-registry.json" in manifest_paths
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-latest-wallet-fifo-run.json"
+            in manifest_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-method-delta-explanation.json"
+            in manifest_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-method-delta-events.csv"
+            in manifest_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-solana-program-settlement-evidence.json"
+            in manifest_paths
+        )
+        assert (
+            "06_Solana_FIFO_Belege/tax-year-2021-solana-service-swap-evidence.json"
+            in manifest_paths
+        )
+        assert (
+            "07_Stichtag_Bewertung/tax-year-2021-latest-valuation-gate.json"
+            in manifest_paths
+        )
+        wallet_fifo = json.loads(
+            package.read(
+                "06_Solana_FIFO_Belege/tax-year-2021-wallet-fifo-delta.json"
+            ).decode("utf-8")
+        )
+        assert wallet_fifo["method_version"] == WalletFifoPreviewService.METHOD_VERSION
+        matrix = json.loads(
+            package.read("00_Manifest/tax-year-2021-bmf-compliance-matrix.json").decode(
+                "utf-8"
+            )
+        )
+        assert matrix["matrix_version"] == "bmf_requirements_2025_v12"
+        time_audit = json.loads(
+            package.read("00_Manifest/tax-year-2021-time-precision-audit.json").decode(
+                "utf-8"
+            )
+        )
+        assert time_audit["policy_version"] == "de_calendar_year_v1"
+        wallet_run = json.loads(
+            package.read(
+                "06_Solana_FIFO_Belege/tax-year-2021-latest-wallet-fifo-run.json"
+            ).decode("utf-8")
+        )
+        assert wallet_run["artifact"] == "wallet_fifo_parallel_run"
+        assert wallet_run["available"] is False
+        program_settlement = json.loads(
+            package.read(
+                "06_Solana_FIFO_Belege/tax-year-2021-solana-program-settlement-evidence.json"
+            ).decode("utf-8")
+        )
+        assert program_settlement["exists"] is False
+        assert program_settlement["status"] == "not_available"
+        assert program_settlement["strict_ready"] is False
+        service_swap = json.loads(
+            package.read(
+                "06_Solana_FIFO_Belege/tax-year-2021-solana-service-swap-evidence.json"
+            ).decode("utf-8")
+        )
+        assert service_swap["exists"] is False
+        assert service_swap["status"] == "not_available"
+        assert service_swap["evidence_ready"] is False
+        assert service_swap["tax_mapping_ready"] is False
+        valuation_gate = json.loads(
+            package.read(
+                "07_Stichtag_Bewertung/tax-year-2021-latest-valuation-gate.json"
+            ).decode("utf-8")
+        )
+        assert valuation_gate["artifact"] == "divorce_valuation_gate"
+        assert valuation_gate["available"] is False
+        filing_summary = json.loads(
+            package.read(
+                "02_Steuerliche_CSVs/tax-year-2021-filing-summary.json"
+            ).decode("utf-8")
+        )
+        filing_checklist = package.read(
+            "02_Steuerliche_CSVs/tax-year-2021-filing-checklist.csv"
+        ).decode("utf-8")
+        evidence = json.loads(
+            package.read("02_Steuerliche_CSVs/tax-year-2021-evidence.json").decode(
+                "utf-8"
+            )
+        )
+        review_decisions = json.loads(
+            package.read(
+                "03_Review_Entscheidungen/tax-year-2021-review-decisions.json"
+            ).decode("utf-8")
+        )
+        cex_evidence = json.loads(
+            package.read(
+                "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-evidence.json"
+            ).decode("utf-8")
+        )
+        cex_anchor = json.loads(
+            package.read(
+                "06_Solana_FIFO_Belege/tax-year-2021-cex-exchange-outflow-anchor-feasibility.json"
+            ).decode("utf-8")
+        )
         assert filing_summary["year"] == 2021
         assert "Category,Label,Amount_EUR,Action" in filing_checklist
         assert evidence["year"] == 2021
@@ -754,6 +1105,17 @@ def test_tax_year_evidence_package_download_endpoint_contains_year_files(tmp_pat
         readme = package.read("README.txt").decode("utf-8")
         assert "schreibt keine Steuerdaten" in readme
         assert "Wallet-FIFO" in readme
+
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.91"),
+            priced_at=datetime(2021, 4, 29, tzinfo=timezone.utc),
+            source="cache-invalidation-test",
+        )
+    )
+    invalidated_response = route.endpoint(2021)
+    assert invalidated_response.headers["x-steuerreport-cache"] == "miss"
 
 
 def test_tax_year_evidence_package_uses_year_filtered_csv_names(tmp_path):
@@ -777,7 +1139,8 @@ def test_tax_year_evidence_package_uses_year_filtered_csv_names(tmp_path):
     route = next(
         route
         for route in app.routes
-        if getattr(route, "path", None) == "/api/v1/export/tax-years/{year}/evidence-package.zip"
+        if getattr(route, "path", None)
+        == "/api/v1/export/tax-years/{year}/evidence-package.zip"
     )
     response = route.endpoint(2021)
 
@@ -785,9 +1148,24 @@ def test_tax_year_evidence_package_uses_year_filtered_csv_names(tmp_path):
         names = set(package.namelist())
         assert "02_Steuerliche_CSVs/tax-year-2021-tax-lines.csv" in names
         assert "02_Steuerliche_CSVs/tax-lines.csv" not in names
-        manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
+        manifest = json.loads(
+            package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8")
+        )
         paths = {file["path"] for file in manifest["files"]}
         assert "02_Steuerliche_CSVs/tax-year-2021-tax-lines.csv" in paths
+        tax_lines = list(
+            csv.DictReader(
+                StringIO(
+                    package.read(
+                        "02_Steuerliche_CSVs/tax-year-2021-tax-lines.csv"
+                    ).decode("utf-8")
+                )
+            )
+        )
+        assert len(tax_lines) == 1
+        assert tax_lines[0]["Source_Event_ID"]
+        assert tax_lines[0]["Lot_ID"]
+        assert tax_lines[0]["Anschaffungs_Event_ID"]
 
 
 def test_tax_year_evidence_package_contains_filtered_review_decisions(tmp_path):
@@ -827,21 +1205,31 @@ def test_tax_year_evidence_package_contains_filtered_review_decisions(tmp_path):
     route = next(
         route
         for route in app.routes
-        if getattr(route, "path", None) == "/api/v1/export/tax-years/{year}/evidence-package.zip"
+        if getattr(route, "path", None)
+        == "/api/v1/export/tax-years/{year}/evidence-package.zip"
     )
 
     response = route.endpoint(2021)
 
     with ZipFile(BytesIO(response.body)) as package:
         decisions = json.loads(
-            package.read("03_Review_Entscheidungen/tax-year-2021-review-decisions.json").decode("utf-8")
+            package.read(
+                "03_Review_Entscheidungen/tax-year-2021-review-decisions.json"
+            ).decode("utf-8")
         )
-        manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
+        manifest = json.loads(
+            package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8")
+        )
 
     assert decisions["decisions_count"] == 1
     assert decisions["decisions"][0]["title"] == "HNT Jahresentscheidung"
-    assert decisions["decisions"][0]["effect_summary"] == "Import: none | Ledger: none | FIFO: none | Tax-Lines: none"
-    assert all(item["title"] != "Globale Token-Entscheidung" for item in decisions["decisions"])
+    assert (
+        decisions["decisions"][0]["effect_summary"]
+        == "Import: none | Ledger: none | FIFO: none | Tax-Lines: none"
+    )
+    assert all(
+        item["title"] != "Globale Token-Entscheidung" for item in decisions["decisions"]
+    )
     assert any(
         file["path"] == "03_Review_Entscheidungen/tax-year-2021-review-decisions.json"
         and file["source_endpoint"] == "/api/v1/export/review-decisions.csv"
@@ -849,7 +1237,9 @@ def test_tax_year_evidence_package_contains_filtered_review_decisions(tmp_path):
     )
 
 
-def test_tax_year_evidence_package_contains_stablecoin_fx_tax_impact(tmp_path, monkeypatch):
+def test_tax_year_evidence_package_contains_stablecoin_fx_tax_impact(
+    tmp_path, monkeypatch
+):
     from steuerreport_v2.api.app import create_app
 
     artifact_dir = tmp_path / "impact"
@@ -864,8 +1254,14 @@ def test_tax_year_evidence_package_contains_stablecoin_fx_tax_impact(tmp_path, m
                     "missing_rows": 0,
                     "applied_rows": 6,
                 },
-                "baseline": {"taxable_gain_loss_eur": "10", "stablecoin_gain_loss_eur": "2"},
-                "patched": {"taxable_gain_loss_eur": "8", "stablecoin_gain_loss_eur": "1"},
+                "baseline": {
+                    "taxable_gain_loss_eur": "10",
+                    "stablecoin_gain_loss_eur": "2",
+                },
+                "patched": {
+                    "taxable_gain_loss_eur": "8",
+                    "stablecoin_gain_loss_eur": "1",
+                },
                 "delta": {
                     "taxable_gain_loss_eur": "-2",
                     "stablecoin_gain_loss_eur": "-1",
@@ -882,16 +1278,21 @@ def test_tax_year_evidence_package_contains_stablecoin_fx_tax_impact(tmp_path, m
     route = next(
         route
         for route in app.routes
-        if getattr(route, "path", None) == "/api/v1/export/tax-years/{year}/evidence-package.zip"
+        if getattr(route, "path", None)
+        == "/api/v1/export/tax-years/{year}/evidence-package.zip"
     )
 
     response = route.endpoint(2024)
 
     with ZipFile(BytesIO(response.body)) as package:
         stablecoin_impact = json.loads(
-            package.read("04_Preise_Paritaet/tax-year-2024-stablecoin-fx-tax-impact.json").decode("utf-8")
+            package.read(
+                "04_Preise_Paritaet/tax-year-2024-stablecoin-fx-tax-impact.json"
+            ).decode("utf-8")
         )
-        manifest = json.loads(package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8"))
+        manifest = json.loads(
+            package.read("00_Manifest/year-evidence-manifest.json").decode("utf-8")
+        )
 
     assert stablecoin_impact["artifact_found"] is True
     assert stablecoin_impact["taxable_gain_loss_delta_eur"] == "-2"

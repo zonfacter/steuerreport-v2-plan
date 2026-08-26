@@ -1,0 +1,45 @@
+{
+  "package_version": "2026-07-10-v1",
+  "provider": "Binance public REST API /api/v3/klines",
+  "interval": "1m",
+  "price_field": "close",
+  "fx_rates": {
+    "2021-03-29": {
+      "usd_eur": "0.84861",
+      "source": "frankfurter_timeseries",
+      "source_rate_date": "2021-03-29"
+    },
+    "2021-04-28": {
+      "usd_eur": "0.8285",
+      "source": "frankfurter_timeseries",
+      "source_rate_date": "2021-04-28"
+    },
+    "2023-05-02": {
+      "usd_eur": "0.91199",
+      "source": "frankfurter_timeseries",
+      "source_rate_date": "2023-05-02"
+    }
+  },
+  "prices": [
+    {"asset":"BNB","priced_at":"2021-03-29T16:48:00Z","pair":"BNBUSDT","quote_asset":"USDT","close":"274.40090000","open_time_ms":1617036480000},
+    {"asset":"BTC","priced_at":"2021-03-29T16:48:00Z","pair":"BTCUSDT","quote_asset":"USDT","close":"57795.01000000","open_time_ms":1617036480000},
+    {"asset":"GTO","priced_at":"2021-03-29T16:48:00Z","pair":"GTOUSDT","quote_asset":"USDT","close":"0.04223000","open_time_ms":1617036480000},
+    {"asset":"HNT","priced_at":"2021-03-29T16:48:00Z","pair":"HNTUSDT","quote_asset":"USDT","close":"10.17500000","open_time_ms":1617036480000},
+
+    {"asset":"BNB","priced_at":"2021-04-28T05:14:00Z","pair":"BNBUSDT","quote_asset":"USDT","close":"563.69000000","open_time_ms":1619586840000},
+    {"asset":"BTC","priced_at":"2021-04-28T05:14:00Z","pair":"BTCUSDT","quote_asset":"USDT","close":"54901.93000000","open_time_ms":1619586840000},
+    {"asset":"BTTC","priced_at":"2021-04-28T05:14:00Z","pair":"BTTUSDT","quote_asset":"USDT","close":"0.00728720","open_time_ms":1619586840000},
+    {"asset":"CDT","priced_at":"2021-04-28T05:14:00Z","pair":"CDTBTC","quote_asset":"BTC","close":"0.00000080","bridge_pair":"BTCUSDT","bridge_close_usd":"54901.93000000","open_time_ms":1619586840000},
+    {"asset":"COTI","priced_at":"2021-04-28T05:14:00Z","pair":"COTIUSDT","quote_asset":"USDT","close":"0.36914000","open_time_ms":1619586840000},
+    {"asset":"DOCK","priced_at":"2021-04-28T05:14:00Z","pair":"DOCKUSDT","quote_asset":"USDT","close":"0.10739500","open_time_ms":1619586840000},
+    {"asset":"HNT","priced_at":"2021-04-28T05:14:00Z","pair":"HNTUSDT","quote_asset":"USDT","close":"18.73900000","open_time_ms":1619586840000},
+    {"asset":"WABI","priced_at":"2021-04-28T05:14:00Z","pair":"WABIBTC","quote_asset":"BTC","close":"0.00000956","bridge_pair":"BTCUSDT","bridge_close_usd":"54901.93000000","open_time_ms":1619586840000},
+    {"asset":"WRX","priced_at":"2021-04-28T05:14:00Z","pair":"WRXUSDT","quote_asset":"USDT","close":"2.97570000","open_time_ms":1619586840000},
+    {"asset":"YFIDOWN","priced_at":"2021-04-28T05:14:00Z","pair":"YFIDOWNUSDT","quote_asset":"USDT","close":"0.00082300","open_time_ms":1619586840000},
+
+    {"asset":"BNB","priced_at":"2023-05-02T04:13:00Z","pair":"BNBUSDT","quote_asset":"USDT","close":"325.60000000","open_time_ms":1683000780000},
+    {"asset":"ETH","priced_at":"2023-05-02T04:13:00Z","pair":"ETHUSDT","quote_asset":"USDT","close":"1830.28000000","open_time_ms":1683000780000},
+    {"asset":"HOT","priced_at":"2023-05-02T04:13:00Z","pair":"HOTUSDT","quote_asset":"USDT","close":"0.00181500","open_time_ms":1683000780000}
+  ],
+  "methodology": "Der Schlusskurs der exakten Binance-1-Minuten-Kerze unmittelbar vor dem jeweiligen Small-Assets-Exchange-Ereignis wird in USD ermittelt. BTC-Quote-Paare werden mit der BTCUSDT-Kerze derselben Minute gekreuzt. Die USD/EUR-Umrechnung nutzt den vorhandenen Frankfurter-Tageskurs."
+}

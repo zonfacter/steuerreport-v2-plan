@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import json
 
 from fastapi.testclient import TestClient
 
@@ -10,6 +11,7 @@ from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.portfolio import PortfolioLiveBalanceSnapshot
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.cex_balances import CexBalanceService
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
@@ -299,6 +301,39 @@ def test_portfolio_as_of_reports_missing_historical_prices(tmp_path):
     assert snapshot.missing_price_assets == ["BTC"]
 
 
+def test_portfolio_as_of_rejects_derived_event_quote_as_possession_price(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    _build_balance(store)
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime(2021, 4, 29, tzinfo=timezone.utc),
+            source="manual-usdt",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="BTC",
+            price_eur=Decimal("25000000"),
+            priced_at=datetime(2021, 4, 29, 12, tzinfo=timezone.utc),
+            source="derived:event_quote",
+        )
+    )
+
+    snapshot = PortfolioService(store).as_of_snapshot("2021-04-29")
+    history = PortfolioService(store).value_history(
+        from_date="2021-04-29",
+        to_date="2021-04-29",
+        interval="day",
+    )
+
+    assert snapshot.total_value_eur == Decimal("100.000000000000000000")
+    assert snapshot.missing_price_assets == ["BTC"]
+    assert history.max_total_value_eur == snapshot.total_value_eur
+    assert history.points[0].missing_price_assets == ["BTC"]
+
+
 def test_portfolio_as_of_api(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     _build_balance(store)
@@ -510,6 +545,12 @@ def test_portfolio_snapshot_excludes_binance_source_account_from_current_total(t
     assert snapshot.excluded_value_eur == Decimal("9000.000000000000000000")
     assert snapshot.account_summary[0].account == "Spot"
     assert snapshot.excluded_account_summary[0].account == "binance"
+    assert snapshot.excluded_account_summary[0].included_in_portfolio_total is False
+    assert (
+        snapshot.excluded_account_summary[0].exclusion_reason_code
+        == "historical_binance_evidence_account"
+    )
+    assert "nicht dazu addieren" in snapshot.excluded_value_semantics
 
 
 def test_portfolio_snapshot_excludes_uppercase_binance_bridge_account(tmp_path):
@@ -539,6 +580,11 @@ def test_portfolio_snapshot_excludes_uppercase_binance_bridge_account(tmp_path):
     assert snapshot.total_value_eur == Decimal("0")
     assert snapshot.excluded_value_eur == Decimal("124.540000000000000000")
     assert snapshot.excluded_account_summary[0].account == "Binance"
+    assert (
+        snapshot.excluded_account_summary[0].exclusion_reason_code
+        == "legacy_transfer_destination"
+    )
+    assert snapshot.excluded_account_summary[0].included_in_portfolio_total is False
     assert all(group.source_group != "Binance" for group in overview.groups)
 
 
@@ -981,6 +1027,198 @@ def test_portfolio_reconciliation_api(tmp_path, monkeypatch):
     assert data["rows"][0]["status"] == "missing_live_wallet_import"
 
 
+def test_portfolio_reconciliation_applies_only_txid_bound_registry_overlay(
+    tmp_path,
+    monkeypatch,
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    tx_id = "binance-owned-wallet-transfer"
+    wallet = PortfolioService.PRIMARY_SOLANA_WALLET
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="binance_withdrawal_api",
+            filename="binance-withdrawal.json",
+        )
+    )
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(
+            row_number=1,
+            payload_json=json.dumps(
+                {
+                    "amount": "98",
+                    "gross_amount": "99",
+                    "transaction_fee": "1",
+                    "tx_id": tx_id,
+                }
+            ),
+        ),
+    )
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="binance",
+            event_time=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            event_type="transfer",
+            asset="JUP",
+            quantity=Decimal("100"),
+            account="Spot",
+        )
+    )
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="binance_withdrawal_api",
+            event_time=datetime(2026, 7, 2, tzinfo=timezone.utc),
+            event_type="unknown",
+            asset="JUP",
+            quantity=Decimal("0"),
+            tx_id=tx_id,
+            account="Binance Withdrawal Evidence",
+            raw_object_id=raw.raw_object_id,
+        )
+    )
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="solana_rpc",
+            event_time=datetime(2026, 7, 2, tzinfo=timezone.utc),
+            event_type="transfer",
+            asset="JUP",
+            quantity=Decimal("98"),
+            tx_id=tx_id,
+            account=wallet,
+        )
+    )
+    BalanceLedgerBuilder(store).rebuild()
+    store.add_price_point(
+        PricePointCreate(
+            asset="JUP",
+            price_eur=Decimal("1"),
+            priced_at=datetime.now(timezone.utc),
+            source="manual-test",
+        )
+    )
+    live_at = datetime.now(timezone.utc)
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="binance:JUP:spot:overlay-test",
+                connector_id="binance",
+                asset="JUP",
+                quantity=Decimal("1"),
+                source="binance_api_v2",
+                fetched_at=live_at,
+                account_type="spot",
+                event_type="balance_snapshot",
+            )
+        ]
+    )
+    config_path = tmp_path / "source_registry.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "registry_version": "test-v1",
+                "entries": [
+                    {
+                        "source_id": "binance-account",
+                        "label": "Binance Account",
+                        "source_type": "exchange",
+                        "ownership": "owned",
+                        "role": "exchange_account",
+                        "portfolio_policy": "include",
+                        "fifo_policy": "owned_pool",
+                        "valid_from": "2021-01-01T00:00:00Z",
+                        "coverage_status": "complete",
+                        "identifiers": [
+                            {
+                                "kind": "canonical_source",
+                                "value": "binance_withdrawal_api",
+                            },
+                            {"kind": "account", "value": "Spot"},
+                        ],
+                    },
+                    {
+                        "source_id": "solana-main-wallet",
+                        "label": "Solana Main Wallet",
+                        "source_type": "wallet",
+                        "ownership": "owned",
+                        "role": "main_wallet",
+                        "portfolio_policy": "include",
+                        "fifo_policy": "owned_pool",
+                        "valid_from": "2021-01-01T00:00:00Z",
+                        "coverage_status": "complete",
+                        "identifiers": [
+                            {"kind": "address", "value": wallet},
+                            {"kind": "account", "value": wallet},
+                        ],
+                    },
+                ],
+                "ledger_adjustments": [
+                    {
+                        "adjustment_id": "binance-jup-owned-wallet-counterpart",
+                        "source_id": "binance-account",
+                        "target_source_id": "solana-main-wallet",
+                        "event_time": "2026-07-02T00:00:00Z",
+                        "asset": "JUP",
+                        "quantity_delta": "-99",
+                        "tx_id": tx_id,
+                        "reason": "missing_transfer_counterpart",
+                        "review_status": "approved_evidence_overlay",
+                        "evidence_refs": ["provider-export", "onchain-transaction"],
+                    },
+                    {
+                        "adjustment_id": "unbound-adjustment-must-not-apply",
+                        "source_id": "binance-account",
+                        "target_source_id": "solana-main-wallet",
+                        "event_time": "2026-07-03T00:00:00Z",
+                        "asset": "SOL",
+                        "quantity_delta": "-5",
+                        "tx_id": "missing-provider-and-target-evidence",
+                        "reason": "missing_transfer_counterpart",
+                        "review_status": "approved_evidence_overlay",
+                        "evidence_refs": ["configuration-is-not-enough"],
+                    }
+                ],
+                "transfer_evidence": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        PortfolioService,
+        "SOURCE_REGISTRY_CONFIG_PATH",
+        config_path,
+    )
+
+    report = PortfolioService(store).reconciliation_report()
+    row = next(
+        item
+        for item in report.rows
+        if item.source_group == "Binance" and item.asset == "JUP"
+    )
+
+    assert row.raw_ledger_quantity == Decimal("100")
+    assert row.ledger_adjustment_quantity == Decimal("-99")
+    assert row.ledger_quantity == Decimal("1")
+    assert row.external_quantity == Decimal("1")
+    assert row.delta_quantity == Decimal("0")
+    assert row.status == "live_anchor_reconciled_with_evidence_overlay"
+    assert row.ledger_adjustment_ids == ["binance-jup-owned-wallet-counterpart"]
+    assert report.applied_ledger_adjustments_count == 1
+    assert report.ledger_adjustment_value_eur == Decimal("-99")
+    assert report.total_reconciled_ledger_value_eur == Decimal("99")
+
+    api_data = TestClient(create_app(store)).get(
+        "/api/v1/portfolio/reconciliation"
+    ).json()["data"]
+    api_row = next(
+        item
+        for item in api_data["rows"]
+        if item["source_group"] == "Binance" and item["asset"] == "JUP"
+    )
+    assert api_row["raw_ledger_quantity"] == "100.000000000000000000"
+    assert api_row["ledger_adjustment_quantity"] == "-99"
+    assert api_row["status"] == "live_anchor_reconciled_with_evidence_overlay"
+
+
 def test_portfolio_reconciliation_expected_zero_small_delta_is_warning(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     monkeypatch.setattr(PortfolioService, "V1_CONNECTOR_BASE_URL", "")
@@ -1240,7 +1478,7 @@ def test_portfolio_snapshot_does_not_use_stale_cex_live_anchor(tmp_path):
                 connector_id="binance",
                 asset="JUP",
                 quantity=Decimal("100"),
-                source="v1_connector:binance",
+                source="binance_api_v2",
                 fetched_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
                 account_type="simple_earn_flexible",
                 product_id="JUP001",
@@ -1256,6 +1494,45 @@ def test_portfolio_snapshot_does_not_use_stale_cex_live_anchor(tmp_path):
     ]
 
 
+def test_portfolio_snapshot_excludes_stale_expected_zero_ledger_fallback(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="pionex",
+        filename="pionex-ledger.csv",
+        content=(
+            "time,asset,amount,type,account\n"
+            "2026-01-01T00:00:00Z,USDT,4,deposit,pionex\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    BalanceLedgerBuilder(store).rebuild()
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime.now(timezone.utc),
+            source="manual-test",
+        )
+    )
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="pionex:USDT:stale",
+                connector_id="pionex",
+                asset="USDT",
+                quantity=Decimal("2"),
+                source="pionex_api_v2",
+                fetched_at=datetime.now(timezone.utc) - timedelta(days=4),
+            )
+        ]
+    )
+
+    snapshot = PortfolioService(store).snapshot()
+
+    assert snapshot.total_value_eur == Decimal("0")
+    assert snapshot.positions == []
+
+
 def test_portfolio_reconciliation_refresh_warns_when_connectors_return_no_snapshots(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     for key in (
@@ -1268,6 +1545,7 @@ def test_portfolio_reconciliation_refresh_warns_when_connectors_return_no_snapsh
         "secret.cex.pionex.api_secret",
     ):
         store.upsert_admin_setting(AdminSettingWrite(key=key, value_json='"test-secret"'))
+    monkeypatch.setattr(CexBalanceService, "fetch", lambda _self, _connector_id, _fetched_at: [])
     monkeypatch.setattr(PortfolioService, "_v1_cex_live_balance_snapshots", lambda _self, _connector_id, _fetched_at: [])
     monkeypatch.setattr(PortfolioService, "_v1_cex_live_balances", lambda _self, _connector_id: {})
     monkeypatch.setattr(PortfolioService, "_v1_solana_wallet_balances", lambda _self, _wallet: {})
@@ -1279,11 +1557,27 @@ def test_portfolio_reconciliation_refresh_warns_when_connectors_return_no_snapsh
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "warning"
+    assert payload["status"] == "ok"
     data = payload["data"]
     assert data["imported_snapshots"] == 0
     assert {row["status"] for row in data["connector_results"]} == {"empty_response"}
-    assert any(warning["code"] == "no_live_snapshots_imported" for warning in payload["warnings"])
+    assert payload["warnings"] == []
+    with store.connect() as con:
+        run_rows = con.execute(
+            """
+            select connector_id, status, snapshots_count
+            from portfolio_live_connector_runs
+            order by connector_id
+            """
+        ).fetchall()
+    assert run_rows == [
+        ("binance", "empty_response", 0),
+        ("bitget", "empty_response", 0),
+        ("jup_wallet", "empty_response", 0),
+        ("pionex", "empty_response", 0),
+        ("solana_wallet", "empty_response", 0),
+    ]
+    assert PortfolioService(store)._connector_live_snapshot_is_current("pionex") is True
 
 
 def test_portfolio_reconciliation_refresh_uses_v1_solana_wallet_fallback_without_solscan_key(tmp_path, monkeypatch):
@@ -1303,6 +1597,77 @@ def test_portfolio_reconciliation_refresh_uses_v1_solana_wallet_fallback_without
     assert solana.status == "refreshed"
     assert result.snapshots[0].asset == "SOL"
     assert result.snapshots[0].quantity == Decimal("2.5")
+
+
+def test_confirmed_empty_cex_run_supersedes_snapshot_without_deleting_history(
+    tmp_path,
+    monkeypatch,
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="pionex",
+        filename="pionex-ledger.csv",
+        content=(
+            "time,asset,amount,type,account\n"
+            "2026-01-01T00:00:00Z,USDT,4,deposit,pionex\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    BalanceLedgerBuilder(store).rebuild()
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime.now(timezone.utc),
+            source="manual-test",
+        )
+    )
+    old_snapshot_at = datetime.now(timezone.utc) - timedelta(days=1)
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="pionex:USDT:old",
+                connector_id="pionex",
+                asset="USDT",
+                quantity=Decimal("2"),
+                source="pionex_api_v2",
+                fetched_at=old_snapshot_at,
+            )
+        ]
+    )
+    for key in ("secret.cex.pionex.api_key", "secret.cex.pionex.api_secret"):
+        store.upsert_admin_setting(
+            AdminSettingWrite(key=key, value_json='"test-secret"')
+        )
+    monkeypatch.setattr(
+        CexBalanceService,
+        "fetch",
+        lambda _self, _connector_id, _fetched_at: [],
+    )
+
+    result = PortfolioService(store).refresh_reconciliation_snapshots(
+        connectors=["pionex"]
+    )
+    service = PortfolioService(store)
+    snapshot = service.snapshot()
+
+    assert result.connector_results[0].status == "empty_response"
+    assert service._latest_live_connector_anchor("pionex")[0] == "empty_response"
+    assert service._connector_live_snapshot_is_current("pionex") is True
+    assert service._stored_live_balance_snapshots("pionex") == {}
+    assert snapshot.total_value_eur == Decimal("0")
+    assert snapshot.positions == []
+    with store.connect() as con:
+        historical_rows = con.execute(
+            """
+            select asset, quantity, fetched_at
+            from portfolio_live_balance_snapshots
+            where connector_id = 'pionex'
+            """
+        ).fetchall()
+    assert historical_rows == [
+        ("USDT", Decimal("2.000000000000000000"), old_snapshot_at.replace(tzinfo=None))
+    ]
 
 
 def test_portfolio_snapshot_uses_live_jup_wallet_anchor_but_reconciliation_keeps_ledger_delta(
@@ -1532,7 +1897,7 @@ def test_portfolio_snapshot_uses_binance_live_product_anchor_in_reconciliation(
                 connector_id="binance",
                 asset="EUR",
                 quantity=Decimal("0.5"),
-                source="v1_connector:binance",
+                source="binance_api_v2",
                 fetched_at=live_at,
                 account_type="spot",
                 event_type="balance_snapshot",
@@ -1542,7 +1907,7 @@ def test_portfolio_snapshot_uses_binance_live_product_anchor_in_reconciliation(
                 connector_id="binance",
                 asset="JUP",
                 quantity=Decimal("25"),
-                source="v1_connector:binance",
+                source="binance_api_v2",
                 fetched_at=live_at,
                 account_type="simple_earn_flexible",
                 product_id="JUP001",
@@ -1577,6 +1942,8 @@ def test_portfolio_snapshot_uses_binance_live_product_anchor_in_reconciliation(
     assert binance_rows["JUP"].ledger_quantity == Decimal("0")
     assert binance_rows["JUP"].external_quantity == Decimal("25.000000000000000000")
     assert binance_rows["JUP"].status == "product_live_anchor_delta"
+    assert "Live-Anker: binance_api_v2" in binance_rows["JUP"].evidence
+    assert "gespeicherten Live-Abgleichankern" in report.methodology
 
 
 def test_portfolio_jup_wallet_history_imports_v1_solana_rows(tmp_path, monkeypatch):
@@ -1647,6 +2014,77 @@ def test_portfolio_normalizes_jlwsol_live_asset_alias(tmp_path):
 
     assert service._canonical_solana_asset_symbol("2UQSYO...2FVU") == "JLWSOL"
     assert service._canonical_solana_asset_symbol("2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU") == "JLWSOL"
+    assert service._canonical_solana_asset_symbol("XS3OZW...QPH8") == "SPCXX"
+    assert service._canonical_solana_asset_symbol("Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8") == "SPCXX"
+
+
+def test_portfolio_solana_rpc_balances_include_legacy_and_token_2022_accounts(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = PortfolioService(store)
+
+    def rpc(_method, params, timeout_seconds):
+        assert timeout_seconds == 45
+        if _method == "getBalance":
+            return {"value": 236_133_776}
+        program_id = params[1]["programId"]
+        mint = (
+            "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux"
+            if program_id == PortfolioService.SOLANA_TOKEN_PROGRAM_IDS[0]
+            else "7atgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"
+        )
+        quantity = "75.175403" if program_id == PortfolioService.SOLANA_TOKEN_PROGRAM_IDS[0] else "11310642.83"
+        return {
+            "value": [
+                {
+                    "account": {
+                        "data": {
+                            "parsed": {
+                                "info": {
+                                    "mint": mint,
+                                    "tokenAmount": {"uiAmountString": quantity},
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(service, "_solana_rpc", rpc)
+
+    assert service._solana_rpc_wallet_balances(PortfolioService.PRIMARY_SOLANA_WALLET) == {
+        "CWIF": Decimal("11310642.83"),
+        "HNT": Decimal("75.175403"),
+        "SOL": Decimal("0.236133776"),
+    }
+
+
+def test_portfolio_reconciliation_refresh_prefers_v2_solana_rpc(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    service = PortfolioService(store)
+    monkeypatch.setattr(service, "_alchemy_api_key", lambda: "configured")
+    monkeypatch.setattr(
+        service,
+        "_solana_rpc_wallet_balances",
+        lambda wallet: {"CWIF": Decimal("11310642.83")} if wallet == service.PRIMARY_SOLANA_WALLET else {},
+    )
+    monkeypatch.setattr(
+        service,
+        "_v1_solana_wallet_balances",
+        lambda _wallet: {},
+    )
+    monkeypatch.setattr(
+        service,
+        "_solscan_wallet_balances",
+        lambda _wallet: (_ for _ in ()).throw(AssertionError("Solscan fallback must not be used")),
+    )
+
+    result = service.refresh_reconciliation_snapshots(connectors=["solana_wallet"])
+
+    assert result.connector_results[0].status == "refreshed"
+    assert [(row.asset, row.quantity, row.source) for row in result.snapshots] == [
+        ("CWIF", Decimal("11310642.83"), "solana_rpc:getBalance+getTokenAccountsByOwner")
+    ]
 
 
 def test_price_points_are_listed_newest_first(tmp_path):

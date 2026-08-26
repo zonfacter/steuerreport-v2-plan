@@ -24,8 +24,12 @@ from steuerreport_v2.domain.account_aliases import (
 )
 from steuerreport_v2.domain.derivatives import DerivativesManager
 from steuerreport_v2.domain.jupiter import JupiterTokenService
+from steuerreport_v2.domain.pionex_reconciliation import (
+    PionexHntReconciliationService,
+)
 from steuerreport_v2.domain.price_lookup import fiat_price_point
 from steuerreport_v2.domain.tax import TaxService
+from steuerreport_v2.domain.tax_time import reporting_tax_year
 from steuerreport_v2.domain.valuation import PriceCoverageService, PriceQualityService
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
@@ -121,7 +125,7 @@ class ReviewService:
         tax_summary = TaxService(self.store).latest_summary()
         if tax_summary is not None and tax_summary.unmatched_disposals > 0:
             unmatched = TaxService(self.store).list_unmatched_disposals()
-            years = sorted({item.event_time.year for item in unmatched})
+            years = sorted({reporting_tax_year(item.event_time) for item in unmatched})
             tax_year = years[0] if len(years) == 1 else None
             closed_years = self._closed_tax_years()
             is_current_scope = not years or any(year not in closed_years for year in years)
@@ -570,14 +574,28 @@ class ReviewService:
         return unresolved_truncated_account_labels(accounts, aliases)
 
     def _zero_cost_tax_lots(self) -> int:
+        approved_event_ids = sorted(
+            PionexHntReconciliationService(self.store).approved_zero_cost_event_ids()
+        )
+        exclusion = ""
+        params: list[str] = []
+        if approved_event_ids:
+            exclusion = (
+                "and lot.source_event_id not in ("
+                + ", ".join("?" for _event_id in approved_event_ids)
+                + ")"
+            )
+            params.extend(approved_event_ids)
         with self.store.connect() as con:
             row = con.execute(
-                """
+                f"""
                 select count(distinct lot.lot_id)
                 from tax_lots lot
                 join tax_lines line on line.lot_id = lot.lot_id
                 where lot.cost_basis_eur_total = 0
-                """
+                {exclusion}
+                """,
+                params,
             ).fetchone()
         return int(row[0] if row is not None else 0)
 

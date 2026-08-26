@@ -71,3 +71,35 @@ class BinanceCapitalWithdrawalPreview(BaseModel):
     records: list[BinanceCapitalWithdrawalRecord] = Field(default_factory=list)
     records_returned: int = 0
     methodology: str
+
+
+class BinanceAssetDividendRecord(BaseModel):
+    endpoint: str
+    asset: str | None = None
+    payload: dict[str, object] = Field(default_factory=dict)
+
+
+class BinanceAssetDividendRequest(BaseModel):
+    endpoint: str
+    asset: str | None = None
+    window_start: datetime
+    window_end: datetime
+    records: int = 0
+    total: int | None = None
+    status: str
+    error: str | None = None
+
+
+class BinanceAssetDividendPreview(BaseModel):
+    generated_at: datetime
+    source_id: str = "binance"
+    credential_status: str
+    since: datetime
+    until: datetime
+    assets: list[str] = Field(default_factory=list)
+    requests: list[BinanceAssetDividendRequest] = Field(default_factory=list)
+    records: list[BinanceAssetDividendRecord] = Field(default_factory=list)
+    records_returned: int = 0
+    records_available_hint: int = 0
+    truncated: bool = False
+    methodology: str

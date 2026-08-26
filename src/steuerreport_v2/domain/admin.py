@@ -24,7 +24,7 @@ from steuerreport_v2.domain.sources import SourceService
 
 class AdminService:
     V1_ADMIN_BASE_URL = "http://127.0.0.1:8000"
-    CEX_CONNECTORS = {"binance", "bitget", "pionex"}
+    CEX_CONNECTORS = {"binance", "bitget", "pionex", "coinbase"}
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store

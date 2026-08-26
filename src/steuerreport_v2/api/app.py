@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import hashlib
 import html
 import io
@@ -8,15 +9,19 @@ import json
 from pathlib import Path
 from threading import RLock
 from time import monotonic
+from uuid import uuid4
 import zipfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from fastapi.routing import APIRoute
 
 from steuerreport_v2 import __version__
+from steuerreport_v2.api.openapi import OPENAPI_TAGS, configure_openapi_routes
+from steuerreport_v2.contracts.api_meta import ApiCapabilities
 from steuerreport_v2.contracts.admin import (
     AdminSetting,
     AdminSettingDeleteResult,
@@ -39,8 +44,14 @@ from steuerreport_v2.contracts.ai import (
     LocalAiYearPackageQaStatus,
 )
 from steuerreport_v2.contracts.audit import AuditExport, ElsterPrepExport
-from steuerreport_v2.contracts.binance_earn import BinanceCapitalWithdrawalPreview, BinanceEarnHistoryApiPreview
+from steuerreport_v2.contracts.binance_earn import (
+    BinanceAssetDividendPreview,
+    BinanceCapitalWithdrawalPreview,
+    BinanceEarnHistoryApiPreview,
+)
 from steuerreport_v2.contracts.binance_earn_import import (
+    BinanceAssetDividendApiImportRequest,
+    BinanceAssetDividendApiImportResult,
     BinanceCapitalWithdrawalApiImportRequest,
     BinanceCapitalWithdrawalApiImportResult,
     BinanceEarnApiImportRequest,
@@ -49,11 +60,30 @@ from steuerreport_v2.contracts.binance_earn_import import (
     BinanceEarnHarvestImportResult,
 )
 from steuerreport_v2.contracts.bitget import BitgetWithdrawalPreview
-from steuerreport_v2.contracts.bitget_import import BitgetWithdrawalApiImportRequest, BitgetWithdrawalApiImportResult
+from steuerreport_v2.contracts.bitget_strategy_basis_decisions import (
+    BitgetStrategyBasisDecisionReport,
+    BitgetStrategyBasisDecisionRequest,
+    BitgetStrategyBasisDecisionResult,
+)
+from steuerreport_v2.contracts.bitget_strategy_fifo import (
+    BitgetStrategyFifoGapReport,
+)
+from steuerreport_v2.contracts.bitget_strategy_reconstruction import (
+    BitgetStrategyBasisReconstructionReport,
+    BitgetStrategyReferencePriceBackfillRequest,
+    BitgetStrategyReferencePriceBackfillResult,
+)
+from steuerreport_v2.contracts.bitget_import import (
+    BitgetWithdrawalApiImportRequest,
+    BitgetWithdrawalApiImportResult,
+)
 from steuerreport_v2.contracts.blockpit_solana import (
     BlockpitSolanaPreflightReport,
     BlockpitSolanaPriceProbeRequest,
     BlockpitSolanaPriceProbeResult,
+)
+from steuerreport_v2.contracts.business_inventory import (
+    BusinessRewardInventoryReviewReport,
 )
 from steuerreport_v2.contracts.common import ApiMessage, ApiResponse
 from steuerreport_v2.contracts.cockpit import CockpitSummary
@@ -64,7 +94,58 @@ from steuerreport_v2.contracts.derivatives import (
     DerivativeRunSummary,
 )
 from steuerreport_v2.contracts.divorce import DivorceEqualizationSummary
+from steuerreport_v2.contracts.divorce_service_routes import (
+    DivorceServiceRouteDecisionRequest,
+    DivorceServiceRouteDecisionResult,
+    DivorceServiceRouteEvidenceRefreshRequest,
+    DivorceServiceRouteEvidenceReport,
+)
+from steuerreport_v2.contracts.divorce_inheritance import (
+    BankCamtUploadResult,
+    CoinbaseConnectorStatus,
+    CoinbaseValuationDecisionRequest,
+    CoinbaseValuationDecisionResult,
+    DivorceInheritanceOriginReport,
+    InheritanceBankCreditCandidateReport,
+    InheritanceBankCreditDecisionRequest,
+    InheritanceBankCreditDecisionResult,
+    InheritanceDocumentConnectorStatus,
+    InheritanceDocumentCreditDecisionRequest,
+    InheritanceDocumentCreditDecisionResult,
+    InheritanceDocumentDecisionRequest,
+    InheritanceDocumentDecisionResult,
+    InheritanceDocumentUploadResult,
+    SparkasseStatementConnectorStatus,
+    TradeRepublicConnectorStatus,
+    TradeRepublicDocumentUploadResult,
+    TradeRepublicValuationDecisionRequest,
+    TradeRepublicValuationDecisionResult,
+)
+from steuerreport_v2.contracts.valuation_runs import (
+    DivorceValuationRunReport,
+    DivorceValuationRunRequest,
+)
 from steuerreport_v2.contracts.events import CanonicalEvent
+from steuerreport_v2.contracts.bmf_event_evidence import (
+    BmfFifoEventEvidenceReport,
+    BmfFifoEventEvidenceRunRequest,
+)
+from steuerreport_v2.contracts.bmf_event_price_remediation import (
+    BmfEventPriceRemediationReport,
+    BmfEventPriceRemediationRunRequest,
+)
+from steuerreport_v2.contracts.bmf_fifo_staging import (
+    BmfCombinedFifoStagingReport,
+    BmfFifoStagingRunRequest,
+)
+from steuerreport_v2.contracts.fairspot_staking import (
+    FairspotStakingReconciliationReport,
+)
+from steuerreport_v2.contracts.moonpay_receipts import (
+    MoonpayReceiptReport,
+    MoonpayReceiptUpsertRequest,
+    MoonpayReceiptUpsertResult,
+)
 from steuerreport_v2.contracts.exports import (
     ExportPackage,
     ExportPackageDeleteResult,
@@ -121,7 +202,18 @@ from steuerreport_v2.contracts.portfolio import (
     PortfolioWalletHistoryImportRequest,
     PortfolioWalletHistoryImportResult,
 )
+from steuerreport_v2.contracts.pionex_reconciliation import (
+    PionexHntReconciliationReport,
+)
+from steuerreport_v2.contracts.cross_cex_evidence import (
+    CrossCexTransferEvidenceReport,
+)
 from steuerreport_v2.contracts.prices import (
+    AsOfPriceGateBackfillRequest,
+    AsOfPriceGateBackfillResult,
+    AsOfPriceGateReport,
+    AsOfTokenValuationDecisionRequest,
+    AsOfTokenValuationDecisionResult,
     CurrentPortfolioPriceBackfillRequest,
     CurrentPortfolioPriceBackfillResult,
     ExternalPriceBackfillRequest,
@@ -154,12 +246,26 @@ from steuerreport_v2.contracts.review import (
     ReviewGate,
     ReviewTaskSummary,
 )
+from steuerreport_v2.contracts.service_swap_tax_mapping import (
+    ServiceSwapTaxMappingReport,
+)
 from steuerreport_v2.contracts.reports import ReportCenterStatus
 from steuerreport_v2.contracts.solscan import (
     SolanaRpcProbeRequest,
     SolanaRpcProbeResult,
     SolscanEvidenceTraceReport,
     SolscanTokenPreflightReport,
+)
+from steuerreport_v2.contracts.solana_staking_position import (
+    SolanaStakingPositionReconciliationReport,
+)
+from steuerreport_v2.contracts.legal_research import (
+    LegalResearchConfig,
+    LegalResearchFreshnessReport,
+)
+from steuerreport_v2.contracts.source_registry import (
+    SourceRegistryConfig,
+    SourceRegistryRunReport,
 )
 from steuerreport_v2.contracts.sources import (
     BinanceEarnHistoryPreflightReport,
@@ -168,6 +274,11 @@ from steuerreport_v2.contracts.sources import (
     SourceDetail,
     SourceOverview,
     SourceReconciliationBreakdown,
+)
+from steuerreport_v2.contracts.swap_valuation import (
+    CryptoSwapFifoParallelPreviewReport,
+    CryptoSwapFifoParallelRunRequest,
+    CryptoSwapValuationReviewReport,
 )
 from steuerreport_v2.contracts.tax import (
     TaxLine,
@@ -180,6 +291,7 @@ from steuerreport_v2.contracts.tax import (
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionPlan,
     TaxBmfAmendmentWorklist,
+    TaxBmfComplianceMatrix,
     TaxBmfClosureBacklogReport,
     TaxBmfClosureBacklogSnapshot,
     TaxBmfFinalizationMatrix,
@@ -193,11 +305,13 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxRewardBmfRecheckReport,
     TaxMethodologyReport,
     TaxMethodologySummary,
+    TaxTimePrecisionAudit,
     TaxYearComplianceStatus,
 )
 from steuerreport_v2.contracts.tax_wallet_fifo import (
     LegacyHeliumOverviewReport,
     WalletFifoGapDiagnosisReport,
+    WalletFifoInternalTransferCarryReport,
     WalletFifoCexDepositTransferEvidenceReport,
     WalletFifoCexExchangeOutflowAnchorFeasibilityReport,
     WalletFifoCexExchangeOutflowEvidenceReport,
@@ -216,6 +330,8 @@ from steuerreport_v2.contracts.tax_wallet_fifo import (
     WalletFifoRawProvenanceBreakdownReport,
     WalletFifoSolanaProvenanceBatchLatest,
     WalletFifoSolanaProvenanceClassificationReport,
+    WalletFifoSolanaProgramSettlementEvidenceReport,
+    WalletFifoSolanaServiceSwapEvidenceReport,
     WalletFifoSolanaRawBmfEvidenceDrilldownReport,
     WalletFifoSolanaRawBmfEvidenceSummaryReport,
     WalletFifoSolanaRawProvenancePriorityReport,
@@ -225,8 +341,23 @@ from steuerreport_v2.contracts.tax_wallet_fifo import (
     WalletFifoSolanaOriginTraceReport,
     WalletFifoWithdrawalGapReport,
 )
+from steuerreport_v2.contracts.wallet_fifo_runs import (
+    WalletFifoMethodAcceptanceReport,
+    WalletFifoMethodAcceptanceRequest,
+    WalletFifoMethodAcceptanceResult,
+    WalletFifoMethodDeltaEvent,
+    WalletFifoMethodDeltaExplanationReport,
+    WalletFifoParallelRunReport,
+    WalletFifoParallelRunRequest,
+)
+from steuerreport_v2.contracts.wallet_fifo_migrations import (
+    WalletFifoMigrationApplyReadinessReport,
+    WalletFifoMigrationApplyReport,
+    WalletFifoMigrationApplyRequest,
+    WalletFifoMigrationRehearsalReport,
+    WalletFifoMigrationRehearsalRequest,
+)
 from steuerreport_v2.contracts.tax_years import (
-    TaxDeclarationGuide,
     TaxExternalInflowReport,
     TaxIncomeReport,
     TaxLossRealizationPlanner,
@@ -289,15 +420,49 @@ from steuerreport_v2.contracts.valuation import (
 from steuerreport_v2.contracts.wallet_monthly import WalletMonthlyPreflightReport
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.admin import AdminService
+from steuerreport_v2.domain.api_meta import ApiCapabilitiesService
 from steuerreport_v2.domain.ai import AiService
+from steuerreport_v2.domain.as_of_price_gate import AsOfPriceGateService
 from steuerreport_v2.domain.audit import AuditService
 from steuerreport_v2.domain.binance_earn import BinanceEarnHistoryService
 from steuerreport_v2.domain.bitget import BitgetWalletHistoryService
-from steuerreport_v2.domain.blockpit_solana_preflight import BlockpitSolanaPreflightService
+from steuerreport_v2.domain.bitget_strategy_basis_decisions import (
+    BitgetStrategyBasisDecisionService,
+)
+from steuerreport_v2.domain.bitget_strategy_fifo import BitgetStrategyFifoGapService
+from steuerreport_v2.domain.bitget_strategy_reconstruction import (
+    BitgetStrategyBasisReconstructionService,
+)
+from steuerreport_v2.domain.bmf_compliance import BmfComplianceMatrixService
+from steuerreport_v2.domain.bmf_fifo_staging import BmfCombinedFifoStagingService
+from steuerreport_v2.domain.bmf_event_evidence import BmfFifoEventEvidenceService
+from steuerreport_v2.domain.bmf_event_price_remediation import (
+    BmfEventPriceRemediationService,
+)
+from steuerreport_v2.domain.business_inventory import (
+    BusinessRewardInventoryReviewService,
+)
+from steuerreport_v2.domain.blockpit_solana_preflight import (
+    BlockpitSolanaPreflightService,
+)
 from steuerreport_v2.domain.cockpit import CockpitService
+from steuerreport_v2.domain.cross_cex_evidence import (
+    CrossCexTransferEvidenceService,
+)
 from steuerreport_v2.domain.derivatives import DerivativesManager
 from steuerreport_v2.domain.divorce import DivorceEqualizationService
+from steuerreport_v2.domain.divorce_service_routes import (
+    DivorceServiceRouteEvidenceService,
+)
+from steuerreport_v2.domain.divorce_inheritance import (
+    DivorceInheritanceOriginService,
+)
+from steuerreport_v2.domain.valuation_runs import DivorceValuationRunService
 from steuerreport_v2.domain.exports import ExportService
+from steuerreport_v2.domain.fairspot_staking import (
+    FairspotStakingReconciliationService,
+)
+from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
 from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
 from steuerreport_v2.domain.flows import FlowService
 from steuerreport_v2.domain.import_coverage import ImportCoverageService
@@ -309,20 +474,51 @@ from steuerreport_v2.domain.parity import V1ParityService
 from steuerreport_v2.domain.parser_preflight import ParserPreflightService
 from steuerreport_v2.domain.price_csv_importer import PriceCsvImporter
 from steuerreport_v2.domain.portfolio import PortfolioService
+from steuerreport_v2.domain.pionex_reconciliation import (
+    PionexHntReconciliationService,
+)
 from steuerreport_v2.domain.product_readiness import ProductReadinessService
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.domain.reports import ReportCenterService
 from steuerreport_v2.domain.solscan_preflight import SolscanPreflightService
+from steuerreport_v2.domain.solana_staking_position import (
+    SolanaStakingPositionReconciliationService,
+)
+from steuerreport_v2.domain.legal_research import LegalResearchService
 from steuerreport_v2.domain.sources import SourceService
+from steuerreport_v2.domain.swap_valuation import CryptoSwapValuationReviewService
+from steuerreport_v2.domain.swap_valuation_parallel import (
+    CryptoSwapFifoParallelPreviewService,
+)
+from steuerreport_v2.domain.source_registry import SourceRegistryService
+from steuerreport_v2.domain.service_swap_tax_mapping import (
+    ServiceSwapTaxMappingService,
+)
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.tax_methodology import TaxMethodologyService
+from steuerreport_v2.domain.tax_time import (
+    TaxTimePolicyService,
+    event_reporting_year_sql,
+    reporting_tax_year,
+    reporting_year_utc_bounds,
+)
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
+from steuerreport_v2.domain.wallet_fifo_acceptance import (
+    WalletFifoMethodAcceptanceService,
+)
+from steuerreport_v2.domain.wallet_fifo_runs import WalletFifoParallelRunService
+from steuerreport_v2.domain.wallet_fifo_migrations import (
+    WalletFifoMigrationApplyService,
+    WalletFifoMigrationRehearsalService,
+)
 from steuerreport_v2.domain.tax_years import TaxYearService
 from steuerreport_v2.domain.transfers import TransferCandidateService
 from steuerreport_v2.domain.valuation import PriceCoverageService, PriceQualityService
 from steuerreport_v2.domain.v1_fx_cache_importer import V1FxCacheImporter
-from steuerreport_v2.domain.wallet_monthly_preflight import WalletMonthlyPreflightService
+from steuerreport_v2.domain.wallet_monthly_preflight import (
+    WalletMonthlyPreflightService,
+)
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.file_raw_importer import FileRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
@@ -381,7 +577,9 @@ def build_health_payload(db: DuckDbStore) -> dict:
     }
 
 
-def _import_preview_warnings(preview: CsvImportPreview, content_field: str) -> list[dict[str, str]]:
+def _import_preview_warnings(
+    preview: CsvImportPreview, content_field: str
+) -> list[dict[str, str]]:
     warnings = []
     if preview.missing_required_groups:
         warnings.append(
@@ -416,7 +614,9 @@ def _import_preview_warnings(preview: CsvImportPreview, content_field: str) -> l
     return warnings
 
 
-def _import_preview_errors(preview: CsvImportPreview, content_field: str) -> list[dict[str, str]]:
+def _import_preview_errors(
+    preview: CsvImportPreview, content_field: str
+) -> list[dict[str, str]]:
     return [
         warning
         for warning in _import_preview_warnings(preview, content_field)
@@ -425,7 +625,19 @@ def _import_preview_errors(preview: CsvImportPreview, content_field: str) -> lis
 
 
 def create_app(store: DuckDbStore | None = None) -> FastAPI:
-    app = FastAPI(title="Steuerreport V2", version=__version__)
+    app = FastAPI(
+        title="Steuerreport V2 API",
+        summary="Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
+        description=(
+            "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. "
+            "Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist "
+            "ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges "
+            "LAN bestimmt und darf nicht direkt im Internet exponiert werden."
+        ),
+        version=__version__,
+        openapi_tags=OPENAPI_TAGS,
+        servers=[{"url": "/", "description": "Aktueller Steuerreport-V2-API-Host"}],
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -465,6 +677,16 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def health() -> ApiResponse[dict]:
         return ApiResponse(data=build_health_payload(db))
 
+    @app.get("/api/v1/meta/capabilities")
+    def api_capabilities() -> ApiResponse[ApiCapabilities]:
+        api_routes = [route for route in app.routes if isinstance(route, APIRoute)]
+        return ApiResponse(
+            data=ApiCapabilitiesService().report(
+                operation_count=sum(len(route.methods or {"GET"}) for route in api_routes),
+                path_count=len({route.path for route in api_routes}),
+            )
+        )
+
     @app.get("/api/v1/admin/database")
     def database_status() -> ApiResponse[dict]:
         return ApiResponse(data=db.health())
@@ -476,13 +698,17 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/cockpit/summary")
     def cockpit_summary() -> ApiResponse[CockpitSummary]:
         return ApiResponse(
-            data=cached_response("cockpit:summary", 10, lambda: CockpitService(db).summary())
+            data=cached_response(
+                "cockpit:summary", 10, lambda: CockpitService(db).summary()
+            )
         )
 
     @app.get("/api/v1/product/readiness")
     def product_readiness() -> ApiResponse[ProductReadinessReport]:
         return ApiResponse(
-            data=cached_response("product:readiness", 60, lambda: ProductReadinessService(db).report())
+            data=cached_response(
+                "product:readiness", 60, lambda: ProductReadinessService(db).report()
+            )
         )
 
     @app.get("/api/v1/admin/settings")
@@ -524,7 +750,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.post("/api/v1/admin/cex-credentials")
-    def save_cex_credentials(payload: CexCredentialWrite) -> ApiResponse[CexCredentialWriteResult]:
+    def save_cex_credentials(
+        payload: CexCredentialWrite,
+    ) -> ApiResponse[CexCredentialWriteResult]:
         try:
             result = AdminService(db).save_cex_credentials(payload)
         except ValueError as exc:
@@ -610,7 +838,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/sources/jupiter/tokens/metadata-cache")
-    def jupiter_token_metadata_cache(limit: int = 200) -> ApiResponse[JupiterTokenMetadataCacheResult]:
+    def jupiter_token_metadata_cache(
+        limit: int = 200,
+    ) -> ApiResponse[JupiterTokenMetadataCacheResult]:
         try:
             result = JupiterTokenService(db).metadata_cache(limit=limit)
         except Exception as exc:
@@ -631,7 +861,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         force: bool = False,
     ) -> ApiResponse[JupiterTokenMetadataRefreshResult]:
         try:
-            result = JupiterTokenService(db).refresh_metadata_cache(limit=limit, force=force)
+            result = JupiterTokenService(db).refresh_metadata_cache(
+                limit=limit, force=force
+            )
         except ValueError as exc:
             return ApiResponse(
                 status="error",
@@ -663,7 +895,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         limit: int = 200,
     ) -> ApiResponse[JupiterTokenRiskReviewResult]:
         try:
-            result = JupiterTokenService(db).risk_review(risk_status=risk_status, limit=limit)
+            result = JupiterTokenService(db).risk_review(
+                risk_status=risk_status, limit=limit
+            )
         except ValueError as exc:
             return ApiResponse(
                 status="error",
@@ -688,7 +922,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=result)
 
     @app.get("/api/v1/admin/cex-credentials/v1-takeover")
-    def v1_cex_credentials_takeover_report() -> ApiResponse[V1CexCredentialTakeoverReport]:
+    def v1_cex_credentials_takeover_report() -> ApiResponse[
+        V1CexCredentialTakeoverReport
+    ]:
         return ApiResponse(data=AdminService(db).v1_cex_credential_takeover_report())
 
     @app.post("/api/v1/admin/cex-credentials/v1-takeover")
@@ -871,7 +1107,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     ) -> ApiResponse[dict[str, object]]:
         if artifact_path is None:
             return ApiResponse(data=SolscanPreflightService().helium_reward_evidence())
-        return ApiResponse(data=SolscanPreflightService().helium_reward_evidence(artifact_path=artifact_path))
+        return ApiResponse(
+            data=SolscanPreflightService().helium_reward_evidence(
+                artifact_path=artifact_path
+            )
+        )
 
     @app.get("/api/v1/import/wallet-monthly/preflight")
     def wallet_monthly_preflight(
@@ -966,7 +1206,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         payload = {
             "batch": batch.model_dump(mode="json") if batch is not None else None,
             "raw_objects": [
-                item.model_dump(mode="json") for item in db.list_raw_objects(batch_id=batch_id, limit=None)
+                item.model_dump(mode="json")
+                for item in db.list_raw_objects(batch_id=batch_id, limit=None)
             ],
             "canonical_events": [
                 item.model_dump(mode="json")
@@ -1059,19 +1300,27 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.post("/api/v1/import/assistant/preview")
-    def preview_import_assistant(payload: ImportAssistantRequest) -> ApiResponse[ImportAssistantPreview]:
+    def preview_import_assistant(
+        payload: ImportAssistantRequest,
+    ) -> ApiResponse[ImportAssistantPreview]:
         preview = ImportAssistantService(db).preview(payload)
         return ApiResponse(
             status="ok" if preview.can_execute else "warning",
             data=preview,
             warnings=[
-                {"code": "import_assistant_warning", "message": warning, "field": "content"}
+                {
+                    "code": "import_assistant_warning",
+                    "message": warning,
+                    "field": "content",
+                }
                 for warning in preview.warnings
             ],
         )
 
     @app.post("/api/v1/import/assistant/execute")
-    def execute_import_assistant(payload: ImportAssistantRequest) -> ApiResponse[ImportAssistantExecuteResult]:
+    def execute_import_assistant(
+        payload: ImportAssistantRequest,
+    ) -> ApiResponse[ImportAssistantExecuteResult]:
         try:
             return ApiResponse(data=ImportAssistantService(db).execute(payload))
         except ValueError as exc:
@@ -1146,7 +1395,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         asset: str | None = None,
         limit: int = 200,
     ) -> ApiResponse[TransferCandidateReport]:
-        return ApiResponse(data=TransferCandidateService(db).candidates(asset=asset, limit=limit))
+        return ApiResponse(
+            data=TransferCandidateService(db).candidates(asset=asset, limit=limit)
+        )
 
     @app.post("/api/v1/prices")
     def add_price_point(payload: PricePointCreate) -> ApiResponse[PriceWriteResult]:
@@ -1163,12 +1414,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=db.list_latest_price_points())
 
     @app.post("/api/v1/prices/import/csv/preview")
-    def preview_price_csv(payload: PriceCsvImportRequest) -> ApiResponse[PriceCsvPreview]:
+    def preview_price_csv(
+        payload: PriceCsvImportRequest,
+    ) -> ApiResponse[PriceCsvPreview]:
         preview = PriceCsvImporter().preview(payload.content, payload.default_source)
-        return ApiResponse(status="ok" if preview.can_import else "warning", data=preview)
+        return ApiResponse(
+            status="ok" if preview.can_import else "warning", data=preview
+        )
 
     @app.post("/api/v1/prices/import/csv")
-    def import_price_csv(payload: PriceCsvImportRequest) -> ApiResponse[PriceCsvImportResult]:
+    def import_price_csv(
+        payload: PriceCsvImportRequest,
+    ) -> ApiResponse[PriceCsvImportResult]:
         preview, prices = PriceCsvImporter().to_price_points(
             payload.content,
             payload.default_source,
@@ -1272,6 +1529,65 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             data=result,
         )
 
+    @app.get("/api/v1/prices/as-of-gate")
+    def prices_as_of_gate(
+        as_of: datetime | None = None,
+        as_of_date: date | None = None,
+        materiality_threshold_eur: Decimal = Decimal("1"),
+    ) -> ApiResponse[AsOfPriceGateReport]:
+        try:
+            report = AsOfPriceGateService(db).report(
+                as_of=as_of,
+                as_of_date=as_of_date,
+                materiality_threshold_eur=materiality_threshold_eur,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(data=report)
+
+    @app.post("/api/v1/prices/as-of-gate/backfill")
+    def prices_as_of_gate_backfill(
+        payload: AsOfPriceGateBackfillRequest,
+    ) -> ApiResponse[AsOfPriceGateBackfillResult]:
+        try:
+            result = AsOfPriceGateService(db).backfill(payload)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(
+            status="ok" if result.dry_run or result.imported_prices else "warning",
+            data=result,
+        )
+
+    @app.post("/api/v1/prices/as-of-gate/token-review-decisions")
+    def accept_as_of_token_valuation(
+        payload: AsOfTokenValuationDecisionRequest,
+    ) -> ApiResponse[AsOfTokenValuationDecisionResult]:
+        try:
+            result = AsOfPriceGateService(db).accept_token_valuation(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=result)
+
+    @app.get("/api/v1/prices/as-of-gate/token-review-decisions.csv")
+    def as_of_token_valuation_decisions_csv(
+        separation_date: date | None = None,
+        end_asset_date: date | None = None,
+    ) -> Response:
+        content = AsOfPriceGateService(db).token_valuation_decisions_csv(
+            separation_date=separation_date,
+            end_asset_date=end_asset_date,
+        )
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": (
+                    "attachment; filename=stichtag-token-valuation-decisions.csv"
+                )
+            },
+        )
+
     @app.get("/api/v1/prices/coverage")
     def price_coverage() -> ApiResponse[PriceCoverageReport]:
         return ApiResponse(data=PriceCoverageService(db).report())
@@ -1297,12 +1613,20 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/prices/quality/manual-review")
-    def price_quality_manual_review(limit: int = 120) -> ApiResponse[PriceQualityManualReviewReport]:
-        return ApiResponse(data=PriceQualityService(db).manual_review_report(limit=limit))
+    def price_quality_manual_review(
+        limit: int = 120,
+    ) -> ApiResponse[PriceQualityManualReviewReport]:
+        return ApiResponse(
+            data=PriceQualityService(db).manual_review_report(limit=limit)
+        )
 
     @app.get("/api/v1/prices/quality/stablecoin-fx-review")
-    def price_quality_stablecoin_fx_review(limit: int = 120) -> ApiResponse[PriceQualityStablecoinFxReport]:
-        return ApiResponse(data=PriceQualityService(db).stablecoin_fx_review(limit=limit))
+    def price_quality_stablecoin_fx_review(
+        limit: int = 120,
+    ) -> ApiResponse[PriceQualityStablecoinFxReport]:
+        return ApiResponse(
+            data=PriceQualityService(db).stablecoin_fx_review(limit=limit)
+        )
 
     @app.get("/api/v1/prices/quality/stablecoin-fx-replacement-preview")
     def price_quality_stablecoin_fx_replacement_preview(
@@ -1351,7 +1675,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         payload: PriceQualityStablecoinFxTaxImpactDecisionCreate,
     ) -> ApiResponse[PriceQualityStablecoinFxTaxImpactDecisionResult]:
         try:
-            result = PriceQualityService(db).add_stablecoin_fx_tax_impact_decision(payload)
+            result = PriceQualityService(db).add_stablecoin_fx_tax_impact_decision(
+                payload
+            )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return ApiResponse(data=result)
@@ -1371,7 +1697,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         payload: PriceQualityStablecoinFxAnchorPreviewDecisionCreate,
     ) -> ApiResponse[PriceQualityStablecoinFxTaxImpactDecisionResult]:
         try:
-            result = PriceQualityService(db).add_stablecoin_fx_anchor_preview_decision(payload)
+            result = PriceQualityService(db).add_stablecoin_fx_anchor_preview_decision(
+                payload
+            )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return ApiResponse(data=result)
@@ -1387,19 +1715,33 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=result)
 
     @app.get("/api/v1/prices/quality/solscan-signature-review")
-    def price_quality_solscan_signature_review(limit: int = 120) -> ApiResponse[PriceQualitySolscanSignatureReport]:
-        return ApiResponse(data=PriceQualityService(db).solscan_signature_review(limit=limit))
+    def price_quality_solscan_signature_review(
+        limit: int = 120,
+    ) -> ApiResponse[PriceQualitySolscanSignatureReport]:
+        return ApiResponse(
+            data=PriceQualityService(db).solscan_signature_review(limit=limit)
+        )
 
     @app.get("/api/v1/prices/quality/binance-normalizer-review")
-    def price_quality_binance_normalizer_review(limit: int = 120) -> ApiResponse[PriceQualityBinanceNormalizerReport]:
-        return ApiResponse(data=PriceQualityService(db).binance_normalizer_review(limit=limit))
+    def price_quality_binance_normalizer_review(
+        limit: int = 120,
+    ) -> ApiResponse[PriceQualityBinanceNormalizerReport]:
+        return ApiResponse(
+            data=PriceQualityService(db).binance_normalizer_review(limit=limit)
+        )
 
     @app.get("/api/v1/prices/quality/event-quote-evidence-review")
-    def price_quality_event_quote_evidence_review(limit: int = 120) -> ApiResponse[PriceQualityEventQuoteEvidenceReport]:
-        return ApiResponse(data=PriceQualityService(db).event_quote_evidence_review(limit=limit))
+    def price_quality_event_quote_evidence_review(
+        limit: int = 120,
+    ) -> ApiResponse[PriceQualityEventQuoteEvidenceReport]:
+        return ApiResponse(
+            data=PriceQualityService(db).event_quote_evidence_review(limit=limit)
+        )
 
     @app.get("/api/v1/prices/quality/closure-candidates")
-    def price_quality_closure_candidates(limit: int = 120) -> ApiResponse[PriceQualityClosureCandidateReport]:
+    def price_quality_closure_candidates(
+        limit: int = 120,
+    ) -> ApiResponse[PriceQualityClosureCandidateReport]:
         return ApiResponse(data=PriceQualityService(db).closure_candidates(limit=limit))
 
     @app.post("/api/v1/prices/quality/decisions")
@@ -1442,7 +1784,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=PriceCoverageService(db).requirements())
 
     @app.post("/api/v1/prices/coverage/decisions")
-    def add_price_gap_decision(payload: PriceGapDecisionCreate) -> ApiResponse[PriceGapDecisionResult]:
+    def add_price_gap_decision(
+        payload: PriceGapDecisionCreate,
+    ) -> ApiResponse[PriceGapDecisionResult]:
         decision = db.add_review_decision(
             ReviewDecisionCreate(
                 decision_type="price_gap",
@@ -1486,7 +1830,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/portfolio/snapshot")
     def portfolio_snapshot() -> ApiResponse[PortfolioSnapshot]:
         return ApiResponse(
-            data=cached_response("portfolio:snapshot", 10, lambda: PortfolioService(db).snapshot())
+            data=cached_response(
+                "portfolio:snapshot", 10, lambda: PortfolioService(db).snapshot()
+            )
         )
 
     @app.get("/api/v1/portfolio/valuation-audit")
@@ -1550,7 +1896,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=PortfolioService(db).reconciliation_report())
 
     @app.post("/api/v1/portfolio/reconciliation/refresh")
-    def portfolio_reconciliation_refresh() -> ApiResponse[PortfolioReconciliationRefreshResult]:
+    def portfolio_reconciliation_refresh() -> ApiResponse[
+        PortfolioReconciliationRefreshResult
+    ]:
         result = PortfolioService(db).refresh_reconciliation_snapshots()
         warnings = [
             ApiMessage(
@@ -1559,9 +1907,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 field=item.connector_id,
             )
             for item in result.connector_results
-            if item.status != "refreshed"
+            if item.status not in {"refreshed", "empty_response"}
         ]
-        if result.imported_snapshots == 0:
+        if result.imported_snapshots == 0 and not any(
+            item.status == "empty_response" for item in result.connector_results
+        ):
             warnings.append(
                 ApiMessage(
                     code="no_live_snapshots_imported",
@@ -1587,16 +1937,587 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/portfolio/fiat-deposits/binance")
     def portfolio_binance_fiat_deposits() -> ApiResponse[PortfolioFiatDepositReport]:
-        return ApiResponse(data=PortfolioService(db).fiat_deposit_report(source="binance"))
+        return ApiResponse(
+            data=PortfolioService(db).fiat_deposit_report(source="binance")
+        )
+
+    @app.get("/api/v1/divorce/inheritance-origin")
+    def divorce_inheritance_origin(
+        separation_date: date = DivorceInheritanceOriginService.DEFAULT_SEPARATION_DATE,
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> ApiResponse[DivorceInheritanceOriginReport]:
+        return ApiResponse(
+            data=DivorceInheritanceOriginService(db).report(
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+            )
+        )
+
+    @app.get("/api/v1/divorce/sparkasse-statements")
+    def divorce_sparkasse_statements() -> ApiResponse[
+        SparkasseStatementConnectorStatus
+    ]:
+        return ApiResponse(
+            data=DivorceInheritanceOriginService(db).sparkasse_statements()
+        )
+
+    @app.get("/api/v1/divorce/sparkasse-statements.csv")
+    def divorce_sparkasse_statements_csv() -> Response:
+        content = DivorceInheritanceOriginService(db).sparkasse_statements_csv()
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": (
+                    "attachment; filename=sparkasse-statement-camt-evidence.csv"
+                )
+            },
+        )
+
+    @app.get("/api/v1/divorce/inheritance-credit-candidates")
+    def divorce_inheritance_credit_candidates(
+        separation_date: date = DivorceInheritanceOriginService.DEFAULT_SEPARATION_DATE,
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> ApiResponse[InheritanceBankCreditCandidateReport]:
+        return ApiResponse(
+            data=DivorceInheritanceOriginService(db).inheritance_bank_credit_candidates(
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+            )
+        )
+
+    @app.get("/api/v1/divorce/inheritance-credits.csv")
+    def divorce_inheritance_credits_csv(
+        separation_date: date = DivorceInheritanceOriginService.DEFAULT_SEPARATION_DATE,
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> Response:
+        content = DivorceInheritanceOriginService(db).inheritance_credits_csv(
+            separation_date=separation_date,
+            end_asset_date=end_asset_date,
+        )
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=inheritance-credit-evidence.csv"
+            },
+        )
+
+    @app.post("/api/v1/divorce/inheritance-credit-decisions")
+    def divorce_inheritance_credit_decision(
+        payload: InheritanceBankCreditDecisionRequest,
+        separation_date: date = DivorceInheritanceOriginService.DEFAULT_SEPARATION_DATE,
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> ApiResponse[InheritanceBankCreditDecisionResult]:
+        try:
+            result = DivorceInheritanceOriginService(db).accept_inheritance_bank_credit(
+                payload,
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="inheritance_credit_not_reviewable",
+                        message=str(exc),
+                        field="transaction_reference_sha256",
+                    )
+                ],
+            )
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.already_recorded else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="inheritance_credit_already_reviewed",
+                        message="Diese Erbmittelgutschrift ist bereits freigegeben.",
+                        field="transaction_reference_sha256",
+                    )
+                ]
+                if result.already_recorded
+                else []
+            ),
+        )
+
+    @app.post("/api/v1/divorce/inheritance-document-credit-decisions")
+    def divorce_inheritance_document_credit_decision(
+        payload: InheritanceDocumentCreditDecisionRequest,
+        separation_date: date = DivorceInheritanceOriginService.DEFAULT_SEPARATION_DATE,
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> ApiResponse[InheritanceDocumentCreditDecisionResult]:
+        try:
+            result = DivorceInheritanceOriginService(
+                db
+            ).accept_inheritance_document_credit(
+                payload,
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="inheritance_document_credit_not_reviewable",
+                        message=str(exc),
+                        field="document_sha256",
+                    )
+                ],
+            )
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.already_recorded else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="inheritance_document_credit_already_reviewed",
+                        message="Dieser dokumentierte Erbmittelzufluss ist bereits freigegeben.",
+                        field="document_sha256",
+                    )
+                ]
+                if result.already_recorded
+                else []
+            ),
+        )
+
+    @app.post("/api/v1/divorce/sparkasse-camt")
+    async def divorce_sparkasse_camt_upload(
+        file: UploadFile = File(...),
+        separation_date: date = Form(
+            DivorceInheritanceOriginService.DEFAULT_SEPARATION_DATE
+        ),
+        end_asset_date: date = Form(
+            DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE
+        ),
+    ) -> ApiResponse[BankCamtUploadResult]:
+        content = await file.read(
+            DivorceInheritanceOriginService.MAX_BANK_CAMT_UPLOAD_BYTES + 1
+        )
+        try:
+            result = DivorceInheritanceOriginService(db).store_bank_camt_document(
+                filename=file.filename or "",
+                content=content,
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="sparkasse_camt_rejected",
+                        message=str(exc),
+                        field="file",
+                    )
+                ],
+            )
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.uploaded_files == 0 else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="sparkasse_camt_already_present",
+                        message="Alle enthaltenen CAMT-Dateien waren bereits hashgleich vorhanden.",
+                        field="file",
+                    )
+                ]
+                if result.uploaded_files == 0
+                else []
+            ),
+        )
+
+    @app.get("/api/v1/divorce/inheritance-documents")
+    def divorce_inheritance_documents() -> ApiResponse[
+        InheritanceDocumentConnectorStatus
+    ]:
+        return ApiResponse(
+            data=DivorceInheritanceOriginService(db).inheritance_documents()
+        )
+
+    @app.get("/api/v1/divorce/inheritance-documents.csv")
+    def divorce_inheritance_documents_csv() -> Response:
+        content = DivorceInheritanceOriginService(db).inheritance_documents_csv()
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=inheritance-document-evidence.csv"
+            },
+        )
+
+    @app.post("/api/v1/divorce/inheritance-documents")
+    async def divorce_inheritance_document_upload(
+        file: UploadFile = File(...),
+    ) -> ApiResponse[InheritanceDocumentUploadResult]:
+        content = await file.read(
+            DivorceInheritanceOriginService.MAX_INHERITANCE_DOCUMENT_BYTES + 1
+        )
+        try:
+            result = DivorceInheritanceOriginService(db).store_inheritance_document(
+                filename=file.filename or "",
+                content=content,
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="inheritance_document_rejected",
+                        message=str(exc),
+                        field="file",
+                    )
+                ],
+            )
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.already_present else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="inheritance_document_already_present",
+                        message="Dieser Erbnachweis war bereits hashgleich vorhanden.",
+                        field="file",
+                    )
+                ]
+                if result.already_present
+                else []
+            ),
+        )
+
+    @app.post("/api/v1/divorce/inheritance-documents/review-decisions")
+    def divorce_inheritance_document_review_decision(
+        payload: InheritanceDocumentDecisionRequest,
+    ) -> ApiResponse[InheritanceDocumentDecisionResult]:
+        try:
+            result = DivorceInheritanceOriginService(db).accept_inheritance_document(
+                payload
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="inheritance_document_not_reviewable",
+                        message=str(exc),
+                        field="document_sha256",
+                    )
+                ],
+            )
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.already_recorded else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="inheritance_document_already_reviewed",
+                        message="Dieser formale Erbnachweis ist bereits freigegeben.",
+                        field="document_sha256",
+                    )
+                ]
+                if result.already_recorded
+                else []
+            ),
+        )
+
+    @app.get("/api/v1/divorce/inheritance-origin.csv")
+    def divorce_inheritance_origin_csv(
+        separation_date: date = DivorceInheritanceOriginService.DEFAULT_SEPARATION_DATE,
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> Response:
+        content = DivorceInheritanceOriginService(db).csv(
+            separation_date=separation_date,
+            end_asset_date=end_asset_date,
+        )
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=divorce-inheritance-origin.csv"
+            },
+        )
+
+    @app.get("/api/v1/divorce/trade-republic/documents")
+    def divorce_trade_republic_documents(
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> ApiResponse[TradeRepublicConnectorStatus]:
+        return ApiResponse(
+            data=DivorceInheritanceOriginService(db).trade_republic_documents(
+                end_asset_date=end_asset_date
+            )
+        )
+
+    @app.get("/api/v1/divorce/coinbase/connector")
+    def divorce_coinbase_connector(
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> ApiResponse[CoinbaseConnectorStatus]:
+        return ApiResponse(
+            data=DivorceInheritanceOriginService(db).coinbase_connector(
+                end_asset_date=end_asset_date
+            )
+        )
+
+    @app.get("/api/v1/divorce/coinbase/connector.csv")
+    def divorce_coinbase_connector_csv(
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> Response:
+        content = DivorceInheritanceOriginService(db).coinbase_connector_csv(
+            end_asset_date=end_asset_date
+        )
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=coinbase-history-valuation-evidence.csv"
+            },
+        )
+
+    @app.post("/api/v1/divorce/coinbase/valuation-decisions")
+    def divorce_coinbase_valuation_decision(
+        payload: CoinbaseValuationDecisionRequest,
+    ) -> ApiResponse[CoinbaseValuationDecisionResult]:
+        try:
+            result = DivorceInheritanceOriginService(db).accept_coinbase_valuation(
+                payload
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="coinbase_valuation_not_reviewable",
+                        message=str(exc),
+                        field="history_manifest_sha256",
+                    )
+                ],
+            )
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.already_recorded else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="coinbase_valuation_already_reviewed",
+                        message="Diese Coinbase-Historie ist bereits fuer den Stichtag freigegeben.",
+                        field="history_manifest_sha256",
+                    )
+                ]
+                if result.already_recorded
+                else []
+            ),
+        )
+
+    @app.get("/api/v1/divorce/trade-republic/documents.csv")
+    def divorce_trade_republic_documents_csv(
+        end_asset_date: date = DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE,
+    ) -> Response:
+        content = DivorceInheritanceOriginService(db).trade_republic_documents_csv(
+            end_asset_date=end_asset_date
+        )
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=trade-republic-document-evidence.csv"
+            },
+        )
+
+    @app.post("/api/v1/divorce/trade-republic/documents")
+    async def divorce_trade_republic_document_upload(
+        file: UploadFile = File(...),
+        end_asset_date: date = Form(
+            DivorceInheritanceOriginService.DEFAULT_END_ASSET_DATE
+        ),
+    ) -> ApiResponse[TradeRepublicDocumentUploadResult]:
+        content = await file.read(
+            DivorceInheritanceOriginService.MAX_TRADE_REPUBLIC_DOCUMENT_BYTES + 1
+        )
+        try:
+            result = DivorceInheritanceOriginService(db).store_trade_republic_document(
+                filename=file.filename or "",
+                content=content,
+                end_asset_date=end_asset_date,
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="trade_republic_document_rejected",
+                        message=str(exc),
+                        field="file",
+                    )
+                ],
+            )
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.already_present else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="trade_republic_document_already_present",
+                        message="Dieses Dokument war bereits hashgleich vorhanden.",
+                        field="file",
+                    )
+                ]
+                if result.already_present
+                else []
+            ),
+        )
+
+    @app.post("/api/v1/divorce/trade-republic/valuation-decisions")
+    def divorce_trade_republic_valuation_decision(
+        payload: TradeRepublicValuationDecisionRequest,
+    ) -> ApiResponse[TradeRepublicValuationDecisionResult]:
+        try:
+            result = DivorceInheritanceOriginService(
+                db
+            ).accept_trade_republic_valuation(payload)
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="trade_republic_valuation_not_reviewable",
+                        message=str(exc),
+                        field="document_sha256",
+                    )
+                ],
+            )
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.already_recorded else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="trade_republic_valuation_already_recorded",
+                        message="Dieser Trade-Republic-Stichtagswert ist bereits freigegeben.",
+                        field="document_sha256",
+                    )
+                ]
+                if result.already_recorded
+                else []
+            ),
+        )
+
+    @app.post("/api/v1/divorce/service-route-evidence/refresh")
+    def divorce_service_route_evidence_refresh(
+        payload: DivorceServiceRouteEvidenceRefreshRequest,
+    ) -> ApiResponse[DivorceServiceRouteEvidenceReport]:
+        try:
+            report = DivorceServiceRouteEvidenceService(db).refresh(payload)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(
+            status="ok" if report.strict_ready else "warning",
+            data=report,
+        )
+
+    @app.get("/api/v1/divorce/service-route-evidence/{tx_id}")
+    def divorce_service_route_evidence(
+        tx_id: str,
+    ) -> ApiResponse[DivorceServiceRouteEvidenceReport]:
+        try:
+            report = DivorceServiceRouteEvidenceService(db).latest(tx_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if report is None:
+            raise HTTPException(
+                status_code=404, detail="service_route_evidence_not_found"
+            )
+        return ApiResponse(data=report)
+
+    @app.post("/api/v1/divorce/service-route-evidence/decisions")
+    def divorce_service_route_decision(
+        payload: DivorceServiceRouteDecisionRequest,
+    ) -> ApiResponse[DivorceServiceRouteDecisionResult]:
+        try:
+            result = DivorceServiceRouteEvidenceService(db).accept(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(
+            status="warning" if result.already_recorded else "ok",
+            data=result,
+        )
+
+    @app.get("/api/v1/divorce/service-route-evidence/{tx_id}/artifacts/{filename}")
+    def divorce_service_route_evidence_artifact(
+        tx_id: str,
+        filename: str,
+    ) -> Response:
+        try:
+            path = DivorceServiceRouteEvidenceService(db).evidence_path(
+                tx_id,
+                filename,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if path is None:
+            raise HTTPException(
+                status_code=404, detail="service_route_artifact_not_found"
+            )
+        return Response(
+            content=path.read_bytes(),
+            media_type="application/gzip",
+            headers={"Content-Disposition": f"attachment; filename={path.name}"},
+        )
 
     @app.get("/api/v1/divorce/equalization-summary")
-    def divorce_equalization_summary() -> ApiResponse[DivorceEqualizationSummary]:
-        return ApiResponse(data=DivorceEqualizationService(db).summary())
+    def divorce_equalization_summary(
+        separation_date: date | None = None,
+        end_asset_date: date | None = None,
+        court_evidence_reference: str | None = None,
+        cutoff_at: datetime | None = None,
+        valuation_at: datetime | None = None,
+        materiality_threshold_eur: Decimal = Decimal("1"),
+    ) -> ApiResponse[DivorceEqualizationSummary]:
+        try:
+            report = DivorceEqualizationService(db).summary(
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+                court_evidence_reference=court_evidence_reference,
+                cutoff_at=cutoff_at,
+                valuation_at=valuation_at,
+                materiality_threshold_eur=materiality_threshold_eur,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(data=report)
 
     @app.get("/api/v1/divorce/equalization-summary/valuation-tokens.csv")
-    def divorce_equalization_valuation_tokens_csv() -> Response:
+    def divorce_equalization_valuation_tokens_csv(
+        separation_date: date | None = None,
+        end_asset_date: date | None = None,
+        court_evidence_reference: str | None = None,
+        cutoff_at: datetime | None = None,
+        valuation_at: datetime | None = None,
+        materiality_threshold_eur: Decimal = Decimal("1"),
+    ) -> Response:
+        try:
+            content = DivorceEqualizationService(db).valuation_tokens_csv(
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+                court_evidence_reference=court_evidence_reference,
+                cutoff_at=cutoff_at,
+                valuation_at=valuation_at,
+                materiality_threshold_eur=materiality_threshold_eur,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return Response(
-            content=DivorceEqualizationService(db).valuation_tokens_csv(),
+            content=content,
             media_type="text/csv",
             headers={
                 "Content-Disposition": "attachment; filename=divorce-equalization-valuation-tokens.csv"
@@ -1604,9 +2525,27 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/divorce/equalization-summary/accounts.csv")
-    def divorce_equalization_accounts_csv() -> Response:
+    def divorce_equalization_accounts_csv(
+        separation_date: date | None = None,
+        end_asset_date: date | None = None,
+        court_evidence_reference: str | None = None,
+        cutoff_at: datetime | None = None,
+        valuation_at: datetime | None = None,
+        materiality_threshold_eur: Decimal = Decimal("1"),
+    ) -> Response:
+        try:
+            content = DivorceEqualizationService(db).accounts_csv(
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+                court_evidence_reference=court_evidence_reference,
+                cutoff_at=cutoff_at,
+                valuation_at=valuation_at,
+                materiality_threshold_eur=materiality_threshold_eur,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return Response(
-            content=DivorceEqualizationService(db).accounts_csv(),
+            content=content,
             media_type="text/csv",
             headers={
                 "Content-Disposition": "attachment; filename=divorce-equalization-accounts.csv"
@@ -1614,23 +2553,130 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/divorce/equalization-summary/live-reconciliation.csv")
-    def divorce_equalization_live_reconciliation_csv() -> Response:
+    def divorce_equalization_live_reconciliation_csv(
+        separation_date: date | None = None,
+        end_asset_date: date | None = None,
+        court_evidence_reference: str | None = None,
+        cutoff_at: datetime | None = None,
+        valuation_at: datetime | None = None,
+        materiality_threshold_eur: Decimal = Decimal("1"),
+    ) -> Response:
+        try:
+            content = DivorceEqualizationService(db).live_reconciliation_csv(
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+                court_evidence_reference=court_evidence_reference,
+                cutoff_at=cutoff_at,
+                valuation_at=valuation_at,
+                materiality_threshold_eur=materiality_threshold_eur,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return Response(
-            content=DivorceEqualizationService(db).live_reconciliation_csv(),
+            content=content,
             media_type="text/csv",
             headers={
                 "Content-Disposition": "attachment; filename=divorce-equalization-live-reconciliation.csv"
             },
         )
 
-    @app.get("/api/v1/divorce/equalization-summary/evidence-package.zip")
-    def divorce_equalization_evidence_package_zip() -> Response:
+    @app.get("/api/v1/divorce/equalization-summary/capital-flows.csv")
+    def divorce_equalization_capital_flows_csv(
+        separation_date: date | None = None,
+        end_asset_date: date | None = None,
+        court_evidence_reference: str | None = None,
+        cutoff_at: datetime | None = None,
+        valuation_at: datetime | None = None,
+        materiality_threshold_eur: Decimal = Decimal("1"),
+    ) -> Response:
+        try:
+            content = DivorceEqualizationService(db).capital_flows_csv(
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+                court_evidence_reference=court_evidence_reference,
+                cutoff_at=cutoff_at,
+                valuation_at=valuation_at,
+                materiality_threshold_eur=materiality_threshold_eur,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return Response(
-            content=DivorceEqualizationService(db).evidence_package_zip(),
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=divorce-equalization-capital-flows.csv"
+            },
+        )
+
+    @app.get("/api/v1/divorce/equalization-summary/evidence-package.zip")
+    def divorce_equalization_evidence_package_zip(
+        separation_date: date | None = None,
+        end_asset_date: date | None = None,
+        court_evidence_reference: str | None = None,
+        cutoff_at: datetime | None = None,
+        valuation_at: datetime | None = None,
+        materiality_threshold_eur: Decimal = Decimal("1"),
+    ) -> Response:
+        try:
+            content = DivorceEqualizationService(db).evidence_package_zip(
+                separation_date=separation_date,
+                end_asset_date=end_asset_date,
+                court_evidence_reference=court_evidence_reference,
+                cutoff_at=cutoff_at,
+                valuation_at=valuation_at,
+                materiality_threshold_eur=materiality_threshold_eur,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return Response(
+            content=content,
             media_type="application/zip",
             headers={
                 "Content-Disposition": "attachment; filename=divorce-equalization-evidence-package.zip"
             },
+        )
+
+    @app.post("/api/v1/divorce/valuation-runs")
+    def divorce_valuation_run(
+        payload: DivorceValuationRunRequest,
+    ) -> ApiResponse[DivorceValuationRunReport]:
+        try:
+            report = DivorceValuationRunService(db).run(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/divorce/valuation-runs/latest")
+    def divorce_valuation_run_latest() -> ApiResponse[DivorceValuationRunReport | None]:
+        return ApiResponse(data=DivorceValuationRunService(db).latest())
+
+    @app.get("/api/v1/divorce/valuation-runs/{run_id}")
+    def divorce_valuation_run_by_id(
+        run_id: str,
+    ) -> ApiResponse[DivorceValuationRunReport]:
+        report = DivorceValuationRunService(db).get(run_id)
+        if report is None:
+            raise HTTPException(status_code=404, detail="Stichtagslauf nicht gefunden")
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/divorce/valuation-runs/{run_id}/evidence/{filename}")
+    def divorce_valuation_run_evidence(run_id: str, filename: str) -> Response:
+        path = DivorceValuationRunService(db).evidence_path(run_id, filename)
+        if path is None:
+            raise HTTPException(
+                status_code=404, detail="Stichtags-Belegdatei nicht gefunden"
+            )
+        media_type = (
+            "application/zip"
+            if path.suffix == ".zip"
+            else "text/csv"
+            if path.suffix == ".csv"
+            else "application/json"
+        )
+        return Response(
+            content=path.read_bytes(),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     @app.get("/api/v1/sources/overview")
@@ -1638,8 +2684,48 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=SourceService(db).overview())
 
     @app.get("/api/v1/sources/connector-diagnostics")
-    def sources_connector_diagnostics() -> ApiResponse[SourceConnectorDiagnosticsReport]:
+    def sources_connector_diagnostics() -> ApiResponse[
+        SourceConnectorDiagnosticsReport
+    ]:
         return ApiResponse(data=SourceService(db).connector_diagnostics())
+
+    @app.get("/api/v1/sources/registry/config")
+    def sources_registry_config() -> ApiResponse[SourceRegistryConfig]:
+        try:
+            config = SourceRegistryService(db).config()
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Quellenregistry ungueltig: {exc}"
+            ) from exc
+        return ApiResponse(data=config)
+
+    @app.post("/api/v1/sources/registry/runs")
+    def sources_registry_run() -> ApiResponse[SourceRegistryRunReport]:
+        try:
+            report = SourceRegistryService(db).run()
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Quellenregistry-Lauf fehlgeschlagen: {exc}"
+            ) from exc
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/sources/registry/runs/latest")
+    def sources_registry_run_latest() -> ApiResponse[SourceRegistryRunReport | None]:
+        return ApiResponse(data=SourceRegistryService(db).latest())
+
+    @app.get("/api/v1/tax-methodology/legal-research/sources")
+    def legal_research_sources() -> ApiResponse[LegalResearchConfig]:
+        try:
+            config = LegalResearchService().config()
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Rechtsquellen-Registry ungueltig: {exc}"
+            ) from exc
+        return ApiResponse(data=config)
+
+    @app.get("/api/v1/tax-methodology/legal-research/freshness")
+    def legal_research_freshness() -> ApiResponse[LegalResearchFreshnessReport | None]:
+        return ApiResponse(data=LegalResearchService().latest())
 
     @app.get("/api/v1/sources/{source_id}")
     def source_detail(source_id: str) -> ApiResponse[SourceDetail]:
@@ -1658,7 +2744,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=detail)
 
     @app.get("/api/v1/sources/{source_id}/reconciliation")
-    def source_reconciliation(source_id: str) -> ApiResponse[SourceReconciliationBreakdown]:
+    def source_reconciliation(
+        source_id: str,
+    ) -> ApiResponse[SourceReconciliationBreakdown]:
         breakdown = SourceService(db).reconciliation_breakdown(source_id)
         if breakdown is None:
             return ApiResponse(
@@ -1683,7 +2771,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             since_at = datetime.fromisoformat(since.replace("Z", "+00:00"))
             if since_at.tzinfo is None:
                 since_at = since_at.replace(tzinfo=timezone.utc)
-        selected_assets = [item.strip().upper() for item in assets.split(",") if item.strip()] if assets else None
+        selected_assets = (
+            [item.strip().upper() for item in assets.split(",") if item.strip()]
+            if assets
+            else None
+        )
         report = SourceService(db).binance_reconciliation_evidence(
             since=since_at,
             assets=selected_assets,
@@ -1702,7 +2794,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=report)
 
     @app.get("/api/v1/sources/binance/earn-history-preflight")
-    def binance_earn_history_preflight() -> ApiResponse[BinanceEarnHistoryPreflightReport]:
+    def binance_earn_history_preflight() -> ApiResponse[
+        BinanceEarnHistoryPreflightReport
+    ]:
         return ApiResponse(data=SourceService(db).binance_earn_history_preflight())
 
     @app.get("/api/v1/sources/binance/earn-history-api-preview")
@@ -1723,7 +2817,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             until_at = datetime.fromisoformat(until.replace("Z", "+00:00"))
             if until_at.tzinfo is None:
                 until_at = until_at.replace(tzinfo=timezone.utc)
-        selected_assets = [item.strip().upper() for item in assets.split(",") if item.strip()] if assets else None
+        selected_assets = (
+            [item.strip().upper() for item in assets.split(",") if item.strip()]
+            if assets
+            else None
+        )
         return ApiResponse(
             data=BinanceEarnHistoryService(db).api_preview(
                 since=since_at,
@@ -1751,13 +2849,48 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             until_at = datetime.fromisoformat(until.replace("Z", "+00:00"))
             if until_at.tzinfo is None:
                 until_at = until_at.replace(tzinfo=timezone.utc)
-        selected_assets = [item.strip().upper() for item in assets.split(",") if item.strip()] if assets else None
+        selected_assets = (
+            [item.strip().upper() for item in assets.split(",") if item.strip()]
+            if assets
+            else None
+        )
         return ApiResponse(
             data=BinanceEarnHistoryService(db).withdrawal_history_api_preview(
                 since=since_at,
                 until=until_at,
                 assets=selected_assets,
                 max_records=max(1, min(max_records, 5000)),
+            )
+        )
+
+    @app.get("/api/v1/sources/binance/asset-dividend-api-preview")
+    def binance_asset_dividend_api_preview(
+        since: str | None = None,
+        until: str | None = None,
+        assets: str | None = "SOL",
+        max_records: int = 5000,
+    ) -> ApiResponse[BinanceAssetDividendPreview]:
+        since_at = None
+        until_at = None
+        if since:
+            since_at = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            if since_at.tzinfo is None:
+                since_at = since_at.replace(tzinfo=timezone.utc)
+        if until:
+            until_at = datetime.fromisoformat(until.replace("Z", "+00:00"))
+            if until_at.tzinfo is None:
+                until_at = until_at.replace(tzinfo=timezone.utc)
+        selected_assets = (
+            [item.strip().upper() for item in assets.split(",") if item.strip()]
+            if assets
+            else None
+        )
+        return ApiResponse(
+            data=BinanceEarnHistoryService(db).asset_dividend_history_api_preview(
+                since=since_at,
+                until=until_at,
+                assets=selected_assets,
+                max_records=max(1, min(max_records, 50000)),
             )
         )
 
@@ -1778,7 +2911,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             until_at = datetime.fromisoformat(until.replace("Z", "+00:00"))
             if until_at.tzinfo is None:
                 until_at = until_at.replace(tzinfo=timezone.utc)
-        selected_assets = [item.strip().upper() for item in assets.split(",") if item.strip()] if assets else None
+        selected_assets = (
+            [item.strip().upper() for item in assets.split(",") if item.strip()]
+            if assets
+            else None
+        )
         return ApiResponse(
             data=BitgetWalletHistoryService(db).withdrawal_history_api_preview(
                 since=since_at,
@@ -1813,7 +2950,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             until_at = datetime.fromisoformat(payload.until.replace("Z", "+00:00"))
             if until_at.tzinfo is None:
                 until_at = until_at.replace(tzinfo=timezone.utc)
-        selected_assets = [item.strip().upper() for item in payload.assets if item.strip()]
+        selected_assets = [
+            item.strip().upper() for item in payload.assets if item.strip()
+        ]
         return ApiResponse(
             data=BinanceEarnHistoryService(db).import_api_history(
                 since=since_at,
@@ -1839,13 +2978,42 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             until_at = datetime.fromisoformat(payload.until.replace("Z", "+00:00"))
             if until_at.tzinfo is None:
                 until_at = until_at.replace(tzinfo=timezone.utc)
-        selected_assets = [item.strip().upper() for item in payload.assets if item.strip()]
+        selected_assets = [
+            item.strip().upper() for item in payload.assets if item.strip()
+        ]
         return ApiResponse(
             data=BinanceEarnHistoryService(db).import_withdrawal_api_history(
                 since=since_at,
                 until=until_at,
                 assets=selected_assets or None,
                 max_records=max(1, min(payload.max_records, 5000)),
+                execute=payload.execute,
+            )
+        )
+
+    @app.post("/api/v1/sources/binance/asset-dividend-api/import")
+    def binance_asset_dividend_api_import(
+        payload: BinanceAssetDividendApiImportRequest,
+    ) -> ApiResponse[BinanceAssetDividendApiImportResult]:
+        since_at = None
+        until_at = None
+        if payload.since:
+            since_at = datetime.fromisoformat(payload.since.replace("Z", "+00:00"))
+            if since_at.tzinfo is None:
+                since_at = since_at.replace(tzinfo=timezone.utc)
+        if payload.until:
+            until_at = datetime.fromisoformat(payload.until.replace("Z", "+00:00"))
+            if until_at.tzinfo is None:
+                until_at = until_at.replace(tzinfo=timezone.utc)
+        selected_assets = [
+            item.strip().upper() for item in payload.assets if item.strip()
+        ]
+        return ApiResponse(
+            data=BinanceEarnHistoryService(db).import_asset_dividend_api_history(
+                since=since_at,
+                until=until_at,
+                assets=selected_assets or ["SOL"],
+                max_records=max(1, min(payload.max_records, 50000)),
                 execute=payload.execute,
             )
         )
@@ -1864,7 +3032,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             until_at = datetime.fromisoformat(payload.until.replace("Z", "+00:00"))
             if until_at.tzinfo is None:
                 until_at = until_at.replace(tzinfo=timezone.utc)
-        selected_assets = [item.strip().upper() for item in payload.assets if item.strip()]
+        selected_assets = [
+            item.strip().upper() for item in payload.assets if item.strip()
+        ]
         return ApiResponse(
             data=BitgetWalletHistoryService(db).import_withdrawal_api_history(
                 since=since_at,
@@ -1894,7 +3064,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.post("/api/v1/review/decisions")
-    def add_review_decision(payload: ReviewDecisionCreate) -> ApiResponse[ReviewDecision]:
+    def add_review_decision(
+        payload: ReviewDecisionCreate,
+    ) -> ApiResponse[ReviewDecision]:
         decision = db.add_review_decision(payload)
         clear_response_cache()
         return ApiResponse(data=decision)
@@ -1987,7 +3159,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=db.list_v1_reference_metrics())
 
     @app.delete("/api/v1/parity/v1/references/{reference_id}")
-    def delete_v1_reference_metric(reference_id: str) -> ApiResponse[V1ReferenceDeleteResult]:
+    def delete_v1_reference_metric(
+        reference_id: str,
+    ) -> ApiResponse[V1ReferenceDeleteResult]:
         deleted = db.delete_v1_reference_metric(reference_id)
         warnings = []
         if not deleted:
@@ -2055,7 +3229,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=V1ParityService(db).group_detail(scope))
 
     @app.get("/api/v1/parity/hnt-wallet-bridge")
-    def parity_hnt_wallet_bridge(year: int = 2022) -> ApiResponse[HntWalletBridgeReport]:
+    def parity_hnt_wallet_bridge(
+        year: int = 2022,
+    ) -> ApiResponse[HntWalletBridgeReport]:
         return ApiResponse(data=V1ParityService(db).hnt_wallet_bridge(year))
 
     @app.get("/api/v1/parity/hnt-fifo-provenance")
@@ -2077,7 +3253,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.post("/api/v1/parity/decisions")
-    def add_parity_decision(payload: V1ParityDecisionCreate) -> ApiResponse[V1ParityDecisionResult]:
+    def add_parity_decision(
+        payload: V1ParityDecisionCreate,
+    ) -> ApiResponse[V1ParityDecisionResult]:
         decision = db.add_review_decision(
             ReviewDecisionCreate(
                 decision_type="parity_finding",
@@ -2116,12 +3294,16 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=TaxService(db).list_unmatched_disposals())
 
     @app.get("/api/v1/tax/holding-periods")
-    def tax_holding_periods(min_value_eur: Decimal = Decimal("1")) -> ApiResponse[TaxHoldingPeriodReport]:
+    def tax_holding_periods(
+        min_value_eur: Decimal = Decimal("1"),
+    ) -> ApiResponse[TaxHoldingPeriodReport]:
         return ApiResponse(
             data=cached_response(
                 f"tax:holding-periods:{min_value_eur}",
                 60,
-                lambda: TaxService(db).holding_period_report(min_value_eur=min_value_eur),
+                lambda: TaxService(db).holding_period_report(
+                    min_value_eur=min_value_eur
+                ),
             )
         )
 
@@ -2147,17 +3329,533 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def tax_summary() -> ApiResponse[TaxRunSummary | None]:
         return ApiResponse(data=TaxService(db).latest_summary())
 
+    @app.get("/api/v1/tax/service-swap-mappings")
+    def tax_service_swap_mappings() -> ApiResponse[ServiceSwapTaxMappingReport]:
+        return ApiResponse(data=ServiceSwapTaxMappingService(db).report())
+
+    @app.get("/api/v1/tax/pionex-hnt-reconciliation")
+    def tax_pionex_hnt_reconciliation() -> ApiResponse[PionexHntReconciliationReport]:
+        return ApiResponse(data=PionexHntReconciliationService(db).report())
+
+    @app.get("/api/v1/tax/cross-cex-transfer-evidence")
+    def tax_cross_cex_transfer_evidence() -> ApiResponse[
+        CrossCexTransferEvidenceReport
+    ]:
+        return ApiResponse(data=CrossCexTransferEvidenceService(db).report())
+
+    @app.get("/api/v1/tax/fairspot-staking-reconciliation")
+    def tax_fairspot_staking_reconciliation() -> ApiResponse[
+        FairspotStakingReconciliationReport
+    ]:
+        return ApiResponse(data=FairspotStakingReconciliationService(db).report())
+
+    @app.get("/api/v1/tax/moonpay-receipts")
+    def tax_moonpay_receipts(
+        as_of: datetime | None = None,
+    ) -> ApiResponse[MoonpayReceiptReport]:
+        return ApiResponse(data=MoonpayReceiptService(db).report(as_of=as_of))
+
+    @app.get("/api/v1/tax/moonpay-receipts/trade-history.csv")
+    def tax_moonpay_trade_history_document() -> Response:
+        service = MoonpayReceiptService(db)
+        report = service.report()
+        path = service.trade_history_path
+        if (
+            not report.trade_history_exists
+            or report.trade_history_sha256 is None
+            or not path.is_file()
+            or hashlib.sha256(path.read_bytes()).hexdigest()
+            != report.trade_history_sha256
+        ):
+            raise HTTPException(
+                status_code=404, detail="moonpay_trade_history_not_found"
+            )
+        return Response(
+            content=path.read_bytes(),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="MoonPay_trade-history.csv"'
+                ),
+                "X-Content-SHA256": report.trade_history_sha256,
+            },
+        )
+
+    @app.get("/api/v1/tax/moonpay-receipts/{tx_id}/document")
+    def tax_moonpay_receipt_document(tx_id: str) -> Response:
+        service = MoonpayReceiptService(db)
+        path = service.document_path(tx_id)
+        if path is None:
+            raise HTTPException(status_code=404, detail="moonpay_receipt_not_found")
+        media_type = (
+            "text/csv; charset=utf-8"
+            if path.suffix.lower() == ".csv"
+            else "application/octet-stream"
+        )
+        return Response(
+            content=path.read_bytes(),
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{path.name}"',
+                "X-Content-SHA256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            },
+        )
+
+    @app.post("/api/v1/tax/moonpay-receipts")
+    def tax_moonpay_receipt_upsert(
+        payload: MoonpayReceiptUpsertRequest,
+    ) -> ApiResponse[MoonpayReceiptUpsertResult]:
+        try:
+            result = MoonpayReceiptService(db).upsert(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=result)
+
+    @app.get("/api/v1/tax/solana-staking-position-reconciliation")
+    def tax_solana_staking_position_reconciliation() -> ApiResponse[
+        SolanaStakingPositionReconciliationReport
+    ]:
+        return ApiResponse(data=SolanaStakingPositionReconciliationService(db).report())
+
     @app.get("/api/v1/tax/wallet-fifo-preview")
-    def tax_wallet_fifo_preview() -> ApiResponse[WalletFifoPreviewReport]:
-        return ApiResponse(data=WalletFifoPreviewService(db).preview())
+    def tax_wallet_fifo_preview(
+        year: int | None = None,
+        as_of: datetime | None = None,
+    ) -> ApiResponse[WalletFifoPreviewReport]:
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).preview(year=year, as_of=as_of)
+        )
+
+    @app.get("/api/v1/tax/wallet-fifo-internal-transfer-carry")
+    def tax_wallet_fifo_internal_transfer_carry(
+        year: int | None = None,
+        limit: int = 200,
+    ) -> ApiResponse[WalletFifoInternalTransferCarryReport]:
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).internal_transfer_carry_report(
+                year=year,
+                limit=limit,
+            )
+        )
+
+    @app.post("/api/v1/tax/wallet-fifo-runs")
+    def tax_wallet_fifo_parallel_run(
+        payload: WalletFifoParallelRunRequest,
+    ) -> ApiResponse[WalletFifoParallelRunReport]:
+        try:
+            report = WalletFifoParallelRunService(db).run(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo-runs/latest")
+    def tax_wallet_fifo_parallel_run_latest() -> ApiResponse[
+        WalletFifoParallelRunReport | None
+    ]:
+        return ApiResponse(data=WalletFifoParallelRunService(db).latest())
+
+    @app.get("/api/v1/tax/wallet-fifo/bitget-strategy-gaps")
+    def tax_wallet_fifo_bitget_strategy_gaps(
+        run_id: str | None = None,
+    ) -> ApiResponse[BitgetStrategyFifoGapReport]:
+        report = BitgetStrategyFifoGapService(db).report(run_id=run_id)
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Wallet-FIFO-Lauf fuer Bitget-Strategy-Nachweis nicht gefunden",
+            )
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo/bitget-strategy-gaps.csv")
+    def tax_wallet_fifo_bitget_strategy_gaps_csv(
+        run_id: str | None = None,
+    ) -> Response:
+        service = BitgetStrategyFifoGapService(db)
+        report = service.report(run_id=run_id)
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Wallet-FIFO-Lauf fuer Bitget-Strategy-Nachweis nicht gefunden",
+            )
+        return Response(
+            content=service.csv_bytes(report),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="bitget-strategy-fifo-gaps.csv"'
+                )
+            },
+        )
+
+    @app.get("/api/v1/tax/wallet-fifo/bitget-strategy-reconstruction")
+    def tax_wallet_fifo_bitget_strategy_reconstruction(
+        run_id: str | None = None,
+    ) -> ApiResponse[BitgetStrategyBasisReconstructionReport]:
+        report = BitgetStrategyBasisReconstructionService(db).report(run_id=run_id)
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Gebundene Bitget-Strategy-Rekonstruktionsakte nicht gefunden; "
+                    "neuen Wallet-FIFO-Lauf erzeugen"
+                ),
+            )
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo/bitget-strategy-basis-decision")
+    def tax_wallet_fifo_bitget_strategy_basis_decision(
+        run_id: str | None = None,
+    ) -> ApiResponse[BitgetStrategyBasisDecisionReport]:
+        report = BitgetStrategyBasisDecisionService(db).readiness(run_id=run_id)
+        if report.run_id is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Wallet-FIFO-Lauf fuer Bitget-Basisentscheidung nicht gefunden",
+            )
+        return ApiResponse(data=report)
+
+    @app.post(
+        "/api/v1/tax/wallet-fifo/bitget-strategy-basis-decision/{run_id}"
+    )
+    def tax_wallet_fifo_bitget_strategy_basis_decision_create(
+        run_id: str,
+        payload: BitgetStrategyBasisDecisionRequest,
+    ) -> ApiResponse[BitgetStrategyBasisDecisionResult]:
+        try:
+            result = BitgetStrategyBasisDecisionService(db).decide(
+                run_id=run_id,
+                request=payload,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=result)
+
+    @app.get("/api/v1/tax/wallet-fifo/bitget-strategy-reconstruction.csv")
+    def tax_wallet_fifo_bitget_strategy_reconstruction_csv(
+        run_id: str | None = None,
+    ) -> Response:
+        service = BitgetStrategyBasisReconstructionService(db)
+        report = service.report(run_id=run_id)
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Gebundene Bitget-Strategy-Rekonstruktionsakte nicht gefunden; "
+                    "neuen Wallet-FIFO-Lauf erzeugen"
+                ),
+            )
+        return Response(
+            content=service.csv_bytes(report),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="bitget-strategy-basis-reconstruction.csv"'
+                )
+            },
+        )
+
+    @app.get(
+        "/api/v1/tax/wallet-fifo/bitget-strategy-reconstruction/"
+        "reference-price-backfill/latest"
+    )
+    def tax_wallet_fifo_bitget_strategy_reference_price_backfill_latest() -> (
+        ApiResponse[BitgetStrategyReferencePriceBackfillResult | None]
+    ):
+        return ApiResponse(
+            data=BitgetStrategyBasisReconstructionService(db).latest_backfill()
+        )
+
+    @app.post(
+        "/api/v1/tax/wallet-fifo/bitget-strategy-reconstruction/"
+        "reference-price-backfill"
+    )
+    def tax_wallet_fifo_bitget_strategy_reference_price_backfill(
+        payload: BitgetStrategyReferencePriceBackfillRequest,
+    ) -> ApiResponse[BitgetStrategyReferencePriceBackfillResult]:
+        try:
+            result = BitgetStrategyBasisReconstructionService(
+                db
+            ).backfill_reference_prices(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if result.imported_count:
+            clear_response_cache()
+        return ApiResponse(data=result)
+
+    @app.get("/api/v1/tax/wallet-fifo/bitget-support-package.zip")
+    def tax_wallet_fifo_bitget_support_package(
+        run_id: str | None = None,
+    ) -> Response:
+        service = BitgetStrategyFifoGapService(db)
+        report = service.report(run_id=run_id)
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Wallet-FIFO-Lauf fuer Bitget-Supportpaket nicht gefunden",
+            )
+        try:
+            content = service.support_package_zip_bytes(report.support_package)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Bitget-Supportpaket konnte nicht gebunden werden: {exc}",
+            ) from exc
+        return Response(
+            content=content,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="bitget-support-package.zip"'
+                )
+            },
+        )
+
+    @app.get("/api/v1/tax/wallet-fifo/bitget-strategy-review.html")
+    def tax_wallet_fifo_bitget_strategy_review_html(
+        run_id: str | None = None,
+    ) -> Response:
+        gap_service = BitgetStrategyFifoGapService(db)
+        reconstruction_service = BitgetStrategyBasisReconstructionService(db)
+        gap_report = gap_service.report(run_id=run_id)
+        reconstruction = reconstruction_service.report(run_id=run_id)
+        if gap_report is None or reconstruction is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Gebundene Bitget-Strategy-Fachakte nicht gefunden",
+            )
+        if gap_report.run_id != reconstruction.run_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Bitget-Gap- und Rekonstruktionsakte sind nicht an denselben Lauf gebunden",
+            )
+        return Response(
+            content=reconstruction_service.professional_review_html(
+                reconstruction,
+                gap_report,
+                BitgetStrategyBasisDecisionService(db).readiness(
+                    run_id=reconstruction.run_id
+                ),
+            ),
+            media_type="text/html; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/v1/tax/wallet-fifo/bitget-strategy-review-package.zip")
+    def tax_wallet_fifo_bitget_strategy_review_package(
+        run_id: str | None = None,
+    ) -> Response:
+        gap_service = BitgetStrategyFifoGapService(db)
+        reconstruction_service = BitgetStrategyBasisReconstructionService(db)
+        gap_report = gap_service.report(run_id=run_id)
+        reconstruction = reconstruction_service.report(run_id=run_id)
+        if gap_report is None or reconstruction is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Gebundenes Bitget-Strategy-Pruefpaket nicht gefunden",
+            )
+        if gap_report.run_id != reconstruction.run_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Bitget-Gap- und Rekonstruktionsakte sind nicht an denselben Lauf gebunden",
+            )
+        try:
+            support_zip = gap_service.support_package_zip_bytes(
+                gap_report.support_package
+            )
+            content = reconstruction_service.professional_review_package_bytes(
+                reconstruction,
+                gap_report,
+                support_package_zip=support_zip,
+            )
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Bitget-Strategy-Pruefpaket konnte nicht gebunden werden: {exc}",
+            ) from exc
+        return Response(
+            content=content,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="bitget-strategy-fifo-review-package.zip"'
+                ),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    @app.get("/api/v1/tax/wallet-fifo-runs/latest/method-acceptance")
+    def tax_wallet_fifo_latest_method_acceptance() -> ApiResponse[
+        WalletFifoMethodAcceptanceReport
+    ]:
+        return ApiResponse(
+            data=cached_response(
+                "tax:wallet-fifo:latest:method-acceptance",
+                60,
+                lambda: WalletFifoMethodAcceptanceService(db).readiness(),
+            )
+        )
+
+    @app.get("/api/v1/tax/wallet-fifo-runs/latest/method-delta-explanation")
+    def tax_wallet_fifo_latest_method_delta_explanation(
+        year: int | None = None,
+        asset: str | None = None,
+        event_limit: int = 20,
+    ) -> ApiResponse[WalletFifoMethodDeltaExplanationReport | None]:
+        try:
+            report = WalletFifoParallelRunService(db).method_delta_explanation(
+                year=year,
+                asset=asset,
+                event_limit=event_limit,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo-runs/{run_id}")
+    def tax_wallet_fifo_parallel_run_by_id(
+        run_id: str,
+    ) -> ApiResponse[WalletFifoParallelRunReport]:
+        report = WalletFifoParallelRunService(db).get(run_id)
+        if report is None:
+            raise HTTPException(
+                status_code=404, detail="Wallet-FIFO-Lauf nicht gefunden"
+            )
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo-runs/{run_id}/method-acceptance")
+    def tax_wallet_fifo_method_acceptance(
+        run_id: str,
+    ) -> ApiResponse[WalletFifoMethodAcceptanceReport]:
+        report = WalletFifoMethodAcceptanceService(db).readiness(run_id=run_id)
+        if report.run_id is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Wallet-FIFO-Lauf nicht gefunden",
+            )
+        return ApiResponse(data=report)
+
+    @app.post("/api/v1/tax/wallet-fifo-runs/{run_id}/method-acceptance")
+    def tax_wallet_fifo_method_acceptance_create(
+        run_id: str,
+        payload: WalletFifoMethodAcceptanceRequest,
+    ) -> ApiResponse[WalletFifoMethodAcceptanceResult]:
+        try:
+            result = WalletFifoMethodAcceptanceService(db).accept(run_id, payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=result)
+
+    @app.post("/api/v1/tax/wallet-fifo-migrations/rehearsals")
+    def tax_wallet_fifo_migration_rehearsal(
+        payload: WalletFifoMigrationRehearsalRequest,
+    ) -> ApiResponse[WalletFifoMigrationRehearsalReport]:
+        try:
+            report = WalletFifoMigrationRehearsalService(db).rehearse(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo-migrations/rehearsals/latest")
+    def tax_wallet_fifo_migration_rehearsal_latest() -> ApiResponse[
+        WalletFifoMigrationRehearsalReport | None
+    ]:
+        return ApiResponse(data=WalletFifoMigrationRehearsalService(db).latest())
+
+    @app.get("/api/v1/tax/wallet-fifo-migrations/rehearsals/{rehearsal_id}")
+    def tax_wallet_fifo_migration_rehearsal_by_id(
+        rehearsal_id: str,
+    ) -> ApiResponse[WalletFifoMigrationRehearsalReport]:
+        report = WalletFifoMigrationRehearsalService(db).get(rehearsal_id)
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Wallet-FIFO-Migrationsprobe nicht gefunden",
+            )
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo-migrations/apply-readiness")
+    def tax_wallet_fifo_migration_apply_readiness(
+        run_id: str | None = None,
+        rehearsal_id: str | None = None,
+    ) -> ApiResponse[WalletFifoMigrationApplyReadinessReport]:
+        return ApiResponse(
+            data=WalletFifoMigrationApplyService(db).readiness(
+                run_id=run_id,
+                rehearsal_id=rehearsal_id,
+            )
+        )
+
+    @app.post("/api/v1/tax/wallet-fifo-migrations/apply")
+    def tax_wallet_fifo_migration_apply(
+        payload: WalletFifoMigrationApplyRequest,
+    ) -> ApiResponse[WalletFifoMigrationApplyReport]:
+        try:
+            report = WalletFifoMigrationApplyService(db).apply(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo-migrations/applies/latest")
+    def tax_wallet_fifo_migration_apply_latest() -> ApiResponse[
+        WalletFifoMigrationApplyReport | None
+    ]:
+        return ApiResponse(data=WalletFifoMigrationApplyService(db).latest())
+
+    @app.get("/api/v1/tax/wallet-fifo-runs/{run_id}/method-delta-explanation")
+    def tax_wallet_fifo_method_delta_explanation(
+        run_id: str,
+        year: int | None = None,
+        asset: str | None = None,
+        event_limit: int = 20,
+    ) -> ApiResponse[WalletFifoMethodDeltaExplanationReport]:
+        try:
+            report = WalletFifoParallelRunService(db).method_delta_explanation(
+                run_id=run_id,
+                year=year,
+                asset=asset,
+                event_limit=event_limit,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Methodendifferenz-Erklaerreport nicht gefunden",
+            )
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/wallet-fifo-runs/{run_id}/evidence/{filename}")
+    def tax_wallet_fifo_parallel_run_evidence(run_id: str, filename: str) -> Response:
+        path = WalletFifoParallelRunService(db).evidence_path(run_id, filename)
+        if path is None:
+            raise HTTPException(
+                status_code=404, detail="Wallet-FIFO-Belegdatei nicht gefunden"
+            )
+        return Response(
+            content=path.read_bytes(),
+            media_type=(
+                "application/json" if path.suffix == ".json" else "application/gzip"
+            ),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.get("/api/v1/tax/legacy-helium-overview")
-    def tax_legacy_helium_overview(limit: int = 200) -> ApiResponse[LegacyHeliumOverviewReport]:
+    def tax_legacy_helium_overview(
+        limit: int = 200,
+    ) -> ApiResponse[LegacyHeliumOverviewReport]:
         return ApiResponse(
             data=cached_response(
                 f"tax:legacy-helium-overview:{limit}",
                 60,
-                lambda: WalletFifoPreviewService(db).legacy_helium_overview(limit=limit),
+                lambda: WalletFifoPreviewService(db).legacy_helium_overview(
+                    limit=limit
+                ),
             )
         )
 
@@ -2192,7 +3890,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/filing-closure-overview")
-    def tax_years_filing_closure_overview() -> ApiResponse[TaxYearsFilingClosureOverview]:
+    def tax_years_filing_closure_overview() -> ApiResponse[
+        TaxYearsFilingClosureOverview
+    ]:
         return ApiResponse(
             data=cached_response(
                 "tax-years:filing-closure-overview",
@@ -2202,13 +3902,170 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/reward-trading-separation")
-    def tax_years_reward_trading_separation() -> ApiResponse[TaxRewardTradingSeparationReport]:
+    def tax_years_reward_trading_separation() -> ApiResponse[
+        TaxRewardTradingSeparationReport
+    ]:
         return ApiResponse(
             data=cached_response(
                 "tax-years:reward-trading-separation",
                 60,
                 lambda: TaxYearService(db).reward_trading_separation(),
             )
+        )
+
+    @app.get("/api/v1/tax-years/business-reward-inventory-review")
+    def tax_years_business_reward_inventory_review() -> ApiResponse[
+        BusinessRewardInventoryReviewReport
+    ]:
+        return ApiResponse(
+            data=cached_response(
+                "tax-years:business-reward-inventory-review",
+                60,
+                lambda: BusinessRewardInventoryReviewService(db).review(),
+            )
+        )
+
+    @app.get("/api/v1/tax/crypto-swap-valuation-review")
+    def tax_crypto_swap_valuation_review(
+        limit: int = 200,
+        year: int | None = None,
+    ) -> ApiResponse[CryptoSwapValuationReviewReport]:
+        return ApiResponse(
+            data=cached_response(
+                f"tax:crypto-swap-valuation-review:{year}:{limit}",
+                60,
+                lambda: CryptoSwapValuationReviewService(db).review(
+                    limit=limit,
+                    year=year,
+                ),
+            )
+        )
+
+    @app.get("/api/v1/tax/crypto-swap-fifo-parallel-preview/latest")
+    def tax_crypto_swap_fifo_parallel_preview_latest() -> ApiResponse[
+        CryptoSwapFifoParallelPreviewReport
+    ]:
+        report = CryptoSwapFifoParallelPreviewService(db).latest()
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="crypto_swap_fifo_parallel_preview_missing",
+            )
+        return ApiResponse(data=report)
+
+    @app.post("/api/v1/tax/crypto-swap-fifo-parallel-preview/run")
+    def tax_crypto_swap_fifo_parallel_preview_run(
+        payload: CryptoSwapFifoParallelRunRequest,
+    ) -> ApiResponse[CryptoSwapFifoParallelPreviewReport]:
+        return ApiResponse(
+            data=CryptoSwapFifoParallelPreviewService(db).run(
+                limit=max(1, min(payload.limit, 5000))
+            )
+        )
+
+    @app.get("/api/v1/tax/bmf-combined-fifo-staging/latest")
+    def tax_bmf_combined_fifo_staging_latest() -> ApiResponse[
+        BmfCombinedFifoStagingReport
+    ]:
+        report = BmfCombinedFifoStagingService(db).latest()
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="bmf_combined_fifo_staging_missing",
+            )
+        return ApiResponse(data=report)
+
+    @app.post("/api/v1/tax/bmf-combined-fifo-staging/run")
+    def tax_bmf_combined_fifo_staging_run(
+        payload: BmfFifoStagingRunRequest,
+    ) -> ApiResponse[BmfCombinedFifoStagingReport]:
+        try:
+            report = BmfCombinedFifoStagingService(db).run(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/bmf-fifo-event-evidence/latest")
+    def tax_bmf_fifo_event_evidence_latest() -> ApiResponse[BmfFifoEventEvidenceReport]:
+        report = BmfFifoEventEvidenceService(db).latest()
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="bmf_fifo_event_evidence_missing",
+            )
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/bmf-fifo-event-evidence/events.jsonl.gz")
+    def tax_bmf_fifo_event_evidence_events_artifact() -> Response:
+        service = BmfFifoEventEvidenceService(db)
+        report = service.latest()
+        if report is None or not report.all_event_evidence_artifact_path:
+            raise HTTPException(
+                status_code=404,
+                detail="bmf_fifo_event_evidence_artifact_missing",
+            )
+        artifact_path = Path(report.all_event_evidence_artifact_path)
+        if not artifact_path.is_absolute():
+            artifact_path = service.PROJECT_ROOT / artifact_path
+        artifact_path = artifact_path.resolve()
+        artifact_root = service.artifact_root.resolve()
+        if (
+            artifact_path != artifact_root
+            and artifact_root not in artifact_path.parents
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="bmf_fifo_event_evidence_artifact_path_invalid",
+            )
+        try:
+            content = artifact_path.read_bytes()
+        except OSError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="bmf_fifo_event_evidence_artifact_missing",
+            ) from exc
+        return Response(
+            content=content,
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": (f'attachment; filename="{artifact_path.name}"'),
+                "X-Content-SHA256": (report.all_event_evidence_artifact_sha256 or ""),
+            },
+        )
+
+    @app.post("/api/v1/tax/bmf-fifo-event-evidence/run")
+    def tax_bmf_fifo_event_evidence_run(
+        payload: BmfFifoEventEvidenceRunRequest,
+    ) -> ApiResponse[BmfFifoEventEvidenceReport]:
+        try:
+            report = BmfFifoEventEvidenceService(db).run(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax/bmf-event-price-remediation/latest")
+    def tax_bmf_event_price_remediation_latest() -> ApiResponse[
+        BmfEventPriceRemediationReport
+    ]:
+        report = BmfEventPriceRemediationService(db).latest()
+        if report is None:
+            raise HTTPException(
+                status_code=404,
+                detail="bmf_event_price_remediation_missing",
+            )
+        return ApiResponse(data=report)
+
+    @app.post("/api/v1/tax/bmf-event-price-remediation/run")
+    def tax_bmf_event_price_remediation_run(
+        payload: BmfEventPriceRemediationRunRequest,
+    ) -> ApiResponse[BmfEventPriceRemediationReport]:
+        try:
+            report = BmfEventPriceRemediationService(db).run(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ApiResponse(
+            status="ok" if report.status in {"planned", "applied"} else "warning",
+            data=report,
         )
 
     @app.get("/api/v1/tax-years/correction-map")
@@ -2222,7 +4079,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/turnover-audit-summary")
-    def tax_years_turnover_audit_summary(limit: int = 20) -> ApiResponse[TaxYearsTurnoverAuditSummary]:
+    def tax_years_turnover_audit_summary(
+        limit: int = 20,
+    ) -> ApiResponse[TaxYearsTurnoverAuditSummary]:
         return ApiResponse(
             data=cached_response(
                 f"tax-years:turnover-audit-summary:{limit}",
@@ -2232,40 +4091,90 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/solana-program-income-review")
-    def tax_years_solana_program_income_review(limit: int = 200) -> ApiResponse[TaxSolanaProgramIncomeReview]:
-        return ApiResponse(data=TaxYearService(db).solana_program_income_review(limit=limit))
+    def tax_years_solana_program_income_review(
+        limit: int = 200,
+    ) -> ApiResponse[TaxSolanaProgramIncomeReview]:
+        return ApiResponse(
+            data=TaxYearService(db).solana_program_income_review(limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/helium-swap-context")
-    def tax_years_helium_swap_context(limit: int = 200) -> ApiResponse[TaxHeliumSwapContextReview]:
-        return ApiResponse(data=TaxYearService(db).helium_swap_context_review(limit=limit))
+    def tax_years_helium_swap_context(
+        limit: int = 200,
+    ) -> ApiResponse[TaxHeliumSwapContextReview]:
+        return ApiResponse(
+            data=TaxYearService(db).helium_swap_context_review(limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/helium-swap-evidence-review")
-    def tax_years_helium_swap_evidence_review(limit: int = 50) -> ApiResponse[TaxHeliumSwapEvidenceReview]:
-        return ApiResponse(data=TaxYearService(db).helium_swap_evidence_review(limit=limit))
+    def tax_years_helium_swap_evidence_review(
+        limit: int = 50,
+    ) -> ApiResponse[TaxHeliumSwapEvidenceReview]:
+        return ApiResponse(
+            data=TaxYearService(db).helium_swap_evidence_review(limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/stablecoin-fifo-review")
-    def tax_years_stablecoin_fifo_review(limit: int = 200) -> ApiResponse[TaxStablecoinFifoReview]:
+    def tax_years_stablecoin_fifo_review(
+        limit: int = 200,
+    ) -> ApiResponse[TaxStablecoinFifoReview]:
         return ApiResponse(data=TaxYearService(db).stablecoin_fifo_review(limit=limit))
 
     @app.get("/api/v1/tax-years/stablecoin-quote-leg-review")
-    def tax_years_stablecoin_quote_leg_review(limit: int = 200) -> ApiResponse[TaxStablecoinQuoteLegReview]:
-        return ApiResponse(data=TaxYearService(db).stablecoin_quote_leg_review(limit=limit))
+    def tax_years_stablecoin_quote_leg_review(
+        limit: int = 200,
+    ) -> ApiResponse[TaxStablecoinQuoteLegReview]:
+        return ApiResponse(
+            data=TaxYearService(db).stablecoin_quote_leg_review(limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/solana-stablecoin-swap-context")
-    def tax_years_solana_stablecoin_swap_context(limit: int = 200) -> ApiResponse[TaxSolanaStablecoinSwapContextReview]:
-        return ApiResponse(data=TaxYearService(db).solana_stablecoin_swap_context_review(limit=limit))
+    def tax_years_solana_stablecoin_swap_context(
+        limit: int = 200,
+    ) -> ApiResponse[TaxSolanaStablecoinSwapContextReview]:
+        return ApiResponse(
+            data=TaxYearService(db).solana_stablecoin_swap_context_review(limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/solana-stablecoin-fx-review")
-    def tax_years_solana_stablecoin_fx_review(limit: int = 200) -> ApiResponse[TaxSolanaStablecoinFxReview]:
-        return ApiResponse(data=TaxYearService(db).solana_stablecoin_fx_review(limit=limit))
+    def tax_years_solana_stablecoin_fx_review(
+        limit: int = 200,
+    ) -> ApiResponse[TaxSolanaStablecoinFxReview]:
+        return ApiResponse(
+            data=TaxYearService(db).solana_stablecoin_fx_review(limit=limit)
+        )
 
     @app.get("/api/v1/tax-methodology/summary")
-    def tax_methodology_summary(year: int | None = None) -> ApiResponse[TaxMethodologySummary]:
+    def tax_methodology_summary(
+        year: int | None = None,
+    ) -> ApiResponse[TaxMethodologySummary]:
         return ApiResponse(
             data=cached_response(
                 f"tax-methodology:summary:{year or 'all'}",
                 60,
                 lambda: TaxMethodologyService(db).summary(year=year),
+            )
+        )
+
+    @app.get("/api/v1/tax-methodology/bmf-compliance-matrix")
+    def tax_methodology_bmf_compliance_matrix() -> ApiResponse[TaxBmfComplianceMatrix]:
+        return ApiResponse(
+            data=cached_response(
+                "tax-methodology:bmf-compliance-matrix",
+                60,
+                lambda: BmfComplianceMatrixService(db).matrix(),
+            )
+        )
+
+    @app.get("/api/v1/tax-methodology/time-precision-audit")
+    def tax_methodology_time_precision_audit(
+        limit: int = 200,
+    ) -> ApiResponse[TaxTimePrecisionAudit]:
+        return ApiResponse(
+            data=cached_response(
+                f"tax-methodology:time-precision-audit:{limit}",
+                60,
+                lambda: TaxTimePolicyService(db).audit(limit=limit),
             )
         )
 
@@ -2287,15 +4196,25 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-methodology/bmf-closure-backlog")
-    def tax_methodology_bmf_closure_backlog(year: int | None = None) -> ApiResponse[TaxBmfClosureBacklogReport]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_closure_backlog(year=year))
+    def tax_methodology_bmf_closure_backlog(
+        year: int | None = None,
+    ) -> ApiResponse[TaxBmfClosureBacklogReport]:
+        return ApiResponse(
+            data=TaxMethodologyService(db).bmf_closure_backlog(year=year)
+        )
 
     @app.get("/api/v1/tax-methodology/bmf-closure-backlog-snapshot")
-    def tax_methodology_bmf_closure_backlog_snapshot() -> ApiResponse[TaxBmfClosureBacklogSnapshot]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_closure_backlog_snapshot())
+    def tax_methodology_bmf_closure_backlog_snapshot() -> ApiResponse[
+        TaxBmfClosureBacklogSnapshot
+    ]:
+        return ApiResponse(
+            data=TaxMethodologyService(db).bmf_closure_backlog_snapshot()
+        )
 
     @app.get("/api/v1/tax-methodology/bmf-filing-readiness")
-    def tax_methodology_bmf_filing_readiness(year: int | None = None) -> ApiResponse[TaxBmfFilingReadinessReport]:
+    def tax_methodology_bmf_filing_readiness(
+        year: int | None = None,
+    ) -> ApiResponse[TaxBmfFilingReadinessReport]:
         service = TaxMethodologyService(db)
         if year is None:
             snapshot = service.bmf_filing_readiness_snapshot()
@@ -2304,8 +4223,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return ApiResponse(data=service.bmf_filing_readiness(year=year))
 
     @app.get("/api/v1/tax-methodology/bmf-filing-readiness-snapshot")
-    def tax_methodology_bmf_filing_readiness_snapshot() -> ApiResponse[TaxBmfFilingReadinessSnapshot]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_filing_readiness_snapshot())
+    def tax_methodology_bmf_filing_readiness_snapshot() -> ApiResponse[
+        TaxBmfFilingReadinessSnapshot
+    ]:
+        return ApiResponse(
+            data=TaxMethodologyService(db).bmf_filing_readiness_snapshot()
+        )
 
     @app.get("/api/v1/tax-methodology/bmf-finalization-matrix")
     def tax_methodology_bmf_finalization_matrix(
@@ -2332,7 +4255,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-methodology/bmf-prior-filing-comparison")
-    def tax_methodology_bmf_prior_filing_comparison() -> ApiResponse[TaxBmfPriorFilingComparison]:
+    def tax_methodology_bmf_prior_filing_comparison() -> ApiResponse[
+        TaxBmfPriorFilingComparison
+    ]:
         return ApiResponse(
             data=cached_response(
                 "tax-methodology:bmf-prior-filing-comparison",
@@ -2342,7 +4267,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-methodology/bmf-amendment-worklist")
-    def tax_methodology_bmf_amendment_worklist() -> ApiResponse[TaxBmfAmendmentWorklist]:
+    def tax_methodology_bmf_amendment_worklist() -> ApiResponse[
+        TaxBmfAmendmentWorklist
+    ]:
         return ApiResponse(
             data=cached_response(
                 "tax-methodology:bmf-amendment-worklist",
@@ -2351,7 +4278,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
         )
 
-    def render_bmf_amendment_worklist_csv(*, service: TaxMethodologyService | None = None) -> str:
+    def render_bmf_amendment_worklist_csv(
+        *, service: TaxMethodologyService | None = None
+    ) -> str:
         worklist = (service or TaxMethodologyService(db)).bmf_amendment_worklist()
         output = io.StringIO()
         writer = csv.DictWriter(
@@ -2381,12 +4310,22 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "Year": row.year,
                     "Status": row.status,
                     "Prior_Filing_Status": row.prior_filing_status,
-                    "V2_Taxable_Private_Disposals_EUR": row.v2_taxable_private_disposals_eur.quantize(Decimal("0.01")),
-                    "V2_Rewards_Mining_Staking_Income_EUR": row.v2_rewards_mining_staking_income_eur.quantize(Decimal("0.01")),
-                    "V2_Derivative_Pnl_EUR": row.v2_derivative_pnl_eur.quantize(Decimal("0.01")),
-                    "V2_Tax_Free_Private_Disposals_EUR": row.v2_tax_free_private_disposals_eur.quantize(Decimal("0.01")),
+                    "V2_Taxable_Private_Disposals_EUR": row.v2_taxable_private_disposals_eur.quantize(
+                        Decimal("0.01")
+                    ),
+                    "V2_Rewards_Mining_Staking_Income_EUR": row.v2_rewards_mining_staking_income_eur.quantize(
+                        Decimal("0.01")
+                    ),
+                    "V2_Derivative_Pnl_EUR": row.v2_derivative_pnl_eur.quantize(
+                        Decimal("0.01")
+                    ),
+                    "V2_Tax_Free_Private_Disposals_EUR": row.v2_tax_free_private_disposals_eur.quantize(
+                        Decimal("0.01")
+                    ),
                     "Technical_Review_Requirements_Count": row.technical_review_requirements_count,
-                    "Amendment_Review_Recommended": "yes" if row.amendment_review_recommended else "no",
+                    "Amendment_Review_Recommended": "yes"
+                    if row.amendment_review_recommended
+                    else "no",
                     "Correction_Reason": row.correction_reason,
                     "Next_Action": row.next_action,
                     "Filing_Summary_Endpoint": row.filing_summary_endpoint,
@@ -2402,18 +4341,26 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=render_bmf_amendment_worklist_csv(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=bmf-amendment-worklist.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=bmf-amendment-worklist.csv"
+            },
         )
 
     @app.get("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts")
-    def tax_methodology_bmf_prior_filing_declared_amounts() -> ApiResponse[TaxBmfPriorFilingDeclaredAmounts]:
-        return ApiResponse(data=TaxMethodologyService(db).bmf_prior_filing_declared_amounts())
+    def tax_methodology_bmf_prior_filing_declared_amounts() -> ApiResponse[
+        TaxBmfPriorFilingDeclaredAmounts
+    ]:
+        return ApiResponse(
+            data=TaxMethodologyService(db).bmf_prior_filing_declared_amounts()
+        )
 
     @app.put("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts")
     def tax_methodology_write_bmf_prior_filing_declared_amounts(
         payload: TaxBmfPriorFilingDeclaredAmountsWrite,
     ) -> ApiResponse[TaxBmfPriorFilingDeclaredAmountsWriteResult]:
-        result = TaxMethodologyService(db).write_bmf_prior_filing_declared_amounts(payload)
+        result = TaxMethodologyService(db).write_bmf_prior_filing_declared_amounts(
+            payload
+        )
         clear_response_cache()
         return ApiResponse(data=result)
 
@@ -2431,14 +4378,44 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
         )
 
+    def wants_html_response(accept: str | None) -> bool:
+        if not isinstance(accept, str) or not accept:
+            return False
+        normalized = accept.lower()
+        return "text/html" in normalized and "application/json" not in normalized
+
     @app.get("/api/v1/tax-years/{year}/declaration-guide")
-    def tax_year_declaration_guide(year: int) -> ApiResponse[TaxDeclarationGuide]:
+    def tax_year_declaration_guide(
+        year: int, accept: str | None = Header(default=None)
+    ):
+        if wants_html_response(accept):
+            summary = cached_response(
+                f"tax-years:filing-summary:{year}",
+                60,
+                lambda: TaxYearService(db).filing_summary(year),
+            )
+            return Response(
+                content=render_tax_year_filing_summary_html(summary),
+                media_type="text/html; charset=utf-8",
+            )
         return ApiResponse(
             data=cached_response(
                 f"tax-years:declaration-guide:{year}",
                 60,
                 lambda: TaxYearService(db).declaration_guide(year),
             )
+        )
+
+    @app.get("/api/v1/tax-years/{year}/declaration-guide.html")
+    def tax_year_declaration_guide_html(year: int) -> Response:
+        summary = cached_response(
+            f"tax-years:filing-summary:{year}",
+            60,
+            lambda: TaxYearService(db).filing_summary(year),
+        )
+        return Response(
+            content=render_tax_year_filing_summary_html(summary),
+            media_type="text/html; charset=utf-8",
         )
 
     @app.get("/api/v1/tax-years/{year}/filing-summary")
@@ -2462,6 +4439,101 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             content=render_tax_year_filing_summary_html(summary),
             media_type="text/html; charset=utf-8",
         )
+
+    def render_tax_year_evidence_html(report: TaxYearEvidenceReport) -> str:
+        rows = "\n".join(
+            f"""
+            <tr>
+              <td>{html_escape(item.category)}</td>
+              <td>{html_escape(item.label)}</td>
+              <td><span class="pill">{html_escape(item.file_format.upper())}</span></td>
+              <td>{item.record_count}</td>
+              <td class="amount">{html_eur(item.amount_eur)}</td>
+              <td>{html_escape(item.status)}</td>
+              <td>{html_escape(item.note)}</td>
+              <td><a class="button small" href="{html_escape(item.endpoint)}">Quelle oeffnen</a></td>
+            </tr>
+            """
+            for item in report.items
+        )
+        return f"""<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steuerjahr {report.year} Belegkarte</title>
+    <style>
+      :root {{
+        color: #17201b;
+        background: #f6f8f4;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }}
+      body {{ margin: 0; }}
+      main {{ display: grid; gap: 16px; margin: 0 auto; max-width: 1180px; padding: 28px; }}
+      .hero, .panel {{
+        background: #ffffff;
+        border: 1px solid #d8d6cf;
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
+      }}
+      .hero {{ display: grid; gap: 12px; padding: 24px; }}
+      .panel {{ display: grid; gap: 12px; padding: 18px; }}
+      .kicker {{ color: #5d685f; font-size: 12px; font-weight: 800; text-transform: uppercase; }}
+      h1, h2 {{ margin: 0; }}
+      h1 {{ font-size: 34px; line-height: 1.1; }}
+      p {{ color: #4d5a52; line-height: 1.45; margin: 0; }}
+      .actions {{ display: flex; flex-wrap: wrap; gap: 10px; }}
+      a.button {{
+        align-items: center;
+        background: #26372f;
+        border-radius: 6px;
+        color: #ffffff;
+        display: inline-flex;
+        font-weight: 700;
+        min-height: 38px;
+        padding: 8px 12px;
+        text-decoration: none;
+      }}
+      a.button.small {{ font-size: 12px; min-height: 30px; padding: 6px 9px; }}
+      .table-wrap {{ overflow-x: auto; }}
+      table {{ border-collapse: collapse; min-width: 980px; width: 100%; }}
+      th, td {{ border-bottom: 1px solid #ece8e0; padding: 10px; text-align: left; vertical-align: top; }}
+      th {{ color: #5d685f; font-size: 12px; text-transform: uppercase; }}
+      td {{ font-size: 13px; }}
+      .amount {{ font-variant-numeric: tabular-nums; white-space: nowrap; }}
+      .pill {{ background: #eef4ef; border: 1px solid #cfd8cf; border-radius: 999px; padding: 4px 8px; }}
+      @media (max-width: 760px) {{
+        main {{ padding: 16px; }}
+        h1 {{ font-size: 28px; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <span class="kicker">Steuerjahr Belegkarte</span>
+        <h1>Steuerjahr {report.year}</h1>
+        <p>{html_escape(report.methodology)}</p>
+        <div class="actions">
+          <a class="button" href="/api/v1/tax-years/{report.year}/filing-summary.html">Eingabehilfe</a>
+          <a class="button" href="/api/v1/export/tax-years/{report.year}/evidence-package.zip">Jahres-Belegpaket</a>
+          <a class="button" href="/api/v1/tax-years/{report.year}/evidence">JSON fuer KI/API</a>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Belege und Nachweise</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Kategorie</th><th>Beleg</th><th>Format</th><th>Datensaetze</th><th>Betrag</th><th>Status</th><th>Hinweis</th><th>Quelle</th></tr>
+            </thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>"""
 
     @app.get("/api/v1/tax-years/{year}/correction-map")
     def tax_year_correction_map(year: int) -> ApiResponse[TaxYearCorrectionMap]:
@@ -2508,7 +4580,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             """
             for item in summary.checklist
         )
-        warnings = "\n".join(f"<li>{html_escape(item)}</li>" for item in summary.warnings)
+        warnings = "\n".join(
+            f"<li>{html_escape(item)}</li>" for item in summary.warnings
+        )
         warnings_block = (
             f"""
             <section class="panel warning">
@@ -2646,7 +4720,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 </html>
 """
 
-    def render_tax_year_correction_map_csv(year: int, *, service: TaxYearService | None = None) -> str:
+    def render_tax_year_correction_map_csv(
+        year: int, *, service: TaxYearService | None = None
+    ) -> str:
         correction_map = (service or TaxYearService(db)).year_correction_map(year)
         output = io.StringIO()
         writer = csv.DictWriter(
@@ -2673,7 +4749,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "Action_Category": line.action_category,
                     "Topic": line.topic,
                     "Label": line.label,
-                    "Amount_EUR": line.amount_eur.quantize(Decimal("0.01")) if line.amount_eur is not None else "",
+                    "Amount_EUR": line.amount_eur.quantize(Decimal("0.01"))
+                    if line.amount_eur is not None
+                    else "",
                     "Risk_Level": line.risk_level,
                     "Declaration_Target": line.declaration_target,
                     "Evidence_Ref": line.evidence_ref or "",
@@ -2682,7 +4760,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
         return output.getvalue()
 
-    def render_tax_years_correction_map_csv(*, service: TaxYearService | None = None) -> str:
+    def render_tax_years_correction_map_csv(
+        *, service: TaxYearService | None = None
+    ) -> str:
         correction_maps = (service or TaxYearService(db)).correction_map()
         output = io.StringIO()
         writer = csv.DictWriter(
@@ -2704,11 +4784,21 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 {
                     "Year": item.year,
                     "Filing_Status": item.filing_status,
-                    "Amendment_Review_Recommended": "yes" if item.amendment_review_recommended else "no",
-                    "Taxable_Private_Disposals_EUR": item.taxable_private_disposals_eur.quantize(Decimal("0.01")),
-                    "Rewards_Mining_Staking_Income_EUR": item.rewards_mining_staking_income_eur.quantize(Decimal("0.01")),
-                    "Derivative_Pnl_EUR": item.derivative_pnl_eur.quantize(Decimal("0.01")),
-                    "Tax_Free_Private_Disposals_EUR": item.tax_free_private_disposals_eur.quantize(Decimal("0.01")),
+                    "Amendment_Review_Recommended": "yes"
+                    if item.amendment_review_recommended
+                    else "no",
+                    "Taxable_Private_Disposals_EUR": item.taxable_private_disposals_eur.quantize(
+                        Decimal("0.01")
+                    ),
+                    "Rewards_Mining_Staking_Income_EUR": item.rewards_mining_staking_income_eur.quantize(
+                        Decimal("0.01")
+                    ),
+                    "Derivative_Pnl_EUR": item.derivative_pnl_eur.quantize(
+                        Decimal("0.01")
+                    ),
+                    "Tax_Free_Private_Disposals_EUR": item.tax_free_private_disposals_eur.quantize(
+                        Decimal("0.01")
+                    ),
                     "Amendment_Reason": item.amendment_reason,
                 }
             )
@@ -2719,7 +4809,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=render_tax_years_correction_map_csv(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=tax-years-correction-map.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=tax-years-correction-map.csv"
+            },
         )
 
     @app.get("/api/v1/export/tax-years/{year}/correction-map.csv")
@@ -2727,10 +4819,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=render_tax_year_correction_map_csv(year),
             media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=tax-year-{year}-correction-map.csv"},
+            headers={
+                "Content-Disposition": f"attachment; filename=tax-year-{year}-correction-map.csv"
+            },
         )
 
-    def render_tax_year_filing_checklist_csv(year: int, *, service: TaxYearService | None = None) -> str:
+    def render_tax_year_filing_checklist_csv(
+        year: int, *, service: TaxYearService | None = None
+    ) -> str:
         summary = (service or TaxYearService(db)).filing_summary(year)
         output = io.StringIO()
         writer = csv.DictWriter(
@@ -2756,7 +4852,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "Order": item.order,
                     "Category": item.category,
                     "Label": item.label,
-                    "Amount_EUR": item.amount_eur.quantize(Decimal("0.01")) if item.amount_eur is not None else "",
+                    "Amount_EUR": item.amount_eur.quantize(Decimal("0.01"))
+                    if item.amount_eur is not None
+                    else "",
                     "Action": item.action,
                     "Done_When": item.done_when,
                     "Evidence_Ref": item.evidence_ref or "",
@@ -2801,8 +4899,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-gaps")
-    def tax_year_wallet_fifo_gaps(year: int, limit: int = 80) -> ApiResponse[WalletFifoGapDiagnosisReport]:
-        return ApiResponse(data=WalletFifoPreviewService(db).gap_diagnosis(year=year, limit=limit))
+    def tax_year_wallet_fifo_gaps(
+        year: int, limit: int = 80
+    ) -> ApiResponse[WalletFifoGapDiagnosisReport]:
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).gap_diagnosis(year=year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-origin-trace")
     def tax_year_wallet_fifo_origin_trace(
@@ -2866,7 +4968,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             network=network,
             limit=500,
         )
-        decision_item = next((item for item in report.decisions if item.txid == payload.txid), None)
+        decision_item = next(
+            (item for item in report.decisions if item.txid == payload.txid), None
+        )
         if decision_item is None:
             return ApiResponse(
                 status="error",
@@ -3054,7 +5158,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             window_hours=max(1, min(window_hours, 24 * 30)),
             limit=500,
         )
-        row = next((item for item in report.rows if item.deposit_txid == payload.deposit_txid), None)
+        row = next(
+            (item for item in report.rows if item.deposit_txid == payload.deposit_txid),
+            None,
+        )
         if row is None:
             return ApiResponse(
                 status="error",
@@ -3066,7 +5173,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     )
                 ],
             )
-        ready_statuses = {"exchange_outflow_txid_match_ready", "exchange_outflow_address_txid_ready"}
+        ready_statuses = {
+            "exchange_outflow_txid_match_ready",
+            "exchange_outflow_address_txid_ready",
+        }
         if (
             payload.decision_status == "transfer_neutral_fifo_carry_forward_reviewed"
             and row.status not in ready_statuses
@@ -3135,7 +5245,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 ),
                 actor="user",
                 source=f"api:/api/v1/tax-years/{year}/cex-exchange-outflow-decisions",
-                affected_ids=[payload.deposit_txid, *( [best.raw_object_id] if best and best.raw_object_id else [] )],
+                affected_ids=[
+                    payload.deposit_txid,
+                    *([best.raw_object_id] if best and best.raw_object_id else []),
+                ],
                 payload={
                     "decision_status": payload.decision_status,
                     "year": year,
@@ -3143,7 +5256,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "target_cex": target_cex.lower(),
                     "network": network,
                     "deposit_txid": payload.deposit_txid,
-                    "deposit_time": row.deposit_time.isoformat() if row.deposit_time else None,
+                    "deposit_time": row.deposit_time.isoformat()
+                    if row.deposit_time
+                    else None,
                     "deposit_address": row.deposit_address,
                     "source_sender": row.source_sender,
                     "source_sender_label": row.source_sender_label,
@@ -3151,12 +5266,20 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "deposit_amount": str(row.amount),
                     "evidence_status": row.status,
                     "exchange_outflow_event_id": best.event_id if best else None,
-                    "exchange_outflow_raw_object_id": best.raw_object_id if best else None,
+                    "exchange_outflow_raw_object_id": best.raw_object_id
+                    if best
+                    else None,
                     "exchange_outflow_tx_id": best.withdrawal_tx_id if best else None,
-                    "exchange_outflow_address": best.withdrawal_address if best else None,
+                    "exchange_outflow_address": best.withdrawal_address
+                    if best
+                    else None,
                     "exchange_outflow_amount": str(best.quantity) if best else None,
-                    "exchange_outflow_gross_amount": str(best.withdrawal_amount) if best and best.withdrawal_amount is not None else None,
-                    "exchange_outflow_fee": str(best.withdrawal_fee) if best and best.withdrawal_fee is not None else None,
+                    "exchange_outflow_gross_amount": str(best.withdrawal_amount)
+                    if best and best.withdrawal_amount is not None
+                    else None,
+                    "exchange_outflow_fee": str(best.withdrawal_fee)
+                    if best and best.withdrawal_fee is not None
+                    else None,
                     "amount_delta": str(best.amount_delta) if best else None,
                     "time_delta_seconds": best.seconds_delta if best else None,
                     "import_effect": "none",
@@ -3180,7 +5303,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         year: int,
         limit: int = 50,
     ) -> ApiResponse[WalletFifoProvenancePriorityReport]:
-        return ApiResponse(data=WalletFifoPreviewService(db).provenance_priorities(year=year, limit=limit))
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).provenance_priorities(
+                year=year, limit=limit
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-provenance-closure")
     def tax_year_wallet_fifo_provenance_closure(
@@ -3191,7 +5318,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             data=cached_response(
                 f"tax-years:wallet-fifo-provenance-closure:{year}:{limit}",
                 60,
-                lambda: WalletFifoPreviewService(db).provenance_closure_report(year=year, limit=limit),
+                lambda: WalletFifoPreviewService(db).provenance_closure_report(
+                    year=year, limit=limit
+                ),
             )
         )
 
@@ -3288,7 +5417,29 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         year: int,
         asset: str = "SOL",
     ) -> ApiResponse[WalletFifoSolanaProvenanceBatchLatest]:
-        return ApiResponse(data=WalletFifoPreviewService(db).solana_provenance_batch_latest(year=year, asset=asset))
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).solana_provenance_batch_latest(
+                year=year, asset=asset
+            )
+        )
+
+    @app.get("/api/v1/tax-years/{year}/wallet-fifo-solana-program-settlement-evidence")
+    def tax_year_wallet_fifo_solana_program_settlement_evidence(
+        year: int,
+    ) -> ApiResponse[WalletFifoSolanaProgramSettlementEvidenceReport]:
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).solana_program_settlement_evidence_latest(
+                year
+            )
+        )
+
+    @app.get("/api/v1/tax-years/{year}/wallet-fifo-solana-service-swap-evidence")
+    def tax_year_wallet_fifo_solana_service_swap_evidence(
+        year: int,
+    ) -> ApiResponse[WalletFifoSolanaServiceSwapEvidenceReport]:
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).solana_service_swap_evidence_latest(year)
+        )
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-solana-raw-provenance-priorities")
     def tax_year_wallet_fifo_solana_raw_provenance_priorities(
@@ -3364,7 +5515,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         asset: str = "SOL",
         limit: int = 50,
     ) -> ApiResponse[WalletFifoSolanaSenderClusterReport]:
-        return ApiResponse(data=WalletFifoPreviewService(db).solana_sender_clusters(year=year, asset=asset, limit=limit))
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).solana_sender_clusters(
+                year=year, asset=asset, limit=limit
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/wallet-fifo-solana-sender-cluster-outflows")
     def tax_year_wallet_fifo_solana_sender_cluster_outflows(
@@ -3407,7 +5562,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         year: int,
         limit: int = 20,
     ) -> ApiResponse[WalletFifoWithdrawalGapReport]:
-        return ApiResponse(data=WalletFifoPreviewService(db).withdrawal_gap_trace(year=year, limit=limit))
+        return ApiResponse(
+            data=WalletFifoPreviewService(db).withdrawal_gap_trace(
+                year=year, limit=limit
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/income-guide")
     def tax_year_income_guide(year: int) -> ApiResponse[TaxIncomeReport]:
@@ -3420,35 +5579,67 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/{year}/solana-program-income-review")
-    def tax_year_solana_program_income_review(year: int, limit: int = 200) -> ApiResponse[TaxSolanaProgramIncomeReview]:
-        return ApiResponse(data=TaxYearService(db).solana_program_income_review(year=year, limit=limit))
+    def tax_year_solana_program_income_review(
+        year: int, limit: int = 200
+    ) -> ApiResponse[TaxSolanaProgramIncomeReview]:
+        return ApiResponse(
+            data=TaxYearService(db).solana_program_income_review(year=year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/helium-swap-context")
-    def tax_year_helium_swap_context(year: int, limit: int = 200) -> ApiResponse[TaxHeliumSwapContextReview]:
-        return ApiResponse(data=TaxYearService(db).helium_swap_context_review(year=year, limit=limit))
+    def tax_year_helium_swap_context(
+        year: int, limit: int = 200
+    ) -> ApiResponse[TaxHeliumSwapContextReview]:
+        return ApiResponse(
+            data=TaxYearService(db).helium_swap_context_review(year=year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/helium-swap-evidence-review")
-    def tax_year_helium_swap_evidence_review(year: int, limit: int = 50) -> ApiResponse[TaxHeliumSwapEvidenceReview]:
-        return ApiResponse(data=TaxYearService(db).helium_swap_evidence_review(year=year, limit=limit))
+    def tax_year_helium_swap_evidence_review(
+        year: int, limit: int = 50
+    ) -> ApiResponse[TaxHeliumSwapEvidenceReview]:
+        return ApiResponse(
+            data=TaxYearService(db).helium_swap_evidence_review(year=year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/stablecoin-fifo-review")
-    def tax_year_stablecoin_fifo_review(year: int, limit: int = 200) -> ApiResponse[TaxStablecoinFifoReview]:
-        return ApiResponse(data=TaxYearService(db).stablecoin_fifo_review(year=year, limit=limit))
+    def tax_year_stablecoin_fifo_review(
+        year: int, limit: int = 200
+    ) -> ApiResponse[TaxStablecoinFifoReview]:
+        return ApiResponse(
+            data=TaxYearService(db).stablecoin_fifo_review(year=year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/stablecoin-quote-leg-review")
-    def tax_year_stablecoin_quote_leg_review(year: int, limit: int = 200) -> ApiResponse[TaxStablecoinQuoteLegReview]:
-        return ApiResponse(data=TaxYearService(db).stablecoin_quote_leg_review(year=year, limit=limit))
+    def tax_year_stablecoin_quote_leg_review(
+        year: int, limit: int = 200
+    ) -> ApiResponse[TaxStablecoinQuoteLegReview]:
+        return ApiResponse(
+            data=TaxYearService(db).stablecoin_quote_leg_review(year=year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/solana-stablecoin-swap-context")
-    def tax_year_solana_stablecoin_swap_context(year: int, limit: int = 200) -> ApiResponse[TaxSolanaStablecoinSwapContextReview]:
-        return ApiResponse(data=TaxYearService(db).solana_stablecoin_swap_context_review(year=year, limit=limit))
+    def tax_year_solana_stablecoin_swap_context(
+        year: int, limit: int = 200
+    ) -> ApiResponse[TaxSolanaStablecoinSwapContextReview]:
+        return ApiResponse(
+            data=TaxYearService(db).solana_stablecoin_swap_context_review(
+                year=year, limit=limit
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/solana-stablecoin-fx-review")
-    def tax_year_solana_stablecoin_fx_review(year: int, limit: int = 200) -> ApiResponse[TaxSolanaStablecoinFxReview]:
-        return ApiResponse(data=TaxYearService(db).solana_stablecoin_fx_review(year=year, limit=limit))
+    def tax_year_solana_stablecoin_fx_review(
+        year: int, limit: int = 200
+    ) -> ApiResponse[TaxSolanaStablecoinFxReview]:
+        return ApiResponse(
+            data=TaxYearService(db).solana_stablecoin_fx_review(year=year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/drivers")
-    def tax_year_drivers(year: int, limit: int = 50) -> ApiResponse[TaxYearDriverReport]:
+    def tax_year_drivers(
+        year: int, limit: int = 50
+    ) -> ApiResponse[TaxYearDriverReport]:
         return ApiResponse(
             data=cached_response(
                 f"tax-years:drivers:{year}:{limit}",
@@ -3458,7 +5649,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/{year}/gain-loss-reality-check")
-    def tax_year_gain_loss_reality_check(year: int, limit: int = 40) -> ApiResponse[TaxYearGainLossRealityCheck]:
+    def tax_year_gain_loss_reality_check(
+        year: int, limit: int = 40
+    ) -> ApiResponse[TaxYearGainLossRealityCheck]:
         return ApiResponse(
             data=cached_response(
                 f"tax-years:gain-loss-reality-check:{year}:{limit}",
@@ -3468,8 +5661,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/{year}/gain-evidence-review")
-    def tax_year_gain_evidence_review(year: int, limit: int = 80) -> ApiResponse[TaxYearGainEvidenceReview]:
-        return ApiResponse(data=TaxYearService(db).gain_evidence_review(year, limit=limit))
+    def tax_year_gain_evidence_review(
+        year: int, limit: int = 80
+    ) -> ApiResponse[TaxYearGainEvidenceReview]:
+        return ApiResponse(
+            data=TaxYearService(db).gain_evidence_review(year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/gain-evidence-price-deltas")
     def tax_year_gain_evidence_price_deltas(
@@ -3490,14 +5687,20 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         year: int,
         limit: int = 200,
     ) -> ApiResponse[TaxYearGainEvidenceEventDeltaReview]:
-        return ApiResponse(data=TaxYearService(db).gain_evidence_event_delta_review(year, limit=limit))
+        return ApiResponse(
+            data=TaxYearService(db).gain_evidence_event_delta_review(year, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/gain-evidence-acquisition-event-deltas")
     def tax_year_gain_evidence_acquisition_event_deltas(
         year: int,
         limit: int = 200,
     ) -> ApiResponse[TaxYearGainEvidenceAcquisitionEventDeltaReview]:
-        return ApiResponse(data=TaxYearService(db).gain_evidence_acquisition_event_delta_review(year, limit=limit))
+        return ApiResponse(
+            data=TaxYearService(db).gain_evidence_acquisition_event_delta_review(
+                year, limit=limit
+            )
+        )
 
     @app.get("/api/v1/tax-years/{year}/asset-fifo-drilldown")
     def tax_year_asset_fifo_drilldown(
@@ -3505,7 +5708,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         asset: str,
         limit: int = 200,
     ) -> ApiResponse[TaxYearAssetFifoDrilldown]:
-        return ApiResponse(data=TaxYearService(db).asset_fifo_drilldown(year, asset=asset, limit=limit))
+        return ApiResponse(
+            data=TaxYearService(db).asset_fifo_drilldown(year, asset=asset, limit=limit)
+        )
 
     @app.get("/api/v1/tax-years/{year}/asset-fifo-plausibility")
     def tax_year_asset_fifo_plausibility(
@@ -3536,7 +5741,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/{year}/turnover-audit")
-    def tax_year_turnover_audit(year: int, limit: int = 20) -> ApiResponse[TaxYearTurnoverAudit]:
+    def tax_year_turnover_audit(
+        year: int, limit: int = 20
+    ) -> ApiResponse[TaxYearTurnoverAudit]:
         return ApiResponse(
             data=cached_response(
                 f"tax-years:turnover-audit:{year}:{limit}",
@@ -3546,7 +5753,17 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/tax-years/{year}/evidence")
-    def tax_year_evidence(year: int) -> ApiResponse[TaxYearEvidenceReport]:
+    def tax_year_evidence(year: int, accept: str | None = Header(default=None)):
+        if wants_html_response(accept):
+            report = cached_response(
+                f"tax-years:evidence:{year}",
+                60,
+                lambda: TaxYearService(db).evidence_report(year),
+            )
+            return Response(
+                content=render_tax_year_evidence_html(report),
+                media_type="text/html; charset=utf-8",
+            )
         return ApiResponse(
             data=cached_response(
                 f"tax-years:evidence:{year}",
@@ -3555,12 +5772,28 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
         )
 
+    @app.get("/api/v1/tax-years/{year}/evidence.html")
+    def tax_year_evidence_html(year: int) -> Response:
+        report = cached_response(
+            f"tax-years:evidence:{year}",
+            60,
+            lambda: TaxYearService(db).evidence_report(year),
+        )
+        return Response(
+            content=render_tax_year_evidence_html(report),
+            media_type="text/html; charset=utf-8",
+        )
+
     @app.get("/api/v1/tax-years/{year}/bmf-closure-appendix")
-    def tax_year_bmf_closure_appendix(year: int) -> ApiResponse[TaxYearBmfClosureAppendix]:
+    def tax_year_bmf_closure_appendix(
+        year: int,
+    ) -> ApiResponse[TaxYearBmfClosureAppendix]:
         return ApiResponse(data=TaxYearService(db).bmf_closure_appendix(year))
 
     @app.get("/api/v1/tax-years/{year}/external-inflows")
-    def tax_year_external_inflows(year: int, limit: int = 200) -> ApiResponse[TaxExternalInflowReport]:
+    def tax_year_external_inflows(
+        year: int, limit: int = 200
+    ) -> ApiResponse[TaxExternalInflowReport]:
         return ApiResponse(
             data=cached_response(
                 f"tax-years:external-inflows:{year}:{limit}",
@@ -3608,13 +5841,17 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/export/readiness")
     def export_readiness() -> ApiResponse[ExportReadiness]:
         return ApiResponse(
-            data=cached_response("export:readiness", 60, lambda: ExportService(db).readiness())
+            data=cached_response(
+                "export:readiness", 60, lambda: ExportService(db).readiness()
+            )
         )
 
     @app.get("/api/v1/reports/center")
     def report_center() -> ApiResponse[ReportCenterStatus]:
         return ApiResponse(
-            data=cached_response("reports:center", 60, lambda: ReportCenterService(db).center())
+            data=cached_response(
+                "reports:center", 60, lambda: ReportCenterService(db).center()
+            )
         )
 
     @app.get("/api/v1/export/evidence-manifest.json")
@@ -3623,16 +5860,22 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=json.dumps(payload, indent=2, ensure_ascii=False),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=evidence-manifest.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=evidence-manifest.json"
+            },
         )
 
     @app.get("/api/v1/export/evidence-package-index.json")
     def download_evidence_package_index() -> Response:
-        payload = ReportCenterService(db).evidence_package_index().model_dump(mode="json")
+        payload = (
+            ReportCenterService(db).evidence_package_index().model_dump(mode="json")
+        )
         return Response(
             content=json.dumps(payload, indent=2, ensure_ascii=False),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=evidence-package-index.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=evidence-package-index.json"
+            },
         )
 
     @app.get("/api/v1/export/packages/{package_id}/download.pdf")
@@ -3655,10 +5898,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 status_code=404,
             )
         package, content = rendered
-        safe_label = "".join(
-            char if char.isalnum() or char in {"-", "_"} else "_"
-            for char in package.label
-        ).strip("_") or "steuerreport"
+        safe_label = (
+            "".join(
+                char if char.isalnum() or char in {"-", "_"} else "_"
+                for char in package.label
+            ).strip("_")
+            or "steuerreport"
+        )
         filename = f"{safe_label}-{package.file_index:03d}.pdf"
         return Response(
             content=content,
@@ -3667,7 +5913,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.delete("/api/v1/export/packages/{package_id}")
-    def delete_export_package(package_id: str) -> ApiResponse[ExportPackageDeleteResult]:
+    def delete_export_package(
+        package_id: str,
+    ) -> ApiResponse[ExportPackageDeleteResult]:
         deleted = ExportService(db).delete_package(package_id)
         warnings = []
         if not deleted:
@@ -3707,7 +5955,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=json.dumps(payload, indent=2, ensure_ascii=False),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=tax-payment-overview.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=tax-payment-overview.json"
+            },
         )
 
     @app.get("/api/v1/export/review-decisions.csv")
@@ -3742,8 +5992,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "evidence_ref": decision.evidence_ref,
                     "actor": decision.actor,
                     "source": decision.source,
-                    "affected_ids": json.dumps(decision.affected_ids, ensure_ascii=False),
-                    "payload_json": json.dumps(decision.payload, ensure_ascii=False, sort_keys=True),
+                    "affected_ids": json.dumps(
+                        decision.affected_ids, ensure_ascii=False
+                    ),
+                    "payload_json": json.dumps(
+                        decision.payload, ensure_ascii=False, sort_keys=True
+                    ),
                 }
             )
         return Response(
@@ -3796,7 +6050,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "token_risk_status": payload.get("token_risk_status"),
                     "quantity": payload.get("quantity"),
                     "value_eur": payload.get("value_eur"),
-                    "accounts": json.dumps(accounts if isinstance(accounts, list) else [], ensure_ascii=False),
+                    "accounts": json.dumps(
+                        accounts if isinstance(accounts, list) else [],
+                        ensure_ascii=False,
+                    ),
                     "evidence_ref": decision.evidence_ref,
                     "import_effect": payload.get("import_effect"),
                     "ledger_effect": payload.get("ledger_effect"),
@@ -3851,7 +6108,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "first_event_at": gap.first_event_at.isoformat(),
                     "last_event_at": gap.last_event_at.isoformat(),
                     "gross_quantity": str(gap.gross_quantity),
-                    "sample_event_ids": json.dumps(gap.sample_event_ids, ensure_ascii=False),
+                    "sample_event_ids": json.dumps(
+                        gap.sample_event_ids, ensure_ascii=False
+                    ),
                 }
             )
         return Response(
@@ -3893,13 +6152,17 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "first_event_at": item.first_event_at.isoformat(),
                     "last_event_at": item.last_event_at.isoformat(),
                     "gross_quantity": str(item.gross_quantity),
-                    "sample_event_ids": json.dumps(item.sample_event_ids, ensure_ascii=False),
+                    "sample_event_ids": json.dumps(
+                        item.sample_event_ids, ensure_ascii=False
+                    ),
                 }
             )
         return Response(
             content=output.getvalue(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=price-requirements.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=price-requirements.csv"
+            },
         )
 
     @app.get("/api/v1/export/parity-diagnostics.csv")
@@ -3945,7 +6208,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=output.getvalue(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=parity-diagnostics.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=parity-diagnostics.csv"
+            },
         )
 
     @app.get("/api/v1/export/hnt-provenance-timeline.csv")
@@ -3989,8 +6254,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "quantity_in": str(step.quantity_in),
                     "quantity_out": str(step.quantity_out),
                     "net_quantity": str(step.net_quantity),
-                    "first_event_at": step.first_event_at.isoformat() if step.first_event_at else "",
-                    "last_event_at": step.last_event_at.isoformat() if step.last_event_at else "",
+                    "first_event_at": step.first_event_at.isoformat()
+                    if step.first_event_at
+                    else "",
+                    "last_event_at": step.last_event_at.isoformat()
+                    if step.last_event_at
+                    else "",
                     "note": step.note,
                     "filter_source": report.filter_source or "",
                     "filter_account": report.filter_account or "",
@@ -3999,7 +6268,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=output.getvalue(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=hnt-provenance-timeline.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=hnt-provenance-timeline.csv"
+            },
         )
 
     @app.get("/api/v1/export/hnt-provenance-events.csv")
@@ -4061,7 +6332,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=output.getvalue(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=hnt-provenance-events.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=hnt-provenance-events.csv"
+            },
         )
 
     @app.get("/api/v1/export/binance-fiat-deposits.csv")
@@ -4100,7 +6373,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=output.getvalue(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=binance-fiat-deposits.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=binance-fiat-deposits.csv"
+            },
         )
 
     def render_tax_lines_csv(*, year: int | None = None) -> str:
@@ -4118,11 +6393,17 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 "Haltedauer_Tage",
                 "Steuerpflichtig",
                 "Steuerliche_Behandlung",
+                "Source_Event_ID",
+                "Lot_ID",
+                "Anschaffungs_Event_ID",
             ],
         )
         writer.writeheader()
+        acquisition_event_by_lot_id = {
+            lot.lot_id: lot.source_event_id for lot in TaxService(db).list_tax_lots()
+        }
         for line in TaxService(db).list_tax_lines():
-            if year is not None and line.disposed_at.year != year:
+            if year is not None and reporting_tax_year(line.disposed_at) != year:
                 continue
             writer.writerow(
                 {
@@ -4139,6 +6420,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         "steuerpflichtig_bis_365_tage"
                         if line.holding_days <= 365
                         else "steuerfrei_nach_haltefrist"
+                    ),
+                    "Source_Event_ID": line.source_event_id,
+                    "Lot_ID": line.lot_id,
+                    "Anschaffungs_Event_ID": acquisition_event_by_lot_id.get(
+                        line.lot_id, ""
                     ),
                 }
             )
@@ -4170,7 +6456,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
         writer.writeheader()
         for line in DerivativesManager(db).list_lines():
-            if year is not None and line.event_time.year != year:
+            if year is not None and reporting_tax_year(line.event_time) != year:
                 continue
             writer.writerow(
                 {
@@ -4204,7 +6490,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         use_lot_breakdown: bool = False,
     ) -> str:
         service = service or TaxYearService(db)
-        selected_years = years if years is not None else service.summary().available_years
+        selected_years = (
+            years if years is not None else service.summary().available_years
+        )
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
@@ -4257,7 +6545,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             else "tax-income-guide.csv"
         )
         return Response(
-            content=render_tax_income_guide_csv(years=[year] if year is not None else None),
+            content=render_tax_income_guide_csv(
+                years=[year] if year is not None else None
+            ),
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
@@ -4268,7 +6558,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         service: TaxYearService | None = None,
     ) -> str:
         service = service or TaxYearService(db)
-        selected_years = years if years is not None else service.summary().available_years
+        selected_years = (
+            years if years is not None else service.summary().available_years
+        )
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
@@ -4332,7 +6624,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=render_tax_external_inflows_csv(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=tax-external-inflows.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=tax-external-inflows.csv"
+            },
         )
 
     def evidence_filename(value: object) -> str:
@@ -4348,7 +6642,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def helium_swap_alchemy_audit_payload() -> dict[str, object]:
         if HELIUM_SWAP_ALCHEMY_AUDIT_PATH.exists():
             try:
-                payload = json.loads(HELIUM_SWAP_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8"))
+                payload = json.loads(
+                    HELIUM_SWAP_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8")
+                )
                 if isinstance(payload, dict):
                     return payload
             except Exception as exc:
@@ -4381,7 +6677,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def solana_tx_alchemy_audit_payload() -> dict[str, object]:
         if SOLANA_TX_ALCHEMY_AUDIT_PATH.exists():
             try:
-                payload = json.loads(SOLANA_TX_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8"))
+                payload = json.loads(
+                    SOLANA_TX_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8")
+                )
                 if isinstance(payload, dict):
                     return payload
             except Exception as exc:
@@ -4414,7 +6712,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def solana_failed_tx_tax_impact_payload() -> dict[str, object]:
         if SOLANA_FAILED_TX_TAX_IMPACT_PATH.exists():
             try:
-                payload = json.loads(SOLANA_FAILED_TX_TAX_IMPACT_PATH.read_text(encoding="utf-8"))
+                payload = json.loads(
+                    SOLANA_FAILED_TX_TAX_IMPACT_PATH.read_text(encoding="utf-8")
+                )
                 if isinstance(payload, dict):
                     return payload
             except Exception as exc:
@@ -4446,7 +6746,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def all_transaction_evidence_matrix_payload() -> dict[str, object]:
         if ALL_TRANSACTION_EVIDENCE_MATRIX_PATH.exists():
             try:
-                payload = json.loads(ALL_TRANSACTION_EVIDENCE_MATRIX_PATH.read_text(encoding="utf-8"))
+                payload = json.loads(
+                    ALL_TRANSACTION_EVIDENCE_MATRIX_PATH.read_text(encoding="utf-8")
+                )
                 if isinstance(payload, dict):
                     return payload
             except Exception as exc:
@@ -4478,7 +6780,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def all_transaction_evidence_closure_payload() -> dict[str, object]:
         if ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH.exists():
             try:
-                payload = json.loads(ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH.read_text(encoding="utf-8"))
+                payload = json.loads(
+                    ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH.read_text(encoding="utf-8")
+                )
                 if isinstance(payload, dict):
                     return payload
             except Exception as exc:
@@ -4510,7 +6814,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def all_transaction_open_detail_review_payload() -> dict[str, object]:
         if ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH.exists():
             try:
-                payload = json.loads(ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH.read_text(encoding="utf-8"))
+                payload = json.loads(
+                    ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH.read_text(encoding="utf-8")
+                )
                 if isinstance(payload, dict):
                     return payload
             except Exception as exc:
@@ -4541,7 +6847,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def all_transaction_decision_candidates_payload() -> dict[str, object]:
         if ALL_TRANSACTION_DECISION_CANDIDATES_PATH.exists():
             try:
-                payload = json.loads(ALL_TRANSACTION_DECISION_CANDIDATES_PATH.read_text(encoding="utf-8"))
+                payload = json.loads(
+                    ALL_TRANSACTION_DECISION_CANDIDATES_PATH.read_text(encoding="utf-8")
+                )
                 if isinstance(payload, dict):
                     return payload
             except Exception as exc:
@@ -4573,57 +6881,89 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/export/solana-tx-alchemy-audit.json")
     def download_solana_tx_alchemy_audit_json() -> Response:
         return Response(
-            content=json.dumps(solana_tx_alchemy_audit_payload(), indent=2, ensure_ascii=False),
+            content=json.dumps(
+                solana_tx_alchemy_audit_payload(), indent=2, ensure_ascii=False
+            ),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=solana-tx-alchemy-audit.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=solana-tx-alchemy-audit.json"
+            },
         )
 
     @app.get("/api/v1/export/solana-failed-tx-tax-impact.json")
     def download_solana_failed_tx_tax_impact_json() -> Response:
         return Response(
-            content=json.dumps(solana_failed_tx_tax_impact_payload(), indent=2, ensure_ascii=False),
+            content=json.dumps(
+                solana_failed_tx_tax_impact_payload(), indent=2, ensure_ascii=False
+            ),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=solana-failed-tx-tax-impact.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=solana-failed-tx-tax-impact.json"
+            },
         )
 
     @app.get("/api/v1/export/all-transaction-evidence-matrix.json")
     def download_all_transaction_evidence_matrix_json() -> Response:
         return Response(
-            content=json.dumps(all_transaction_evidence_matrix_payload(), indent=2, ensure_ascii=False),
+            content=json.dumps(
+                all_transaction_evidence_matrix_payload(), indent=2, ensure_ascii=False
+            ),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=all-transaction-evidence-matrix.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=all-transaction-evidence-matrix.json"
+            },
         )
 
     @app.get("/api/v1/export/all-transaction-evidence-closure.json")
     def download_all_transaction_evidence_closure_json() -> Response:
         return Response(
-            content=json.dumps(all_transaction_evidence_closure_payload(), indent=2, ensure_ascii=False),
+            content=json.dumps(
+                all_transaction_evidence_closure_payload(), indent=2, ensure_ascii=False
+            ),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=all-transaction-evidence-closure.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=all-transaction-evidence-closure.json"
+            },
         )
 
     @app.get("/api/v1/export/all-transaction-open-detail-review.json")
     def download_all_transaction_open_detail_review_json() -> Response:
         return Response(
-            content=json.dumps(all_transaction_open_detail_review_payload(), indent=2, ensure_ascii=False),
+            content=json.dumps(
+                all_transaction_open_detail_review_payload(),
+                indent=2,
+                ensure_ascii=False,
+            ),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=all-transaction-open-detail-review.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=all-transaction-open-detail-review.json"
+            },
         )
 
     @app.get("/api/v1/export/all-transaction-decision-candidates.json")
     def download_all_transaction_decision_candidates_json() -> Response:
         return Response(
-            content=json.dumps(all_transaction_decision_candidates_payload(), indent=2, ensure_ascii=False),
+            content=json.dumps(
+                all_transaction_decision_candidates_payload(),
+                indent=2,
+                ensure_ascii=False,
+            ),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=all-transaction-decision-candidates.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=all-transaction-decision-candidates.json"
+            },
         )
 
-    def helium_swap_alchemy_audit_summary(year: int | None = None, limit: int = 20) -> dict[str, object]:
+    def helium_swap_alchemy_audit_summary(
+        year: int | None = None, limit: int = 20
+    ) -> dict[str, object]:
         payload = helium_swap_alchemy_audit_payload()
         rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
         filtered_rows = [
-            row for row in rows
-            if isinstance(row, dict) and (year is None or int(row.get("year") or 0) == year)
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and (year is None or int(row.get("year") or 0) == year)
         ]
         limited_rows = filtered_rows[: max(0, limit)]
         review_counts: dict[str, int] = {}
@@ -4639,12 +6979,21 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             "provider": payload.get("provider", "alchemy"),
             "rpc_url": payload.get("rpc_url"),
             "tx_count": len(filtered_rows),
-            "alchemy_found_count": sum(1 for row in filtered_rows if row.get("alchemy_status") == "alchemy_found"),
-            "confirmed_count": sum(1 for row in filtered_rows if row.get("review_status") == "alchemy_confirmed"),
+            "alchemy_found_count": sum(
+                1
+                for row in filtered_rows
+                if row.get("alchemy_status") == "alchemy_found"
+            ),
+            "confirmed_count": sum(
+                1
+                for row in filtered_rows
+                if row.get("review_status") == "alchemy_confirmed"
+            ),
             "alchemy_failed_count": sum(
                 1
                 for row in filtered_rows
-                if str(row.get("alchemy_status") or "") in {"alchemy_failed", "alchemy_not_found", "alchemy_http_error"}
+                if str(row.get("alchemy_status") or "")
+                in {"alchemy_failed", "alchemy_not_found", "alchemy_http_error"}
             ),
             "review_status_counts": review_counts,
             "alchemy_status_counts": alchemy_counts,
@@ -4653,19 +7002,29 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         }
 
     @app.get("/api/v1/tax-years/helium-swap-alchemy-audit")
-    def tax_years_helium_swap_alchemy_audit(limit: int = 20) -> ApiResponse[dict[str, object]]:
+    def tax_years_helium_swap_alchemy_audit(
+        limit: int = 20,
+    ) -> ApiResponse[dict[str, object]]:
         return ApiResponse(data=helium_swap_alchemy_audit_summary(limit=limit))
 
     @app.get("/api/v1/tax-years/{year}/helium-swap-alchemy-audit")
-    def tax_year_helium_swap_alchemy_audit(year: int, limit: int = 20) -> ApiResponse[dict[str, object]]:
-        return ApiResponse(data=helium_swap_alchemy_audit_summary(year=year, limit=limit))
+    def tax_year_helium_swap_alchemy_audit(
+        year: int, limit: int = 20
+    ) -> ApiResponse[dict[str, object]]:
+        return ApiResponse(
+            data=helium_swap_alchemy_audit_summary(year=year, limit=limit)
+        )
 
     @app.get("/api/v1/export/tax-helium-swap-alchemy-audit.json")
     def download_tax_helium_swap_alchemy_audit_json() -> Response:
         return Response(
-            content=json.dumps(helium_swap_alchemy_audit_payload(), indent=2, ensure_ascii=False),
+            content=json.dumps(
+                helium_swap_alchemy_audit_payload(), indent=2, ensure_ascii=False
+            ),
             media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=tax-helium-swap-alchemy-audit.json"},
+            headers={
+                "Content-Disposition": "attachment; filename=tax-helium-swap-alchemy-audit.json"
+            },
         )
 
     def render_tax_solana_stablecoin_swap_evidence_csv(
@@ -4675,7 +7034,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         limit: int = 10_000,
     ) -> str:
         service = service or TaxYearService(db)
-        selected_years = years if years is not None else service.summary().available_years
+        selected_years = (
+            years if years is not None else service.summary().available_years
+        )
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
@@ -4715,10 +7076,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
         writer.writeheader()
         for selected_year in selected_years:
-            swap_report = service.solana_stablecoin_swap_context_review(year=selected_year, limit=limit)
+            swap_report = service.solana_stablecoin_swap_context_review(
+                year=selected_year, limit=limit
+            )
             fx_by_event_id = {
                 row.event_id: row
-                for row in service.solana_stablecoin_fx_review(year=selected_year, limit=limit).rows
+                for row in service.solana_stablecoin_fx_review(
+                    year=selected_year, limit=limit
+                ).rows
             }
             for row in swap_report.rows:
                 fx_row = fx_by_event_id.get(row.event_id)
@@ -4745,7 +7110,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         "Raw_Belege": row.raw_evidence_count,
                         "Raw_Dateien": " | ".join(
                             filename
-                            for filename in (evidence_filename(item) for item in row.raw_filenames)
+                            for filename in (
+                                evidence_filename(item) for item in row.raw_filenames
+                            )
                             if filename
                         ),
                         "Jupiter_Asset_Status": row.jupiter_asset_status,
@@ -4754,7 +7121,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         "Preisquelle": fx_row.selected_price_source if fx_row else None,
                         "Preiszeit_UTC": fx_row.selected_priced_at if fx_row else None,
                         "Preisalter_Tage": fx_row.price_age_days if fx_row else None,
-                        "Preis_Delta_Prozent": fx_row.price_delta_pct if fx_row else None,
+                        "Preis_Delta_Prozent": fx_row.price_delta_pct
+                        if fx_row
+                        else None,
                         "FX_Basis_Status": fx_row.fx_basis_status if fx_row else None,
                         "Review_Grund": row.review_reason,
                         "FX_Review_Grund": fx_row.review_reason if fx_row else None,
@@ -4764,14 +7133,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return output.getvalue()
 
     @app.get("/api/v1/export/tax-solana-stablecoin-swap-evidence.csv")
-    def download_tax_solana_stablecoin_swap_evidence_csv(year: int | None = None) -> Response:
+    def download_tax_solana_stablecoin_swap_evidence_csv(
+        year: int | None = None,
+    ) -> Response:
         filename = (
             f"tax-year-{year}-solana-stablecoin-swap-evidence.csv"
             if year is not None
             else "tax-solana-stablecoin-swap-evidence.csv"
         )
         return Response(
-            content=render_tax_solana_stablecoin_swap_evidence_csv(years=[year] if year is not None else None),
+            content=render_tax_solana_stablecoin_swap_evidence_csv(
+                years=[year] if year is not None else None
+            ),
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
@@ -4783,7 +7156,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         limit: int = 100_000,
     ) -> str:
         service = service or TaxYearService(db)
-        selected_years = years if years is not None else service.summary().available_years
+        selected_years = (
+            years if years is not None else service.summary().available_years
+        )
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
@@ -4825,9 +7200,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         for selected_year in selected_years:
             swap_event_ids = {
                 row.event_id
-                for row in service.solana_stablecoin_swap_context_review(year=selected_year, limit=limit).rows
+                for row in service.solana_stablecoin_swap_context_review(
+                    year=selected_year, limit=limit
+                ).rows
             }
-            fifo_report = service.stablecoin_fifo_review(year=selected_year, limit=limit)
+            fifo_report = service.stablecoin_fifo_review(
+                year=selected_year, limit=limit
+            )
             for row in fifo_report.rows:
                 if row.disposal_event_id not in swap_event_ids:
                     continue
@@ -4852,14 +7231,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         "Disposal_Quote_Asset": row.disposal_quote_asset,
                         "Disposal_Quote_Menge": row.disposal_quote_quantity,
                         "Disposal_Konto": row.disposal_account,
-                        "Disposal_Datei": evidence_filename(row.disposal_batch_filename),
+                        "Disposal_Datei": evidence_filename(
+                            row.disposal_batch_filename
+                        ),
                         "Disposal_Zeile": row.disposal_row_number,
                         "Acquisition_Event_ID": row.acquisition_event_id,
                         "Acquisition_Quelle": row.acquisition_source,
                         "Acquisition_Event_Typ": row.acquisition_event_type,
                         "Acquisition_TX_ID": row.acquisition_tx_id,
                         "Acquisition_Konto": row.acquisition_account,
-                        "Acquisition_Datei": evidence_filename(row.acquisition_batch_filename),
+                        "Acquisition_Datei": evidence_filename(
+                            row.acquisition_batch_filename
+                        ),
                         "Acquisition_Zeile": row.acquisition_row_number,
                         "Acquisition_Evidence_Status": row.acquisition_evidence_status,
                         "Acquisition_Klassifizierung": row.acquisition_classification,
@@ -4869,14 +7252,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return output.getvalue()
 
     @app.get("/api/v1/export/tax-solana-stablecoin-swap-fifo-lines.csv")
-    def download_tax_solana_stablecoin_swap_fifo_lines_csv(year: int | None = None) -> Response:
+    def download_tax_solana_stablecoin_swap_fifo_lines_csv(
+        year: int | None = None,
+    ) -> Response:
         filename = (
             f"tax-year-{year}-solana-stablecoin-swap-fifo-lines.csv"
             if year is not None
             else "tax-solana-stablecoin-swap-fifo-lines.csv"
         )
         return Response(
-            content=render_tax_solana_stablecoin_swap_fifo_lines_csv(years=[year] if year is not None else None),
+            content=render_tax_solana_stablecoin_swap_fifo_lines_csv(
+                years=[year] if year is not None else None
+            ),
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
@@ -4888,7 +7275,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         limit: int = 100_000,
     ) -> str:
         service = service or TaxYearService(db)
-        selected_years = years if years is not None else service.summary().available_years
+        selected_years = (
+            years if years is not None else service.summary().available_years
+        )
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
@@ -4947,7 +7336,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             else "tax-helium-swap-context.csv"
         )
         return Response(
-            content=render_tax_helium_swap_context_csv(years=[year] if year is not None else None),
+            content=render_tax_helium_swap_context_csv(
+                years=[year] if year is not None else None
+            ),
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
@@ -4959,7 +7350,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         limit: int = 100_000,
     ) -> str:
         service = service or TaxYearService(db)
-        selected_years = years if years is not None else service.summary().available_years
+        selected_years = (
+            years if years is not None else service.summary().available_years
+        )
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
@@ -4986,7 +7379,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
         writer.writeheader()
         for selected_year in selected_years:
-            report = service.helium_swap_evidence_review(year=selected_year, limit=limit)
+            report = service.helium_swap_evidence_review(
+                year=selected_year, limit=limit
+            )
             for row in report.rows:
                 writer.writerow(
                     {
@@ -5001,7 +7396,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         "Kontextwert_EUR": row.context_value_eur,
                         "Max_Eventwert_EUR": row.max_event_value_eur,
                         "Raw_Belege": row.raw_evidence_count,
-                        "Raw_Dateien": " | ".join(evidence_filename(item) for item in row.raw_filenames),
+                        "Raw_Dateien": " | ".join(
+                            evidence_filename(item) for item in row.raw_filenames
+                        ),
                         "Raw_Quellen": " | ".join(row.raw_sources),
                         "Belegstatus": row.evidence_status,
                         "Steuerliche_Behandlung": row.tax_treatment,
@@ -5013,14 +7410,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return output.getvalue()
 
     @app.get("/api/v1/export/tax-helium-swap-evidence-review.csv")
-    def download_tax_helium_swap_evidence_review_csv(year: int | None = None) -> Response:
+    def download_tax_helium_swap_evidence_review_csv(
+        year: int | None = None,
+    ) -> Response:
         filename = (
             f"tax-year-{year}-helium-swap-evidence-review.csv"
             if year is not None
             else "tax-helium-swap-evidence-review.csv"
         )
         return Response(
-            content=render_tax_helium_swap_evidence_review_csv(years=[year] if year is not None else None),
+            content=render_tax_helium_swap_evidence_review_csv(
+                years=[year] if year is not None else None
+            ),
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
@@ -5040,12 +7441,20 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             if file_id == "audit-json":
                 return (
                     "audit.json",
-                    json.dumps(AuditService(db).export().model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
+                    json.dumps(
+                        AuditService(db).export().model_dump(mode="json"),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
                 )
             if file_id == "elster-prep":
                 return (
                     "elster-prep.json",
-                    json.dumps(AuditService(db).elster_prep().model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
+                    json.dumps(
+                        AuditService(db).elster_prep().model_dump(mode="json"),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
                 )
             if file_id == "tax-payment-overview":
                 return (
@@ -5060,7 +7469,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 return (
                     "solscan-evidence-trace.json",
                     json.dumps(
-                        SolscanPreflightService().evidence_trace().model_dump(mode="json"),
+                        SolscanPreflightService()
+                        .evidence_trace()
+                        .model_dump(mode="json"),
                         indent=2,
                         ensure_ascii=False,
                     ).encode("utf-8"),
@@ -5138,18 +7549,48 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     ).encode("utf-8"),
                 )
             csv_responses = {
-                "review-decisions": ("review-decisions.csv", download_review_decisions_csv),
-                "token-risk-documentation": ("token-risk-documentation.csv", download_token_risk_documentation_csv),
+                "review-decisions": (
+                    "review-decisions.csv",
+                    download_review_decisions_csv,
+                ),
+                "token-risk-documentation": (
+                    "token-risk-documentation.csv",
+                    download_token_risk_documentation_csv,
+                ),
                 "price-gaps": ("price-gaps.csv", download_price_gaps_csv),
-                "price-requirements": ("price-requirements.csv", download_price_requirements_csv),
-                "parity-diagnostics": ("parity-diagnostics.csv", download_parity_diagnostics_csv),
-                "hnt-provenance-timeline": ("hnt-provenance-timeline.csv", download_hnt_provenance_timeline_csv),
-                "hnt-provenance-events": ("hnt-provenance-events.csv", download_hnt_provenance_events_csv),
-                "binance-fiat-deposits": ("binance-fiat-deposits.csv", download_binance_fiat_deposits_csv),
+                "price-requirements": (
+                    "price-requirements.csv",
+                    download_price_requirements_csv,
+                ),
+                "parity-diagnostics": (
+                    "parity-diagnostics.csv",
+                    download_parity_diagnostics_csv,
+                ),
+                "hnt-provenance-timeline": (
+                    "hnt-provenance-timeline.csv",
+                    download_hnt_provenance_timeline_csv,
+                ),
+                "hnt-provenance-events": (
+                    "hnt-provenance-events.csv",
+                    download_hnt_provenance_events_csv,
+                ),
+                "binance-fiat-deposits": (
+                    "binance-fiat-deposits.csv",
+                    download_binance_fiat_deposits_csv,
+                ),
                 "tax-lines": ("tax-lines.csv", download_tax_lines_csv),
-                "derivative-lines": ("derivative-lines.csv", download_derivative_lines_csv),
-                "tax-income-guide": ("tax-income-guide.csv", download_tax_income_guide_csv),
-                "tax-external-inflows": ("tax-external-inflows.csv", download_tax_external_inflows_csv),
+                "derivative-lines": (
+                    "derivative-lines.csv",
+                    download_derivative_lines_csv,
+                ),
+                "tax-income-guide": (
+                    "tax-income-guide.csv",
+                    download_tax_income_guide_csv,
+                ),
+                "tax-external-inflows": (
+                    "tax-external-inflows.csv",
+                    download_tax_external_inflows_csv,
+                ),
                 "tax-solana-stablecoin-swap-evidence": (
                     "tax-solana-stablecoin-swap-evidence.csv",
                     download_tax_solana_stablecoin_swap_evidence_csv,
@@ -5170,12 +7611,20 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             if file_id == "hnt-fairspot-timeline":
                 return (
                     "hnt-fairspot-timeline.csv",
-                    response_body(download_hnt_provenance_timeline_csv(account=ReportCenterService.FAIRSPOT_STAKING_WALLET)),
+                    response_body(
+                        download_hnt_provenance_timeline_csv(
+                            account=ReportCenterService.FAIRSPOT_STAKING_WALLET
+                        )
+                    ),
                 )
             if file_id == "hnt-fairspot-events":
                 return (
                     "hnt-fairspot-events.csv",
-                    response_body(download_hnt_provenance_events_csv(account=ReportCenterService.FAIRSPOT_STAKING_WALLET)),
+                    response_body(
+                        download_hnt_provenance_events_csv(
+                            account=ReportCenterService.FAIRSPOT_STAKING_WALLET
+                        )
+                    ),
                 )
             csv_entry = csv_responses.get(file_id)
             if csv_entry is None:
@@ -5183,13 +7632,21 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             filename, factory = csv_entry
             return filename, response_body(factory())
 
-        with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
-            manifest_content = json.dumps(manifest.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8")
-            indexed_files_by_id = {entry.file_id: entry for entry in package_index.files}
+        with zipfile.ZipFile(
+            buffer, mode="w", compression=zipfile.ZIP_DEFLATED
+        ) as package:
+            manifest_content = json.dumps(
+                manifest.model_dump(mode="json"), indent=2, ensure_ascii=False
+            ).encode("utf-8")
+            indexed_files_by_id = {
+                entry.file_id: entry for entry in package_index.files
+            }
             manifest_index_entry = indexed_files_by_id.get("evidence-manifest")
             if manifest_index_entry is not None:
                 manifest_index_entry.size_bytes = len(manifest_content)
-                manifest_index_entry.sha256 = hashlib.sha256(manifest_content).hexdigest()
+                manifest_index_entry.sha256 = hashlib.sha256(
+                    manifest_content
+                ).hexdigest()
             package.writestr(
                 "README.txt",
                 (
@@ -5217,7 +7674,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 filename, content = rendered
                 if not content:
                     continue
-                indexed = next((entry for entry in package_index.files if entry.file_id == file.file_id), None)
+                indexed = next(
+                    (
+                        entry
+                        for entry in package_index.files
+                        if entry.file_id == file.file_id
+                    ),
+                    None,
+                )
                 if indexed is None:
                     continue
                 path = indexed.path
@@ -5226,7 +7690,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 indexed.sha256 = hashlib.sha256(content).hexdigest()
             package.writestr(
                 "00_Manifest/package-index.json",
-                json.dumps(package_index.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
+                json.dumps(
+                    package_index.model_dump(mode="json"), indent=2, ensure_ascii=False
+                ).encode("utf-8"),
             )
 
         buffer.seek(0)
@@ -5234,37 +7700,172 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         return Response(
             content=buffer.getvalue(),
             media_type="application/zip",
-            headers={"Content-Disposition": f"attachment; filename=steuerreport-v2-evidence-{timestamp}.zip"},
+            headers={
+                "Content-Disposition": f"attachment; filename=steuerreport-v2-evidence-{timestamp}.zip"
+            },
         )
 
     @app.get("/api/v1/export/tax-years/{year}/evidence-package.zip")
     def download_tax_year_evidence_package_zip(year: int) -> Response:
+        project_root = Path(__file__).resolve().parents[3]
+        cache_inputs = [
+            db.path,
+            Path(__file__),
+            project_root / "src/steuerreport_v2/contracts/tax_methodology.py",
+            project_root / "src/steuerreport_v2/domain/bmf_compliance.py",
+            project_root / "src/steuerreport_v2/domain/source_registry.py",
+            project_root / "src/steuerreport_v2/domain/cross_cex_evidence.py",
+            project_root / "src/steuerreport_v2/domain/fairspot_staking.py",
+            project_root / "src/steuerreport_v2/domain/solana_staking_position.py",
+            project_root / "src/steuerreport_v2/domain/service_swap_tax_mapping.py",
+            project_root / "src/steuerreport_v2/domain/pionex_reconciliation.py",
+            project_root / "src/steuerreport_v2/domain/tax_methodology.py",
+            project_root / "src/steuerreport_v2/domain/tax_years.py",
+            project_root / "src/steuerreport_v2/domain/tax_wallet_fifo.py",
+            project_root / "src/steuerreport_v2/domain/tax_time.py",
+            project_root / "src/steuerreport_v2/domain/valuation.py",
+            project_root / "src/steuerreport_v2/domain/valuation_runs.py",
+            project_root / "src/steuerreport_v2/domain/wallet_fifo_runs.py",
+            project_root / "configs/source_registry.json",
+            project_root / "configs/solana_service_swap_tax_mappings.json",
+            project_root / "configs/pionex_hnt_reconciliation.json",
+            project_root / "configs/pionex_hnt_minimum_reconciliation_2022.csv",
+            project_root / "configs/pionex_hnt_api_probe_2022.json",
+            project_root / "configs/fairspot_hnt_staking_reconciliation.json",
+            project_root / "configs/solana_staking_position_reconciliations.json",
+            Path("/workspace/steuerreport/usertransfer/pionex/raw-trading-details.csv"),
+            Path("/workspace/steuerreport/usertransfer/pionex/trading.csv"),
+            project_root / "var/wallet_fifo_runs/latest_wallet_fifo_run.json",
+            project_root
+            / "var/cross_cex_transfer_evidence/latest_cross_cex_transfer_evidence.json",
+            project_root
+            / "var/fairspot_staking_reconciliation/latest_fairspot_staking_reconciliation.json",
+            project_root
+            / "var/fairspot_staking_reconciliation/latest_fairspot_staking_source.csv",
+            project_root
+            / "var/solana_staking_position_reconciliation/latest_solana_staking_position_reconciliation.json",
+            project_root / "var/source_registry/latest_source_registry.json",
+            project_root / "var/valuation_runs/latest_valuation_gate.json",
+            project_root
+            / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            project_root
+            / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
+            project_root
+            / "var/helium_swap_alchemy_audits/latest_all_years_helium_swap_alchemy_audit.json",
+            project_root
+            / f"var/solana_program_settlement_evidence/latest_{year}_SOL_program_settlement_evidence.json",
+            project_root
+            / f"var/solana_service_swap_evidence/latest_{year}_service_swap_evidence.json",
+        ]
+        cache_fingerprint = {
+            "schema": "tax_year_evidence_package_v2",
+            "app_version": __version__,
+            "year": year,
+            "inputs": [
+                {
+                    "path": str(path.relative_to(project_root))
+                    if path.is_relative_to(project_root)
+                    else str(path),
+                    "exists": path.exists(),
+                    "size": path.stat().st_size if path.exists() else 0,
+                    "mtime_ns": path.stat().st_mtime_ns if path.exists() else 0,
+                }
+                for path in cache_inputs
+            ],
+        }
+        cache_digest = hashlib.sha256(
+            json.dumps(cache_fingerprint, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        cache_dir = db.path.parent / ".steuerreport_v2_cache/tax_year_evidence_package"
+        cache_path = cache_dir / f"{year}-{cache_digest}.zip"
+        try:
+            cached_content = cache_path.read_bytes()
+        except OSError:
+            cached_content = None
+        if cached_content:
+            return Response(
+                content=cached_content,
+                media_type="application/zip",
+                headers={
+                    "Content-Disposition": (
+                        f"attachment; filename=steuerreport-v2-tax-year-{year}-evidence.zip"
+                    ),
+                    "X-Steuerreport-Cache": "hit",
+                },
+            )
+
+        reporting_year_start_utc, reporting_year_end_utc = reporting_year_utc_bounds(
+            year
+        )
         tax_year_service = TaxYearService(db)
         wallet_fifo_service = WalletFifoPreviewService(db)
         filing_summary = tax_year_service.filing_summary(year)
         correction_map = tax_year_service.year_correction_map(year)
         evidence_report = tax_year_service.evidence_report(year)
-        stablecoin_fx_tax_impact = PriceQualityService(db).stablecoin_fx_tax_impact_latest(
+        stablecoin_fx_tax_impact = PriceQualityService(
+            db
+        ).stablecoin_fx_tax_impact_latest(
             asset="USDT",
             year=year,
         )
         bmf_closure_appendix = tax_year_service.bmf_closure_appendix(year)
         wallet_fifo_delta = wallet_fifo_service.preview(year=year)
-        cex_exchange_outflow_evidence = wallet_fifo_service.cex_exchange_outflow_evidence(
-            year,
-            source_exchange="bitget",
-            target_cex="binance",
-            network="SOL",
+        bmf_compliance_matrix = BmfComplianceMatrixService(db).matrix()
+        time_precision_audit = TaxTimePolicyService(db).audit(limit=1000)
+        wallet_fifo_parallel_service = WalletFifoParallelRunService(db)
+        wallet_fifo_parallel_run = wallet_fifo_parallel_service.latest()
+        wallet_fifo_method_delta_explanation = (
+            wallet_fifo_parallel_service.method_delta_explanation(
+                run_id=wallet_fifo_parallel_run.run_id,
+                year=year,
+                event_limit=50,
+            )
+            if wallet_fifo_parallel_run is not None
+            else None
         )
-        cex_exchange_outflow_anchor_feasibility = wallet_fifo_service.cex_exchange_outflow_anchor_feasibility(
-            year,
-            source_exchange="bitget",
-            target_cex="binance",
-            network="SOL",
+        solana_program_settlement_evidence = (
+            wallet_fifo_service.solana_program_settlement_evidence_latest(year)
+        )
+        solana_service_swap_evidence = (
+            wallet_fifo_service.solana_service_swap_evidence_latest(year)
+        )
+        service_swap_tax_mappings = ServiceSwapTaxMappingService(db).report()
+        pionex_hnt_reconciliation = PionexHntReconciliationService(db).report()
+        cross_cex_transfer_evidence = CrossCexTransferEvidenceService(db).report()
+        fairspot_staking_reconciliation = FairspotStakingReconciliationService(
+            db
+        ).report()
+        solana_staking_position_reconciliation = (
+            SolanaStakingPositionReconciliationService(db).report()
+        )
+        moonpay_receipts = MoonpayReceiptService(db).report(
+            as_of=reporting_year_end_utc
+        )
+        source_registry_run = SourceRegistryService(db).latest()
+        valuation_gate_run = DivorceValuationRunService(db).latest()
+        cex_exchange_outflow_evidence = (
+            wallet_fifo_service.cex_exchange_outflow_evidence(
+                year,
+                source_exchange="bitget",
+                target_cex="binance",
+                network="SOL",
+            )
+        )
+        cex_exchange_outflow_anchor_feasibility = (
+            wallet_fifo_service.cex_exchange_outflow_anchor_feasibility(
+                year,
+                source_exchange="bitget",
+                target_cex="binance",
+                network="SOL",
+            )
         )
         if wallet_fifo_delta.unmatched_count:
             wallet_fifo_gaps = wallet_fifo_service.gap_diagnosis(year=year, limit=80)
-            wallet_fifo_withdrawal_gaps = wallet_fifo_service.withdrawal_gap_trace(year=year)
+            wallet_fifo_withdrawal_gaps = wallet_fifo_service.withdrawal_gap_trace(
+                year=year
+            )
         else:
             wallet_fifo_gaps = {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -5289,8 +7890,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "deshalb sind keine Exchange-Withdrawal-Gaps offen."
                 ),
             }
-        required_refs = {line.evidence_ref for line in filing_summary.lines if line.evidence_ref}
-        required_refs.update(item.endpoint for item in evidence_report.items if item.required)
+        required_refs = {
+            line.evidence_ref for line in filing_summary.lines if line.evidence_ref
+        }
+        required_refs.update(
+            item.endpoint for item in evidence_report.items if item.required
+        )
         required_refs.add(f"/api/v1/tax-years/{year}/correction-map")
         required_refs.add(f"/api/v1/export/tax-years/{year}/correction-map.csv")
         required_refs.add(f"/api/v1/export/tax-years/{year}/filing-checklist.csv")
@@ -5298,6 +7903,28 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         required_refs.add(f"/api/v1/tax-years/{year}/wallet-fifo-delta")
         required_refs.add(f"/api/v1/tax-years/{year}/wallet-fifo-gaps?limit=80")
         required_refs.add(f"/api/v1/tax-years/{year}/wallet-fifo-withdrawal-gaps")
+        required_refs.add("/api/v1/tax-methodology/bmf-compliance-matrix")
+        required_refs.add("/api/v1/tax-methodology/time-precision-audit")
+        required_refs.add("/api/v1/tax/wallet-fifo-runs/latest")
+        required_refs.add(
+            f"/api/v1/tax/wallet-fifo-runs/latest/method-delta-explanation?year={year}&event_limit=50"
+        )
+        required_refs.add(
+            f"/api/v1/tax-years/{year}/wallet-fifo-solana-program-settlement-evidence"
+        )
+        if any(record.year == year for record in service_swap_tax_mappings.records):
+            required_refs.add("/api/v1/tax/service-swap-mappings")
+        if year == 2022:
+            required_refs.add("/api/v1/tax/pionex-hnt-reconciliation")
+            required_refs.add("/api/v1/tax/fairspot-staking-reconciliation")
+        if year == 2026:
+            required_refs.add("/api/v1/tax/solana-staking-position-reconciliation")
+            required_refs.add("/api/v1/tax/moonpay-receipts")
+            required_refs.add("/api/v1/tax/moonpay-receipts/trade-history.csv")
+        if any(record.year == year for record in cross_cex_transfer_evidence.records):
+            required_refs.add("/api/v1/tax/cross-cex-transfer-evidence")
+        required_refs.add("/api/v1/sources/registry/runs/latest")
+        required_refs.add("/api/v1/divorce/valuation-runs/latest")
         if cex_exchange_outflow_evidence.rows_count:
             required_refs.add(
                 f"/api/v1/tax-years/{year}/cex-exchange-outflow-evidence?source_exchange=bitget&target_cex=binance&network=SOL"
@@ -5306,11 +7933,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             required_refs.add(
                 f"/api/v1/tax-years/{year}/cex-exchange-outflow-anchor-feasibility?source_exchange=bitget&target_cex=binance&network=SOL"
             )
-        solana_swap_context = tax_year_service.solana_stablecoin_swap_context_review(year, limit=1)
+        solana_swap_context = tax_year_service.solana_stablecoin_swap_context_review(
+            year, limit=1
+        )
         if solana_swap_context.events_count:
             required_refs.add("/api/v1/export/tax-solana-stablecoin-swap-evidence.csv")
         if solana_swap_context.stable_tax_lines_count:
-            required_refs.add("/api/v1/export/tax-solana-stablecoin-swap-fifo-lines.csv")
+            required_refs.add(
+                "/api/v1/export/tax-solana-stablecoin-swap-fifo-lines.csv"
+            )
         helium_swap_context = tax_year_service.helium_swap_context_review(year, limit=1)
         if helium_swap_context.events_count:
             required_refs.add("/api/v1/export/tax-helium-swap-context.csv")
@@ -5348,7 +7979,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
             with db.connect() as con:
                 rows = con.execute(
-                    """
+                    f"""
                     select
                         e.event_id,
                         e.event_time::varchar,
@@ -5404,13 +8035,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         end as tax_effect_note
                     from canonical_events e
                     left join raw_objects r on r.raw_object_id = e.raw_object_id
-                    where e.event_time >= ? and e.event_time < ?
+                    where {event_reporting_year_sql("e", "r")} = ?
                     order by e.event_time, e.event_id
                     """,
-                    [
-                        datetime(year, 1, 1),
-                        datetime(year + 1, 1, 1),
-                    ],
+                    [year],
                 ).fetchall()
             writer.writerows(rows)
             return output.getvalue().encode("utf-8")
@@ -5436,7 +8064,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
             with db.connect() as con:
                 rows = con.execute(
-                    """
+                    f"""
                     select
                         e.event_id,
                         e.event_time::varchar,
@@ -5478,14 +8106,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                         end as tax_effect_note
                     from canonical_events e
                     left join raw_objects r on r.raw_object_id = e.raw_object_id
-                    where e.event_time >= ? and e.event_time < ?
+                    where {event_reporting_year_sql("e", "r")} = ?
                       and lower(e.event_type) = 'unknown'
                     order by e.event_time, e.event_id
                     """,
-                    [
-                        datetime(year, 1, 1),
-                        datetime(year + 1, 1, 1),
-                    ],
+                    [year],
                 ).fetchall()
             writer.writerows(rows)
             return output.getvalue().encode("utf-8")
@@ -5512,63 +8137,117 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
             with db.connect() as con:
                 rows = con.execute(
-                    """
+                    f"""
                     select
-                        event_id,
-                        event_time::varchar,
-                        source,
-                        event_type,
-                        asset,
-                        quantity::varchar,
-                        coalesce(quote_asset, ''),
-                        coalesce(quote_quantity::varchar, ''),
-                        coalesce(tx_id, ''),
-                        coalesce(wallet, ''),
-                        coalesce(account, ''),
-                        coalesce(raw_object_id, ''),
+                        e.event_id,
+                        e.event_time::varchar,
+                        e.source,
+                        e.event_type,
+                        e.asset,
+                        e.quantity::varchar,
+                        coalesce(e.quote_asset, ''),
+                        coalesce(e.quote_quantity::varchar, ''),
+                        coalesce(e.tx_id, ''),
+                        coalesce(e.wallet, ''),
+                        coalesce(e.account, ''),
+                        coalesce(e.raw_object_id, ''),
                         case
-                            when lower(event_type) = 'mining' then 'mining_reward_detail'
-                            when lower(event_type) = 'reward' then 'reward_detail'
-                            when lower(event_type) = 'staking' then 'staking_detail'
+                            when lower(e.event_type) = 'mining' then 'mining_reward_detail'
+                            when lower(e.event_type) = 'reward' then 'reward_detail'
+                            when lower(e.event_type) = 'staking' then 'staking_detail'
                             else 'income_detail_review'
                         end
-                    from canonical_events
-                    where event_time >= ? and event_time < ?
-                      and lower(event_type) in ('mining', 'reward', 'staking', 'income')
-                    order by event_time, event_id
+                    from canonical_events e
+                    left join raw_objects r on r.raw_object_id = e.raw_object_id
+                    where {event_reporting_year_sql("e", "r")} = ?
+                      and lower(e.event_type) in ('mining', 'reward', 'staking', 'income')
+                    order by e.event_time, e.event_id
                     """,
-                    [
-                        datetime(year, 1, 1),
-                        datetime(year + 1, 1, 1),
-                    ],
+                    [year],
                 ).fetchall()
             writer.writerows(rows)
+            return output.getvalue().encode("utf-8")
+
+        def render_latest_governance_artifact(
+            *,
+            artifact: str,
+            source_endpoint: str,
+            report: object | None,
+        ) -> bytes:
+            payload = {
+                "artifact": artifact,
+                "package_year": year,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "available": report is not None,
+                "source_endpoint": source_endpoint,
+                "report": (
+                    report.model_dump(mode="json")
+                    if report is not None and hasattr(report, "model_dump")
+                    else report
+                ),
+                "methodology": (
+                    "Read-only Snapshot des neuesten versionierten Governance-Artefakts. "
+                    "available=false bedeutet, dass fuer die verwendete Datenbank noch kein "
+                    "entsprechender Lauf erzeugt wurde; es werden keine Produktivdaten veraendert."
+                ),
+            }
+            return json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+
+        def render_wallet_fifo_method_delta_events_csv() -> bytes:
+            output = io.StringIO()
+            fieldnames = list(WalletFifoMethodDeltaEvent.model_fields)
+            writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+            writer.writeheader()
+            if wallet_fifo_parallel_run is None:
+                return output.getvalue().encode("utf-8")
+            path = wallet_fifo_parallel_service.evidence_path(
+                wallet_fifo_parallel_run.run_id,
+                "wallet_fifo_method_delta_events.csv.gz",
+            )
+            if path is None:
+                return output.getvalue().encode("utf-8")
+            with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    if str(row.get("year") or "") == str(year):
+                        writer.writerow({key: row.get(key, "") for key in fieldnames})
             return output.getvalue().encode("utf-8")
 
         files: list[tuple[str, bytes, str]] = [
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-filing-summary.json",
-                json.dumps(filing_summary.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
+                json.dumps(
+                    filing_summary.model_dump(mode="json"), indent=2, ensure_ascii=False
+                ).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/filing-summary",
             ),
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-filing-checklist.csv",
-                render_tax_year_filing_checklist_csv(year, service=tax_year_service).encode("utf-8"),
+                render_tax_year_filing_checklist_csv(
+                    year, service=tax_year_service
+                ).encode("utf-8"),
                 f"/api/v1/export/tax-years/{year}/filing-checklist.csv",
             ),
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-correction-map.json",
-                json.dumps(correction_map.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
+                json.dumps(
+                    correction_map.model_dump(mode="json"), indent=2, ensure_ascii=False
+                ).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/correction-map",
             ),
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-correction-map.csv",
-                render_tax_year_correction_map_csv(year, service=tax_year_service).encode("utf-8"),
+                render_tax_year_correction_map_csv(
+                    year, service=tax_year_service
+                ).encode("utf-8"),
                 f"/api/v1/export/tax-years/{year}/correction-map.csv",
             ),
             (
                 f"02_Steuerliche_CSVs/tax-year-{year}-evidence.json",
-                json.dumps(evidence_report.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
+                json.dumps(
+                    evidence_report.model_dump(mode="json"),
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/evidence",
             ),
             (
@@ -5614,7 +8293,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             (
                 "02_Steuerliche_CSVs/tax-payment-overview.json",
                 json.dumps(
-                    tax_year_service.payment_overview(years=[year]).model_dump(mode="json"),
+                    tax_year_service.payment_overview(years=[year]).model_dump(
+                        mode="json"
+                    ),
                     indent=2,
                     ensure_ascii=False,
                 ).encode("utf-8"),
@@ -5622,13 +8303,19 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
             (
                 f"06_Solana_FIFO_Belege/tax-year-{year}-wallet-fifo-delta.json",
-                json.dumps(wallet_fifo_delta.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8"),
+                json.dumps(
+                    wallet_fifo_delta.model_dump(mode="json"),
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/wallet-fifo-delta",
             ),
             (
                 f"06_Solana_FIFO_Belege/tax-year-{year}-wallet-fifo-gaps.json",
                 json.dumps(
-                    wallet_fifo_gaps.model_dump(mode="json") if hasattr(wallet_fifo_gaps, "model_dump") else wallet_fifo_gaps,
+                    wallet_fifo_gaps.model_dump(mode="json")
+                    if hasattr(wallet_fifo_gaps, "model_dump")
+                    else wallet_fifo_gaps,
                     indent=2,
                     ensure_ascii=False,
                 ).encode("utf-8"),
@@ -5644,6 +8331,109 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     ensure_ascii=False,
                 ).encode("utf-8"),
                 f"/api/v1/tax-years/{year}/wallet-fifo-withdrawal-gaps",
+            ),
+            (
+                f"00_Manifest/tax-year-{year}-bmf-compliance-matrix.json",
+                json.dumps(
+                    bmf_compliance_matrix.model_dump(mode="json"),
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                "/api/v1/tax-methodology/bmf-compliance-matrix",
+            ),
+            (
+                f"00_Manifest/tax-year-{year}-time-precision-audit.json",
+                json.dumps(
+                    time_precision_audit.model_dump(mode="json"),
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                "/api/v1/tax-methodology/time-precision-audit",
+            ),
+            (
+                f"06_Solana_FIFO_Belege/tax-year-{year}-latest-wallet-fifo-run.json",
+                render_latest_governance_artifact(
+                    artifact="wallet_fifo_parallel_run",
+                    source_endpoint="/api/v1/tax/wallet-fifo-runs/latest",
+                    report=wallet_fifo_parallel_run,
+                ),
+                "/api/v1/tax/wallet-fifo-runs/latest",
+            ),
+            (
+                f"06_Solana_FIFO_Belege/tax-year-{year}-wallet-fifo-method-delta-explanation.json",
+                render_latest_governance_artifact(
+                    artifact="wallet_fifo_method_delta_explanation",
+                    source_endpoint=(
+                        "/api/v1/tax/wallet-fifo-runs/latest/"
+                        f"method-delta-explanation?year={year}&event_limit=50"
+                    ),
+                    report=wallet_fifo_method_delta_explanation,
+                ),
+                (
+                    "/api/v1/tax/wallet-fifo-runs/latest/"
+                    f"method-delta-explanation?year={year}&event_limit=50"
+                ),
+            ),
+            (
+                f"06_Solana_FIFO_Belege/tax-year-{year}-wallet-fifo-method-delta-events.csv",
+                render_wallet_fifo_method_delta_events_csv(),
+                (
+                    wallet_fifo_method_delta_explanation.full_event_csv_download_url
+                    if wallet_fifo_method_delta_explanation is not None
+                    else "/api/v1/tax/wallet-fifo-runs/latest"
+                ),
+            ),
+            (
+                f"06_Solana_FIFO_Belege/tax-year-{year}-solana-program-settlement-evidence.json",
+                json.dumps(
+                    solana_program_settlement_evidence.model_dump(mode="json"),
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                f"/api/v1/tax-years/{year}/wallet-fifo-solana-program-settlement-evidence",
+            ),
+            (
+                f"06_Solana_FIFO_Belege/tax-year-{year}-solana-service-swap-evidence.json",
+                json.dumps(
+                    solana_service_swap_evidence.model_dump(mode="json"),
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                f"/api/v1/tax-years/{year}/wallet-fifo-solana-service-swap-evidence",
+            ),
+            (
+                f"06_Solana_FIFO_Belege/tax-year-{year}-service-swap-tax-mapping.json",
+                json.dumps(
+                    {
+                        **service_swap_tax_mappings.model_dump(mode="json"),
+                        "records": [
+                            record.model_dump(mode="json")
+                            for record in service_swap_tax_mappings.records
+                            if record.year == year
+                        ],
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                "/api/v1/tax/service-swap-mappings",
+            ),
+            (
+                f"00_Manifest/tax-year-{year}-latest-source-registry.json",
+                render_latest_governance_artifact(
+                    artifact="source_registry_run",
+                    source_endpoint="/api/v1/sources/registry/runs/latest",
+                    report=source_registry_run,
+                ),
+                "/api/v1/sources/registry/runs/latest",
+            ),
+            (
+                f"07_Stichtag_Bewertung/tax-year-{year}-latest-valuation-gate.json",
+                render_latest_governance_artifact(
+                    artifact="divorce_valuation_gate",
+                    source_endpoint="/api/v1/divorce/valuation-runs/latest",
+                    report=valuation_gate_run,
+                ),
+                "/api/v1/divorce/valuation-runs/latest",
             ),
             (
                 f"06_Solana_FIFO_Belege/tax-year-{year}-cex-exchange-outflow-evidence.json",
@@ -5679,6 +8469,106 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 "/api/v1/events/canonical?event_type=reward_mining_staking_income",
             ),
         ]
+        if year == 2022:
+            files.append(
+                (
+                    "06_Solana_FIFO_Belege/tax-year-2022-pionex-hnt-reconciliation.json",
+                    json.dumps(
+                        pionex_hnt_reconciliation.model_dump(mode="json"),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "/api/v1/tax/pionex-hnt-reconciliation",
+                )
+            )
+            files.append(
+                (
+                    "05_HNT_Fairspot/tax-year-2022-fairspot-staking-reconciliation.json",
+                    json.dumps(
+                        fairspot_staking_reconciliation.model_dump(mode="json"),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "/api/v1/tax/fairspot-staking-reconciliation",
+                )
+            )
+            fairspot_source_path = Path(
+                fairspot_staking_reconciliation.independent_source_path
+            )
+            if fairspot_source_path.exists():
+                files.append(
+                    (
+                        "05_HNT_Fairspot/tax-year-2022-fairspot-staking-source.csv",
+                        fairspot_source_path.read_bytes(),
+                        "/api/v1/tax/fairspot-staking-reconciliation",
+                    )
+                )
+        if year == 2026:
+            files.append(
+                (
+                    "06_Solana_FIFO_Belege/tax-year-2026-solana-staking-position-reconciliation.json",
+                    json.dumps(
+                        solana_staking_position_reconciliation.model_dump(mode="json"),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "/api/v1/tax/solana-staking-position-reconciliation",
+                )
+            )
+            files.append(
+                (
+                    "06_Solana_FIFO_Belege/tax-year-2026-moonpay-onramp-reconciliation.json",
+                    json.dumps(
+                        moonpay_receipts.model_dump(mode="json"),
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "/api/v1/tax/moonpay-receipts",
+                )
+            )
+            moonpay_trade_history_path = Path(moonpay_receipts.trade_history_path)
+            if (
+                moonpay_receipts.trade_history_exists
+                and moonpay_trade_history_path.is_file()
+                and hashlib.sha256(moonpay_trade_history_path.read_bytes()).hexdigest()
+                == moonpay_receipts.trade_history_sha256
+            ):
+                files.append(
+                    (
+                        "06_Solana_FIFO_Belege/MoonPay_trade-history.csv",
+                        moonpay_trade_history_path.read_bytes(),
+                        "/api/v1/tax/moonpay-receipts/trade-history.csv",
+                    )
+                )
+        cross_cex_year_records = [
+            record
+            for record in cross_cex_transfer_evidence.records
+            if record.year == year
+        ]
+        if cross_cex_year_records:
+            cross_cex_year_payload = cross_cex_transfer_evidence.model_dump(mode="json")
+            cross_cex_year_payload["records"] = [
+                record.model_dump(mode="json") for record in cross_cex_year_records
+            ]
+            cross_cex_year_payload["records_count"] = len(cross_cex_year_records)
+            cross_cex_year_payload["ready_count"] = sum(
+                record.ready for record in cross_cex_year_records
+            )
+            cross_cex_year_payload["review_count"] = sum(
+                not record.ready for record in cross_cex_year_records
+            )
+            cross_cex_year_payload["years"] = [year]
+            files.append(
+                (
+                    f"06_Solana_FIFO_Belege/tax-year-{year}-cross-cex-transfer-evidence.json",
+                    json.dumps(
+                        cross_cex_year_payload,
+                        indent=2,
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "/api/v1/tax/cross-cex-transfer-evidence",
+                )
+            )
         csv_factories = {
             "/api/v1/export/tax-lines.csv": (
                 f"02_Steuerliche_CSVs/tax-year-{year}-tax-lines.csv",
@@ -5748,17 +8638,21 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
             "/api/v1/export/hnt-provenance-events.csv": (
                 f"05_HNT_Fairspot/tax-year-{year}-hnt-provenance-events.csv",
-                lambda: response_body(download_hnt_provenance_events_csv(
-                    from_at=datetime(year, 1, 1, tzinfo=timezone.utc),
-                    to_at=datetime(year + 1, 1, 1, tzinfo=timezone.utc),
-                )),
+                lambda: response_body(
+                    download_hnt_provenance_events_csv(
+                        from_at=reporting_year_start_utc,
+                        to_at=reporting_year_end_utc,
+                    )
+                ),
             ),
             "/api/v1/export/hnt-provenance-timeline.csv": (
                 f"05_HNT_Fairspot/tax-year-{year}-hnt-provenance-timeline.csv",
-                lambda: response_body(download_hnt_provenance_timeline_csv(
-                    from_at=datetime(year, 1, 1, tzinfo=timezone.utc),
-                    to_at=datetime(year + 1, 1, 1, tzinfo=timezone.utc),
-                )),
+                lambda: response_body(
+                    download_hnt_provenance_timeline_csv(
+                        from_at=reporting_year_start_utc,
+                        to_at=reporting_year_end_utc,
+                    )
+                ),
             ),
         }
         for endpoint, (path, factory) in csv_factories.items():
@@ -5790,7 +8684,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             ),
         }
 
-        with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+        with zipfile.ZipFile(
+            buffer, mode="w", compression=zipfile.ZIP_DEFLATED
+        ) as package:
             package.writestr(
                 "README.txt",
                 (
@@ -5801,7 +8697,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     f"Kurzfassung: {filing_summary.plain_language_summary}\n"
                     f"Wallet-FIFO: {wallet_fifo_delta.status}, "
                     f"offene Luecken {wallet_fifo_delta.unmatched_count}, "
-                    f"Transfers {wallet_fifo_delta.transfer_traces_count}\n"
+                    f"Transfers {wallet_fifo_delta.transfer_traces_count}\n\n"
+                    "Governance-Nachweise:\n"
+                    "00_Manifest: BMF-Matrix, Zeitpraezisions-Audit und Quellenregistry\n"
+                    "06_Solana_FIFO_Belege: neuester versionierter Wallet-FIFO-Run\n"
+                    "07_Stichtag_Bewertung: neuestes Stichtags-/Bewertungsgate\n"
                 ),
             )
             package.writestr(
@@ -5813,10 +8713,21 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     package.writestr(path, content)
 
         buffer.seek(0)
+        content = buffer.getvalue()
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            temporary_cache_path = cache_path.with_suffix(f".{uuid4().hex}.tmp")
+            temporary_cache_path.write_bytes(content)
+            temporary_cache_path.replace(cache_path)
+        except OSError:
+            pass
         return Response(
-            content=buffer.getvalue(),
+            content=content,
             media_type="application/zip",
-            headers={"Content-Disposition": f"attachment; filename=steuerreport-v2-tax-year-{year}-evidence.zip"},
+            headers={
+                "Content-Disposition": f"attachment; filename=steuerreport-v2-tax-year-{year}-evidence.zip",
+                "X-Steuerreport-Cache": "miss",
+            },
         )
 
     @app.post("/api/v1/ai/tasks")
@@ -5859,7 +8770,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/ai/local-asset-fifo-correction-review")
-    def local_ai_asset_fifo_correction_review() -> ApiResponse[LocalAiAssetFifoCorrectionStatus]:
+    def local_ai_asset_fifo_correction_review() -> ApiResponse[
+        LocalAiAssetFifoCorrectionStatus
+    ]:
         return ApiResponse(data=AiService(db).local_asset_fifo_correction_status())
 
     @app.get("/api/v1/ai/local-asset-fifo-correction-review/artifacts/{artifact}")
@@ -5890,7 +8803,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/ai/local-wallet-fifo-provenance-review")
-    def local_ai_wallet_fifo_provenance_review() -> ApiResponse[LocalAiWalletFifoProvenanceStatus]:
+    def local_ai_wallet_fifo_provenance_review() -> ApiResponse[
+        LocalAiWalletFifoProvenanceStatus
+    ]:
         return ApiResponse(data=AiService(db).local_wallet_fifo_provenance_status())
 
     @app.get("/api/v1/ai/local-wallet-fifo-provenance-review/artifacts/{artifact}")
@@ -5938,6 +8853,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             warnings=warnings,
         )
 
+    configure_openapi_routes(app)
     return app
 
 

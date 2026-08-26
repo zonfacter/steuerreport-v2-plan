@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 from types import SimpleNamespace
 import urllib.parse
@@ -18,6 +19,7 @@ from steuerreport_v2.contracts.portfolio import (
     PortfolioAccountSummary,
     PortfolioAsOfSnapshot,
     PortfolioAssetSummary,
+    PortfolioExcludedAccountSummary,
     PortfolioFiatDeposit,
     PortfolioFiatDepositReport,
     PortfolioInvestmentLocation,
@@ -47,12 +49,17 @@ from steuerreport_v2.contracts.portfolio import (
     PortfolioWalletHistoryImportResult,
 )
 from steuerreport_v2.contracts.prices import PricePointCreate
+from steuerreport_v2.contracts.source_registry import (
+    SourceRegistryConfig,
+    SourceRegistryLedgerAdjustment,
+)
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.account_aliases import (
     build_account_alias_map_for_store,
     canonical_account_label,
     unresolved_truncated_account_labels,
 )
+from steuerreport_v2.domain.cex_balances import CexBalanceService
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup, fiat_price_point
 from steuerreport_v2.domain.pipeline import PipelineService
@@ -63,10 +70,16 @@ from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 
 class PortfolioService:
+    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    SOURCE_REGISTRY_CONFIG_PATH = PROJECT_ROOT / "configs/source_registry.json"
     DEFAULT_SEPARATION_CUTOFF = datetime(2025, 6, 13, tzinfo=timezone.utc)
     SEPARATION_LABEL = "Virtuelle Wallet: Neubestand ab 13.06.2025"
     SEPARATION_EXCLUDED_ASSETS = {"EUR"}
     PORTFOLIO_EXCLUDED_ACCOUNTS = {"binance"}
+    EXCLUDED_VALUE_SEMANTICS = (
+        "Rechnerischer EUR-Wert kumulierter technischer Belegkonten. Kein Konto- oder "
+        "Portfoliobestand; nicht in total_value_eur enthalten und nicht dazu addieren."
+    )
     MAIN_HELIUM_LEGACY_WALLET = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
     HELIUM_TO_SOLANA_MIGRATION_ACCOUNT = "Helium -> Solana Migration Startbestand"
     HELIUM_SERVICE_TO_SOLANA_MIGRATION_ACCOUNT = "Helium Service-Transfers -> Solana Startbestand"
@@ -84,9 +97,19 @@ class PortfolioService:
     SOLANA_MINT_SYMBOLS = {
         "JUPYIWRYJFSKUPIHA7HKER8VUTAEFOSYBKEDZNSDVCN": "JUP",
         "HNTYVP6YFM1HG25TN9WGLQM12B8TQMCKNKRDU1OXWUX": "HNT",
+        "IOTEVVZLEYWOTN1QDWNPDDXPWSZN3ZFHEOT3MFL9FNS": "IOT",
+        "MB1EU7TZEC71KXDPSMSSKOUCSSUUOGLV1DRYS1OP2JH6": "MOBILE",
         "EPJFWDD5AUFQSSQEM2QN1XZYBAPC8G4WEGGKZWYTDT1V": "USDC",
+        "ES9VMFRZACERMJFRF4H2FYD4KCONKY11MCCE8BENWNYB": "USDT",
         "2UQSYO1FXXQKDTCPXNLOFWY88PXCVNFH2L8FPSE62FVU": "JLWSOL",
+        "XS3OZWBHVQIS4NYCF4YKWMEIA2EC84WSIVRCYCTQPH8": "SPCXX",
+        "7ATGF8KQO4WJRD5ATGX7T1V2ZVVYKPJBFFNEVF1ICFV1": "CWIF",
+        "SHARKSYJJQANYXVFRPNBN9PJGKHWDHATNMYICWPNR1S": "SHARK",
     }
+    SOLANA_TOKEN_PROGRAM_IDS = (
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    )
     EXPECTED_ZERO_SOURCES = {"Bitget", "Pionex"}
     EXPECTED_ZERO_BLOCKER_VALUE_EUR = Decimal("10")
     EXPECTED_ZERO_DUST_INFO_VALUE_EUR = Decimal("1")
@@ -108,23 +131,41 @@ class PortfolioService:
     }
     PRICE_FRESH_DAYS = 3
     PRICE_STALE_DAYS = 14
-    CEX_LIVE_CONNECTORS = {"binance", "bitget", "pionex"}
+    CEX_LIVE_CONNECTORS = {"binance", "bitget", "pionex", "coinbase"}
     CEX_REQUIRED_SECRET_KEYS = {
         "binance": ("api_key", "api_secret"),
         "bitget": ("api_key", "api_secret", "passphrase"),
         "pionex": ("api_key", "api_secret"),
+        "coinbase": ("api_key", "api_secret"),
     }
     LIVE_CONNECTOR_BY_SOURCE_GROUP = {
         "Binance": "binance",
         "Bitget": "bitget",
         "Pionex": "pionex",
+        "Coinbase": "coinbase",
         "Jup Wallet GmHY...3yu": "jup_wallet",
         "Solana Wallet 6K9n7y...qEwP": "solana_wallet",
     }
+    SOURCE_REGISTRY_ID_BY_SOURCE_GROUP = {
+        "Binance": "binance-account",
+        "Bitget": "bitget-account",
+        "Pionex": "pionex-account",
+        "Coinbase": "coinbase-account",
+        "Jup Wallet GmHY...3yu": "jup-inheritance-wallet",
+        "Solana Wallet 6K9n7y...qEwP": "solana-main-wallet",
+    }
     LIVE_STALE_AFTER_DAYS = 3
 
-    def __init__(self, store: DuckDbStore) -> None:
+    def __init__(
+        self,
+        store: DuckDbStore,
+        *,
+        source_registry_config_path: Path | None = None,
+    ) -> None:
         self.store = store
+        self.source_registry_config_path = (
+            source_registry_config_path or self.SOURCE_REGISTRY_CONFIG_PATH
+        )
         self._canonical_events_cache: list[object] | None = None
         self._canonical_events_by_id_cache: dict[str, object] | None = None
         self._tax_lots_cache: list[object] | None = None
@@ -210,8 +251,9 @@ class PortfolioService:
             total_value_eur=total,
             asset_summary=self._asset_summary(positions),
             account_summary=self._account_summary(positions),
-            excluded_account_summary=self._account_summary(excluded_positions),
+            excluded_account_summary=self._excluded_account_summary(excluded_positions),
             excluded_value_eur=excluded_total,
+            excluded_value_semantics=self.EXCLUDED_VALUE_SEMANTICS,
             missing_price_assets=sorted(missing),
             separation_virtual_wallet=self.separation_virtual_wallet(),
             resolved_account_aliases=[
@@ -249,7 +291,11 @@ class PortfolioService:
                 continue
             if self._is_transfer_counterparty_account(account) or self._is_current_source_excluded_account(account, asset):
                 continue
-            price = prices.at_or_before(asset, valuation_at)
+            price = prices.at_or_before(
+                asset,
+                valuation_at,
+                allow_derived=False,
+            )
             if price is None:
                 missing.add(asset)
                 position = PortfolioPosition(
@@ -289,8 +335,9 @@ class PortfolioService:
             total_value_eur=total,
             asset_summary=self._asset_summary(positions, valuation_at=valuation_at),
             account_summary=self._account_summary(positions),
-            excluded_account_summary=self._account_summary(excluded_positions),
+            excluded_account_summary=self._excluded_account_summary(excluded_positions),
             excluded_value_eur=excluded_total,
+            excluded_value_semantics=self.EXCLUDED_VALUE_SEMANTICS,
             missing_price_assets=sorted(missing),
             resolved_account_aliases=[
                 PortfolioAccountAlias(alias=alias, canonical_account=canonical)
@@ -302,8 +349,10 @@ class PortfolioService:
             ),
             methodology=(
                 "Summiert Balance-Ledger-Deltas bis einschliesslich Stichtag und "
-                "bewertet jede Asset-Position mit dem letzten belegten EUR-Preis "
-                "am oder vor dem Stichtag. Datum ohne Uhrzeit wird als "
+                "bewertet jede Asset-Position mit dem letzten unabhaengig belegten "
+                "EUR-Preis am oder vor dem Stichtag. Aus Transaktions-Quotes "
+                "abgeleitete Preise werden nicht als Besitzwert verwendet und "
+                "bleiben bis zum Preisnachweis als fehlend markiert. Datum ohne Uhrzeit wird als "
                 "23:59:59.999999 UTC interpretiert. Transfer- und Bridge-"
                 "Gegenparteien bleiben in der Historie/Auditspur sichtbar, werden "
                 "aber nicht als aktuelle Portfolio-Orte bewertet."
@@ -373,7 +422,11 @@ class PortfolioService:
                     continue
                 if self._is_transfer_counterparty_account(account) or self._is_current_source_excluded_account(account, asset):
                     continue
-                price = prices.at_or_before(asset, marker_at)
+                price = prices.at_or_before(
+                    asset,
+                    marker_at,
+                    allow_derived=False,
+                )
                 if price is None:
                     missing.add(asset)
                     if not self._is_portfolio_excluded_account(account):
@@ -414,8 +467,10 @@ class PortfolioService:
             max_total_value_eur=max(values) if values else None,
             methodology=(
                 "V2-Portfolio-Historie aus derselben Methodik wie /api/v1/portfolio/as-of: "
-                "Balance-Ledger bis Stichtag, historische EUR-Preise am oder vor dem "
-                "Stichtag, Transfer-/Bridge-Gegenparteien aus dem Besitzwert ausgeklammert. "
+                "Balance-Ledger bis Stichtag, unabhaengig belegte historische EUR-Preise "
+                "am oder vor dem Stichtag, Transfer-/Bridge-Gegenparteien aus dem "
+                "Besitzwert ausgeklammert. Event-Quotes werden nicht als Portfolio-"
+                "Stichtagspreise verwendet. "
                 "Dieser Verlauf ersetzt den alten Legacy-Roh-Event-Chart."
             ),
         )
@@ -722,6 +777,9 @@ class PortfolioService:
         live_unverified_value = Decimal("0")
         missing_wallets: list[str] = []
         prices = self._latest_prices()
+        registry_adjustments = self._validated_registry_ledger_adjustments()
+        applied_adjustment_ids: set[str] = set()
+        applied_adjustment_value = Decimal("0")
 
         for group in overview.groups:
             if group.current_status == "known_wallet_missing_import":
@@ -883,16 +941,60 @@ class PortfolioService:
             if connector_id is not None and self._connector_live_snapshot_is_current(connector_id):
                 external_balances = self._stored_live_balance_snapshots(connector_id)
                 if external_balances:
+                    snapshot_sources = self._stored_live_snapshot_sources(connector_id)
+                    live_anchor_source = (
+                        ", ".join(snapshot_sources)
+                        if snapshot_sources
+                        else self._snapshot_source_for_connector(connector_id)
+                    )
                     ledger_assets = {item.asset: item for item in group.asset_summary}
                     all_assets = sorted(set(ledger_assets) | set(external_balances))
                     for asset_name in all_assets:
                         ledger_asset = ledger_assets.get(asset_name)
-                        ledger_quantity = ledger_asset.quantity if ledger_asset is not None else Decimal("0")
-                        ledger_value = ledger_asset.value_eur if ledger_asset is not None else Decimal("0")
+                        raw_ledger_quantity = (
+                            ledger_asset.quantity
+                            if ledger_asset is not None
+                            else Decimal("0")
+                        )
+                        raw_ledger_value = (
+                            ledger_asset.value_eur
+                            if ledger_asset is not None
+                            else Decimal("0")
+                        )
+                        adjustments = registry_adjustments.get(
+                            (group.source_group, asset_name.upper()),
+                            [],
+                        )
+                        adjustment_quantity = sum(
+                            (item.quantity_delta for item in adjustments),
+                            Decimal("0"),
+                        )
+                        adjustment_value = (
+                            self._portfolio_value(
+                                asset_name,
+                                adjustment_quantity,
+                                prices,
+                            )
+                            or Decimal("0")
+                        )
+                        ledger_quantity = raw_ledger_quantity + adjustment_quantity
+                        ledger_value = raw_ledger_value + adjustment_value
                         external_quantity = external_balances.get(asset_name)
                         external_value = self._portfolio_value(asset_name, external_quantity, prices)
-                        delta_quantity = None if external_quantity is None else external_quantity - ledger_quantity
-                        delta_value = None if external_value is None else external_value - ledger_value
+                        if external_quantity is None and adjustments:
+                            delta_quantity = -ledger_quantity
+                            delta_value = -ledger_value
+                        else:
+                            delta_quantity = (
+                                None
+                                if external_quantity is None
+                                else external_quantity - ledger_quantity
+                            )
+                            delta_value = (
+                                None
+                                if external_value is None
+                                else external_value - ledger_value
+                            )
                         reconciled = self._is_live_delta_reconciled(delta_quantity, delta_value)
                         material_delta = (
                             delta_value is not None
@@ -903,11 +1005,21 @@ class PortfolioService:
                             and self._has_product_live_snapshots("binance")
                         )
                         if reconciled:
-                            status = "live_anchor_reconciled"
+                            status = (
+                                "live_anchor_reconciled_with_evidence_overlay"
+                                if adjustments
+                                else "live_anchor_reconciled"
+                            )
                             severity = "info"
                             next_action = (
-                                "Live-Anker und V2-Ledger stimmen innerhalb der "
-                                "Reconciliation-Toleranz ueberein."
+                                "TxID-gebundene Evidence-Overlays schliessen den fehlenden "
+                                "Ledger-Gegenposten read-only; Rohledger und FIFO bleiben "
+                                "unveraendert."
+                                if adjustments
+                                else (
+                                    "Live-Anker und V2-Ledger stimmen innerhalb der "
+                                    "Reconciliation-Toleranz ueberein."
+                                )
                             )
                         elif product_snapshot:
                             status = "product_live_anchor_delta"
@@ -924,11 +1036,37 @@ class PortfolioService:
                                 "Gespeicherten Live-Snapshot gegen V2-Ledger pruefen; "
                                 "Abweichungen nur mit API-/Export-/On-chain-Beleg korrigieren."
                             )
+                        evidence = (
+                            f"{group.note or 'V2-Ledgerbestand'}; "
+                            f"Live-Anker: {live_anchor_source}"
+                        )
+                        if adjustments:
+                            evidence = (
+                                f"{evidence}; Evidence-Overlay: "
+                                + ", ".join(
+                                    f"{item.adjustment_id} (TxID {item.tx_id})"
+                                    for item in adjustments
+                                )
+                            )
+                            applied_adjustment_ids.update(
+                                item.adjustment_id for item in adjustments
+                            )
+                            applied_adjustment_value += adjustment_value
                         rows.append(
                             PortfolioReconciliationRow(
                                 source_group=group.source_group,
                                 source_type=group.source_type,
                                 asset=asset_name,
+                                raw_ledger_quantity=raw_ledger_quantity,
+                                raw_ledger_value_eur=raw_ledger_value,
+                                ledger_adjustment_quantity=adjustment_quantity,
+                                ledger_adjustment_value_eur=adjustment_value,
+                                ledger_adjustment_ids=[
+                                    item.adjustment_id for item in adjustments
+                                ],
+                                ledger_adjustment_tx_ids=[
+                                    item.tx_id for item in adjustments
+                                ],
                                 ledger_quantity=ledger_quantity,
                                 ledger_value_eur=ledger_value,
                                 external_quantity=external_quantity,
@@ -937,10 +1075,7 @@ class PortfolioService:
                                 delta_value_eur=delta_value,
                                 status=status,
                                 severity=severity,
-                                evidence=(
-                                    f"{group.note or 'V2-Ledgerbestand'}; "
-                                    f"Live-Anker: {self._snapshot_source_for_connector(connector_id)}"
-                                ),
+                                evidence=evidence,
                                 next_action=next_action,
                             )
                         )
@@ -968,6 +1103,11 @@ class PortfolioService:
             total_ledger_value_eur=overview.total_value_eur,
             expected_zero_ledger_value_eur=expected_zero_value,
             live_unverified_ledger_value_eur=live_unverified_value,
+            ledger_adjustment_value_eur=applied_adjustment_value,
+            total_reconciled_ledger_value_eur=(
+                overview.total_value_eur + applied_adjustment_value
+            ),
+            applied_ledger_adjustments_count=len(applied_adjustment_ids),
             missing_wallets=(
                 sorted(set(missing_wallets))
                 if any(row.source_group == "Jup Wallet GmHY...3yu" and row.severity == "blocker" for row in rows)
@@ -977,20 +1117,26 @@ class PortfolioService:
                 rows,
                 key=lambda item: (
                     {"blocker": 0, "warning": 1, "info": 2}.get(item.severity, 9),
+                    0 if item.ledger_adjustment_ids else 1,
                     -abs(item.ledger_value_eur),
                     item.source_group,
                     item.asset or "",
                 ),
             ),
             connector_actions=[
-                "CEX Balance Preview aus V1 fuer Binance, Bitget und Pionex nach V2 migrieren.",
+                "Gespeicherte V2-Snapshotquelle und Abrufzeit je CEX regelmaessig pruefen.",
                 "Binance Spot + Simple Earn Flexible + Locked Earn getrennt als Live-Anker speichern.",
                 "Bitget/Pionex Live-Null gegen V2-Ledger-Restbestand pruefen und historische Abgaenge belegen.",
                 f"Solana Wallet {self.KNOWN_JUP_WALLET} per RPC und Historienimport aufnehmen.",
                 "Helium Legacy Main-Wallet und Staking-Roundtrips gegen Transferkette dokumentieren.",
             ],
             methodology=(
-                "Vergleicht den aktuellen V2-Balance-Ledger mit belegten V1-Live-Abgleichankern. "
+                "Vergleicht den aktuellen V2-Balance-Ledger mit den gespeicherten Live-"
+                "Abgleichankern. Die tatsaechlich verwendete API-/RPC-Quelle steht je Snapshot "
+                "und Reconciliation-Zeile. "
+                "Freigegebene Ledger-Overlays werden nur bei vorhandener TxID-gebundener "
+                "Provider- und Zielwallet-Evidenz read-only auf den Abgleichswert angewandt; "
+                "Rohledger, Canonical Events, FIFO und Steuerzeilen bleiben unveraendert. "
                 "Bei Quellen mit erwartetem Live-Nullbestand wird die Differenz als Reconciliation-"
                 "Fehler ausgewiesen. Es wird keine steuerliche Gegenbuchung automatisch erzeugt; "
                 "Korrekturen muessen aus API-/Export-/Onchain-Belegen oder expliziten Review-"
@@ -1009,7 +1155,145 @@ class PortfolioService:
             return True
         return delta_value is not None and abs(delta_value) < Decimal("5")
 
+    def _validated_registry_ledger_adjustments(
+        self,
+    ) -> dict[tuple[str, str], list[SourceRegistryLedgerAdjustment]]:
+        try:
+            config = SourceRegistryConfig.model_validate_json(
+                self.source_registry_config_path.read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            return {}
+
+        source_group_by_id = {
+            source_id: source_group
+            for source_group, source_id in self.SOURCE_REGISTRY_ID_BY_SOURCE_GROUP.items()
+        }
+        result: dict[tuple[str, str], list[SourceRegistryLedgerAdjustment]] = {}
+        for adjustment in config.ledger_adjustments:
+            source_group = source_group_by_id.get(adjustment.source_id)
+            if source_group is None or not self._ledger_adjustment_evidence_present(
+                adjustment,
+                config,
+            ):
+                continue
+            result.setdefault(
+                (source_group, adjustment.asset.upper()),
+                [],
+            ).append(adjustment)
+        return result
+
+    def _ledger_adjustment_evidence_present(
+        self,
+        adjustment: SourceRegistryLedgerAdjustment,
+        config: SourceRegistryConfig,
+    ) -> bool:
+        source_entry = next(
+            (item for item in config.entries if item.source_id == adjustment.source_id),
+            None,
+        )
+        target_entry = next(
+            (
+                item
+                for item in config.entries
+                if item.source_id == adjustment.target_source_id
+            ),
+            None,
+        )
+        if source_entry is None or (
+            adjustment.target_source_id is not None and target_entry is None
+        ):
+            return False
+
+        source_names = {
+            item.value.casefold()
+            for item in source_entry.identifiers
+            if item.kind in {"canonical_source", "canonical_source_prefix"}
+        }
+        target_accounts = {
+            item.value.casefold()
+            for item in (target_entry.identifiers if target_entry is not None else [])
+            if item.kind in {"account", "wallet", "address"}
+        }
+        with self.store.connect() as con:
+            evidence_rows = con.execute(
+                """
+                select
+                    ce.source,
+                    ce.account,
+                    ce.wallet,
+                    ce.quantity,
+                    ro.payload_json
+                from canonical_events ce
+                left join raw_objects ro on ro.raw_object_id = ce.raw_object_id
+                where ce.tx_id = ? and upper(ce.asset) = ?
+                """,
+                [adjustment.tx_id, adjustment.asset.upper()],
+            ).fetchall()
+
+        tolerance = Decimal("0.00000001")
+        expected_gross = abs(adjustment.quantity_delta)
+        provider_evidence = False
+        expected_net: Decimal | None = None
+        for source, _account, _wallet, _quantity, payload_json in evidence_rows:
+            normalized_source = str(source or "").casefold()
+            if not any(
+                normalized_source == name
+                or normalized_source.startswith(f"{name}:")
+                for name in source_names
+            ):
+                continue
+            try:
+                payload = json.loads(payload_json) if payload_json else {}
+            except (TypeError, ValueError):
+                payload = {}
+            gross = self._registry_payload_decimal(payload, "gross_amount")
+            amount = self._registry_payload_decimal(payload, "amount")
+            fee = self._registry_payload_decimal(payload, "transaction_fee")
+            if gross is None and amount is not None:
+                gross = amount + abs(fee or Decimal("0"))
+            if gross is None or abs(abs(gross) - expected_gross) > tolerance:
+                continue
+            provider_evidence = True
+            expected_net = abs(amount) if amount is not None else None
+            break
+
+        if not provider_evidence:
+            return False
+        if target_entry is None:
+            return True
+        if expected_net is None:
+            return False
+
+        return any(
+            (
+                str(account or "").casefold() in target_accounts
+                or str(wallet or "").casefold() in target_accounts
+            )
+            and Decimal(str(quantity)) > 0
+            and abs(Decimal(str(quantity)) - expected_net) <= tolerance
+            for _source, account, wallet, quantity, _payload_json in evidence_rows
+        )
+
+    @staticmethod
+    def _registry_payload_decimal(
+        payload: object,
+        key: str,
+    ) -> Decimal | None:
+        if not isinstance(payload, dict):
+            return None
+        value = payload.get(key)
+        if value in {None, ""}:
+            return None
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+
     def _external_live_balances(self, connector_id: str) -> dict[str, Decimal]:
+        anchor_status, _anchor_at = self._latest_live_connector_anchor(connector_id)
+        if anchor_status == "empty_response":
+            return {}
         stored = self._stored_live_balance_snapshots(connector_id)
         if stored:
             return stored
@@ -1018,25 +1302,46 @@ class PortfolioService:
         return self._v1_cex_live_balances(connector_id)
 
     def _stored_live_balance_snapshots(self, connector_id: str) -> dict[str, Decimal]:
+        anchor_status, anchor_at = self._latest_live_connector_anchor(connector_id)
+        if anchor_status == "empty_response" or anchor_at is None:
+            return {}
         with self.store.connect() as con:
             rows = con.execute(
                 """
                 select asset, sum(quantity)
                 from portfolio_live_balance_snapshots
                 where connector_id = ?
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
+                  and fetched_at = ?
                 group by asset
                 order by asset
                 """,
-                [connector_id, connector_id],
+                [connector_id, anchor_at],
             ).fetchall()
         return {str(row[0]).upper(): row[1] or Decimal("0") for row in rows}
 
+    def _stored_live_snapshot_sources(self, connector_id: str) -> list[str]:
+        anchor_status, anchor_at = self._latest_live_connector_anchor(connector_id)
+        if anchor_status == "empty_response":
+            return [f"{connector_id}_api_v2:empty_response"]
+        if anchor_at is None:
+            return []
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select distinct source
+                from portfolio_live_balance_snapshots
+                where connector_id = ?
+                  and fetched_at = ?
+                order by source
+                """,
+                [connector_id, anchor_at],
+            ).fetchall()
+        return [str(row[0]) for row in rows if str(row[0] or "").strip()]
+
     def _has_product_live_snapshots(self, connector_id: str) -> bool:
+        anchor_status, anchor_at = self._latest_live_connector_anchor(connector_id)
+        if anchor_status == "empty_response" or anchor_at is None:
+            return False
         with self.store.connect() as con:
             row = con.execute(
                 """
@@ -1044,14 +1349,10 @@ class PortfolioService:
                 from portfolio_live_balance_snapshots
                 where connector_id = ?
                   and coalesce(account_type, '') not in ('', 'spot')
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
+                  and fetched_at = ?
                 limit 1
                 """,
-                [connector_id, connector_id],
+                [connector_id, anchor_at],
             ).fetchone()
         return row is not None
 
@@ -1065,13 +1366,13 @@ class PortfolioService:
         if not self._connector_live_snapshot_is_current(connector_id):
             return
         live_balances = self._stored_live_balance_snapshots(connector_id)
-        if not live_balances:
-            return
         ledger_assets = {asset for current_account, asset in grouped_balances if current_account == account}
         prices = self._latest_prices()
         for key in list(grouped_balances):
             if key[0] == account:
                 del grouped_balances[key]
+        if not live_balances:
+            return
         for asset, quantity in live_balances.items():
             if (
                 asset not in ledger_assets
@@ -1087,11 +1388,16 @@ class PortfolioService:
         grouped_balances: dict[tuple[str, str], Decimal],
     ) -> None:
         for account, connector_id in (("bitget", "bitget"), ("pionex", "pionex")):
-            self._apply_live_balance_anchor(
-                grouped_balances,
-                account=account,
-                connector_id=connector_id,
-            )
+            if self._connector_live_snapshot_is_current(connector_id):
+                self._apply_live_balance_anchor(
+                    grouped_balances,
+                    account=account,
+                    connector_id=connector_id,
+                )
+                continue
+            for key in list(grouped_balances):
+                if key[0] == account:
+                    del grouped_balances[key]
 
     def _apply_binance_live_product_anchor(
         self,
@@ -1100,12 +1406,12 @@ class PortfolioService:
         if not self._connector_live_snapshot_is_current("binance"):
             return
         snapshots = self._latest_live_balance_snapshot_rows("binance")
-        if not snapshots:
-            return
         for account, asset in list(grouped_balances):
             source_group, _source_type = self._source_group_for_account(account, {asset})
             if source_group == "Binance":
                 del grouped_balances[(account, asset)]
+        if not snapshots:
+            return
         for snapshot in snapshots:
             if snapshot["asset"] in self.NON_VALUED_LIVE_RECEIPT_ASSETS:
                 continue
@@ -1125,20 +1431,19 @@ class PortfolioService:
         return (datetime.now(timezone.utc) - comparable).days <= self.LIVE_STALE_AFTER_DAYS
 
     def _latest_live_balance_snapshot_rows(self, connector_id: str) -> list[dict[str, object]]:
+        anchor_status, anchor_at = self._latest_live_connector_anchor(connector_id)
+        if anchor_status == "empty_response" or anchor_at is None:
+            return []
         with self.store.connect() as con:
             rows = con.execute(
                 """
                 select asset, quantity, account_type, product_id, position_id, event_type
                 from portfolio_live_balance_snapshots
                 where connector_id = ?
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
+                  and fetched_at = ?
                 order by asset, account_type, product_id, position_id, event_type
                 """,
-                [connector_id, connector_id],
+                [connector_id, anchor_at],
             ).fetchall()
         return [
             {
@@ -1190,33 +1495,70 @@ class PortfolioService:
         self,
         connectors: list[str] | None = None,
     ) -> PortfolioReconciliationRefreshResult:
+        requested_connectors = connectors
+        if requested_connectors is None:
+            requested_connectors = [
+                "binance",
+                "bitget",
+                "pionex",
+                "jup_wallet",
+                "solana_wallet",
+            ]
+            if self._cex_credentials_configured("coinbase"):
+                requested_connectors.insert(3, "coinbase")
         connector_ids = [
             item.lower()
-            for item in (connectors or ["binance", "bitget", "pionex", "jup_wallet", "solana_wallet"])
+            for item in requested_connectors
             if item.strip()
         ]
         fetched_at = datetime.now(timezone.utc)
         snapshots: list[PortfolioLiveBalanceSnapshot] = []
         connector_results: list[PortfolioReconciliationRefreshConnectorResult] = []
         for connector_id in connector_ids:
+            self._connector_errors.pop(connector_id, None)
             previous_snapshot_at = self._latest_live_snapshot_at(connector_id)
             connector_snapshots: list[PortfolioLiveBalanceSnapshot] = []
             missing_configuration = False
+            snapshot_source = self._snapshot_source_for_connector(connector_id)
             if connector_id == "jup_wallet":
-                missing_configuration = not bool(self.V1_CONNECTOR_BASE_URL or self._solscan_api_key())
-                balances = self._v1_solana_wallet_balances(self.KNOWN_JUP_WALLET)
-                if not balances:
-                    balances = self._solscan_wallet_balances(self.KNOWN_JUP_WALLET)
+                missing_configuration = not bool(
+                    self._alchemy_api_key() or self.V1_CONNECTOR_BASE_URL or self._solscan_api_key()
+                )
+                try:
+                    balances, snapshot_source = self._live_solana_wallet_balances(self.KNOWN_JUP_WALLET)
+                except Exception as exc:
+                    balances = {}
+                    self._connector_errors[connector_id] = f"Solana-Liveabruf fehlgeschlagen: {exc}"
             elif connector_id == "solana_wallet":
-                missing_configuration = not bool(self.V1_CONNECTOR_BASE_URL or self._solscan_api_key())
-                balances = self._v1_solana_wallet_balances(self.PRIMARY_SOLANA_WALLET)
-                if not balances:
-                    balances = self._solscan_wallet_balances(self.PRIMARY_SOLANA_WALLET)
+                missing_configuration = not bool(
+                    self._alchemy_api_key() or self.V1_CONNECTOR_BASE_URL or self._solscan_api_key()
+                )
+                try:
+                    balances, snapshot_source = self._live_solana_wallet_balances(self.PRIMARY_SOLANA_WALLET)
+                except Exception as exc:
+                    balances = {}
+                    self._connector_errors[connector_id] = f"Solana-Liveabruf fehlgeschlagen: {exc}"
             else:
                 missing_configuration = not self._cex_credentials_configured(connector_id)
-                balances = self._v1_cex_live_balance_snapshots(connector_id, fetched_at)
-                if not balances:
-                    balances = self._v1_cex_live_balances(connector_id)
+                if not missing_configuration:
+                    try:
+                        balances = CexBalanceService(self.store).fetch(
+                            connector_id,
+                            fetched_at,
+                        )
+                        snapshot_source = f"{connector_id}_api_v2"
+                    except Exception as exc:
+                        balances = []
+                        self._connector_errors[connector_id] = (
+                            f"V2-{connector_id}-Liveabruf fehlgeschlagen: {exc}"
+                        )
+                else:
+                    balances = self._v1_cex_live_balance_snapshots(
+                        connector_id,
+                        fetched_at,
+                    )
+                    if not balances:
+                        balances = self._v1_cex_live_balances(connector_id)
             if connector_id in {"jup_wallet", "solana_wallet"}:
                 self._store_solscan_live_prices(fetched_at)
             if isinstance(balances, list):
@@ -1229,7 +1571,7 @@ class PortfolioService:
                             connector_id=connector_id,
                             asset=asset,
                             quantity=quantity,
-                            source=self._snapshot_source_for_connector(connector_id),
+                            source=snapshot_source,
                             fetched_at=fetched_at,
                         )
                     )
@@ -1255,11 +1597,19 @@ class PortfolioService:
                         if self._connector_errors.get(connector_id)
                         else "Connector ist nicht konfiguriert."
                         if missing_configuration
-                        else "Connector lieferte keine verwertbaren Live-Bestaende; vorhandene Snapshots bleiben erhalten."
+                        else (
+                            "Connector bestaetigte einen leeren Bestand; vorherige "
+                            "Snapshots bleiben nur als historische Referenz erhalten."
+                        )
                     ),
                 )
             )
         self._replace_live_balance_snapshots(snapshots)
+        self._record_live_connector_runs(
+            fetched_at=fetched_at,
+            results=connector_results,
+            snapshots=snapshots,
+        )
         return PortfolioReconciliationRefreshResult(
             fetched_at=fetched_at,
             connectors=connector_ids,
@@ -1269,9 +1619,52 @@ class PortfolioService:
             report=self.reconciliation_report(),
         )
 
+    def _live_solana_wallet_balances(self, wallet_address: str) -> tuple[dict[str, Decimal], str]:
+        rpc_error: Exception | None = None
+        if self._alchemy_api_key():
+            try:
+                balances = self._solana_rpc_wallet_balances(wallet_address)
+                if balances:
+                    return balances, "solana_rpc:getBalance+getTokenAccountsByOwner"
+            except Exception as exc:
+                rpc_error = exc
+
+        balances = self._v1_solana_wallet_balances(wallet_address)
+        if balances:
+            source = (
+                f"v1_bridge:{self.V1_CONNECTOR_BASE_URL.rstrip('/')}"
+                "/api/v1/connectors/solana/balance-snapshot"
+            )
+            return balances, source
+
+        balances = self._solscan_wallet_balances(wallet_address)
+        if balances:
+            return balances, "solscan_pro:/account/portfolio"
+        if rpc_error is not None:
+            raise rpc_error
+        return {}, "solana_live:empty"
+
     def _latest_live_snapshot_at(self, connector_id: str) -> datetime | None:
+        _status, anchor_at = self._latest_live_connector_anchor(connector_id)
+        return anchor_at
+
+    def _latest_live_connector_anchor(
+        self,
+        connector_id: str,
+    ) -> tuple[str | None, datetime | None]:
         with self.store.connect() as con:
-            row = con.execute(
+            run_row = con.execute(
+                """
+                select status, fetched_at
+                from portfolio_live_connector_runs
+                where connector_id = ?
+                  and status in ('refreshed', 'empty_response')
+                order by fetched_at desc
+                limit 1
+                """,
+                [connector_id],
+            ).fetchone()
+            snapshot_row = con.execute(
                 """
                 select max(fetched_at)
                 from portfolio_live_balance_snapshots
@@ -1279,9 +1672,23 @@ class PortfolioService:
                 """,
                 [connector_id],
             ).fetchone()
-        if row is None:
-            return None
-        return row[0]
+        run_status = str(run_row[0]) if run_row is not None else None
+        run_at = run_row[1] if run_row is not None else None
+        snapshot_at = snapshot_row[0] if snapshot_row is not None else None
+        if run_at is not None and (
+            snapshot_at is None
+            or self._comparable_utc(run_at) >= self._comparable_utc(snapshot_at)
+        ):
+            return run_status, run_at
+        if snapshot_at is not None:
+            return "refreshed", snapshot_at
+        return None, None
+
+    @staticmethod
+    def _comparable_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def _snapshot_source_for_connector(self, connector_id: str) -> str:
         endpoint = (
@@ -1648,6 +2055,61 @@ class PortfolioService:
                 balances[symbol] = balances.get(symbol, Decimal("0")) + self._decimal_from_payload(row.get("quantity"))
         return {asset: quantity for asset, quantity in balances.items() if quantity != 0}
 
+    def _solana_rpc_wallet_balances(self, wallet_address: str) -> dict[str, Decimal]:
+        balances: dict[str, Decimal] = {}
+        native = self._solana_rpc(
+            "getBalance",
+            [wallet_address, {"commitment": "finalized"}],
+            timeout_seconds=45,
+        )
+        if isinstance(native, dict):
+            lamports = self._decimal_from_payload(native.get("value"))
+            if lamports:
+                balances["SOL"] = lamports / Decimal("1000000000")
+
+        for program_id in self.SOLANA_TOKEN_PROGRAM_IDS:
+            payload = self._solana_rpc(
+                "getTokenAccountsByOwner",
+                [
+                    wallet_address,
+                    {"programId": program_id},
+                    {"encoding": "jsonParsed", "commitment": "finalized"},
+                ],
+                timeout_seconds=45,
+            )
+            rows = payload.get("value") if isinstance(payload, dict) else None
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                account = row.get("account") if isinstance(row.get("account"), dict) else {}
+                data = account.get("data") if isinstance(account.get("data"), dict) else {}
+                parsed = data.get("parsed") if isinstance(data.get("parsed"), dict) else {}
+                info = parsed.get("info") if isinstance(parsed.get("info"), dict) else {}
+                mint = str(info.get("mint") or "").strip()
+                token_amount = (
+                    info.get("tokenAmount")
+                    if isinstance(info.get("tokenAmount"), dict)
+                    else {}
+                )
+                quantity = self._decimal_from_payload(token_amount.get("uiAmountString"))
+                if not mint or not quantity:
+                    continue
+                asset = self._solana_asset_for_mint(mint)
+                balances[asset] = balances.get(asset, Decimal("0")) + quantity
+        return {asset: quantity for asset, quantity in balances.items() if quantity != 0}
+
+    def _solana_asset_for_mint(self, mint: str) -> str:
+        known = self.SOLANA_MINT_SYMBOLS.get(mint.upper())
+        if known:
+            return known
+        if self._jupiter_metadata_cache is None:
+            self._jupiter_metadata_cache = JupiterTokenService(self.store).cached_metadata_by_asset()
+        metadata = self._jupiter_metadata_cache.get(mint)
+        symbol = str(metadata.symbol or "").strip().lstrip("$").upper() if metadata else ""
+        return symbol or f"{mint[:6].upper()}...{mint[-4:].upper()}"
+
     def _decimal_from_payload(self, value: object) -> Decimal:
         try:
             return Decimal(str(value or "0"))
@@ -1874,12 +2336,56 @@ class PortfolioService:
                 ],
             )
 
+    def _record_live_connector_runs(
+        self,
+        *,
+        fetched_at: datetime,
+        results: list[PortfolioReconciliationRefreshConnectorResult],
+        snapshots: list[PortfolioLiveBalanceSnapshot],
+    ) -> None:
+        sources_by_connector: dict[str, set[str]] = {}
+        for snapshot in snapshots:
+            sources_by_connector.setdefault(snapshot.connector_id, set()).add(
+                snapshot.source
+            )
+        with self.store.connect() as con:
+            con.executemany(
+                """
+                insert or replace into portfolio_live_connector_runs (
+                    run_id, connector_id, fetched_at, status, snapshots_count,
+                    source, message
+                )
+                values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    [
+                        hashlib.sha256(
+                            f"{result.connector_id}:{fetched_at.isoformat()}".encode(
+                                "utf-8"
+                            )
+                        ).hexdigest(),
+                        result.connector_id,
+                        fetched_at,
+                        result.status,
+                        result.snapshots,
+                        ", ".join(
+                            sorted(sources_by_connector.get(result.connector_id, set()))
+                        )
+                        or self._snapshot_source_for_connector(result.connector_id),
+                        result.message,
+                    ]
+                    for result in results
+                ],
+            )
+
     def _canonical_solana_asset_symbol(self, asset: str) -> str:
         normalized = str(asset or "").strip().upper()
         if normalized in self.SOLANA_MINT_SYMBOLS:
             return self.SOLANA_MINT_SYMBOLS[normalized]
         if normalized == "2UQSYO...2FVU":
             return "JLWSOL"
+        if normalized == "XS3OZW...QPH8":
+            return "SPCXX"
         return normalized
 
     def _portfolio_value(
@@ -2077,6 +2583,39 @@ class PortfolioService:
                 reverse=True,
             )
         ]
+
+    def _excluded_account_summary(
+        self,
+        positions: list[PortfolioPosition],
+    ) -> list[PortfolioExcludedAccountSummary]:
+        summaries = self._account_summary(positions)
+        result = []
+        for summary in summaries:
+            reason_code, reason = self._portfolio_exclusion_reason(summary.account)
+            result.append(
+                PortfolioExcludedAccountSummary(
+                    **summary.model_dump(),
+                    exclusion_reason_code=reason_code,
+                    exclusion_reason=reason,
+                )
+            )
+        return result
+
+    @staticmethod
+    def _portfolio_exclusion_reason(account: str) -> tuple[str, str]:
+        if account.strip() == "Binance":
+            return (
+                "legacy_transfer_destination",
+                "Historisches Empfaengerlabel aus Heliumtracker-Transfers. Das Konto dient "
+                "als Audit-/FIFO-Gegenkonto und ist kein eigenstaendiger Bestandsnachweis.",
+            )
+        return (
+            "historical_binance_evidence_account",
+            "Historisches Binance-Importkonto mit kumulierten Kauf-, Einzahlungs-, "
+            "Auszahlungs- und Deposit-Belegen. Es ist keine saldo-vollstaendige Binance-"
+            "Unterkonto-Historie; aktuelle bzw. stichtagsbezogene Binance-Bestaende werden "
+            "ueber Spot, Funding und Earn ausgewiesen.",
+        )
 
     def separation_virtual_wallet(
         self,
@@ -2718,6 +3257,8 @@ class PortfolioService:
             return "Pionex", "exchange"
         if "bitget" in lower:
             return "Bitget", "exchange"
+        if "coinbase" in lower:
+            return "Coinbase", "exchange"
         if lower == "helium":
             return "Solana Wallet 6K9n7y...qEwP", "solana_wallet"
         if normalized == self.HELIUM_TO_SOLANA_MIGRATION_ACCOUNT:

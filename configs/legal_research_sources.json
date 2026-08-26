@@ -1,0 +1,240 @@
+{
+  "registry_version": "2026-08-24-v3",
+  "freshness_hours": 36,
+  "sources": [
+    {
+      "source_id": "estg-4",
+      "title": "EStG Paragraph 4 - Gewinnbegriff",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/estg/__4.html",
+      "reviewed_sha256": "562c9eece323332272071ef61a569c46c142642b843380d607bb498ac3dc889f",
+      "relevance_tags": ["gewerbliche_einkuenfte", "gewinnermittlung"]
+    },
+    {
+      "source_id": "estg-6",
+      "title": "EStG Paragraph 6 - Bewertung",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/estg/__6.html",
+      "reviewed_sha256": "6a144b721a71c2766f3f2b03f6b0baf6f880db63e4e01f518f8d35a16f36a0d2",
+      "relevance_tags": ["betriebsvermoegen", "bewertung"]
+    },
+    {
+      "source_id": "estg-15",
+      "title": "EStG Paragraph 15 - Einkuenfte aus Gewerbebetrieb",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/estg/__15.html",
+      "reviewed_sha256": "aa85413914a315fa59d6ebe8330db237129b27d28a293c572507027cdeaaf348",
+      "relevance_tags": ["mining", "rewards", "gewerbe"]
+    },
+    {
+      "source_id": "estg-22",
+      "title": "EStG Paragraph 22 - Sonstige Einkuenfte",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/estg/__22.html",
+      "reviewed_sha256": "9e3721404b90670e62659a1c13227c7da4dbcf7669c69bbd15e0a97f73df4587",
+      "relevance_tags": ["sonstige_einkuenfte", "private_veraeusserungen"]
+    },
+    {
+      "source_id": "estg-23",
+      "title": "EStG Paragraph 23 - Private Veraeusserungsgeschaefte",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/estg/__23.html",
+      "reviewed_sha256": "ea1479442d5e03bffc5e8ca8d527840058787553e443de9c1ff1e573d92e2d52",
+      "relevance_tags": ["haltefrist", "fifo", "gewinn", "verlust"]
+    },
+    {
+      "source_id": "ao-90",
+      "title": "AO Paragraph 90 - Mitwirkungspflichten",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/ao_1977/__90.html",
+      "reviewed_sha256": "c2b9c80d8fc4d35e5b1b8172c3eb5cb36b29737193d025e5b6b27e4a7ae1c8a3",
+      "relevance_tags": ["mitwirkung", "nachweise"]
+    },
+    {
+      "source_id": "ao-93",
+      "title": "AO Paragraph 93 - Auskunftspflicht",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/ao_1977/__93.html",
+      "reviewed_sha256": "a5a1c5b8e6080fb3ed31553345e363648baff4ddaf230656ca1d1ab5413e9bbd",
+      "relevance_tags": ["auskunft", "nachweise"]
+    },
+    {
+      "source_id": "ao-97",
+      "title": "AO Paragraph 97 - Vorlage von Urkunden",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/ao_1977/__97.html",
+      "reviewed_sha256": "03354f1d90b131e1143fc34b45c8571940da15e95443ab2563605e3761eb20f5",
+      "relevance_tags": ["belege", "urkunden"]
+    },
+    {
+      "source_id": "ao-147",
+      "title": "AO Paragraph 147 - Ordnungsvorschriften fuer Aufbewahrung",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/ao_1977/__147.html",
+      "reviewed_sha256": "64b2d3ce02b0959d101fac7a18fe23c6eb3208a523a591fee037547e64aead8c",
+      "relevance_tags": ["aufbewahrung", "betriebsvermoegen"]
+    },
+    {
+      "source_id": "ao-150",
+      "title": "AO Paragraph 150 - Form und Inhalt der Steuererklaerungen",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/ao_1977/__150.html",
+      "reviewed_sha256": "ca4f76ab93691d4f5e821c7b96f15584fdf140ab5795f8e44be581ffc8a4e5bf",
+      "relevance_tags": ["steuererklaerung", "vollstaendigkeit"]
+    },
+    {
+      "source_id": "ao-153",
+      "title": "AO Paragraph 153 - Berichtigung von Erklaerungen",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/ao_1977/__153.html",
+      "reviewed_sha256": "e03ac07139e5fc1ce7071997b6e43b447e42854199dd5c464106d248af4524b9",
+      "relevance_tags": ["berichtigung", "altjahre"]
+    },
+    {
+      "source_id": "ao-162",
+      "title": "AO Paragraph 162 - Schaetzung von Besteuerungsgrundlagen",
+      "authority": "gesetze_im_internet",
+      "kind": "law_section",
+      "url": "https://www.gesetze-im-internet.de/ao_1977/__162.html",
+      "reviewed_sha256": "5b7fccc6400c9eb48587936f9c64fa0b7df9bc2d2ea0340a7544b2ede8c0e00b",
+      "relevance_tags": ["schaetzung", "nachweisluecke"]
+    },
+    {
+      "source_id": "ksttg-current",
+      "title": "Kryptowerte-Steuertransparenz-Gesetz",
+      "authority": "gesetze_im_internet",
+      "kind": "legislation",
+      "url": "https://www.gesetze-im-internet.de/ksttg/",
+      "reviewed_sha256": "8832e5c961a31f6cfc6a817d652519161e8cf129c20fd3d50fe2ca4ad326fb68",
+      "relevance_tags": ["dac8", "meldepflichten", "plattformdaten"]
+    },
+    {
+      "source_id": "bmf-kryptowerte-2025-pdf",
+      "title": "BMF-Schreiben vom 6. Maerz 2025 zu Kryptowerte - Original-PDF",
+      "authority": "bundesfinanzministerium",
+      "kind": "administrative_guidance",
+      "url": "https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2025-03-06-einzelfragen-kryptowerte-bmf-schreiben.pdf?__blob=publicationFile&v=2",
+      "reviewed_sha256": "a739f2ffdfa4b6b2cf013c0a7fd2f12209716abcc2e945f187ce96cbe7b76056",
+      "relevance_tags": ["kryptowerte", "fifo", "preise", "dokumentation"]
+    },
+    {
+      "source_id": "bfh-ix-r-3-22",
+      "title": "BFH IX R 3/22 - Veraeusserungsgewinne aus Kryptowaehrungen",
+      "authority": "bundesfinanzhof",
+      "kind": "court_decision",
+      "url": "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202310057/",
+      "reviewed_sha256": "c10c8106a988cbef20dc9bf4dff88bda38efc78c0eb7b6168c7b07c563f9594e",
+      "relevance_tags": ["wirtschaftsgut", "kryptowerte", "estg_23"]
+    },
+    {
+      "source_id": "bfh-ix-b-24-26",
+      "title": "BFH IX B 24/26 - Fristberechnung bei privaten Veraeusserungsgeschaeften",
+      "authority": "bundesfinanzhof",
+      "kind": "court_decision",
+      "url": "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202650119/",
+      "reviewed_sha256": "2e09070547e4d9e0493bbc9b86f7d8edc0a3cd81491dd0695150c142c8c67103",
+      "relevance_tags": ["estg_23", "fristberechnung", "transaktionszeitpunkt"],
+      "note": "Immobilienfall zu EStG Paragraph 23 Absatz 1 Satz 1 Nummer 1; keine unmittelbare Aenderung der Krypto-FIFO-Regel. Der bindende Transaktionszeitpunkt bleibt als Nachweisanker zu beachten."
+    },
+    {
+      "source_id": "bundestag-crypto-holding-period-proposal-result-2026",
+      "title": "Bundestag: Ergebnis des Vorstosses zur Kryptowerte-Haltefrist 2026",
+      "authority": "bundestag",
+      "kind": "legislation",
+      "url": "https://www.bundestag.de/presse/hib/kurzmeldungen-1179034",
+      "reviewed_sha256": "04dc28f30f3ee961800475424acf0476e6979e2e8ddef1c54ba1334c87eefc71",
+      "relevance_tags": ["haltefrist", "gesetzgebung", "entwurf"]
+    }
+  ],
+  "monitors": [
+    {
+      "monitor_id": "bmf-krypto-sitemap",
+      "title": "BMF Sitemap Kryptowerte",
+      "authority": "bundesfinanzministerium",
+      "mode": "sitemap",
+      "url": "https://www.bundesfinanzministerium.de/sitemap.xml",
+      "keywords": ["krypto", "bitcoin", "blockchain", "virtuelle-waehr"],
+      "reviewed_urls": [
+        "https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2025-03-06-einzelfragen-kryptowerte.html",
+        "https://www.bundesfinanzministerium.de/Content/DE/Standardartikel/Themen/Steuern/Internationales_Steuerrecht/Allgemeine_Informationen/2023-11-10-umsetzung-melderahmen-fuer-kryptowerte.html",
+        "https://www.bundesfinanzministerium.de/Content/DE/Gesetzestexte/Gesetze_Gesetzesvorhaben/Abteilungen/Abteilung_IV/21_Legislaturperiode/2026-03-24-Austausch-Informationen-Kryptowerte/0-Gesetz.html"
+      ],
+      "reviewed_url_last_modified": {
+        "https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2025-03-06-einzelfragen-kryptowerte.html": "2025-03-07",
+        "https://www.bundesfinanzministerium.de/Content/DE/Standardartikel/Themen/Steuern/Internationales_Steuerrecht/Allgemeine_Informationen/2023-11-10-umsetzung-melderahmen-fuer-kryptowerte.html": "2024-04-03",
+        "https://www.bundesfinanzministerium.de/Content/DE/Gesetzestexte/Gesetze_Gesetzesvorhaben/Abteilungen/Abteilung_IV/21_Legislaturperiode/2026-03-24-Austausch-Informationen-Kryptowerte/0-Gesetz.html": "2026-06-09"
+      },
+      "ignored_urls": [
+        "https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Weitere_Steuerthemen/Abgabenordnung/2025-07-10-BSI-TR-03116-kryptographische-vorgaben.html",
+        "https://www.bundesfinanzministerium.de/Content/DE/Video/Finanzisch/kryptowerte/kryptowerte.html"
+      ],
+      "max_results": 25
+    },
+    {
+      "monitor_id": "bfh-kryptowerte-search",
+      "title": "BFH Entscheidungen zu Kryptowerten",
+      "authority": "bundesfinanzhof",
+      "mode": "bfh_search",
+      "url": "https://www.bundesfinanzhof.de/de/entscheidungen/entscheidungen-online/",
+      "queries": ["Kryptowerte", "Kryptowährung", "Bitcoin", "Blockchain", "Token"],
+      "reviewed_urls": [
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202310057/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202210247/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202210041/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202210037/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE201910273/"
+      ],
+      "max_results": 25
+    },
+    {
+      "monitor_id": "bfh-private-sales-search",
+      "title": "BFH Entscheidungen zu privaten Veraeusserungsgeschaeften",
+      "authority": "bundesfinanzhof",
+      "mode": "bfh_search",
+      "url": "https://www.bundesfinanzhof.de/de/entscheidungen/entscheidungen-online/",
+      "queries": ["private Veräußerungsgeschäfte"],
+      "reviewed_urls": [
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202650119/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202610121/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202610108/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202610101/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202620061/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202520349/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202520341/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202550157/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202510112/",
+        "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202520025/"
+      ],
+      "max_results": 25
+    },
+    {
+      "monitor_id": "bundestag-finance-rss",
+      "title": "Bundestag Finanzausschuss RSS Kryptowerte",
+      "authority": "bundestag",
+      "mode": "rss",
+      "url": "https://www.bundestag.de/static/appdata/includes/rss/finanzen.rss",
+      "keywords": ["krypto", "bitcoin", "token", "blockchain"],
+      "max_results": 25
+    },
+    {
+      "monitor_id": "bundestag-documents-rss",
+      "title": "Bundestag Drucksachen RSS Kryptowerte",
+      "authority": "bundestag",
+      "mode": "rss",
+      "url": "https://www.bundestag.de/static/appdata/includes/rss/drucksachen.rss",
+      "keywords": ["krypto", "bitcoin", "token", "blockchain"],
+      "max_results": 25
+    }
+  ]
+}

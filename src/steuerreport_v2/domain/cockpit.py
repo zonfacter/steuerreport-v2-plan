@@ -30,8 +30,12 @@ from steuerreport_v2.domain.account_aliases import (
     canonical_account_label,
 )
 from steuerreport_v2.domain.portfolio import PortfolioService
+from steuerreport_v2.domain.pionex_reconciliation import (
+    PionexHntReconciliationService,
+)
 from steuerreport_v2.domain.price_lookup import fiat_price_point
 from steuerreport_v2.domain.review import ReviewService
+from steuerreport_v2.domain.tax_time import reporting_year_sql
 from steuerreport_v2.domain.valuation import PriceCoverageService
 
 
@@ -74,8 +78,19 @@ class CockpitService:
         live = self._live_reconciliation_status(sources.groups, source_live)
         cockpit_value_eur = sum((asset.value_eur for asset in top_assets), Decimal("0"))
         if not top_assets:
-            cockpit_value_eur = sources.total_value_eur
-            top_assets = self._top_assets_from_source_overview(sources.groups, cockpit_value_eur)
+            fallback_groups = [
+                group
+                for group in sources.groups
+                if group.source_group not in PortfolioService.EXPECTED_ZERO_SOURCES
+            ]
+            cockpit_value_eur = sum(
+                (group.value_eur for group in fallback_groups),
+                Decimal("0"),
+            )
+            top_assets = self._top_assets_from_source_overview(
+                fallback_groups,
+                cockpit_value_eur,
+            )
         price_coverage = self._price_coverage_from_top_assets(
             top_assets,
             price_report.missing_count,
@@ -83,12 +98,7 @@ class CockpitService:
         )
         tasks = self._tasks(review, price_coverage, live)
         source_display_total = sum(
-            (
-                source_live.get(item.source_group, {}).get("live_value_eur")
-                if source_live.get(item.source_group, {}).get("live_value_eur") is not None
-                else item.value_eur
-                for item in sources.groups
-            ),
+            (self._source_display_value(item, source_live) for item in sources.groups),
             Decimal("0"),
         )
         portfolio_performance = self._portfolio_performance(
@@ -120,12 +130,7 @@ class CockpitService:
                     account_count=item.account_count,
                     assets=item.assets,
                     current_status=self._source_current_status(item, source_live),
-                    value_basis=(
-                        "live_api"
-                        if item.source_group in source_live
-                        and source_live[item.source_group]["live_value_eur"] is not None
-                        else "ledger"
-                    ),
+                    value_basis=self._source_value_basis(item, source_live),
                     ledger_value_eur=item.value_eur,
                     live_value_eur=source_live.get(item.source_group, {}).get("live_value_eur"),
                     delta_value_eur=(
@@ -139,7 +144,13 @@ class CockpitService:
                     note=item.note,
                     accounts=[account.account for account in item.accounts[:3]],
                 )
-                for item in sources.groups[:5]
+                for item in sorted(
+                    sources.groups,
+                    key=lambda group: abs(
+                        self._source_display_value(group, source_live)
+                    ),
+                    reverse=True,
+                )[:5]
             ],
             portfolio_performance=portfolio_performance,
             price_coverage=price_coverage,
@@ -339,8 +350,8 @@ class CockpitService:
             return None
         with self.store.connect() as con:
             rows = con.execute(
-                """
-                select distinct date_part('year', event_time)::integer as year
+                f"""
+                select distinct {reporting_year_sql('event_time')} as year
                 from tax_unmatched_disposals
                 order by year
                 """
@@ -363,14 +374,28 @@ class CockpitService:
         )
 
     def _zero_cost_tax_lots_count(self) -> int:
+        approved_event_ids = sorted(
+            PionexHntReconciliationService(self.store).approved_zero_cost_event_ids()
+        )
+        exclusion = ""
+        params: list[str] = []
+        if approved_event_ids:
+            exclusion = (
+                "and lot.source_event_id not in ("
+                + ", ".join("?" for _event_id in approved_event_ids)
+                + ")"
+            )
+            params.extend(approved_event_ids)
         with self.store.connect() as con:
             row = con.execute(
-                """
+                f"""
                 select count(distinct lot.lot_id)
                 from tax_lots lot
                 join tax_lines line on line.lot_id = lot.lot_id
                 where lot.cost_basis_eur_total = 0
-                """
+                {exclusion}
+                """,
+                params,
             ).fetchone()
         return int(row[0] if row is not None else 0)
 
@@ -726,43 +751,46 @@ class CockpitService:
         return "old"
 
     def _source_live_values(self) -> dict[str, dict[str, object]]:
-        prices = PortfolioService(self.store)._latest_prices()
+        portfolio_service = PortfolioService(self.store)
+        prices = portfolio_service._latest_prices()
         result: dict[str, dict[str, object]] = {}
-        with self.store.connect() as con:
-            for source_group, connector_id in self.CONNECTOR_BY_SOURCE.items():
-                if not self._connector_live_snapshot_is_current(connector_id):
-                    continue
-                rows = con.execute(
-                    """
-                    select asset, quantity, fetched_at
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                      and fetched_at = (
-                        select max(fetched_at)
-                        from portfolio_live_balance_snapshots
-                        where connector_id = ?
-                      )
-                    order by asset
-                    """,
-                    [connector_id, connector_id],
-                ).fetchall()
-                if not rows:
-                    continue
-                total = Decimal("0")
-                latest_at = rows[0][2]
-                for asset, quantity, fetched_at in rows:
-                    if str(asset).upper() in PortfolioService.NON_VALUED_LIVE_RECEIPT_ASSETS:
-                        continue
-                    latest_at = max(latest_at, fetched_at)
-                    price = fiat_price_point(str(asset).upper()) or prices.get(str(asset).upper())
-                    if price is None:
-                        continue
-                    total += (quantity or Decimal("0")) * price.price_eur
+        for source_group, connector_id in self.CONNECTOR_BY_SOURCE.items():
+            if not portfolio_service._connector_live_snapshot_is_current(
+                connector_id
+            ):
                 result[source_group] = {
-                    "live_value_eur": total,
-                    "last_live_at": latest_at,
-                    "live_anchor_source": self._stored_live_source(connector_id),
+                    "live_value_eur": None,
+                    "last_live_at": portfolio_service._latest_live_snapshot_at(
+                        connector_id
+                    ),
+                    "live_anchor_source": ", ".join(
+                        portfolio_service._stored_live_snapshot_sources(
+                            connector_id
+                        )
+                    )
+                    or None,
                 }
+                continue
+            balances = portfolio_service._stored_live_balance_snapshots(connector_id)
+            total = Decimal("0")
+            for asset, quantity in balances.items():
+                symbol = str(asset).upper()
+                if symbol in PortfolioService.NON_VALUED_LIVE_RECEIPT_ASSETS:
+                    continue
+                price = fiat_price_point(symbol) or prices.get(symbol)
+                if price is None:
+                    continue
+                total += (quantity or Decimal("0")) * price.price_eur
+            result[source_group] = {
+                "live_value_eur": total,
+                "last_live_at": portfolio_service._latest_live_snapshot_at(
+                    connector_id
+                ),
+                "live_anchor_source": ", ".join(
+                    portfolio_service._stored_live_snapshot_sources(connector_id)
+                )
+                or None,
+            }
         return result
 
     def _stored_live_source(self, connector_id: str) -> str | None:
@@ -1041,32 +1069,21 @@ class CockpitService:
         )
 
     def _stored_live_anchor_summary(self) -> dict[str, object]:
-        with self.store.connect() as con:
-            rows = con.execute(
-                """
-                select
-                    connector_id,
-                    count(*)::integer as assets,
-                    max(fetched_at) as latest_at
-                from portfolio_live_balance_snapshots
-                where upper(asset) not in (
-                    select * from unnest(?)
-                )
-                  and fetched_at = (
-                    select max(latest.fetched_at)
-                    from portfolio_live_balance_snapshots latest
-                    where latest.connector_id = portfolio_live_balance_snapshots.connector_id
-                  )
-                group by connector_id
-                """
-                ,
-                [list(PortfolioService.NON_VALUED_LIVE_RECEIPT_ASSETS)],
-            ).fetchall()
-        current_rows = [
-            row
-            for row in rows
-            if self._live_snapshot_at_is_current(str(row[0]), row[2])
-        ]
+        portfolio_service = PortfolioService(self.store)
+        current_rows: list[tuple[str, int, datetime]] = []
+        for connector_id in set(self.CONNECTOR_BY_SOURCE.values()):
+            latest_at = portfolio_service._latest_live_snapshot_at(connector_id)
+            if not portfolio_service._connector_live_snapshot_is_current(
+                connector_id
+            ) or latest_at is None:
+                continue
+            balances = portfolio_service._stored_live_balance_snapshots(connector_id)
+            asset_count = sum(
+                str(asset).upper()
+                not in PortfolioService.NON_VALUED_LIVE_RECEIPT_ASSETS
+                for asset in balances
+            )
+            current_rows.append((connector_id, asset_count, latest_at))
         return {
             "connectors": len({str(row[0]) for row in current_rows}),
             "assets": sum(int(row[1] or 0) for row in current_rows),
@@ -1090,20 +1107,11 @@ class CockpitService:
     def _latest_live_snapshot_at(self, connector_id: str) -> datetime | None:
         if connector_id in self._latest_live_snapshot_cache:
             return self._latest_live_snapshot_cache[connector_id]
-        with self.store.connect() as con:
-            row = con.execute(
-                """
-                select max(fetched_at)
-                from portfolio_live_balance_snapshots
-                where connector_id = ?
-                """,
-                [connector_id],
-            ).fetchone()
-        if row is None:
-            self._latest_live_snapshot_cache[connector_id] = None
-            return None
-        self._latest_live_snapshot_cache[connector_id] = row[0]
-        return row[0]
+        latest_at = PortfolioService(self.store)._latest_live_snapshot_at(
+            connector_id
+        )
+        self._latest_live_snapshot_cache[connector_id] = latest_at
+        return latest_at
 
     def _source_display_value(
         self,
@@ -1112,8 +1120,21 @@ class CockpitService:
     ) -> Decimal:
         live_value = source_live.get(group.source_group, {}).get("live_value_eur")
         if live_value is None:
+            if group.source_group in PortfolioService.EXPECTED_ZERO_SOURCES:
+                return Decimal("0")
             return group.value_eur
         return live_value  # type: ignore[return-value]
+
+    def _source_value_basis(
+        self,
+        group: object,
+        source_live: dict[str, dict[str, object]],
+    ) -> str:
+        if source_live.get(group.source_group, {}).get("live_value_eur") is not None:
+            return "live_api"
+        if group.source_group in PortfolioService.EXPECTED_ZERO_SOURCES:
+            return "expected_zero_policy_no_current_live"
+        return "ledger"
 
     def _source_current_status(
         self,
@@ -1124,6 +1145,11 @@ class CockpitService:
             live_value = source_live.get(group.source_group, {}).get("live_value_eur")
             if live_value is not None and abs(live_value - group.value_eur) < Decimal("5"):  # type: ignore[operator]
                 return "live_anchor_reconciled"
+        if (
+            group.source_group in PortfolioService.EXPECTED_ZERO_SOURCES
+            and source_live.get(group.source_group, {}).get("live_value_eur") is None
+        ):
+            return "expected_zero_live_unavailable"
         return group.current_status
 
     def _source_display_warning(
@@ -1133,6 +1159,12 @@ class CockpitService:
     ) -> str | None:
         live_value = source_live.get(group.source_group, {}).get("live_value_eur")
         if live_value is None:
+            if group.source_group in PortfolioService.EXPECTED_ZERO_SOURCES:
+                return (
+                    "Kein aktueller API-Liveanker; 0 EUR werden nur gemaess "
+                    "expected-zero-Policy angezeigt. Der Ledger-Restbestand "
+                    "bleibt im Reconciliation-Drilldown erhalten."
+                )
             return None
         delta = live_value - group.value_eur  # type: ignore[operator]
         if (

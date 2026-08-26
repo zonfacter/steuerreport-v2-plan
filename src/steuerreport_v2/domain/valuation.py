@@ -54,7 +54,7 @@ from steuerreport_v2.contracts.valuation import (
     PriceRequirementReport,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup, fiat_price_point
+from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 
 TAX_VALUE_EVENT_TYPES = {"trade", "income", "reward", "staking", "mining", "fee"}
 STABLECOIN_FX_ASSETS = {"USDT", "USDC", "BUSD", "EUR"}

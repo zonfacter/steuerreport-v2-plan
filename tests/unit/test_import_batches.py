@@ -140,3 +140,55 @@ def test_add_canonical_events_bulk_persists_events(tmp_path):
     assert len(events) == 2
     assert events[0].event_id != events[1].event_id
     assert [event.asset for event in store.list_canonical_events()] == ["USDT", "HNT"]
+
+
+def test_raw_backed_canonical_event_ids_are_stable_across_rebuilds(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(ImportBatchCreate(source="pionex"))
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(row_number=1, payload_json='{"asset":"HNT"}'),
+    )
+    payload = CanonicalEventCreate(
+        source="pionex",
+        source_ref="stable-row",
+        event_time=datetime(2022, 1, 1, tzinfo=timezone.utc),
+        event_type="trade",
+        asset="HNT",
+        quantity=Decimal("1.25"),
+        quote_asset="USDT",
+        quote_quantity=Decimal("10"),
+        raw_object_id=raw.raw_object_id,
+    )
+
+    first = store.add_canonical_event(payload)
+    store.delete_canonical_events_for_batch(batch.batch_id)
+    second = store.add_canonical_event(payload)
+
+    assert second.event_id == first.event_id
+
+
+def test_identical_raw_backed_event_legs_remain_distinct_and_stable(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(ImportBatchCreate(source="binance"))
+    raw = store.add_raw_object(
+        batch.batch_id,
+        RawObjectCreate(row_number=1, payload_json='{"asset":"SOL"}'),
+    )
+    payload = CanonicalEventCreate(
+        source="binance",
+        event_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        event_type="transfer",
+        asset="SOL",
+        quantity=Decimal("1"),
+        raw_object_id=raw.raw_object_id,
+    )
+
+    first = store.add_canonical_events([payload, payload])
+    store.delete_canonical_events_for_batch(batch.batch_id)
+    second = store.add_canonical_events([payload, payload])
+
+    assert first[0].event_id != first[1].event_id
+    assert [event.event_id for event in second] == [
+        event.event_id for event in first
+    ]

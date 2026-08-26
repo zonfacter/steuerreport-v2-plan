@@ -17,8 +17,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.db.duckdb_store import DuckDbStore  # noqa: E402
+from steuerreport_v2.domain.pipeline import PipelineService  # noqa: E402
 
 REPAIR_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_hnt_legacy_reward_price_repair_20260626.py"
 PREVIEW_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_all_income_price_repair_preview_20260626.py"

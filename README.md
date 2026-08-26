@@ -61,9 +61,17 @@ Der aktuelle Abschlussstand hat einen kanonischen Einstiegspunkt:
     Sicherheitsregeln.
 - `docs/626_API_ENDPOINT_REFERENZ_VOLLSTAENDIG_2026-07-05.md`
   - Vollstaendige aus dem Code generierte Liste aller API-Endpunkte.
+- `docs/007_MOBILE_APP_API_INTEGRATION_2026-08-26.md`
+  - Verbindlicher Einstieg fuer Android-/iOS-Clients, Transportregeln,
+    Sicherheitsgrenze und SDK-Generierung.
+- `docs/openapi/steuerreport-v2-openapi.json`
+  - Versioniertes, maschinenlesbares OpenAPI-Schema aller V2-Endpunkte und DTOs.
 - `docs/627_QUELLEN_CONNECTOR_SETUP_UND_WALLET_REGISTRY_2026-07-05.md`
   - Einrichtung und Pruefung von Wallets, Binance, Bitget, Pionex, Alchemy,
     Solscan und Jupiter.
+- `docs/696_OPENWEBUI_STEUERREPORT_AGENTS_2026-08-23.md`
+  - Lokale Qwen-3.8-Agenten fuer BMF, FIFO, Quellen und Stichtag mit
+    kontrolliertem Read-only-Zugriff.
 
 ## V1 bleibt Referenz
 
@@ -84,7 +92,7 @@ Backend:
 
 ```bash
 cd /workspace/steuerreport-v2-plan
-python3 -m uvicorn steuerreport_v2.api.app:app --reload --host 0.0.0.0 --port 8000
+python3 -m uvicorn steuerreport_v2.api.app:app --reload --host 0.0.0.0 --port 8010
 ```
 
 Frontend:
@@ -122,3 +130,29 @@ Tests:
 cd /workspace/steuerreport-v2-plan
 python3 -m pytest tests/unit
 ```
+
+## API und Mobile-Clients
+
+Bei laufendem Backend:
+
+- Swagger UI: `http://localhost:8010/docs`
+- ReDoc: `http://localhost:8010/redoc`
+- Live-Schema: `http://localhost:8010/openapi.json`
+- Client-Faehigkeiten: `GET http://localhost:8010/api/v1/meta/capabilities`
+
+Das eingecheckte Schema wird reproduzierbar erzeugt und geprueft:
+
+```bash
+python3 scripts/export_openapi_v2.py
+python3 scripts/export_openapi_v2.py --check
+python3 scripts/generate_api_endpoint_reference_v2.py --check
+```
+
+Die GitHub-CI unter `.github/workflows/ci.yml` fuehrt Unit-Tests, Ruff,
+OpenAPI-/Endpoint-Driftchecks und den Frontend-Build bei Pushes und Pull
+Requests erneut aus.
+
+Die API hat derzeit keine eigene Authentifizierung. Sie ist fuer das
+vertrauenswuerdige LAN ausgelegt und darf fuer eine Android-/iOS-App erst hinter
+TLS und einem Auth-Gateway aus dem Internet erreichbar gemacht werden. Details
+stehen in `docs/007_MOBILE_APP_API_INTEGRATION_2026-08-26.md`.

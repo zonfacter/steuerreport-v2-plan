@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Steuerreport V2 official crypto tax legal freshness check
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 Europe/Berlin
+Persistent=true
+RandomizedDelaySec=10m
+Unit=steuerreport-v2-legal-freshness-monitor.service
+
+[Install]
+WantedBy=timers.target

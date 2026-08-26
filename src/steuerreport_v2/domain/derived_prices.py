@@ -32,7 +32,7 @@ class DerivedPriceService:
             known_keys.add((asset, point.priced_at))
 
         derived: list[PricePointCreate] = []
-        events = self.store.list_canonical_events()
+        events = sorted(self.store.list_canonical_events(), key=self._event_sort_key)
         for _ in range(max_passes):
             created_in_pass = 0
             for event in events:
@@ -50,6 +50,28 @@ class DerivedPriceService:
 
                 asset_quantity = abs(event.quantity)
                 quote_quantity = abs(event.quote_quantity)
+                if quote_asset == "EUR":
+                    created_in_pass += self._append_price(
+                        history=history,
+                        known_keys=known_keys,
+                        derived=derived,
+                        asset=asset,
+                        priced_at=event.event_time,
+                        price_eur=quote_quantity / asset_quantity,
+                        confidence=Decimal("0.95"),
+                    )
+                    continue
+                if asset == "EUR":
+                    created_in_pass += self._append_price(
+                        history=history,
+                        known_keys=known_keys,
+                        derived=derived,
+                        asset=quote_asset,
+                        priced_at=event.event_time,
+                        price_eur=asset_quantity / quote_quantity,
+                        confidence=Decimal("0.95"),
+                    )
+                    continue
                 quote_price = self._price_at_or_before(history, quote_asset, event.event_time)
                 if quote_price is not None:
                     created_in_pass += self._append_price(
@@ -158,7 +180,7 @@ class DerivedPriceService:
         price_eur: Decimal,
         confidence: Decimal,
     ) -> int:
-        if price_eur <= 0:
+        if asset == "EUR" or price_eur <= 0:
             return 0
         key = (asset, priced_at)
         if key in known_keys:
@@ -175,6 +197,24 @@ class DerivedPriceService:
             )
         )
         return 1
+
+    @staticmethod
+    def _event_sort_key(event: CanonicalEvent) -> tuple[object, ...]:
+        return (
+            event.event_time,
+            event.source,
+            event.account or "",
+            event.wallet or "",
+            event.tx_id or "",
+            event.source_ref or "",
+            event.event_type,
+            event.asset,
+            event.quote_asset or "",
+            event.quantity,
+            event.quote_quantity or Decimal("0"),
+            event.fee_asset or "",
+            event.fee_quantity or Decimal("0"),
+        )
 
     def _price_at_or_before(
         self,

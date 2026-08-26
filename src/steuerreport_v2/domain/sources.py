@@ -15,6 +15,7 @@ from steuerreport_v2.contracts.sources import (
     BinanceReconciliationEvidenceReport,
     SourceAccountStatus,
     SourceAssetStatus,
+    SourceConnectorAttempt,
     SourceConnectorDiagnostic,
     SourceConnectorDiagnosticsReport,
     SourceDetail,
@@ -33,6 +34,7 @@ from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.price_lookup import fiat_price_point
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.secrets import resolve_secret_value, secret_metadata
+from steuerreport_v2.domain.tax_time import reporting_year_sql
 
 
 class SourceService:
@@ -42,13 +44,15 @@ class SourceService:
         "Jup Wallet GmHY...3yu": "jup_wallet",
         "Solana Wallet 6K9n7y...qEwP": "solana_wallet",
         "Binance": "binance",
+        "Coinbase": "coinbase",
     }
     EXPECTED_ZERO_SOURCES = {"Bitget", "Pionex"}
-    CEX_CONNECTORS = {"binance", "bitget", "pionex"}
+    CEX_CONNECTORS = {"binance", "bitget", "pionex", "coinbase"}
     CEX_REQUIRED_SECRET_KEYS = {
         "binance": ("api_key", "api_secret"),
         "bitget": ("api_key", "api_secret", "passphrase"),
         "pionex": ("api_key", "api_secret"),
+        "coinbase": ("api_key", "api_secret"),
     }
     DUST_DELTA_VALUE_EUR = Decimal("5")
     LIVE_STALE_AFTER_DAYS = 3
@@ -80,9 +84,12 @@ class SourceService:
             methodology=(
                 "Read-only Quellenuebersicht aus Portfolio-Quellengruppen, "
                 "Review-Gate, Import-Batches und persistierten Live-Snapshot-"
-                "Ankern. Wenn ein gespeicherter Live-Snapshot vorhanden ist, "
-                "wird dieser als Anzeigenwert genutzt; Ledger und Delta bleiben "
-                "je Quelle sichtbar. Externe Connectoren werden nicht abgefragt."
+                "Ankern. Nur ein frischer gespeicherter Live-Snapshot wird als "
+                "Anzeigenwert genutzt. Erfolgreich bestaetigte leere Connector-"
+                "Antworten gelten als 0-EUR-Liveanker; stale oder missing wird "
+                "nicht als heutiger Bestand oder belastbares Delta ausgegeben. "
+                "Ledgerwerte bleiben im Reconciliation-Nachweis sichtbar. Externe "
+                "Connectoren werden nicht abgefragt."
             ),
         )
 
@@ -129,6 +136,7 @@ class SourceService:
             group = groups_by_label.get(label)
             source_id = self.source_id(label)
             stats = self._live_snapshot_stats(connector_id)
+            last_attempt = self.latest_connector_attempt(connector_id)
             age_days = self._live_age_days(stats["last_snapshot_at"])
             connector_type = "cex" if connector_id in self.CEX_CONNECTORS else "wallet"
             credential = (
@@ -149,6 +157,7 @@ class SourceService:
                 last_snapshot_at=stats["last_snapshot_at"],
                 age_days=age_days,
                 group_value=group.value_eur if group is not None else Decimal("0"),
+                last_attempt=last_attempt,
             )
             diagnostics.append(
                 SourceConnectorDiagnostic(
@@ -168,6 +177,7 @@ class SourceService:
                     last_snapshot_age_days=age_days,
                     last_snapshot_assets=int(stats["asset_count"]),
                     last_snapshot_value_eur=stats["value_eur"],
+                    last_attempt=last_attempt,
                     message=message,
                     next_action=next_action,
                 )
@@ -187,14 +197,53 @@ class SourceService:
                 and item.last_snapshot_age_days > self.LIVE_STALE_AFTER_DAYS
             ),
             missing_snapshots=sum(1 for item in diagnostics if item.status == "missing_snapshot"),
+            failed_latest_attempts=sum(
+                1
+                for item in diagnostics
+                if item.last_attempt is not None
+                and item.last_attempt.status
+                in {"connector_error", "missing_configuration"}
+            ),
             methodology=(
                 "Read-only Connector-Diagnose. CEX-Credentials werden ueber den "
                 "V2-Secret-Store nur als vorhanden/entschluesselbar/nicht entschluesselbar "
                 "geprueft; zusaetzlich werden V2-Settings-Metadaten ohne Secret-Werte "
                 "gelesen. Secret-Werte werden nicht zurueckgegeben. Snapshot-Status "
-                "stammt aus persistierten V2-Live-Snapshots und loest keine Exchange-"
-                "Abfrage, FIFO-Buchung oder Ledger-Aenderung aus."
+                "stammt aus persistierten V2-Live-Snapshots. Der letzte persistierte "
+                "Connectorlauf bleibt mit Status und Fehlermeldung sichtbar, damit "
+                "ein fehlgeschlagener Abruf nicht hinter einem alten Snapshot "
+                "verschwindet. Die Diagnose loest keine Exchange-Abfrage, FIFO-"
+                "Buchung oder Ledger-Aenderung aus."
             ),
+        )
+
+    def latest_connector_attempt(
+        self, connector_id: str
+    ) -> SourceConnectorAttempt | None:
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select connector_id, fetched_at, status, snapshots_count,
+                       source, message
+                from portfolio_live_connector_runs
+                where lower(connector_id) = lower(?)
+                order by fetched_at desc, run_id desc
+                limit 1
+                """,
+                [connector_id],
+            ).fetchone()
+        if row is None:
+            return None
+        attempted_at = self._parse_datetime(row[1])
+        if attempted_at is None:
+            return None
+        return SourceConnectorAttempt(
+            connector_id=str(row[0]),
+            attempted_at=attempted_at,
+            status=str(row[2]),
+            snapshots_count=int(row[3] or 0),
+            source=str(row[4]) if row[4] is not None else None,
+            message=str(row[5]) if row[5] is not None else None,
         )
 
     def reconciliation_breakdown(self, source_id: str) -> SourceReconciliationBreakdown | None:
@@ -221,6 +270,11 @@ class SourceService:
             source_type=group.source_type,
             ledger_value_eur=reconciliation.ledger_value_eur,
             live_value_eur=reconciliation.live_value_eur,
+            live_nonledger_accrual_value_eur=(
+                reconciliation.live_nonledger_accrual_value_eur
+            ),
+            reconciliation_live_value_eur=reconciliation.reconciliation_live_value_eur,
+            raw_delta_value_eur=reconciliation.raw_delta_value_eur,
             delta_value_eur=reconciliation.delta_value_eur,
             last_live_at=reconciliation.last_live_at,
             live_anchor_source=reconciliation.live_anchor_source,
@@ -231,7 +285,9 @@ class SourceService:
             live_components=live_components,
             methodology=(
                 "Read-only Asset-Drilldown aus V2-Ledger und gespeichertem "
-                "API-Live-Snapshot. Deltas sind Pruefhinweise und erzeugen keine "
+                "API-Live-Snapshot. Noch nicht gutgeschriebene Earn-Abgrenzungen "
+                "bleiben im Live-Gesamtwert sichtbar, werden aber vom FIFO-/Ledger-"
+                "Abgleich getrennt. Deltas sind Pruefhinweise und erzeugen keine "
                 "FIFO-, Ledger- oder Steuerkorrektur."
             ),
         )
@@ -270,6 +326,24 @@ class SourceService:
                     ledger_value_eur=row.ledger_value_eur if row is not None else Decimal("0"),
                     live_quantity=row.live_quantity if row is not None else None,
                     live_value_eur=row.live_value_eur if row is not None else None,
+                    live_nonledger_accrual_quantity=(
+                        row.live_nonledger_accrual_quantity
+                        if row is not None
+                        else Decimal("0")
+                    ),
+                    live_nonledger_accrual_value_eur=(
+                        row.live_nonledger_accrual_value_eur
+                        if row is not None
+                        else Decimal("0")
+                    ),
+                    reconciliation_live_quantity=(
+                        row.reconciliation_live_quantity if row is not None else None
+                    ),
+                    reconciliation_live_value_eur=(
+                        row.reconciliation_live_value_eur if row is not None else None
+                    ),
+                    raw_delta_quantity=row.raw_delta_quantity if row is not None else None,
+                    raw_delta_value_eur=row.raw_delta_value_eur if row is not None else None,
                     delta_quantity=row.delta_quantity if row is not None else None,
                     delta_value_eur=row.delta_value_eur if row is not None else None,
                     live_components=live_components,
@@ -296,6 +370,11 @@ class SourceService:
             assets=selected_assets,
             ledger_value_eur=breakdown.ledger_value_eur,
             live_value_eur=breakdown.live_value_eur,
+            live_nonledger_accrual_value_eur=(
+                breakdown.live_nonledger_accrual_value_eur
+            ),
+            reconciliation_live_value_eur=breakdown.reconciliation_live_value_eur,
+            raw_delta_value_eur=breakdown.raw_delta_value_eur,
             delta_value_eur=breakdown.delta_value_eur,
             last_live_at=breakdown.last_live_at,
             import_batches=self._binance_import_batches(),
@@ -307,7 +386,9 @@ class SourceService:
             methodology=(
                 "Read-only Binance-Evidence-Report: vergleicht den steuerlichen "
                 "V2-Ledger mit gespeicherten Binance-API-Live-Komponenten und "
-                "Canonical-Event-Aggregaten seit dem Stichtag. Der Report erzeugt "
+                "Canonical-Event-Aggregaten seit dem Stichtag. Noch nicht "
+                "gutgeschriebene Earn-Abgrenzungen werden als Vermoegenswert gezeigt, "
+                "aber nicht als fehlende Ledgerbuchung gewertet. Der Report erzeugt "
                 "keine Ledger-, FIFO- oder Preisbuchungen."
             ),
         )
@@ -329,6 +410,8 @@ class SourceService:
                 ),
                 [],
             ).append(component)
+        for product_key in self._historical_binance_earn_product_keys():
+            grouped.setdefault(product_key, [])
         products: list[BinanceEarnHistoryProduct] = []
         for (asset, account_type, product_id, position_id), items in sorted(grouped.items()):
             quantity = sum((item.quantity for item in items), Decimal("0"))
@@ -389,12 +472,44 @@ class SourceService:
             covered_products=covered,
             connector_endpoint="/api/v1/connectors/cex/balances-preview",
             methodology=(
-                "Read-only Preflight aus gespeicherten Binance-Live-Produktkomponenten "
-                "und vorhandenen Binance-Import-Batches. Der Report definiert den "
+                "Read-only Preflight aus gespeicherten Binance-Live-Produktkomponenten, "
+                "historisch importierten Earn-Produktkennungen und vorhandenen Binance-"
+                "Import-Batches. Auch bereits beendete oder zurueckgezahlte Produkte "
+                "bleiben dadurch fuer lueckenlose API-Nachhistorisierung adressierbar. "
+                "Der Report definiert den "
                 "notwendigen History-Import fuer Simple Earn, erzeugt aber keine "
                 "Canonical Events, FIFO-Lots oder Ledgerbuchungen."
             ),
         )
+
+    def _historical_binance_earn_product_keys(
+        self,
+    ) -> set[tuple[str, str, str | None, str | None]]:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select distinct
+                    upper(json_extract_string(raw.payload_json, '$.asset')) as asset,
+                    json_extract_string(raw.payload_json, '$.account_type') as account_type,
+                    nullif(json_extract_string(raw.payload_json, '$.product_id'), '') as product_id,
+                    nullif(json_extract_string(raw.payload_json, '$.position_id'), '') as position_id
+                from raw_objects raw
+                join raw_import_batches batch using(batch_id)
+                where lower(batch.source) = 'binance_simple_earn_api'
+                  and json_extract_string(raw.payload_json, '$.account_type')
+                      in ('simple_earn_flexible', 'simple_earn_locked')
+                  and coalesce(json_extract_string(raw.payload_json, '$.asset'), '') <> ''
+                """
+            ).fetchall()
+        return {
+            (
+                str(asset).upper(),
+                str(account_type),
+                str(product_id) if product_id is not None else None,
+                str(position_id) if position_id is not None else None,
+            )
+            for asset, account_type, product_id, position_id in rows
+        }
 
     @classmethod
     def source_id(cls, label: str) -> str:
@@ -420,6 +535,7 @@ class SourceService:
                     group.source_group == "Binance"
                     and reconciliation.status == "reconciled_with_dust"
                 )
+                or reconciliation.status == "expected_zero_live_unavailable"
                 or reconciliation.status == "complete_export_strategy_reference_live_zero"
             )
             else group.current_status
@@ -441,6 +557,11 @@ class SourceService:
             live_freshness=self._live_freshness(reconciliation.last_live_at, live_age_days),
             ledger_value_eur=reconciliation.ledger_value_eur,
             live_value_eur=reconciliation.live_value_eur,
+            live_nonledger_accrual_value_eur=(
+                reconciliation.live_nonledger_accrual_value_eur
+            ),
+            reconciliation_live_value_eur=reconciliation.reconciliation_live_value_eur,
+            raw_delta_value_eur=reconciliation.raw_delta_value_eur,
             delta_value_eur=reconciliation.delta_value_eur,
             live_anchor_source=reconciliation.live_anchor_source,
             display_warning=self._display_warning_for_group(group, reconciliation),
@@ -641,6 +762,7 @@ class SourceService:
         last_snapshot_at: datetime | None,
         age_days: int | None,
         group_value: Decimal,
+        last_attempt: SourceConnectorAttempt | None,
     ) -> tuple[str, str, str]:
         if credential_status == "decrypt_failed":
             return (
@@ -659,6 +781,13 @@ class SourceService:
                 "credential_check_failed",
                 f"Credential-Status konnte nicht gelesen werden{': ' + credential_issue if credential_issue else ''}.",
                 "V2-Secret-Key-Konfiguration pruefen; keine Live-Werte als frisch annehmen.",
+            )
+        if self._failed_attempt_is_current(last_attempt, last_snapshot_at):
+            attempt_message = str(last_attempt.message or "unbekannter Connectorfehler")
+            return (
+                "connector_error",
+                "Der letzte API-Abruf ist fehlgeschlagen: " + attempt_message,
+                self._connector_error_next_action(attempt_message),
             )
         if last_snapshot_at is None:
             return (
@@ -682,6 +811,42 @@ class SourceService:
             "fresh",
             "Credential-Check und gespeicherter Live-Snapshot sind aktuell.",
             "Ledger-vs-Live-Delta im Quellen-Drilldown pruefen; keine automatische Steuerkorrektur.",
+        )
+
+    @staticmethod
+    def _failed_attempt_is_current(
+        attempt: SourceConnectorAttempt | None,
+        last_snapshot_at: datetime | None,
+    ) -> bool:
+        if attempt is None or attempt.status not in {
+            "connector_error",
+            "missing_configuration",
+        }:
+            return False
+        if last_snapshot_at is None:
+            return True
+        comparable = last_snapshot_at
+        if comparable.tzinfo is None:
+            comparable = comparable.replace(tzinfo=timezone.utc)
+        return attempt.attempted_at > comparable
+
+    @staticmethod
+    def _connector_error_next_action(message: str) -> str:
+        normalized = message.upper()
+        if "APIKEY_EXPIRED" in normalized or "API_KEY_EXPIRED" in normalized:
+            return (
+                "API-Key/Secret fuer diese Quelle im V2 Secret Store erneuern und "
+                "danach den Sammelabruf erneut starten; alten Snapshot nur als "
+                "historische Referenz behandeln."
+            )
+        if any(marker in normalized for marker in ("INVALID_API", "UNAUTHORIZED", "401")):
+            return (
+                "API-Zugang und Berechtigungen im V2 Secret Store pruefen und danach "
+                "den Sammelabruf erneut starten."
+            )
+        return (
+            "Persistierten Connectorfehler pruefen und Quelle erneut abfragen; alten "
+            "Snapshot nicht als aktuellen Bestand auslegen."
         )
 
     def _cex_credential_diagnostic(self, connector_id: str) -> dict[str, object]:
@@ -717,31 +882,19 @@ class SourceService:
         return parsed
 
     def _live_snapshot_stats(self, connector_id: str) -> dict[str, object]:
-        prices = PortfolioService(self.store)._latest_prices()
-        with self.store.connect() as con:
-            rows = con.execute(
-                """
-                select asset, quantity, fetched_at
-                from portfolio_live_balance_snapshots
-                where connector_id = ?
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
-                """,
-                [connector_id, connector_id],
-            ).fetchall()
-        if not rows:
+        portfolio_service = PortfolioService(self.store)
+        prices = portfolio_service._latest_prices()
+        fetched_at = portfolio_service._latest_live_snapshot_at(connector_id)
+        if fetched_at is None:
             return {
                 "last_snapshot_at": None,
                 "asset_count": 0,
                 "value_eur": None,
             }
-        fetched_at = rows[0][2]
+        balances = portfolio_service._stored_live_balance_snapshots(connector_id)
         value = Decimal("0")
         asset_count = 0
-        for asset, quantity, _fetched_at in rows:
+        for asset, quantity in balances.items():
             symbol = str(asset).upper()
             if symbol in PortfolioService.NON_VALUED_LIVE_RECEIPT_ASSETS:
                 continue
@@ -758,23 +911,48 @@ class SourceService:
     def _reconciliation_for_group(self, group: object) -> SourceReconciliationStatus:
         connector_id = self.CONNECTOR_BY_SOURCE.get(group.source_group)
         live_value = None
+        live_nonledger_accrual_value = Decimal("0")
+        reconciliation_live_value = None
+        raw_delta = None
         last_live_at = None
         live_anchor_source = None
         if connector_id is not None:
             live_value, last_live_at = self._stored_live_value(connector_id)
+            live_nonledger_accrual_value = self._stored_live_nonledger_accrual_value(
+                connector_id
+            )
             live_anchor_source = self._stored_live_source(connector_id)
-        delta = None if live_value is None else live_value - group.value_eur
+            if not PortfolioService(self.store)._connector_live_snapshot_is_current(
+                connector_id
+            ):
+                live_value = None
+                live_nonledger_accrual_value = Decimal("0")
+        if live_value is not None:
+            reconciliation_live_value = live_value - live_nonledger_accrual_value
+            raw_delta = live_value - group.value_eur
+        delta = (
+            None
+            if reconciliation_live_value is None
+            else reconciliation_live_value - group.value_eur
+        )
         severity = "info"
         status = "ledger_current_needs_live_anchor"
         next_action = "Live-Anker fuer diese Quelle speichern oder Detailbeleg pruefen."
         if group.source_group in self.EXPECTED_ZERO_SOURCES:
             status = "expected_live_zero"
             if live_value is None:
-                delta = -group.value_eur
+                status = "expected_zero_live_unavailable"
                 severity = "blocker" if abs(group.value_eur) >= Decimal("5") else "warning"
+                next_action = (
+                    "Aktuellen API-Snapshot beschaffen; Ledger-Restbestand bis "
+                    "dahin nicht als Live-Delta auslegen."
+                )
             else:
                 severity = "blocker" if abs(delta or Decimal("0")) >= Decimal("5") else "ok"
-            next_action = "Live-Nullbestand gegen Ledger-Restbestand belegen und historische Abgaenge klaeren."
+                next_action = (
+                    "Live-Nullbestand gegen Ledger-Restbestand belegen und "
+                    "historische Abgaenge klaeren."
+                )
             if (
                 group.source_group == "Bitget"
                 and live_value is not None
@@ -821,6 +999,9 @@ class SourceService:
             severity=severity,
             ledger_value_eur=group.value_eur,
             live_value_eur=live_value,
+            live_nonledger_accrual_value_eur=live_nonledger_accrual_value,
+            reconciliation_live_value_eur=reconciliation_live_value,
+            raw_delta_value_eur=raw_delta,
             delta_value_eur=delta,
             last_live_at=last_live_at,
             live_anchor_source=live_anchor_source,
@@ -836,6 +1017,18 @@ class SourceService:
         live_value = reconciliation.live_value_eur
         delta = reconciliation.delta_value_eur
         if live_value is None or delta is None:
+            connector_id = self.CONNECTOR_BY_SOURCE.get(group.source_group)
+            if connector_id is not None and reconciliation.last_live_at is not None:
+                return (
+                    "Letzter API-Snapshot ist nicht aktuell; er wird nicht als "
+                    "heutiger Bestand oder belastbares Delta verwendet."
+                )
+            if group.source_group in self.EXPECTED_ZERO_SOURCES:
+                return (
+                    "Kein aktueller API-Liveanker; 0 EUR werden nur gemaess "
+                    "expected-zero-Policy angezeigt. Der Ledger-Restbestand "
+                    "bleibt im Reconciliation-Nachweis erhalten."
+                )
             return None
         if (
             group.source_group == "Bitget"
@@ -863,6 +1056,11 @@ class SourceService:
         return None
 
     def _has_product_live_snapshots(self, connector_id: str) -> bool:
+        anchor_status, anchor_at = PortfolioService(
+            self.store
+        )._latest_live_connector_anchor(connector_id)
+        if anchor_status == "empty_response" or anchor_at is None:
+            return False
         with self.store.connect() as con:
             row = con.execute(
                 """
@@ -870,14 +1068,10 @@ class SourceService:
                 from portfolio_live_balance_snapshots
                 where connector_id = ?
                   and coalesce(account_type, '') not in ('', 'spot')
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
+                  and fetched_at = ?
                 limit 1
                 """,
-                [connector_id, connector_id],
+                [connector_id, anchor_at],
             ).fetchone()
         return row is not None
 
@@ -899,6 +1093,21 @@ class SourceService:
         ledger_assets = {asset.asset: asset for asset in group.asset_summary}
         connector_id = self.CONNECTOR_BY_SOURCE.get(group.source_group)
         live_assets = self._stored_live_asset_breakdown(connector_id) if connector_id is not None else {}
+        if connector_id is not None:
+            anchor_status, _anchor_at = PortfolioService(
+                self.store
+            )._latest_live_connector_anchor(connector_id)
+            if anchor_status == "empty_response":
+                live_assets = {
+                    asset: {
+                        "quantity": Decimal("0"),
+                        "nonledger_accrual_quantity": Decimal("0"),
+                        "components": 0,
+                        "account_types": set(),
+                        "products": set(),
+                    }
+                    for asset in ledger_assets
+                }
         prices = PortfolioService(self.store)._latest_prices()
         rows: list[SourceReconciliationAssetRow] = []
         for asset in sorted(set(ledger_assets) | set(live_assets)):
@@ -907,14 +1116,46 @@ class SourceService:
             ledger_quantity = ledger.quantity if ledger is not None else Decimal("0")
             ledger_value = ledger.value_eur if ledger is not None else Decimal("0")
             live_quantity = live["quantity"] if live is not None else None
+            live_nonledger_accrual_quantity = (
+                live["nonledger_accrual_quantity"]
+                if live is not None
+                else Decimal("0")
+            )
+            reconciliation_live_quantity = (
+                None
+                if live_quantity is None
+                else live_quantity - live_nonledger_accrual_quantity
+            )
             price = fiat_price_point(asset) or prices.get(asset.upper())
             live_value = (
                 None
                 if live_quantity is None or price is None
                 else live_quantity * price.price_eur
             )
-            delta_quantity = None if live_quantity is None else live_quantity - ledger_quantity
-            delta_value = None if live_value is None else live_value - ledger_value
+            live_nonledger_accrual_value = (
+                Decimal("0")
+                if price is None
+                else live_nonledger_accrual_quantity * price.price_eur
+            )
+            reconciliation_live_value = (
+                None
+                if reconciliation_live_quantity is None or price is None
+                else reconciliation_live_quantity * price.price_eur
+            )
+            raw_delta_quantity = (
+                None if live_quantity is None else live_quantity - ledger_quantity
+            )
+            raw_delta_value = None if live_value is None else live_value - ledger_value
+            delta_quantity = (
+                None
+                if reconciliation_live_quantity is None
+                else reconciliation_live_quantity - ledger_quantity
+            )
+            delta_value = (
+                None
+                if reconciliation_live_value is None
+                else reconciliation_live_value - ledger_value
+            )
             severity, status, next_action = self._asset_delta_status(
                 group.source_group,
                 delta_quantity,
@@ -929,6 +1170,12 @@ class SourceService:
                     ledger_value_eur=ledger_value,
                     live_quantity=live_quantity,
                     live_value_eur=live_value,
+                    live_nonledger_accrual_quantity=live_nonledger_accrual_quantity,
+                    live_nonledger_accrual_value_eur=live_nonledger_accrual_value,
+                    reconciliation_live_quantity=reconciliation_live_quantity,
+                    reconciliation_live_value_eur=reconciliation_live_value,
+                    raw_delta_quantity=raw_delta_quantity,
+                    raw_delta_value_eur=raw_delta_value,
                     delta_quantity=delta_quantity,
                     delta_value_eur=delta_value,
                     price_eur=price.price_eur if price is not None else None,
@@ -957,23 +1204,24 @@ class SourceService:
     ) -> dict[str, dict[str, object]]:
         if connector_id is None:
             return {}
+        anchor_status, anchor_at = PortfolioService(
+            self.store
+        )._latest_live_connector_anchor(connector_id)
+        if anchor_status == "empty_response" or anchor_at is None:
+            return {}
         with self.store.connect() as con:
             rows = con.execute(
                 """
-                select asset, quantity, account_type, product_id, fetched_at
+                select asset, quantity, account_type, product_id, event_type, fetched_at
                 from portfolio_live_balance_snapshots
                 where connector_id = ?
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
+                  and fetched_at = ?
                 order by asset, account_type, product_id
                 """,
-                [connector_id, connector_id],
+                [connector_id, anchor_at],
             ).fetchall()
         result: dict[str, dict[str, object]] = {}
-        for asset, quantity, account_type, product_id, _fetched_at in rows:
+        for asset, quantity, account_type, product_id, event_type, _fetched_at in rows:
             symbol = str(asset).upper()
             if symbol in PortfolioService.NON_VALUED_LIVE_RECEIPT_ASSETS:
                 continue
@@ -981,12 +1229,17 @@ class SourceService:
                 symbol,
                 {
                     "quantity": Decimal("0"),
+                    "nonledger_accrual_quantity": Decimal("0"),
                     "components": 0,
                     "account_types": set(),
                     "products": set(),
                 },
             )
             item["quantity"] = item["quantity"] + (quantity or Decimal("0"))  # type: ignore[operator]
+            if str(event_type or "").lower() == "earn_accrued_reward_snapshot":
+                item["nonledger_accrual_quantity"] = (
+                    item["nonledger_accrual_quantity"] + (quantity or Decimal("0"))  # type: ignore[operator]
+                )
             item["components"] = int(item["components"]) + 1
             if account_type:
                 item["account_types"].add(str(account_type))  # type: ignore[union-attr]
@@ -997,21 +1250,23 @@ class SourceService:
     def _stored_live_components(self, connector_id: str | None) -> list[SourceLiveComponent]:
         if connector_id is None:
             return []
-        prices = PortfolioService(self.store)._latest_prices()
+        portfolio_service = PortfolioService(self.store)
+        anchor_status, anchor_at = portfolio_service._latest_live_connector_anchor(
+            connector_id
+        )
+        if anchor_status == "empty_response" or anchor_at is None:
+            return []
+        prices = portfolio_service._latest_prices()
         with self.store.connect() as con:
             rows = con.execute(
                 """
                 select asset, quantity, account_type, product_id, position_id, event_type
                 from portfolio_live_balance_snapshots
                 where connector_id = ?
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
+                  and fetched_at = ?
                 order by asset, account_type, product_id, position_id, event_type
                 """,
-                [connector_id, connector_id],
+                [connector_id, anchor_at],
             ).fetchall()
         components: list[SourceLiveComponent] = []
         for asset, quantity, account_type, product_id, position_id, event_type in rows:
@@ -1055,7 +1310,7 @@ class SourceService:
             rows = con.execute(
                 f"""
                 select
-                    date_part('year', event_time)::int as year,
+                    {reporting_year_sql('event_time')} as year,
                     upper(asset) as asset,
                     event_type,
                     nullif(account, '') as account,
@@ -1390,6 +1645,12 @@ class SourceService:
         connector_id = self.CONNECTOR_BY_SOURCE.get(group.source_group)
         if connector_id is None:
             return group.value_eur, "ledger"
+        if not PortfolioService(self.store)._connector_live_snapshot_is_current(
+            connector_id
+        ):
+            if group.source_group in self.EXPECTED_ZERO_SOURCES:
+                return Decimal("0"), "expected_zero_policy_no_current_live"
+            return group.value_eur, "ledger"
         live_value, _ = self._stored_live_value(connector_id)
         if live_value is None:
             return group.value_eur, "ledger"
@@ -1402,6 +1663,15 @@ class SourceService:
     ) -> list[SourceAssetStatus]:
         connector_id = self.CONNECTOR_BY_SOURCE.get(group.source_group)
         if connector_id is not None:
+            if not PortfolioService(self.store)._connector_live_snapshot_is_current(
+                connector_id
+            ):
+                if group.source_group in self.EXPECTED_ZERO_SOURCES:
+                    return []
+                return [
+                    self._asset_status(asset, total_value_eur)
+                    for asset in group.asset_summary
+                ]
             ledger_symbols = {str(asset.asset).upper() for asset in group.asset_summary}
             live_assets = self._stored_live_assets(connector_id, total_value_eur, ledger_symbols)
             if live_assets:
@@ -1418,22 +1688,24 @@ class SourceService:
         ledger_symbols: set[str] | None = None,
     ) -> list[SourceAssetStatus]:
         ledger_symbols = ledger_symbols or set()
-        prices = PortfolioService(self.store)._latest_prices()
+        portfolio_service = PortfolioService(self.store)
+        prices = portfolio_service._latest_prices()
+        anchor_status, anchor_at = portfolio_service._latest_live_connector_anchor(
+            connector_id
+        )
+        if anchor_status == "empty_response" or anchor_at is None:
+            return []
         with self.store.connect() as con:
             rows = con.execute(
                 """
                 select asset, sum(quantity), max(fetched_at)
                 from portfolio_live_balance_snapshots
                 where connector_id = ?
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
+                  and fetched_at = ?
                 group by asset
                 order by asset
                 """,
-                [connector_id, connector_id],
+                [connector_id, anchor_at],
             ).fetchall()
         assets: list[SourceAssetStatus] = []
         for asset, quantity, fetched_at in rows:
@@ -1462,55 +1734,58 @@ class SourceService:
         return sorted(assets, key=lambda item: abs(item.value_eur), reverse=True)
 
     def _stored_live_value(self, connector_id: str) -> tuple[Decimal | None, datetime | None]:
-        prices = PortfolioService(self.store)._latest_prices()
-        with self.store.connect() as con:
-            rows = con.execute(
-                """
-                select asset, sum(quantity), max(fetched_at)
-                from portfolio_live_balance_snapshots
-                where connector_id = ?
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
-                group by asset
-                order by asset
-                """,
-                [connector_id, connector_id],
-            ).fetchall()
-        if not rows:
+        portfolio_service = PortfolioService(self.store)
+        prices = portfolio_service._latest_prices()
+        latest_at = portfolio_service._latest_live_snapshot_at(connector_id)
+        if latest_at is None:
             return None, None
+        balances = portfolio_service._stored_live_balance_snapshots(connector_id)
         total = Decimal("0")
-        latest_at = rows[0][2]
-        for asset, quantity, fetched_at in rows:
+        for asset, quantity in balances.items():
             if str(asset).upper() in PortfolioService.NON_VALUED_LIVE_RECEIPT_ASSETS:
                 continue
-            latest_at = max(latest_at, fetched_at)
             price = fiat_price_point(str(asset).upper()) or prices.get(str(asset).upper())
             if price is None:
                 continue
             total += (quantity or Decimal("0")) * price.price_eur
         return total, latest_at
 
-    def _stored_live_source(self, connector_id: str) -> str | None:
+    def _stored_live_nonledger_accrual_value(self, connector_id: str) -> Decimal:
+        portfolio_service = PortfolioService(self.store)
+        prices = portfolio_service._latest_prices()
+        anchor_status, anchor_at = portfolio_service._latest_live_connector_anchor(
+            connector_id
+        )
+        if anchor_status == "empty_response" or anchor_at is None:
+            return Decimal("0")
         with self.store.connect() as con:
-            row = con.execute(
+            rows = con.execute(
                 """
-                select string_agg(distinct source, ', ' order by source)
+                select asset, sum(quantity)
                 from portfolio_live_balance_snapshots
                 where connector_id = ?
-                  and fetched_at = (
-                    select max(fetched_at)
-                    from portfolio_live_balance_snapshots
-                    where connector_id = ?
-                  )
+                  and lower(coalesce(event_type, '')) = 'earn_accrued_reward_snapshot'
+                  and fetched_at = ?
+                group by asset
+                order by asset
                 """,
-                [connector_id, connector_id],
-            ).fetchone()
-        if row is None or row[0] is None:
-            return None
-        return str(row[0])
+                [connector_id, anchor_at],
+            ).fetchall()
+        total = Decimal("0")
+        for asset, quantity in rows:
+            symbol = str(asset).upper()
+            if symbol in PortfolioService.NON_VALUED_LIVE_RECEIPT_ASSETS:
+                continue
+            price = fiat_price_point(symbol) or prices.get(symbol)
+            if price is not None:
+                total += (quantity or Decimal("0")) * price.price_eur
+        return total
+
+    def _stored_live_source(self, connector_id: str) -> str | None:
+        sources = PortfolioService(self.store)._stored_live_snapshot_sources(
+            connector_id
+        )
+        return ", ".join(sources) or None
 
     def _asset_status(self, asset: object, total_value_eur: Decimal) -> SourceAssetStatus:
         return SourceAssetStatus(
@@ -1675,6 +1950,8 @@ class SourceService:
             names.update({"bitget"})
         if source_group == "pionex":
             names.update({"pionex"})
+        if source_group == "coinbase":
+            names.update({"coinbase"})
         if source_type == "solana_wallet":
             names.update({"solana", "solana_rpc", "blockpit"})
         if source_type == "staking_platform":

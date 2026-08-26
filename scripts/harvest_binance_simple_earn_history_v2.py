@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.binance_earn import BinanceEarnHistoryService
+from steuerreport_v2.db.duckdb_store import DuckDbStore  # noqa: E402
+from steuerreport_v2.domain.binance_earn import BinanceEarnHistoryService  # noqa: E402
 
 
 def main() -> int:
@@ -174,4 +174,3 @@ def build_summary(payload: dict[str, Any], out_dir: Path) -> str:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

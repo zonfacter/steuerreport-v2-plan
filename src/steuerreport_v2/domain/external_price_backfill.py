@@ -24,6 +24,7 @@ from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 DEFILLAMA_COINS_BASE_URL = "https://coins.llama.fi"
+FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 DEFAULT_CONFIG = Path("/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json")
 EXAMPLE_CONFIG = Path("/workspace/steuerreport/configs/crypto_price_sources.example.json")
 
@@ -31,8 +32,9 @@ EXAMPLE_CONFIG = Path("/workspace/steuerreport/configs/crypto_price_sources.exam
 @dataclass(frozen=True)
 class _PriceAsset:
     symbol: str
-    coingecko_id: str
+    coingecko_id: str | None
     aliases: tuple[str, ...]
+    defillama_id: str | None = None
 
 
 class ExternalPriceBackfillService:
@@ -93,7 +95,7 @@ class ExternalPriceBackfillService:
                         ExternalPriceBackfillJob(
                             asset=requirement.asset,
                             price_date=requirement.price_date,
-                            provider_id=asset.coingecko_id,
+                            provider_id=asset.coingecko_id or asset.defillama_id,
                             status="skipped",
                             reason="usd_eur_missing",
                         )
@@ -105,7 +107,7 @@ class ExternalPriceBackfillService:
                         ExternalPriceBackfillJob(
                             asset=requirement.asset,
                             price_date=requirement.price_date,
-                            provider_id=asset.coingecko_id,
+                            provider_id=asset.coingecko_id or asset.defillama_id,
                             status="planned",
                             usd_eur=usd_eur,
                         )
@@ -113,17 +115,21 @@ class ExternalPriceBackfillService:
                     continue
 
                 attempted += 1
-                price_usd, source = self._fetch_price_usd(
-                    client=client,
-                    coingecko_id=asset.coingecko_id,
-                    date_str=requirement.price_date.isoformat(),
-                    provider=provider,
-                )
+                fetch_kwargs: dict[str, object] = {
+                    "client": client,
+                    "coingecko_id": asset.coingecko_id,
+                    "date_str": requirement.price_date.isoformat(),
+                    "provider": provider,
+                }
+                if asset.defillama_id:
+                    fetch_kwargs["defillama_id"] = asset.defillama_id
+                price_usd, source = self._fetch_price_usd(**fetch_kwargs)
                 price_source_date = requirement.price_date.isoformat()
                 if price_usd <= 0:
                     price_usd, source, price_source_date = self._fetch_first_available_price_usd_after(
                         client=client,
                         coingecko_id=asset.coingecko_id,
+                        defillama_id=asset.defillama_id,
                         date_str=requirement.price_date.isoformat(),
                         provider=provider,
                     )
@@ -136,7 +142,7 @@ class ExternalPriceBackfillService:
                                 ExternalPriceBackfillJob(
                                     asset=requirement.asset,
                                     price_date=requirement.price_date,
-                                    provider_id=asset.coingecko_id,
+                                    provider_id=asset.coingecko_id or asset.defillama_id,
                                     status="skipped",
                                     reason="usd_eur_missing",
                                 )
@@ -148,7 +154,7 @@ class ExternalPriceBackfillService:
                         ExternalPriceBackfillJob(
                             asset=requirement.asset,
                             price_date=requirement.price_date,
-                            provider_id=asset.coingecko_id,
+                            provider_id=asset.coingecko_id or asset.defillama_id,
                             status="failed",
                             reason="asset_usd_missing",
                         )
@@ -252,37 +258,74 @@ class ExternalPriceBackfillService:
                 continue
             configured[asset_symbol] = asset
 
-        current_prices: dict[str, Decimal] = {}
+        coingecko_prices: dict[str, Decimal] = {}
+        defillama_prices_usd: dict[str, Decimal] = {}
+        usd_eur = Decimal("0")
+        fx_source_date = ""
         if configured and not dry_run:
             with httpx.Client(
                 timeout=timeout_seconds,
                 headers={"user-agent": "steuerreport-v2/0.1"},
             ) as client:
-                current_prices = self._fetch_coingecko_simple_prices_eur(
+                coingecko_prices = self._fetch_coingecko_simple_prices_eur(
                     client,
-                    sorted({asset.coingecko_id for asset in configured.values()}),
+                    sorted(
+                        {
+                            asset.coingecko_id
+                            for asset in configured.values()
+                            if asset.coingecko_id
+                        }
+                    ),
                 )
+                defillama_prices_usd = self._fetch_defillama_current_prices_usd(
+                    client,
+                    sorted(
+                        {
+                            asset.defillama_id
+                            for asset in configured.values()
+                            if asset.defillama_id
+                        }
+                    ),
+                )
+                if defillama_prices_usd:
+                    usd_eur, fx_source_date = self._fetch_frankfurter_usd_eur(client)
 
         for asset_symbol, asset in configured.items():
             attempted += 1
-            source_label = f"{normalized_provider}:simple-price:eur"
+            provider_id = asset.defillama_id or asset.coingecko_id
+            source_label = (
+                "defillama_token_current:usd_eur:frankfurter_latest"
+                if asset.defillama_id
+                else f"{normalized_provider}:simple-price:eur"
+            )
             if dry_run:
                 jobs.append(
                     CurrentPortfolioPriceBackfillJob(
                         asset=asset_symbol,
-                        provider_id=asset.coingecko_id,
+                        provider_id=provider_id,
                         status="planned",
                         source=source_label,
                     )
                 )
                 continue
-            price_eur = current_prices.get(asset.coingecko_id, Decimal("0"))
+            price_eur = Decimal("0")
+            if asset.defillama_id and usd_eur > 0:
+                price_usd = defillama_prices_usd.get(asset.defillama_id, Decimal("0"))
+                if price_usd > 0:
+                    price_eur = price_usd * usd_eur
+                    source_label = (
+                        "defillama_token_current:usd_eur:"
+                        f"frankfurter_latest:{fx_source_date}"
+                    )
+            if price_eur <= 0 and asset.coingecko_id:
+                price_eur = coingecko_prices.get(asset.coingecko_id, Decimal("0"))
+                source_label = f"{normalized_provider}:simple-price:eur"
             if price_eur <= 0:
                 failed += 1
                 jobs.append(
                     CurrentPortfolioPriceBackfillJob(
                         asset=asset_symbol,
-                        provider_id=asset.coingecko_id,
+                        provider_id=provider_id,
                         status="failed",
                         reason="asset_eur_missing",
                         source=source_label,
@@ -301,7 +344,7 @@ class ExternalPriceBackfillService:
             jobs.append(
                 CurrentPortfolioPriceBackfillJob(
                     asset=asset_symbol,
-                    provider_id=asset.coingecko_id,
+                    provider_id=provider_id,
                     status="imported",
                     price_eur=price_eur,
                     source=source_label,
@@ -337,14 +380,22 @@ class ExternalPriceBackfillService:
             if not isinstance(item, dict):
                 continue
             symbol = str(item.get("symbol", "")).upper().strip()
-            coingecko_id = str(item.get("coingecko_id", "")).strip()
+            coingecko_id = str(item.get("coingecko_id", "")).strip() or None
+            defillama_id = str(item.get("defillama_id", "")).strip() or None
             aliases = tuple(
                 str(value).upper().strip()
                 for value in [symbol, *item.get("aliases", []), *item.get("store_keys", [])]
                 if str(value).strip()
             )
-            if symbol and coingecko_id and aliases:
-                result.append(_PriceAsset(symbol=symbol, coingecko_id=coingecko_id, aliases=aliases))
+            if symbol and (coingecko_id or defillama_id) and aliases:
+                result.append(
+                    _PriceAsset(
+                        symbol=symbol,
+                        coingecko_id=coingecko_id,
+                        aliases=aliases,
+                        defillama_id=defillama_id,
+                    )
+                )
         return result
 
     def _alias_map(self, assets: list[_PriceAsset]) -> dict[str, _PriceAsset]:
@@ -378,26 +429,35 @@ class ExternalPriceBackfillService:
         self,
         *,
         client: httpx.Client,
-        coingecko_id: str,
+        coingecko_id: str | None,
         date_str: str,
         provider: str,
+        defillama_id: str | None = None,
     ) -> tuple[Decimal, str]:
         normalized_provider = provider if provider in {"auto", "coingecko", "defillama"} else "auto"
-        if normalized_provider != "defillama":
+        if normalized_provider != "defillama" and coingecko_id:
             price = self._fetch_coingecko_history_price(client, coingecko_id, date_str)
             if price > 0:
                 return price, "coingecko_history"
         if normalized_provider != "coingecko":
-            price = self._fetch_defillama_history_price(client, coingecko_id, date_str)
-            if price > 0:
-                return price, "defillama_coingecko_history"
+            token_id = defillama_id or (f"coingecko:{coingecko_id}" if coingecko_id else "")
+            if token_id:
+                price = self._fetch_defillama_history_price(client, token_id, date_str)
+                if price > 0:
+                    return (
+                        price,
+                        "defillama_token_history"
+                        if defillama_id
+                        else "defillama_coingecko_history",
+                    )
         return Decimal("0"), ""
 
     def _fetch_first_available_price_usd_after(
         self,
         *,
         client: httpx.Client,
-        coingecko_id: str,
+        coingecko_id: str | None,
+        defillama_id: str | None = None,
         date_str: str,
         provider: str,
         max_days_after: int = 7,
@@ -405,12 +465,15 @@ class ExternalPriceBackfillService:
         start = datetime.strptime(date_str, "%Y-%m-%d")
         for offset in range(1, max_days_after + 1):
             candidate = (start + timedelta(days=offset)).strftime("%Y-%m-%d")
-            price, source = self._fetch_price_usd(
-                client=client,
-                coingecko_id=coingecko_id,
-                date_str=candidate,
-                provider=provider,
-            )
+            fetch_kwargs: dict[str, object] = {
+                "client": client,
+                "coingecko_id": coingecko_id,
+                "date_str": candidate,
+                "provider": provider,
+            }
+            if defillama_id:
+                fetch_kwargs["defillama_id"] = defillama_id
+            price, source = self._fetch_price_usd(**fetch_kwargs)
             if price > 0:
                 return price, source, candidate
         return Decimal("0"), "", date_str
@@ -439,12 +502,11 @@ class ExternalPriceBackfillService:
     def _fetch_defillama_history_price(
         self,
         client: httpx.Client,
-        coingecko_id: str,
+        token_id: str,
         date_str: str,
     ) -> Decimal:
         dt = datetime.strptime(date_str, "%Y-%m-%d")
         timestamp = int(dt.replace(tzinfo=UTC).timestamp())
-        token_id = f"coingecko:{coingecko_id}"
         response = client.get(
             f"{DEFILLAMA_COINS_BASE_URL}/prices/historical/{timestamp}/{token_id}",
             headers={"accept": "application/json"},
@@ -458,6 +520,52 @@ class ExternalPriceBackfillService:
         if not isinstance(coin, dict):
             return Decimal("0")
         return self._decimal(coin.get("price"))
+
+    def _fetch_defillama_current_prices_usd(
+        self,
+        client: httpx.Client,
+        token_ids: list[str],
+    ) -> dict[str, Decimal]:
+        if not token_ids:
+            return {}
+        response = client.get(
+            f"{DEFILLAMA_COINS_BASE_URL}/prices/current/{','.join(token_ids)}",
+            headers={"accept": "application/json"},
+        )
+        if response.status_code in {401, 403, 404, 429} or response.status_code >= 500:
+            return {}
+        response.raise_for_status()
+        data = response.json()
+        coins = data.get("coins") if isinstance(data, dict) else None
+        if not isinstance(coins, dict):
+            return {}
+        result: dict[str, Decimal] = {}
+        for token_id in token_ids:
+            coin = coins.get(token_id)
+            if not isinstance(coin, dict):
+                continue
+            price = self._decimal(coin.get("price"))
+            if price > 0:
+                result[token_id] = price
+        return result
+
+    def _fetch_frankfurter_usd_eur(
+        self,
+        client: httpx.Client,
+    ) -> tuple[Decimal, str]:
+        response = client.get(
+            f"{FRANKFURTER_BASE_URL}/latest",
+            params={"from": "USD", "to": "EUR"},
+            headers={"accept": "application/json"},
+        )
+        if response.status_code in {401, 403, 404, 429} or response.status_code >= 500:
+            return Decimal("0"), ""
+        response.raise_for_status()
+        data = response.json()
+        rates = data.get("rates") if isinstance(data, dict) else None
+        if not isinstance(rates, dict):
+            return Decimal("0"), ""
+        return self._decimal(rates.get("EUR")), str(data.get("date") or "")
 
     def _fetch_coingecko_simple_prices_eur(
         self,

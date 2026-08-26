@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
+import json
 from pathlib import Path
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import duckdb
 import pandas as pd
@@ -75,6 +77,14 @@ class DuckDbStore:
         except Exception:
             self._connection_lock.release()
             raise
+
+    @contextmanager
+    def exclusive_access(self):
+        self._connection_lock.acquire()
+        try:
+            yield
+        finally:
+            self._connection_lock.release()
 
     def ensure_schema(self, con: duckdb.DuckDBPyConnection) -> None:
         self._drop_table_if_missing_columns(
@@ -345,6 +355,31 @@ class DuckDbStore:
             )
             """
         )
+        for column_name, column_type in (
+            ("pool_id", "varchar"),
+            ("origin_lot_id", "varchar"),
+            ("fifo_method", "varchar"),
+        ):
+            con.execute(
+                f"alter table tax_lots add column if not exists {column_name} {column_type}"
+            )
+        for column_name, column_type in (
+            ("pool_id", "varchar"),
+            ("acquired_at", "timestamp"),
+            ("acquisition_source_event_id", "varchar"),
+            ("origin_lot_id", "varchar"),
+            ("fifo_method", "varchar"),
+        ):
+            con.execute(
+                f"alter table tax_lines add column if not exists {column_name} {column_type}"
+            )
+        for column_name, column_type in (
+            ("fifo_method", "varchar"),
+            ("input_fingerprint_digest", "varchar"),
+        ):
+            con.execute(
+                f"alter table tax_run_summaries add column if not exists {column_name} {column_type}"
+            )
         con.execute(
             """
             create table if not exists derivative_lines (
@@ -426,6 +461,19 @@ class DuckDbStore:
                 product_id varchar,
                 position_id varchar,
                 event_type varchar
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists portfolio_live_connector_runs (
+                run_id varchar primary key,
+                connector_id varchar not null,
+                fetched_at timestamp not null,
+                status varchar not null,
+                snapshots_count bigint not null,
+                source varchar,
+                message varchar
             )
             """
         )
@@ -1265,9 +1313,23 @@ class DuckDbStore:
     ) -> list[CanonicalEvent]:
         if not payloads:
             return []
-        rows = [
-            (
-                str(uuid4()),
+        identity_occurrences: dict[str, int] = {}
+        rows = []
+        for payload in payloads:
+            event_id = str(uuid4())
+            if payload.raw_object_id:
+                identity = self._canonical_event_identity(payload)
+                occurrence = identity_occurrences.get(identity, 0)
+                identity_occurrences[identity] = occurrence + 1
+                event_id = str(
+                    uuid5(
+                        NAMESPACE_URL,
+                        f"steuerreport-v2:canonical-event:v1:{identity}:{occurrence}",
+                    )
+                )
+            rows.append(
+                (
+                event_id,
                 payload.source,
                 payload.source_ref,
                 payload.event_time,
@@ -1283,9 +1345,8 @@ class DuckDbStore:
                 payload.account,
                 str(payload.confidence),
                 payload.raw_object_id,
+                )
             )
-            for payload in payloads
-        ]
         with self.connect() as con:
             frame = pd.DataFrame(
                 rows,
@@ -1354,6 +1415,40 @@ class DuckDbStore:
             for row in rows
         ]
 
+    @staticmethod
+    def _canonical_event_identity(payload: CanonicalEventCreate) -> str:
+        event_time = payload.event_time
+        if event_time.tzinfo is not None:
+            event_time = event_time.astimezone(timezone.utc)
+        values = {
+            "raw_object_id": payload.raw_object_id,
+            "source": payload.source,
+            "source_ref": payload.source_ref,
+            "event_time": event_time.isoformat(),
+            "event_type": payload.event_type,
+            "asset": payload.asset,
+            "quantity": str(payload.quantity),
+            "quote_asset": payload.quote_asset,
+            "quote_quantity": (
+                str(payload.quote_quantity)
+                if payload.quote_quantity is not None
+                else None
+            ),
+            "fee_asset": payload.fee_asset,
+            "fee_quantity": (
+                str(payload.fee_quantity) if payload.fee_quantity is not None else None
+            ),
+            "tx_id": payload.tx_id,
+            "wallet": payload.wallet,
+            "account": payload.account,
+        }
+        return json.dumps(
+            values,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+
     def list_canonical_events(self, batch_id: str | None = None) -> list[CanonicalEvent]:
         where_clause = ""
         params: list[str] = []
@@ -1379,6 +1474,16 @@ class DuckDbStore:
                     e.event_time,
                     case when r.row_number is null then 1 else 0 end,
                     r.row_number,
+                    e.source,
+                    coalesce(e.account, ''),
+                    coalesce(e.wallet, ''),
+                    coalesce(e.tx_id, ''),
+                    coalesce(e.source_ref, ''),
+                    e.event_type,
+                    e.asset,
+                    coalesce(e.quote_asset, ''),
+                    e.quantity,
+                    coalesce(e.quote_quantity, 0),
                     e.event_id
                 """,
                 params,

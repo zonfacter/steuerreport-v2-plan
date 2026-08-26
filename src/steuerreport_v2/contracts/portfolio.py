@@ -45,6 +45,12 @@ class PortfolioAccountSummary(BaseModel):
     assets: int
 
 
+class PortfolioExcludedAccountSummary(PortfolioAccountSummary):
+    exclusion_reason_code: str
+    exclusion_reason: str
+    included_in_portfolio_total: bool = False
+
+
 class PortfolioAccountAlias(BaseModel):
     alias: str
     canonical_account: str
@@ -174,8 +180,9 @@ class PortfolioSnapshot(BaseModel):
     total_value_eur: Decimal
     asset_summary: list[PortfolioAssetSummary] = Field(default_factory=list)
     account_summary: list[PortfolioAccountSummary] = Field(default_factory=list)
-    excluded_account_summary: list[PortfolioAccountSummary] = Field(default_factory=list)
+    excluded_account_summary: list[PortfolioExcludedAccountSummary] = Field(default_factory=list)
     excluded_value_eur: Decimal = Decimal("0")
+    excluded_value_semantics: str
     missing_price_assets: list[str]
     separation_virtual_wallet: PortfolioVirtualWallet | None = None
     resolved_account_aliases: list[PortfolioAccountAlias] = Field(default_factory=list)
@@ -217,8 +224,9 @@ class PortfolioAsOfSnapshot(BaseModel):
     total_value_eur: Decimal
     asset_summary: list[PortfolioAssetSummary] = Field(default_factory=list)
     account_summary: list[PortfolioAccountSummary] = Field(default_factory=list)
-    excluded_account_summary: list[PortfolioAccountSummary] = Field(default_factory=list)
+    excluded_account_summary: list[PortfolioExcludedAccountSummary] = Field(default_factory=list)
     excluded_value_eur: Decimal = Decimal("0")
+    excluded_value_semantics: str
     missing_price_assets: list[str] = Field(default_factory=list)
     resolved_account_aliases: list[PortfolioAccountAlias] = Field(default_factory=list)
     unresolved_truncated_accounts: list[str] = Field(default_factory=list)
@@ -307,6 +315,12 @@ class PortfolioReconciliationRow(BaseModel):
     asset: str | None = None
     ledger_quantity: Decimal | None = None
     ledger_value_eur: Decimal
+    raw_ledger_quantity: Decimal | None = None
+    raw_ledger_value_eur: Decimal | None = None
+    ledger_adjustment_quantity: Decimal = Decimal("0")
+    ledger_adjustment_value_eur: Decimal = Decimal("0")
+    ledger_adjustment_ids: list[str] = Field(default_factory=list)
+    ledger_adjustment_tx_ids: list[str] = Field(default_factory=list)
     external_quantity: Decimal | None = None
     external_value_eur: Decimal | None = None
     delta_quantity: Decimal | None = None
@@ -322,6 +336,9 @@ class PortfolioReconciliationReport(BaseModel):
     total_ledger_value_eur: Decimal
     expected_zero_ledger_value_eur: Decimal
     live_unverified_ledger_value_eur: Decimal
+    ledger_adjustment_value_eur: Decimal = Decimal("0")
+    total_reconciled_ledger_value_eur: Decimal | None = None
+    applied_ledger_adjustments_count: int = 0
     missing_wallets: list[str] = Field(default_factory=list)
     rows: list[PortfolioReconciliationRow] = Field(default_factory=list)
     connector_actions: list[str] = Field(default_factory=list)

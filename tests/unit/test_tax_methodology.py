@@ -6,7 +6,10 @@ from fastapi.testclient import TestClient
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.admin import AdminSettingWrite
-from steuerreport_v2.contracts.tax_methodology import TaxBmfClosureBacklogReport, TaxBmfFilingReadinessReport
+from steuerreport_v2.contracts.tax_methodology import (
+    TaxBmfClosureBacklogReport,
+    TaxBmfFilingReadinessReport,
+)
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
@@ -27,7 +30,9 @@ def _import_trade_csv(store: DuckDbStore, content: str) -> None:
     TaxService(store).rebuild_fifo()
 
 
-def test_tax_methodology_report_marks_clean_year_as_bmf_ready_with_evidence_overlay(tmp_path):
+def test_tax_methodology_report_marks_clean_year_as_bmf_ready_with_evidence_overlay(
+    tmp_path,
+):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     _import_trade_csv(
         store,
@@ -42,7 +47,9 @@ def test_tax_methodology_report_marks_clean_year_as_bmf_ready_with_evidence_over
 
     assert report.status == "ok"
     assert report.bmf_ready is True
-    assert report.policy.fifo_scope == "global_asset_with_wallet_fifo_evidence_overlay_v1"
+    assert (
+        report.policy.fifo_scope == "global_asset_with_wallet_fifo_evidence_overlay_v1"
+    )
     assert report.tax_lines_count == 1
     assert report.traceability_score == Decimal("100")
     assert [gap.code for gap in report.gaps] == [
@@ -50,9 +57,12 @@ def test_tax_methodology_report_marks_clean_year_as_bmf_ready_with_evidence_over
         "asset_fifo_quote_attribution_documented",
     ]
     assert all(gap.blocks_bmf_ready is False for gap in report.gaps)
-    assert any(metric.key == "asset_fifo_correction_candidates" for metric in report.metrics)
     assert any(
-        metric.key == "gain_evidence_event_level_reconciliation" and metric.status == "ok"
+        metric.key == "asset_fifo_correction_candidates" for metric in report.metrics
+    )
+    assert any(
+        metric.key == "gain_evidence_event_level_reconciliation"
+        and metric.status == "ok"
         for metric in report.metrics
     )
 
@@ -76,7 +86,9 @@ def test_tax_methodology_report_blocks_unmatched_disposals(tmp_path):
     assert any(gap.blocks_bmf_ready for gap in report.gaps)
 
 
-def test_tax_methodology_documents_small_exchange_sequencing_gap_without_blocker(tmp_path):
+def test_tax_methodology_documents_small_exchange_sequencing_gap_without_blocker(
+    tmp_path,
+):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_canonical_events(
         [
@@ -128,7 +140,11 @@ def test_tax_methodology_documents_small_exchange_sequencing_gap_without_blocker
 
     assert report.status == "review"
     assert not any(gap.code == "wallet_fifo_preview_unmatched" for gap in report.gaps)
-    sequencing_gap = next(gap for gap in report.gaps if gap.code == "wallet_fifo_exchange_sequencing_documented")
+    sequencing_gap = next(
+        gap
+        for gap in report.gaps
+        if gap.code == "wallet_fifo_exchange_sequencing_documented"
+    )
     assert sequencing_gap.count == 1
     assert sequencing_gap.blocks_bmf_ready is False
 
@@ -151,7 +167,9 @@ def test_tax_methodology_bmf_action_plan_lists_blockers(tmp_path):
     assert any(item.category == "wallet_fifo" for item in plan.items)
 
 
-def test_bmf_filing_readiness_surfaces_conservative_appendix_without_ready_flag(tmp_path):
+def test_bmf_filing_readiness_surfaces_conservative_appendix_without_ready_flag(
+    tmp_path,
+):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)
     service._available_years = lambda: [2024]
@@ -195,7 +213,9 @@ def test_bmf_filing_readiness_surfaces_conservative_appendix_without_ready_flag(
     assert "2024 | Konservativ belegbar | 18490.20 EUR" in report.ascii_table
 
 
-def test_bmf_filing_readiness_treats_documented_review_only_year_as_conservative(tmp_path):
+def test_bmf_filing_readiness_treats_documented_review_only_year_as_conservative(
+    tmp_path,
+):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)
     service._available_years = lambda: [2025]
@@ -359,19 +379,25 @@ def test_bmf_finalization_matrix_combines_filing_correction_rewards_and_fx(tmp_p
     service.reward_bmf_recheck = lambda: SimpleNamespace(
         years=[
             SimpleNamespace(year=2024, consistency_status="ok", flags=[]),
-            SimpleNamespace(year=2025, consistency_status="review", flags=["missing_income_value"]),
+            SimpleNamespace(
+                year=2025, consistency_status="review", flags=["missing_income_value"]
+            ),
         ]
     )
     from steuerreport_v2.domain.valuation import PriceQualityService
 
     original_anchor = PriceQualityService.stablecoin_fx_anchor_preview_latest
-    PriceQualityService.stablecoin_fx_anchor_preview_latest = lambda self: SimpleNamespace(
-        groups=[
-            SimpleNamespace(year=2025, status="ready_for_review"),
-        ]
+    PriceQualityService.stablecoin_fx_anchor_preview_latest = lambda self: (
+        SimpleNamespace(
+            groups=[
+                SimpleNamespace(year=2025, status="ready_for_review"),
+            ]
+        )
     )
     try:
-        matrix = service.bmf_finalization_matrix(years=[2024, 2025], include_reward_recheck=True)
+        matrix = service.bmf_finalization_matrix(
+            years=[2024, 2025], include_reward_recheck=True
+        )
     finally:
         PriceQualityService.stablecoin_fx_anchor_preview_latest = original_anchor
 
@@ -382,16 +408,27 @@ def test_bmf_finalization_matrix_combines_filing_correction_rewards_and_fx(tmp_p
     year_2025 = matrix.years[1]
     assert year_2024.can_submit_conservative is True
     assert year_2024.correction_review_recommended is True
-    assert any(item.key == "transfers_provenance" and item.status == "review" for item in year_2024.requirements)
-    assert any(item.key == "prices_fx" and item.status == "blocked" for item in year_2025.requirements)
-    assert any(item.key == "income_rewards_mining" and item.status == "review" for item in year_2025.requirements)
+    assert any(
+        item.key == "transfers_provenance" and item.status == "review"
+        for item in year_2024.requirements
+    )
+    assert any(
+        item.key == "prices_fx" and item.status == "blocked"
+        for item in year_2025.requirements
+    )
+    assert any(
+        item.key == "income_rewards_mining" and item.status == "review"
+        for item in year_2025.requirements
+    )
     assert "Jahr | Status" in matrix.ascii_table
 
 
 def test_bmf_finalization_matrix_endpoint(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     # Route smoke test uses the real app/service path on an empty DB.
-    response = TestClient(create_app(store)).get("/api/v1/tax-methodology/bmf-finalization-matrix")
+    response = TestClient(create_app(store)).get(
+        "/api/v1/tax-methodology/bmf-finalization-matrix"
+    )
 
     assert response.status_code == 200
     assert response.json()["data"]["available_years"] == [2021, 2022, 2023, 2024, 2025]
@@ -481,7 +518,9 @@ def test_bmf_submission_guide_combines_finalization_and_closure(tmp_path):
 
 def test_bmf_submission_guide_endpoint(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    response = TestClient(create_app(store)).get("/api/v1/tax-methodology/bmf-submission-guide")
+    response = TestClient(create_app(store)).get(
+        "/api/v1/tax-methodology/bmf-submission-guide"
+    )
 
     assert response.status_code == 200
     payload = response.json()["data"]
@@ -608,7 +647,9 @@ def test_bmf_prior_filing_comparison_keeps_probably_wrong_values_untrusted(tmp_p
 
 def test_bmf_prior_filing_comparison_endpoint(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    response = TestClient(create_app(store)).get("/api/v1/tax-methodology/bmf-prior-filing-comparison")
+    response = TestClient(create_app(store)).get(
+        "/api/v1/tax-methodology/bmf-prior-filing-comparison"
+    )
 
     assert response.status_code == 200
     payload = response.json()["data"]
@@ -656,7 +697,9 @@ def test_bmf_prior_filing_declared_amounts_write_roundtrip(tmp_path):
     assert result.comparison.delta_review_years == [2021]
     assert declared.years[0].year == 2021
     assert declared.years[0].rewards_mining_staking_income_eur == Decimal("11000")
-    stored = {setting.key: setting.value_json for setting in store.list_admin_settings()}
+    stored = {
+        setting.key: setting.value_json for setting in store.list_admin_settings()
+    }
     assert "tax.prior_filing.declared_amounts" in stored
 
 
@@ -678,7 +721,9 @@ def test_bmf_prior_filing_declared_amounts_endpoint_writes_setting(tmp_path):
             ]
         },
     )
-    get_response = client.get("/api/v1/tax-methodology/bmf-prior-filing-declared-amounts")
+    get_response = client.get(
+        "/api/v1/tax-methodology/bmf-prior-filing-declared-amounts"
+    )
 
     assert response.status_code == 200
     assert response.json()["data"]["written_years"] == [2021]
@@ -737,7 +782,9 @@ def test_bmf_amendment_worklist_prioritizes_untrusted_prior_filings(tmp_path):
 
 def test_bmf_amendment_worklist_endpoint(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    response = TestClient(create_app(store)).get("/api/v1/tax-methodology/bmf-amendment-worklist")
+    response = TestClient(create_app(store)).get(
+        "/api/v1/tax-methodology/bmf-amendment-worklist"
+    )
 
     assert response.status_code == 200
     payload = response.json()["data"]
@@ -831,7 +878,10 @@ def test_bmf_closure_backlog_prioritizes_technical_and_fifo_blockers(tmp_path):
         "solana_batch_incomplete",
         "asset_fifo_possible_recalculation",
     ]
-    assert all(item.blocker_type != "documented_non_live_opening_balance" for item in year.items)
+    assert all(
+        item.blocker_type != "documented_non_live_opening_balance"
+        for item in year.items
+    )
     assert year.items[0].required_evidence.startswith("Solana-Provenance-Batch")
 
 
@@ -891,7 +941,11 @@ def test_tax_methodology_blocks_unresolved_wallet_fifo_inbound_provenance(tmp_pa
 
     assert report.status == "blocked"
     assert report.bmf_ready is False
-    gap = next(gap for gap in report.gaps if gap.code == "wallet_fifo_unresolved_inbound_provenance")
+    gap = next(
+        gap
+        for gap in report.gaps
+        if gap.code == "wallet_fifo_unresolved_inbound_provenance"
+    )
     assert gap.count == 1
     assert gap.blocks_bmf_ready is True
 
@@ -899,7 +953,11 @@ def test_tax_methodology_blocks_unresolved_wallet_fifo_inbound_provenance(tmp_pa
 def test_tax_methodology_does_not_block_documented_fiat_purchase_provenance(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = store.create_import_batch(
-        ImportBatchCreate(source="binance", filename="Binance-Fiat-Buy-History.xlsx", file_hash="methodology-fiat-buy")
+        ImportBatchCreate(
+            source="binance",
+            filename="Binance-Fiat-Buy-History.xlsx",
+            file_hash="methodology-fiat-buy",
+        )
     )
     raw = store.add_raw_object(
         batch.batch_id,
@@ -938,8 +996,12 @@ def test_tax_methodology_does_not_block_documented_fiat_purchase_provenance(tmp_
 
     report = TaxMethodologyService(store).report(2021)
 
-    assert any(gap.code == "wallet_fifo_fiat_purchase_documented" for gap in report.gaps)
-    assert not any(gap.code == "wallet_fifo_unresolved_inbound_provenance" for gap in report.gaps)
+    assert any(
+        gap.code == "wallet_fifo_fiat_purchase_documented" for gap in report.gaps
+    )
+    assert not any(
+        gap.code == "wallet_fifo_unresolved_inbound_provenance" for gap in report.gaps
+    )
 
 
 def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp_path):
@@ -977,6 +1039,7 @@ def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp
         wallet_fifo_documented_manual_cex_deposit_count=1,
         wallet_fifo_documented_external_or_unknown_count=1,
         wallet_fifo_documented_unverified_cex_count=1,
+        wallet_fifo_documented_service_swap_count=1,
         asset_fifo_possible_recalculation_count=0,
         asset_fifo_attribution_review_count=0,
     )
@@ -994,7 +1057,10 @@ def test_tax_methodology_reduces_unresolved_provenance_by_documented_sources(tmp
     assert by_code["wallet_fifo_manual_cex_deposit_documented"].count == 1
     assert by_code["wallet_fifo_external_or_unknown_origin_documented"].count == 1
     assert by_code["wallet_fifo_unverified_cex_deposit_documented"].count == 1
-    assert not any(gap.code == "wallet_fifo_unresolved_inbound_provenance" for gap in gaps)
+    assert by_code["wallet_fifo_service_swap_tax_mapping_review"].count == 1
+    assert not any(
+        gap.code == "wallet_fifo_unresolved_inbound_provenance" for gap in gaps
+    )
 
 
 def test_tax_methodology_report_blocks_asset_fifo_recalculation_candidates(tmp_path):
@@ -1008,9 +1074,11 @@ def test_tax_methodology_report_blocks_asset_fifo_recalculation_candidates(tmp_p
         ),
     )
     service = TaxMethodologyService(store)
-    service.tax_years.asset_fifo_correction_review = lambda *args, **kwargs: SimpleNamespace(
-        possible_recalculation_assets_count=1,
-        attribution_review_assets_count=0,
+    service.tax_years.asset_fifo_correction_review = lambda *args, **kwargs: (
+        SimpleNamespace(
+            possible_recalculation_assets_count=1,
+            attribution_review_assets_count=0,
+        )
     )
 
     report = service.report(2024)
@@ -1112,7 +1180,9 @@ def test_tax_methodology_api_endpoints(tmp_path):
     summary_year = client.get("/api/v1/tax-methodology/summary?year=2024")
     reward_recheck = client.get("/api/v1/tax-years/reward-bmf-recheck")
     action_plan = client.get("/api/v1/tax-methodology/bmf-action-plan?year=2024")
-    filing_readiness = client.get("/api/v1/tax-methodology/bmf-filing-readiness?year=2024")
+    filing_readiness = client.get(
+        "/api/v1/tax-methodology/bmf-filing-readiness?year=2024"
+    )
     detail = client.get("/api/v1/tax-years/2024/methodology")
     status = client.get("/api/v1/tax-years/2024/compliance-status")
 
@@ -1129,4 +1199,7 @@ def test_tax_methodology_api_endpoints(tmp_path):
     assert action_plan.json()["data"]["available_years"] == [2024]
     assert filing_readiness.json()["data"]["available_years"] == [2024]
     assert detail.json()["data"]["policy"]["method_version"] == "bmf_readiness_v2"
-    assert status.json()["data"]["methodology_endpoint"] == "/api/v1/tax-years/2024/methodology"
+    assert (
+        status.json()["data"]["methodology_endpoint"]
+        == "/api/v1/tax-years/2024/methodology"
+    )

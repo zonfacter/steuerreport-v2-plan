@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -7,6 +8,12 @@ from pydantic import BaseModel, Field
 
 TaxMethodologyStatus = Literal["ok", "review", "blocked", "empty"]
 TaxMethodologySeverity = Literal["info", "warning", "blocker"]
+TaxBmfComplianceStatus = Literal["satisfied", "review", "blocked", "not_applicable"]
+TaxBmfImplementationStatus = Literal["implemented", "partial", "missing", "not_applicable"]
+TaxTimeBoundaryClassification = Literal[
+    "local_calendar_shift_required",
+    "source_period_aggregate_preserved",
+]
 
 
 class TaxMethodologyPolicy(BaseModel):
@@ -18,6 +25,50 @@ class TaxMethodologyPolicy(BaseModel):
     transfer_policy: str
     source_policy: str
     bmf_reference: str
+
+
+class TaxTimeBoundaryEvent(BaseModel):
+    event_id: str
+    event_time_utc: datetime
+    event_time_europe_berlin: datetime
+    utc_year: int
+    reporting_year: int
+    classification: TaxTimeBoundaryClassification
+    source_period_year: int | None = None
+    source: str
+    event_type: str
+    asset: str
+    quantity: Decimal
+    tx_id: str | None = None
+    source_ref: str | None = None
+    raw_object_id: str | None = None
+    raw_filename: str | None = None
+    tax_lines_count: int = 0
+    tax_lines_gain_loss_eur: Decimal = Decimal("0")
+    income_cost_basis_eur: Decimal = Decimal("0")
+
+
+class TaxTimePrecisionAudit(BaseModel):
+    generated_at: datetime
+    policy_version: str
+    status: Literal["satisfied", "blocked"]
+    reporting_policy_applied: bool = False
+    storage_timezone: Literal["UTC"] = "UTC"
+    reporting_timezone: Literal["Europe/Berlin"] = "Europe/Berlin"
+    rounding_policy: str
+    boundary_events_count: int = 0
+    source_period_aggregate_events_count: int = 0
+    reporting_year_shift_events_count: int = 0
+    reporting_year_shift_tax_lines_count: int = 0
+    reporting_year_shift_tax_gain_loss_eur: Decimal = Decimal("0")
+    reporting_year_shift_income_events_count: int = 0
+    reporting_year_shift_income_cost_basis_eur: Decimal = Decimal("0")
+    affected_utc_years: list[int] = Field(default_factory=list)
+    affected_reporting_years: list[int] = Field(default_factory=list)
+    events: list[TaxTimeBoundaryEvent] = Field(default_factory=list)
+    findings: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    methodology: str
 
 
 class TaxMethodologyGap(BaseModel):
@@ -87,6 +138,51 @@ class TaxMethodologySummary(BaseModel):
     review_years: int = 0
     blocked_years: int = 0
     empty_years: int = 0
+    methodology: str
+
+
+class TaxBmfComplianceMetric(BaseModel):
+    key: str
+    label: str
+    value: Decimal | int | str | bool
+    target: str
+    status: TaxBmfComplianceStatus
+    detail: str
+
+
+class TaxBmfComplianceRequirement(BaseModel):
+    requirement_id: str
+    title: str
+    bmf_paragraphs: list[str] = Field(default_factory=list)
+    requirement: str
+    implementation_status: TaxBmfImplementationStatus
+    evidence_status: TaxBmfComplianceStatus
+    strict_ready: bool = False
+    affected_years: list[int] = Field(default_factory=list)
+    metrics: list[TaxBmfComplianceMetric] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    findings: list[str] = Field(default_factory=list)
+    next_action: str
+
+
+class TaxBmfComplianceMatrix(BaseModel):
+    generated_at: str
+    matrix_version: str
+    bmf_reference: str
+    bmf_reference_url: str
+    scope_years: list[int] = Field(default_factory=list)
+    strict_bmf_ready: bool = False
+    strict_ready_years: list[int] = Field(default_factory=list)
+    conservative_years: list[int] = Field(default_factory=list)
+    review_years: list[int] = Field(default_factory=list)
+    blocked_years: list[int] = Field(default_factory=list)
+    requirements_count: int = 0
+    satisfied_count: int = 0
+    review_count: int = 0
+    blocked_count: int = 0
+    not_applicable_count: int = 0
+    requirements: list[TaxBmfComplianceRequirement] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
     methodology: str
 
 

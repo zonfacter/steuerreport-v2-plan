@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
+from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.derived_prices import (
@@ -91,6 +92,83 @@ def test_derived_prices_use_same_timestamp_counterflow_group(tmp_path):
 
     assert result.created == 1
     assert price.price_eur == Decimal("0.097319692307692308")
+
+
+def test_derived_price_candidate_order_uses_semantic_fields_before_uuid(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    event_time = datetime(2024, 1, 1, 12, 0, 0)
+    events = store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="manual-csv",
+                source_ref="z-expensive",
+                event_time=event_time,
+                event_type="trade",
+                asset="TOKEN",
+                quantity=Decimal("1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("20"),
+                account="test",
+            ),
+            CanonicalEventCreate(
+                source="manual-csv",
+                source_ref="a-cheap",
+                event_time=event_time,
+                event_type="trade",
+                asset="TOKEN",
+                quantity=Decimal("1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("10"),
+                account="test",
+            ),
+        ]
+    )
+    with store.connect() as con:
+        con.execute("update canonical_events set event_id = '000-z' where event_id = ?", [events[0].event_id])
+        con.execute("update canonical_events set event_id = '999-a' where event_id = ?", [events[1].event_id])
+
+    DerivedPriceService(store).rebuild_from_event_quotes()
+    point = next(
+        item
+        for item in store.list_price_points(limit=100)
+        if item.asset == "TOKEN" and item.source == DERIVED_EVENT_QUOTE_SOURCE
+    )
+
+    assert point.price_eur == Decimal("10")
+
+
+def test_derived_prices_never_create_or_reprice_eur(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="manual-csv",
+            event_time=datetime(2024, 1, 1, 12, 0, 0),
+            event_type="trade",
+            asset="EUR",
+            quantity=Decimal("100"),
+            quote_asset="USDT",
+            quote_quantity=Decimal("110"),
+            account="test",
+        )
+    )
+
+    first = DerivedPriceService(store).rebuild_from_event_quotes()
+    first_points = [
+        (item.asset, item.price_eur, item.priced_at, item.source)
+        for item in store.list_price_points(limit=100)
+    ]
+    second = DerivedPriceService(store).rebuild_from_event_quotes()
+    second_points = [
+        (item.asset, item.price_eur, item.priced_at, item.source)
+        for item in store.list_price_points(limit=100)
+    ]
+
+    assert first.created == 1
+    assert second.created == 1
+    assert first_points == second_points
+    assert first_points[0][0] == "USDT"
+    assert first_points[0][1] == Decimal("0.909090909090909091")
+    assert not any(asset == "EUR" for asset, _price, _time, _source in first_points)
 
 
 def test_price_requirements_do_not_treat_derived_quotes_as_primary_prices(tmp_path):

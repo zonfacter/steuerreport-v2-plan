@@ -12,7 +12,7 @@
 
 body {
   background:
-    linear-gradient(180deg, #f7f7f4 0%, #eef2ef 100%);
+    linear-gradient(180deg, #f7f8f9 0%, #eef2f1 100%);
   margin: 0;
 }
 
@@ -29,7 +29,25 @@ button {
 .sidebar {
   background: #1b2622;
   color: #f8f5ef;
+  height: 100vh;
+  overflow-y: auto;
   padding: 20px 14px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.sidebarHeader {
+  align-items: start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sidebarClose,
+.mobileNavToggle,
+.mobileNavBackdrop {
+  display: none;
 }
 
 .brand {
@@ -116,6 +134,17 @@ nav button.expertToggle {
   min-width: 0;
 }
 
+.topbarTitle {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topbarTitle > div {
+  min-width: 0;
+}
+
 .topbarStatus {
   align-items: end;
   display: grid;
@@ -163,6 +192,21 @@ p {
   display: inline-flex;
   gap: 8px;
   padding: 7px 12px;
+}
+
+.statusButton:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loadingPanel {
@@ -471,6 +515,32 @@ p {
   border-color: #e2c56c;
 }
 
+.proofRouteLine {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.proofRouteLine code {
+  background: #f3f4f1;
+  border: 1px solid #d8d6cf;
+  border-radius: 6px;
+  color: #26322b;
+  display: block;
+  max-width: min(100%, 280px);
+  overflow: hidden;
+  padding: 6px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proofRouteLine svg {
+  color: #677169;
+  flex: 0 0 auto;
+}
+
 .separationPanel .panelToolbar span {
   color: #677169;
   font-size: 13px;
@@ -495,7 +565,7 @@ p {
   align-items: start;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .holdingDecisionHeader h3 {
@@ -758,14 +828,14 @@ p {
 
 .cockpitHero {
   align-items: stretch;
-  background: linear-gradient(135deg, #ffffff 0%, #f4f7f2 58%, #eef5f6 100%);
+  background: #ffffff;
   border: 1px solid #d8d6cf;
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(0, 1fr) minmax(250px, 380px);
-  min-height: 210px;
+  min-height: 190px;
   padding: 22px;
 }
 
@@ -1038,6 +1108,60 @@ p {
 
 .sourceHealthNotice {
   overflow-wrap: anywhere;
+}
+
+.sourceRegistryBand {
+  border-bottom: 1px solid #d8d6cf;
+  border-top: 1px solid #d8d6cf;
+  display: grid;
+  gap: 14px;
+  padding: 18px 0;
+}
+
+.sourceRegistryHeader {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sourceRegistryHeader h3 {
+  font-size: 22px;
+  margin: 3px 0 6px;
+}
+
+.sourceRegistryHeader p {
+  margin: 0;
+  max-width: 980px;
+  overflow-wrap: anywhere;
+}
+
+.sourceMethodology {
+  margin-top: 12px;
+  max-width: 100%;
+}
+
+.sourceMethodology p {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.sourceRegistryMetrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.sourceRegistryFindings {
+  display: grid;
+  gap: 6px;
+}
+
+.sourceRegistryFindings span {
+  background: #fff7e1;
+  border-left: 3px solid #c49b32;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
 }
 
 .sourceCardGrid {
@@ -1421,6 +1545,14 @@ p {
   padding: 10px;
 }
 
+.sourceSetupBlockerFacts .statusRow {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sourceSetupBlockerFacts .statusRow strong {
+  text-align: left;
+}
+
 .sourceSetupWizard {
   background: #ffffff;
   border: 1px solid #d8d6cf;
@@ -1549,6 +1681,393 @@ p {
   line-height: 1.35;
 }
 
+.bmfMatrixPanel {
+  padding: 22px;
+  border: 1px solid #d8d6cf;
+  border-left: 4px solid #8d2d1a;
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 18px;
+}
+
+.bmfMatrixPanel.ok {
+  border-left-color: #347a45;
+}
+
+.bmfMatrixPanel.isLoading {
+  min-height: 118px;
+}
+
+.sectionHeading,
+.bmfMatrixHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.sectionHeading h3 {
+  margin: 3px 0 5px;
+  font-size: 1.2rem;
+  letter-spacing: 0;
+}
+
+.sectionHeading p {
+  margin: 0;
+  color: #5d685f;
+}
+
+.bmfMatrixHeading > .statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.bmfMatrixMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.legalFreshnessNotice {
+  align-items: flex-start;
+  background: #f7f8f5;
+  border: 1px solid #d8d6cf;
+  border-left: 4px solid #8d2d1a;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  padding: 14px 16px;
+}
+
+.legalFreshnessNotice.ok {
+  background: #f3f8f4;
+  border-left-color: #347a45;
+}
+
+.legalFreshnessNotice.warning {
+  background: #fff9ec;
+  border-left-color: #9b6a12;
+}
+
+.legalFreshnessIcon {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 50%;
+  color: #8d2d1a;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.legalFreshnessNotice.ok .legalFreshnessIcon {
+  color: #347a45;
+}
+
+.legalFreshnessNotice.warning .legalFreshnessIcon {
+  color: #9b6a12;
+}
+
+.legalFreshnessMain {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.legalFreshnessMain strong,
+.legalFreshnessMain p,
+.legalFreshnessMeta span {
+  overflow-wrap: anywhere;
+}
+
+.legalFreshnessMain p {
+  color: #5d685f;
+  margin: 0;
+}
+
+.legalFreshnessMeta {
+  color: #6f776f;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 5px 14px;
+}
+
+.legalFreshnessNotice > a {
+  align-items: center;
+  color: #1f6f8b;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.walletFifoRunSummary {
+  background: #f7f8f5;
+  border-bottom: 1px solid #dedbd2;
+  border-top: 1px solid #dedbd2;
+  display: grid;
+  gap: 14px;
+  margin: 0 -22px;
+  padding: 16px 22px;
+}
+
+.walletFifoRunSummary.ok {
+  background: #f3f8f4;
+}
+
+.walletFifoRunSummary.warning {
+  background: #fffaf0;
+}
+
+.walletFifoRunSummary.blocked {
+  background: #fff6f3;
+}
+
+.walletFifoRunHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.walletFifoRunHeader > div {
+  min-width: 0;
+}
+
+.walletFifoRunHeader strong {
+  color: #17201b;
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.walletFifoRunHeader p {
+  color: #4c574f;
+  line-height: 1.45;
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.walletFifoRunHeader button,
+.walletFifoEvidenceActions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  justify-content: center;
+}
+
+.walletFifoRunHeader button {
+  flex: 0 0 auto;
+  min-height: 38px;
+}
+
+.walletFifoRunMetrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.walletFifoParityNotice {
+  align-items: start;
+  border-bottom: 1px solid #dedbd2;
+  border-top: 1px solid #dedbd2;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  padding: 10px 0;
+}
+
+.walletFifoParityNotice.ok svg {
+  color: #237a49;
+}
+
+.walletFifoParityNotice.blocked svg {
+  color: #a53d26;
+}
+
+.walletFifoParityNotice div {
+  min-width: 0;
+}
+
+.walletFifoParityNotice strong,
+.walletFifoParityNotice span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.walletFifoParityNotice span {
+  color: #5d685f;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin-top: 3px;
+}
+
+.walletFifoDeltaExplanation {
+  border-bottom: 1px solid #dedbd2;
+  display: grid;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+.walletFifoDeltaHeading {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.walletFifoDeltaHeading > div {
+  min-width: 0;
+}
+
+.walletFifoDeltaHeading strong {
+  color: #17201b;
+  display: block;
+  font-size: 1rem;
+  line-height: 1.35;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.walletFifoDeltaHeading p {
+  color: #4c574f;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.walletFifoDeltaHeading > .statusPill {
+  flex: 0 0 auto;
+}
+
+.walletFifoDeltaRows {
+  border-top: 1px solid #dedbd2;
+  display: grid;
+}
+
+.walletFifoDeltaRow {
+  align-items: center;
+  border-bottom: 1px solid #e8e4dc;
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(120px, 0.7fr) minmax(220px, 2fr) auto;
+  min-width: 0;
+  padding: 10px 0;
+}
+
+.walletFifoDeltaRow strong,
+.walletFifoDeltaRow span,
+.walletFifoDeltaRow small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.walletFifoDeltaRow small {
+  color: #5d685f;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.walletFifoRunYears,
+.walletFifoEvidenceActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.walletFifoEvidenceActions button {
+  min-height: 34px;
+  text-transform: capitalize;
+}
+
+.bmfMatrixRows {
+  border-top: 1px solid #dedbd2;
+}
+
+.bmfMatrixRow {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(110px, auto);
+  gap: 12px;
+  align-items: start;
+  min-height: 92px;
+  padding: 15px 4px;
+  border-bottom: 1px solid #ece8e0;
+}
+
+.bmfMatrixRowIcon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #755a16;
+  background: #fff8e7;
+}
+
+.bmfMatrixRow.ok .bmfMatrixRowIcon {
+  color: #245637;
+  background: #edf8f1;
+}
+
+.bmfMatrixRow.blocked .bmfMatrixRowIcon {
+  color: #8d2d1a;
+  background: #fff0ec;
+}
+
+.bmfMatrixRowMain {
+  min-width: 0;
+}
+
+.bmfMatrixRowTitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.bmfMatrixRowTitle strong {
+  color: #17201b;
+}
+
+.bmfMatrixRowTitle span,
+.bmfMatrixRowMain small,
+.bmfMatrixRowStatus > span:last-child {
+  color: #677169;
+  font-size: 0.78rem;
+}
+
+.bmfMatrixRowMain p {
+  margin: 7px 0 5px;
+  color: #3d4740;
+  overflow-wrap: anywhere;
+}
+
+.bmfMatrixRowMain small {
+  display: block;
+  line-height: 1.45;
+}
+
+.bmfMatrixRowStatus {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  text-align: right;
+}
+
+.bmfMatrixPanel footer {
+  color: #677169;
+  font-size: 0.78rem;
+}
+
 .taxYearHero {
   align-items: end;
   background: linear-gradient(135deg, #ffffff 0%, #f4f7f2 52%, #eef4f5 100%);
@@ -1626,6 +2145,11 @@ p {
   border-color: #e4b6aa;
 }
 
+.taxFilingDecision.loading,
+.portfolioDecision.loading {
+  border-color: #b9cedb;
+}
+
 .taxFilingDecisionMain,
 .portfolioDecisionMain {
   display: grid;
@@ -1694,6 +2218,12 @@ p {
 .portfolioDecisionActions button:hover {
   border-color: #8fb2a0;
   box-shadow: 0 1px 4px rgba(30, 40, 34, 0.1);
+}
+
+.taxFilingDecisionActions button:disabled,
+.portfolioDecisionActions button:disabled {
+  cursor: progress;
+  opacity: 0.6;
 }
 
 .taxFilingDecisionActions span,
@@ -2288,6 +2818,168 @@ p {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.valuationControlGrid {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) repeat(2, minmax(170px, auto));
+  padding: 14px;
+}
+
+.valuationControlGrid button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.valuationGateBand {
+  border-bottom: 1px solid #d8d6cf;
+  border-top: 1px solid #d8d6cf;
+  display: grid;
+  gap: 14px;
+  padding: 18px 0;
+}
+
+.valuationGateHeader {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.valuationGateHeader h3 {
+  font-size: 22px;
+  margin: 3px 0 0;
+}
+
+.valuationGateGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.valuationGateItem {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.valuationGateItem > p,
+.valuationGateItem > span {
+  display: block;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 0 12px 12px;
+}
+
+.valuationGateItem > span {
+  color: #5d685f;
+  font-size: 13px;
+}
+
+.evidenceFactGrid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0 12px 12px;
+}
+
+.evidenceFactGrid > div {
+  border-bottom: 1px solid #eceae4;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 0;
+}
+
+.evidenceFactGrid span {
+  color: #5d685f;
+  font-size: 12px;
+}
+
+.evidenceFactGrid strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.evidenceActions {
+  padding: 0 12px 12px;
+}
+
+.fileActionButton {
+  align-items: center;
+  background: #26372f;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  gap: 8px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.fileActionButton.disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.fileActionButton input {
+  display: none;
+}
+
+.valuationGateMetrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 12px;
+}
+
+.valuationGateFindings {
+  display: grid;
+  gap: 6px;
+}
+
+.valuationGateFindings span {
+  background: #fff7e1;
+  border-left: 3px solid #c49b32;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+}
+
+.priceGateActionBand {
+  align-items: end;
+  border-bottom: 1px solid #d8d6cf;
+  border-top: 1px solid #d8d6cf;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(260px, 1fr) minmax(360px, 1fr) auto;
+  padding: 18px 0;
+}
+
+.priceGateActionBand h3 {
+  font-size: 22px;
+  margin: 3px 0 6px;
+}
+
+.priceGateActionBand p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.priceGateActionMetrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .equalizationCard {
@@ -2906,6 +3598,10 @@ p {
   max-width: 760px;
 }
 
+.cockpitHeroLead strong {
+  color: #17201b;
+}
+
 .cockpitHeroMeta {
   align-items: center;
   color: #5d685f;
@@ -3016,6 +3712,22 @@ p {
   display: grid;
   gap: 14px;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.cockpitHeadlineMetrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.cockpitHeadlineMetrics .metric {
+  box-shadow: none;
+  min-height: 92px;
+  padding: 13px;
+}
+
+.cockpitHeadlineMetrics .metric strong {
+  font-size: 18px;
 }
 
 .blockpitPortfolioCommand {
@@ -3256,7 +3968,7 @@ p {
 .filingJourneyFacts {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .filingJourneyFacts .metric {
@@ -3265,10 +3977,86 @@ p {
   padding: 12px;
 }
 
+.filingJourneyNextAction {
+  background: #f5f8f7;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 11px 12px;
+}
+
+.filingJourneyNextAction span {
+  color: #677169;
+  font-size: 12px;
+}
+
+.filingJourneyNextAction strong {
+  color: #17201b;
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .filingJourneySteps {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.cockpitDetails {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(30, 40, 34, 0.06);
+  overflow: hidden;
+}
+
+.cockpitDetails > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  list-style-position: inside;
+  min-width: 0;
+  padding: 15px 18px;
+}
+
+.cockpitDetails > summary:hover {
+  background: #f6f8f4;
+}
+
+.cockpitDetails > summary > span:first-of-type {
+  display: grid;
+  gap: 3px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.cockpitDetails > summary strong,
+.cockpitDetails > summary em {
+  overflow-wrap: anywhere;
+}
+
+.cockpitDetails > summary strong {
+  color: #17201b;
+  font-size: 15px;
+}
+
+.cockpitDetails > summary em {
+  color: #677169;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.cockpitDetailsBody {
+  border-top: 1px solid #ece8e0;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
 }
 
 .filingStep {
@@ -4011,6 +4799,17 @@ p {
   background: #b8792f;
 }
 
+.statusPill.loading {
+  background: #edf3f7;
+  border-color: #b9cedb;
+  color: #31566b;
+}
+
+.statusPill.loading::before {
+  animation: loadingPulse 1.1s ease-in-out infinite;
+  background: #3f7895;
+}
+
 .statusPill.neutral {
   background: #f4f5f2;
   border-color: #d8d6cf;
@@ -4019,6 +4818,63 @@ p {
 
 .statusPill.neutral::before {
   background: #8a948c;
+}
+
+.cockpitHero.loading,
+.filingJourney.loading,
+.filingStep.loading,
+.workspaceCard.loading,
+.blockpitPortfolioCommand.loading,
+.taxProductCenter.loading,
+.nextActionCard.loading {
+  border-color: #b9cedb;
+}
+
+.nextActionCard:disabled {
+  cursor: progress;
+}
+
+.loadingPlaceholder,
+.taxProductLoadingRows {
+  align-content: center;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.loadingPlaceholder span,
+.taxProductLoadingRows span {
+  animation: loadingPulse 1.1s ease-in-out infinite;
+  background: #dfe8ec;
+  border-radius: 6px;
+  display: block;
+  height: 44px;
+}
+
+.loadingPlaceholder span:nth-child(2),
+.taxProductLoadingRows span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.loadingPlaceholder span:nth-child(3),
+.taxProductLoadingRows span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.taxProductLoadingRows {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 0;
+}
+
+@keyframes loadingPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .panelToolbar button {
@@ -4343,6 +5199,8 @@ button:disabled {
 
 .footer {
   border-top: 1px solid #ece8e0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .tableWrap {
@@ -4546,17 +5404,129 @@ th {
   }
 
   .sidebar {
-    position: static;
+    box-shadow: 12px 0 36px rgba(10, 18, 14, 0.28);
+    height: 100dvh;
+    inset: 0 auto 0 0;
+    max-width: 88vw;
+    position: fixed;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    width: 310px;
+    z-index: 60;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebarHeader {
+    align-items: start;
+  }
+
+  .sidebarClose {
+    align-items: center;
+    background: #2b3b35;
+    border: 1px solid #43564e;
+    border-radius: 6px;
+    color: #ffffff;
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 auto;
+    justify-content: center;
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  .mobileNavBackdrop {
+    background: rgba(12, 20, 16, 0.46);
+    border: 0;
+    display: block;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    position: fixed;
+    transition: opacity 180ms ease;
+    z-index: 50;
+  }
+
+  .mobileNavBackdrop.open {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .topbar {
+    align-items: center;
+    background: rgba(247, 248, 249, 0.96);
+    border-bottom: 1px solid #dce2df;
+    display: grid;
+    gap: 9px 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin: -14px -14px 14px;
+    padding: 12px 14px;
+    position: sticky;
+    top: 0;
+    z-index: 25;
+  }
+
+  .topbarTitle {
     align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
+  }
+
+  .topbarTitle h1 {
+    font-size: 21px;
+  }
+
+  .topbarTitle p {
+    display: -webkit-box;
+    font-size: 12px;
+    line-height: 1.35;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .mobileNavToggle {
+    align-items: center;
+    background: #1b2622;
+    border: 0;
+    border-radius: 6px;
+    color: #ffffff;
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 auto;
+    justify-content: center;
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  .topbarStatus {
+    align-items: center;
+    display: flex;
+    flex: 1 1 auto;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .topbarStatus em {
+    max-width: none;
+    text-align: left;
+  }
+
+  .statusButton {
+    min-height: 40px;
+  }
+
+  .loadingPanel {
+    padding: 10px 12px;
+  }
+
+  .loadingStepList {
+    display: none;
   }
 
   .grid {
@@ -4584,7 +5554,11 @@ th {
   .blockpitPortfolioCommand,
   .portfolioCommandMetrics,
   .portfolioReturnBand,
+  .cockpitHeadlineMetrics,
   .cockpitMetricGrid,
+  .filingJourneyHeader,
+  .filingJourneyFacts,
+  .filingJourneySteps,
   .productReadinessHeader,
   .productReadinessGrid,
   .readinessCheckGrid,
@@ -4596,18 +5570,28 @@ th {
   .cockpitStatusStrip,
   .sourcesHero,
   .sourceHeroStats,
+  .sourceRegistryHeader,
+  .sourceRegistryMetrics,
   .sourceCommandHeader,
   .sourceCommandMetrics,
   .sourceCommandGrid,
   .sourceSetupBlockerHeader,
   .sourceSetupBlockerMetrics,
   .sourceSetupBlockerFacts,
+  .sourceSetupBlockerGrid,
+  .sourceSetupSteps,
   .sourceDetailGrid,
   .sourceStatusRows,
   .taxYearHero,
   .reportHero,
+  .divorceHero,
   .reportHeroStats,
   .reportActionBand,
+  .valuationControlGrid,
+  .valuationGateGrid,
+  .valuationGateMetrics,
+  .priceGateActionBand,
+  .priceGateActionMetrics,
   .reportWorkflowHeader,
   .reportWorkflowGrid,
   .gateStatusLegend,
@@ -4633,6 +5617,38 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .cockpitHeadlineMetrics,
+  .cockpitMetricGrid,
+  .portfolioCommandMetrics,
+  .taxProductSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filingStep {
+    gap: 4px 10px;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 11px;
+  }
+
+  .filingStep > .statusPill {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+  }
+
+  .filingStep > strong,
+  .filingStep > p,
+  .filingStep > .filingStepActions {
+    grid-column: 2;
+  }
+
+  .filingStep p {
+    min-height: 0;
+  }
+
+  .taxProductLoadingRows {
+    grid-template-columns: 1fr;
+  }
+
   .taxFilingDecisionActions,
   .portfolioDecisionActions,
   .portfolioCommandSide {
@@ -4647,6 +5663,11 @@ th {
 
   .workspaceSyncBar > span {
     margin-right: 0;
+  }
+
+  .cockpitDetails > summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .presetRow {
@@ -4788,6 +5809,58 @@ th {
 .fifoProofMetrics .metric {
   box-shadow: none;
   min-height: 100%;
+}
+
+.fifoReconstructionBand {
+  border-top: 1px solid #e2c56c;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.fifoReconstructionBand > p {
+  color: #445148;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.bitgetDecisionBand {
+  border-top: 1px solid #d7ddd8;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.bitgetDecisionBand > p {
+  color: #445148;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.bitgetDecisionForm {
+  padding: 0;
+}
+
+.bitgetDecisionRationale,
+.bitgetDecisionAcknowledge {
+  grid-column: 1 / -1;
+}
+
+.bitgetDecisionForm textarea {
+  margin: 0;
+  min-height: 104px;
+  width: 100%;
+}
+
+.bitgetDecisionAcknowledge span {
+  color: #3f4b43;
+  line-height: 1.4;
+}
+
+.bitgetDecisionBand .footer {
+  overflow-wrap: anywhere;
 }
 
 .fifoTraceCards {
@@ -4977,4 +6050,69 @@ th {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 820px) {
+  .sectionHeading,
+  .bmfMatrixHeading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bmfMatrixHeading > .statusPill {
+    align-self: flex-start;
+  }
+
+  .bmfMatrixMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .legalFreshnessNotice {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .legalFreshnessNotice > a {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .walletFifoRunHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .walletFifoDeltaHeading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .walletFifoDeltaHeading > .statusPill {
+    align-self: flex-start;
+  }
+
+  .walletFifoDeltaRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .walletFifoDeltaRow small {
+    grid-column: 1 / -1;
+  }
+
+  .walletFifoRunHeader button {
+    align-self: flex-start;
+  }
+
+  .walletFifoRunMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bmfMatrixRow {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .bmfMatrixRowStatus {
+    grid-column: 2;
+    justify-items: start;
+    text-align: left;
+  }
 }

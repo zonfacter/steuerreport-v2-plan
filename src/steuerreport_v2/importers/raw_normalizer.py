@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import calendar
 import re
@@ -18,6 +19,15 @@ from steuerreport_v2.importers.source_profiles import (
 )
 
 DEFAULT_PRICE_CONFIG = Path("/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json")
+DEFAULT_SOLANA_OWNERSHIP_CONFIG = Path(
+    "/workspace/steuerreport-v2-plan/configs/solana_v1_ownership_scope.json"
+)
+DEFAULT_FAIRSPOT_STAKING_RECONCILIATION_CONFIG = Path(
+    "/workspace/steuerreport-v2-plan/configs/fairspot_hnt_staking_reconciliation.json"
+)
+DEFAULT_SOLANA_STAKING_POSITION_RECONCILIATIONS_CONFIG = Path(
+    "/workspace/steuerreport-v2-plan/configs/solana_staking_position_reconciliations.json"
+)
 
 
 @dataclass(frozen=True)
@@ -31,10 +41,41 @@ class NormalizationReport:
 class RawNormalizer:
     HELIUM_MAIN_LEGACY_WALLET = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
     HELIUM_FAIRSPOT_STAKING_WALLET = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
+    HELIUM_VSR_POSITION_RECEIPTS = {
+        "5MFEM7LYTSGP2X3TVJXHXLENXSLRW6DQR3PSPJXVUETF": "MOBILE",
+        "7RPAXCSA3BIKAUOQTJ3DDSMKBLHEFQNBACPAUNBGC3KQ": "IOT",
+    }
+    BITGET_INTERNAL_BLOCKPIT_LABELS = {
+        "auto-balancing in",
+        "auto-balancing out",
+        "non-taxable in",
+        "non-taxable out",
+    }
+    BITGET_BLOCKPIT_EVIDENCE_ONLY_RECORD_TYPES = {
+        "bitget_fiat_conversion_out_evidence",
+        "bitget_unmerged_trade_out_evidence",
+    }
 
-    def __init__(self, store: DuckDbStore) -> None:
+    def __init__(
+        self,
+        store: DuckDbStore,
+        *,
+        fairspot_staking_config_path: Path | None = None,
+        solana_staking_config_path: Path | None = None,
+    ) -> None:
         self.store = store
         self._asset_aliases = self._load_asset_aliases(DEFAULT_PRICE_CONFIG)
+        self._solana_unowned_txids = self._load_solana_unowned_txids(
+            DEFAULT_SOLANA_OWNERSHIP_CONFIG
+        )
+        self._fairspot_staking_config = self._load_fairspot_staking_config(
+            fairspot_staking_config_path
+            or DEFAULT_FAIRSPOT_STAKING_RECONCILIATION_CONFIG
+        )
+        self._solana_staking_config = self._load_fairspot_staking_config(
+            solana_staking_config_path
+            or DEFAULT_SOLANA_STAKING_POSITION_RECONCILIATIONS_CONFIG
+        )
 
     def normalize_batch(self, batch_id: str) -> list[CanonicalEvent]:
         return self.normalize_batch_with_report(batch_id)[0]
@@ -51,23 +92,44 @@ class RawNormalizer:
         events: list[CanonicalEvent] = []
         event_payloads: list[CanonicalEventCreate] = []
         raw_objects = self.store.list_raw_objects(batch_id, limit=None)
+        batch_timezone = self._timezone_from_text(batch.filename) if batch.source == "binance" else None
         skipped = 0
         event_rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]] = []
         for raw in raw_objects:
             row = json.loads(raw.payload_json)
-            event = self._row_to_event(batch.source, raw.raw_object_id, row)
+            event = self._row_to_event(
+                batch.source,
+                raw.raw_object_id,
+                row,
+                default_timezone=batch_timezone,
+            )
             if event is not None:
                 event_rows.append((event, row))
             else:
                 skipped += 1
         event_rows = self._merge_binance_small_assets_exchange_bnb(batch.source, event_rows)
         event_rows = self._merge_binance_sol_staking_purchase_quotes(batch.source, event_rows)
+        event_rows = self._add_binance_simple_earn_internal_mirrors(
+            batch.source,
+            event_rows,
+        )
         event_rows = self._split_binance_simple_earn_flexible_redemption_yield(batch.source, event_rows)
         event_rows = self._merge_binance_transaction_related_quotes(batch.source, event_rows)
         event_rows = self._merge_binance_same_asset_trade_fees(batch.source, event_rows)
         event_rows = self._merge_binance_transaction_spend_quotes(batch.source, event_rows)
         event_rows = self._merge_binance_same_asset_trade_fees(batch.source, event_rows)
+        event_rows = self._split_documented_fairspot_staking_reward(
+            batch.source,
+            batch.file_hash,
+            event_rows,
+        )
         event_rows = self._merge_solana_rpc_swap_quotes(batch.source, event_rows)
+        event_rows = self._reconcile_solana_rpc_native_wallet_effects(batch.source, event_rows)
+        event_rows = self._split_documented_solana_staking_reward(
+            batch.source,
+            batch.file_hash,
+            event_rows,
+        )
         event_payloads = [event for event, _row in event_rows]
         events = self.store.add_canonical_events(event_payloads)
         return events, NormalizationReport(
@@ -77,15 +139,334 @@ class RawNormalizer:
             skipped_raw_objects=skipped,
         )
 
+    def _add_binance_simple_earn_internal_mirrors(
+        self,
+        source: str,
+        event_rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]],
+    ) -> list[tuple[CanonicalEventCreate, dict[str, str | None]]]:
+        if source != "binance_simple_earn_api":
+            return event_rows
+        transfer_rows = [
+            (event, row)
+            for event, row in event_rows
+            if event.event_type == "transfer"
+            and (
+                "subscription"
+                in str(row.get("record_type") or row.get("record type") or "").lower()
+                or "redemption"
+                in str(row.get("record_type") or row.get("record type") or "").lower()
+            )
+            and event.quantity != 0
+        ]
+        if not transfer_rows:
+            return event_rows
+        with self.store.connect() as con:
+            existing_rows = con.execute(
+                """
+                select e.event_time, upper(e.asset), e.quantity, r.payload_json
+                from canonical_events e
+                left join raw_objects r on r.raw_object_id = e.raw_object_id
+                where lower(e.source) = 'binance'
+                  and lower(coalesce(e.account, '')) = 'spot'
+                  and e.event_type in ('transfer', 'income', 'reward')
+                  and e.quantity <> 0
+                order by e.event_time
+                """
+            ).fetchall()
+        result = list(event_rows)
+        tolerance = Decimal("0.000000000001")
+        delayed_counterpart_window = timedelta(hours=72)
+        for event, raw_row in transfer_rows:
+            expected_spot_quantity = -event.quantity
+            existing_quantity = sum(
+                (
+                    quantity
+                    for event_time, asset, quantity, _payload_json in existing_rows
+                    if str(asset).upper() == event.asset.upper()
+                    and abs(
+                        (
+                            self._utc_datetime(event_time)
+                            - self._utc_datetime(event.event_time)
+                        ).total_seconds()
+                    )
+                    <= 2
+                    and quantity * expected_spot_quantity > 0
+                ),
+                Decimal("0"),
+            )
+            if abs(existing_quantity) <= tolerance:
+                record_type = str(
+                    raw_row.get("record_type") or raw_row.get("record type") or ""
+                ).lower()
+                counterpart_kind = (
+                    "redemption" if "redemption" in record_type else "subscription"
+                )
+                existing_quantity = sum(
+                    (
+                        quantity
+                        for event_time, asset, quantity, payload_json in existing_rows
+                        if str(asset).upper() == event.asset.upper()
+                        and quantity * expected_spot_quantity > 0
+                        and timedelta(0)
+                        < self._utc_datetime(event_time)
+                        - self._utc_datetime(event.event_time)
+                        <= delayed_counterpart_window
+                        and self._binance_simple_earn_counterpart_kind(payload_json)
+                        == counterpart_kind
+                    ),
+                    Decimal("0"),
+                )
+            if abs(existing_quantity - expected_spot_quantity) <= tolerance:
+                continue
+            if abs(existing_quantity) > tolerance:
+                # A partial CEX-ledger counterpart needs evidence review. Adding the
+                # complete mirror here would overstate the Spot balance.
+                continue
+            result.append(
+                (
+                    event.model_copy(
+                        update={
+                            "source_ref": f"{event.source_ref}:spot_mirror",
+                            "quantity": expected_spot_quantity,
+                            "account": "Spot",
+                            "confidence": Decimal("0.99"),
+                        }
+                    ),
+                    {
+                        **raw_row,
+                        "evidence_role": "simple_earn_internal_spot_mirror",
+                    },
+                )
+            )
+        return result
+
+    @staticmethod
+    def _binance_simple_earn_counterpart_kind(payload_json: str | None) -> str | None:
+        if not payload_json:
+            return None
+        try:
+            raw_row = json.loads(payload_json)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if not isinstance(raw_row, dict):
+            return None
+        normalized = {
+            normalize_column_name(str(key)): str(value or "").strip().lower()
+            for key, value in raw_row.items()
+        }
+        operation = next(
+            (
+                normalized[key]
+                for key in ("operation", "type", "category")
+                if normalized.get(key)
+            ),
+            "",
+        )
+        if "simple earn" not in operation:
+            return None
+        if "redemption" in operation:
+            return "redemption"
+        if "subscription" in operation:
+            return "subscription"
+        return None
+
+    @staticmethod
+    def _utc_datetime(value: datetime) -> datetime:
+        return (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+
+    def _split_documented_fairspot_staking_reward(
+        self,
+        source: str,
+        file_hash: str,
+        rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]],
+    ) -> list[tuple[CanonicalEventCreate, dict[str, str | None]]]:
+        config = self._fairspot_staking_config
+        primary_source = config.get("primary_source", {})
+        if (
+            source.lower() != "helium"
+            or config.get("review_status") != "approved_evidence_overlay"
+            or not isinstance(primary_source, dict)
+            or str(primary_source.get("file_hash") or "") != file_hash
+        ):
+            return rows
+        rules = config.get("return_splits")
+        if not isinstance(rules, list):
+            return rows
+        rules_by_tx_id: dict[str, dict[str, object]] = {}
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            tx_ids = [str(rule.get("tx_id") or "")]
+            aliases = rule.get("tx_id_aliases")
+            if isinstance(aliases, list):
+                tx_ids.extend(str(value) for value in aliases)
+            for tx_id in tx_ids:
+                if tx_id:
+                    rules_by_tx_id[tx_id] = rule
+        result: list[tuple[CanonicalEventCreate, dict[str, str | None]]] = []
+        for event, raw_row in rows:
+            rule = rules_by_tx_id.get(str(event.tx_id or ""))
+            if (
+                rule is None
+                or event.event_type != "transfer"
+                or event.asset.upper() != "HNT"
+                or event.quantity <= 0
+                or event.account != str(config.get("main_wallet") or "")
+            ):
+                result.append((event, raw_row))
+                continue
+            received = Decimal(str(rule.get("received_quantity") or "0"))
+            principal = Decimal(str(rule.get("principal_quantity") or "0"))
+            reward = Decimal(str(rule.get("reward_quantity") or "0"))
+            if (
+                event.quantity != received
+                or principal <= 0
+                or reward <= 0
+                or principal + reward != received
+            ):
+                result.append((event, raw_row))
+                continue
+            principal_quote = event.quote_quantity
+            reward_quote = None
+            if event.quote_quantity is not None:
+                reward_quote = event.quote_quantity * reward / received
+                principal_quote = event.quote_quantity - reward_quote
+            result.append(
+                (
+                    event.model_copy(
+                        update={
+                            "quantity": principal,
+                            "quote_quantity": principal_quote,
+                            "confidence": Decimal("0.99"),
+                        }
+                    ),
+                    raw_row,
+                )
+            )
+            result.append(
+                (
+                    event.model_copy(
+                        update={
+                            "event_type": "reward",
+                            "quantity": reward,
+                            "quote_quantity": reward_quote,
+                            "fee_asset": None,
+                            "fee_quantity": None,
+                            "confidence": Decimal("0.99"),
+                        }
+                    ),
+                    raw_row,
+                )
+            )
+        return result
+
+    @staticmethod
+    def _load_fairspot_staking_config(path: Path) -> dict[str, object]:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _split_documented_solana_staking_reward(
+        self,
+        source: str,
+        file_hash: str,
+        rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]],
+    ) -> list[tuple[CanonicalEventCreate, dict[str, str | None]]]:
+        config = self._solana_staking_config
+        if (
+            source.lower() != "solana_rpc"
+            or config.get("review_status") != "approved_evidence_overlay"
+        ):
+            return rows
+        positions = config.get("positions")
+        if not isinstance(positions, list):
+            return rows
+        rules: dict[str, tuple[dict[str, object], dict[str, object]]] = {}
+        for position in positions:
+            if not isinstance(position, dict):
+                continue
+            position_return = position.get("position_return")
+            if not isinstance(position_return, dict):
+                continue
+            tx_id = str(position_return.get("tx_id") or "")
+            if tx_id and str(position_return.get("source_file_hash") or "") == file_hash:
+                rules[tx_id] = (position, position_return)
+        result: list[tuple[CanonicalEventCreate, dict[str, str | None]]] = []
+        for event, raw_row in rows:
+            rule = rules.get(str(event.tx_id or ""))
+            if rule is None:
+                result.append((event, raw_row))
+                continue
+            position, position_return = rule
+            received = Decimal(str(position_return.get("received_quantity") or "0"))
+            principal = Decimal(str(position_return.get("principal_quantity") or "0"))
+            reward = Decimal(str(position_return.get("reward_quantity") or "0"))
+            if (
+                event.event_type != "transfer"
+                or event.asset.upper() != str(position.get("asset") or "").upper()
+                or event.account != str(position.get("wallet") or "")
+                or event.quantity != received
+                or principal <= 0
+                or reward <= 0
+                or principal + reward != received
+            ):
+                result.append((event, raw_row))
+                continue
+            principal_quote = event.quote_quantity
+            reward_quote = None
+            if event.quote_quantity is not None:
+                reward_quote = event.quote_quantity * reward / received
+                principal_quote = event.quote_quantity - reward_quote
+            result.append(
+                (
+                    event.model_copy(
+                        update={
+                            "quantity": principal,
+                            "quote_quantity": principal_quote,
+                            "confidence": Decimal("0.99"),
+                        }
+                    ),
+                    raw_row,
+                )
+            )
+            result.append(
+                (
+                    event.model_copy(
+                        update={
+                            "event_type": "reward",
+                            "quantity": reward,
+                            "quote_quantity": reward_quote,
+                            "fee_asset": None,
+                            "fee_quantity": None,
+                            "confidence": Decimal("0.99"),
+                        }
+                    ),
+                    raw_row,
+                )
+            )
+        return result
+
     def _row_to_event(
         self,
         source: str,
         raw_object_id: str,
         row: dict[str, str | None],
+        *,
+        default_timezone: timezone | None = None,
     ) -> CanonicalEventCreate | None:
         profile = profile_for_source(source)
         normalized = {self._normalize_key(key): value for key, value in row.items()}
-        if profile.source == "pionex" and str(normalized.get("state") or "").strip().upper() == "CANCELED":
+        if (
+            profile.source == "pionex"
+            and str(normalized.get("state") or "").strip().upper() == "CANCELED"
+            and not self._pionex_row_has_execution(normalized)
+        ):
             return None
         if (
             profile.source == "bitget"
@@ -93,10 +474,28 @@ class RawNormalizer:
             == "bitget_withdrawal_evidence"
         ):
             return None
+        if self._is_bitget_non_balance_blockpit_evidence(normalized, profile):
+            return self._bitget_non_balance_blockpit_evidence_event(
+                source,
+                raw_object_id,
+                normalized,
+                profile,
+                default_timezone=default_timezone,
+            )
         if profile.source == "binance_simple_earn_api":
             return self._binance_simple_earn_event(source, raw_object_id, normalized)
+        if profile.source == "binance_asset_dividend_api":
+            return self._binance_asset_dividend_event(
+                source, raw_object_id, normalized
+            )
         if profile.source == "binance_withdrawal_api":
-            return self._binance_withdrawal_evidence_event(source, raw_object_id, normalized, profile)
+            return self._binance_withdrawal_evidence_event(
+                source,
+                raw_object_id,
+                normalized,
+                profile,
+                default_timezone=default_timezone,
+            )
         is_bitget_spot_financial_quote_shadow = self._is_bitget_spot_financial_quote_shadow(normalized)
         is_failed_binance_status = (
             profile.source == "binance" and self._is_failed_binance_status(normalized)
@@ -116,7 +515,11 @@ class RawNormalizer:
             asset = derived_trade[0]
             quantity_raw = derived_trade[1]
         quantity_raw = self._correct_scaled_quantity(normalized, profile, quantity_raw)
-        if profile.source in {"blockpit", "blockpit-solana"} and derived_quantity_raw is not None:
+        if (
+            profile.source in {"blockpit", "blockpit-solana"}
+            and derived_trade is None
+            and derived_quantity_raw is not None
+        ):
             quantity_raw = derived_quantity_raw
         if quantity_raw is None or (
             derived_quantity_raw is not None and not self._has_decimal_value(quantity_raw)
@@ -157,6 +560,13 @@ class RawNormalizer:
             sign_context = self._helium_transfer_sign_context(normalized, account, raw_type)
         quantity = self._signed_quantity(quantity, event_type, sign_context)
         if (
+            profile.source == "coinbase"
+            and event_type == "transfer"
+            and quantity > 0
+            and any(token in raw_type.strip().lower() for token in ("send", "withdraw"))
+        ):
+            quantity = -quantity
+        if (
             profile.source == "solana_rpc"
             and event_type == "transfer"
             and raw_type.strip().lower() == "token_transfer"
@@ -186,6 +596,8 @@ class RawNormalizer:
         if derived_trade is not None:
             quote_raw = derived_trade[4]
         quote_raw, parsed_quote_asset = self._split_amount_asset(quote_raw)
+        if profile.source == "coinbase":
+            quote_raw = self._coinbase_numeric_text(quote_raw)
         quote_quantity = self._decimal_or_none(quote_raw)
         quote_asset = self._first_value(normalized, list(profile.quote_asset_columns))
         if derived_trade is not None:
@@ -221,9 +633,10 @@ class RawNormalizer:
         fee_asset = self._first_value(normalized, list(profile.fee_asset_columns))
         if profile.source == "bitget" and fee_asset is None:
             fee_asset = asset
-        fee_quantity = self._decimal_or_none(
-            self._first_value(normalized, list(profile.fee_quantity_columns))
-        )
+        fee_raw = self._first_value(normalized, list(profile.fee_quantity_columns))
+        if profile.source == "coinbase":
+            fee_raw = self._coinbase_numeric_text(fee_raw)
+        fee_quantity = self._decimal_or_none(fee_raw)
         if (
             is_failed_binance_status
             or is_binance_card_buy_mirror
@@ -235,7 +648,12 @@ class RawNormalizer:
         return CanonicalEventCreate(
             source=source,
             source_ref=self._first_value(normalized, list(profile.source_ref_columns)),
-            event_time=self._parse_event_datetime_for_row(str(time_raw), profile, normalized),
+            event_time=self._parse_event_datetime_for_row(
+                str(time_raw),
+                profile,
+                normalized,
+                default_timezone=default_timezone,
+            ),
             event_type=event_type,
             asset=self._canonical_asset(asset),
             quantity=quantity,
@@ -255,6 +673,8 @@ class RawNormalizer:
         raw_object_id: str,
         row: dict[str, str | None],
         profile: SourceProfile,
+        *,
+        default_timezone: timezone | None = None,
     ) -> CanonicalEventCreate | None:
         asset = self._first_value(row, list(profile.asset_columns))
         time_raw = self._first_value(row, list(profile.time_columns))
@@ -263,7 +683,64 @@ class RawNormalizer:
         return CanonicalEventCreate(
             source=source,
             source_ref=self._first_value(row, list(profile.source_ref_columns)),
-            event_time=self._parse_event_datetime_for_row(str(time_raw), profile, row),
+            event_time=self._parse_event_datetime_for_row(
+                str(time_raw),
+                profile,
+                row,
+                default_timezone=default_timezone,
+            ),
+            event_type="unknown",
+            asset=self._canonical_asset(asset),
+            quantity=Decimal("0"),
+            tx_id=self._first_value(row, list(profile.tx_id_columns)),
+            account=self._event_account(row, profile, "unknown"),
+            confidence=Decimal("0.95"),
+            raw_object_id=raw_object_id,
+        )
+
+    def _is_bitget_non_balance_blockpit_evidence(
+        self,
+        row: dict[str, str | None],
+        profile: SourceProfile,
+    ) -> bool:
+        if profile.source != "blockpit":
+            return False
+        integration = str(
+            row.get("integration name") or row.get("source name") or ""
+        ).strip().lower()
+        if integration != "bitget":
+            return False
+        label = str(row.get("label") or "").strip().lower()
+        record_type = str(
+            row.get("record type") or row.get("record_type") or ""
+        ).strip().lower()
+        return (
+            label in self.BITGET_INTERNAL_BLOCKPIT_LABELS
+            or record_type in self.BITGET_BLOCKPIT_EVIDENCE_ONLY_RECORD_TYPES
+        )
+
+    def _bitget_non_balance_blockpit_evidence_event(
+        self,
+        source: str,
+        raw_object_id: str,
+        row: dict[str, str | None],
+        profile: SourceProfile,
+        *,
+        default_timezone: timezone | None = None,
+    ) -> CanonicalEventCreate | None:
+        time_raw = self._first_value(row, list(profile.time_columns))
+        amount_raw, asset = self._derived_quantity_asset(row, profile)
+        if time_raw is None or amount_raw is None or asset is None:
+            return None
+        return CanonicalEventCreate(
+            source=source,
+            source_ref=self._first_value(row, list(profile.source_ref_columns)),
+            event_time=self._parse_event_datetime_for_row(
+                str(time_raw),
+                profile,
+                row,
+                default_timezone=default_timezone,
+            ),
             event_type="unknown",
             asset=self._canonical_asset(asset),
             quantity=Decimal("0"),
@@ -731,11 +1208,16 @@ class RawNormalizer:
             weighted_out: list[tuple[int, CanonicalEventCreate, dict[str, str | None], Decimal]] = []
             for index, event, row in dust_out:
                 try:
-                    price = price_lookup.at_or_before(event.asset, event.event_time)
+                    price = price_lookup.at_or_before(
+                        event.asset,
+                        event.event_time,
+                        allow_derived=False,
+                    )
                 except TypeError:
                     price = price_lookup.at_or_before(
                         event.asset,
                         event.event_time.replace(tzinfo=None),
+                        allow_derived=False,
                     )
                 value = abs(event.quantity) * price.price_eur if price is not None else Decimal("0")
                 weighted_out.append((index, event, row, value))
@@ -804,6 +1286,45 @@ class RawNormalizer:
 
         rewritten: dict[int, CanonicalEventCreate] = {}
         for _tx_id, items in grouped.items():
+            vsr_position = next(
+                (
+                    (event.asset, self.HELIUM_VSR_POSITION_RECEIPTS[event.asset])
+                    for _index, event, _row in items
+                    if event.quantity > 0 and event.asset in self.HELIUM_VSR_POSITION_RECEIPTS
+                ),
+                None,
+            )
+            if vsr_position is not None:
+                receipt_asset, principal_asset = vsr_position
+                principal_rows = [
+                    (index, event)
+                    for index, event, _row in items
+                    if event.asset == principal_asset and event.quantity < 0
+                ]
+                if principal_rows:
+                    for index, event, _row in items:
+                        if event.asset == principal_asset and event.quantity < 0:
+                            rewritten[index] = event.model_copy(
+                                update={
+                                    "event_type": "transfer",
+                                    "quote_asset": None,
+                                    "quote_quantity": None,
+                                    "confidence": Decimal("0.98"),
+                                }
+                            )
+                        elif event.asset == receipt_asset and event.quantity > 0:
+                            rewritten[index] = event.model_copy(
+                                update={
+                                    "event_type": "unknown",
+                                    "quantity": Decimal("0"),
+                                    "quote_asset": None,
+                                    "quote_quantity": None,
+                                    "fee_asset": None,
+                                    "fee_quantity": None,
+                                    "confidence": Decimal("0.98"),
+                                }
+                            )
+                    continue
             if any(self._contains_solana_claim_or_airdrop_instruction(row) for _index, _event, row in items):
                 continue
             incoming = [(index, event) for index, event, _row in items if event.quantity > 0]
@@ -910,6 +1431,201 @@ class RawNormalizer:
         }
         return non_dust or outgoing_by_asset
 
+    def _reconcile_solana_rpc_native_wallet_effects(
+        self,
+        source: str,
+        event_rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]],
+    ) -> list[tuple[CanonicalEventCreate, dict[str, str | None]]]:
+        if source != "solana_rpc":
+            return event_rows
+
+        grouped: dict[
+            tuple[str, str],
+            list[tuple[int, CanonicalEventCreate, dict[str, str | None]]],
+        ] = {}
+        for index, (event, row) in enumerate(event_rows):
+            if event.tx_id and event.account:
+                grouped.setdefault((event.tx_id, event.account), []).append((index, event, row))
+
+        rewritten: dict[int, CanonicalEventCreate] = {}
+        additions: list[tuple[CanonicalEventCreate, dict[str, str | None]]] = []
+        for (_tx_id, wallet), items in grouped.items():
+            if _tx_id in self._solana_unowned_txids:
+                for index, event, _row in items:
+                    rewritten[index] = event.model_copy(
+                        update={
+                            "event_type": "unknown",
+                            "quantity": Decimal("0"),
+                            "quote_asset": None,
+                            "quote_quantity": None,
+                            "fee_asset": None,
+                            "fee_quantity": None,
+                            "account": "solana_rpc_unowned_evidence",
+                            "confidence": Decimal("0.98"),
+                        }
+                    )
+                continue
+            state = next(
+                (
+                    parsed
+                    for _index, _event, row in items
+                    if (parsed := self._solana_rpc_raw_wallet_state(row, wallet)) is not None
+                ),
+                None,
+            )
+            if state is None:
+                continue
+            if not bool(state["wallet_owned_transaction"]):
+                continue
+
+            group_events: list[tuple[int, CanonicalEventCreate, dict[str, str | None]]] = []
+            for index, event, row in items:
+                if event.fee_asset == "SOL":
+                    event = event.model_copy(update={"fee_asset": None, "fee_quantity": None})
+                group_events.append((index, event, row))
+
+            wallet_fee = abs(Decimal(str(state["wallet_fee_sol"])))
+            if wallet_fee:
+                fee_index = next(
+                    (
+                        index
+                        for index, event, _row in group_events
+                        if event.fee_asset is None and event.event_type != "unknown"
+                    ),
+                    group_events[0][0],
+                )
+                group_events = [
+                    (
+                        index,
+                        event.model_copy(
+                            update={"fee_asset": "SOL", "fee_quantity": wallet_fee}
+                        )
+                        if index == fee_index
+                        else event,
+                        row,
+                    )
+                    for index, event, row in group_events
+                ]
+
+            normalized_effect = sum(
+                (self._canonical_event_asset_effect(event, "SOL") for _index, event, _row in group_events),
+                Decimal("0"),
+            )
+            exact_effect = Decimal(str(state["wallet_native_sol_delta"]))
+            residual = exact_effect - normalized_effect
+            for index, event, _row in group_events:
+                rewritten[index] = event
+            if residual:
+                _index, primary, row = group_events[0]
+                additions.append(
+                    (
+                        primary.model_copy(
+                            update={
+                                "source_ref": primary.tx_id,
+                                "event_type": "transfer",
+                                "asset": "SOL",
+                                "quantity": residual,
+                                "quote_asset": None,
+                                "quote_quantity": None,
+                                "fee_asset": None,
+                                "fee_quantity": None,
+                                "confidence": Decimal("0.98"),
+                            }
+                        ),
+                        row,
+                    )
+                )
+
+        return [
+            (rewritten.get(index, event), row)
+            for index, (event, row) in enumerate(event_rows)
+        ] + additions
+
+    def _solana_rpc_raw_wallet_state(
+        self,
+        row: dict[str, object],
+        wallet: str,
+    ) -> dict[str, object] | None:
+        raw_value = row.get("raw_row") or row.get("raw row")
+        transaction = self._structured_solana_rpc_row(raw_value)
+        if transaction is None:
+            return None
+        tx = transaction.get("transaction") if isinstance(transaction.get("transaction"), dict) else {}
+        message = tx.get("message") if isinstance(tx.get("message"), dict) else {}
+        account_values = message.get("accountKeys") if isinstance(message.get("accountKeys"), list) else []
+        account_keys = [
+            str(value.get("pubkey") or "") if isinstance(value, dict) else str(value)
+            for value in account_values
+        ]
+        meta = transaction.get("meta") if isinstance(transaction.get("meta"), dict) else {}
+        token_owners = {
+            str(value.get("owner") or "")
+            for value in [
+                *(meta.get("preTokenBalances") or []),
+                *(meta.get("postTokenBalances") or []),
+            ]
+            if isinstance(value, dict)
+        }
+        wallet_owned_transaction = wallet in account_keys or wallet in token_owners
+        native_delta = Decimal("0")
+        if wallet in account_keys:
+            index = account_keys.index(wallet)
+            pre = meta.get("preBalances") if isinstance(meta.get("preBalances"), list) else []
+            post = meta.get("postBalances") if isinstance(meta.get("postBalances"), list) else []
+            if index < len(pre) and index < len(post):
+                native_delta = (
+                    Decimal(int(post[index])) - Decimal(int(pre[index]))
+                ) / Decimal("1000000000")
+        wallet_paid_fee = bool(account_keys) and account_keys[0] == wallet
+        fee = (
+            Decimal(int(meta.get("fee") or 0)) / Decimal("1000000000")
+            if wallet_paid_fee
+            else Decimal("0")
+        )
+        return {
+            "wallet_owned_transaction": wallet_owned_transaction,
+            "wallet_native_sol_delta": native_delta,
+            "wallet_fee_sol": fee,
+        }
+
+    @staticmethod
+    def _structured_solana_rpc_row(value: object) -> dict[str, object] | None:
+        if isinstance(value, dict):
+            return value
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            try:
+                parsed = ast.literal_eval(value)
+            except (SyntaxError, ValueError):
+                return None
+        return parsed if isinstance(parsed, dict) else None
+
+    @staticmethod
+    def _canonical_event_asset_effect(event: CanonicalEventCreate, asset: str) -> Decimal:
+        target = asset.upper()
+        effect = event.quantity if event.asset == target else Decimal("0")
+        if event.quote_asset == target and event.quote_quantity is not None:
+            quote = abs(event.quote_quantity)
+            effect += -quote if event.quantity > 0 else quote
+        if event.fee_asset == target and event.fee_quantity is not None:
+            effect -= abs(event.fee_quantity)
+        return effect
+
+    @staticmethod
+    def _load_solana_unowned_txids(path: Path) -> set[str]:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return set()
+        return {
+            str(value)
+            for value in payload.get("outside_owned_wallet_scope_txids", [])
+            if value
+        }
+
     def _is_solana_helium_reward_transfer(
         self,
         row: dict[str, object],
@@ -980,6 +1696,18 @@ class RawNormalizer:
             return self._bitget_event_type(row, lowered)
         if profile.source == "binance":
             return self._binance_event_type(row, lowered)
+        if profile.source == "coinbase":
+            if any(token in lowered for token in ("send", "receive", "deposit", "withdraw")):
+                return "transfer"
+            if "staking" in lowered:
+                return "staking"
+            if any(token in lowered for token in ("reward", "coinbase earn", "learning reward")):
+                return "reward"
+            if any(token in lowered for token in ("buy", "sell", "trade", "convert")):
+                return "trade"
+            if any(token in lowered for token in ("income", "distribution")):
+                return "income"
+            return "unknown"
         if profile.source in {"blockpit", "blockpit-solana"}:
             return self._blockpit_event_type(lowered)
         if profile.source == "solana_rpc":
@@ -1100,7 +1828,11 @@ class RawNormalizer:
             return None
         event_type = "reward" if "reward" in record_type else "transfer"
         record_subtype = str(row.get("type") or "").strip().upper()
-        if (
+        if record_type == "locked_redemption_loss":
+            event_type = "fee"
+            signed_quantity = -abs(quantity)
+            account = self._binance_simple_earn_account(row)
+        elif (
             record_type == "locked_subscription"
             and record_subtype == "AUTO"
         ):
@@ -1114,7 +1846,11 @@ class RawNormalizer:
             account = self._binance_simple_earn_account(row)
         else:
             signed_quantity = quantity
-            account = self._binance_simple_earn_account(row)
+            account = (
+                "Spot"
+                if record_type == "locked_rewards"
+                else self._binance_simple_earn_account(row)
+            )
         return CanonicalEventCreate(
             source=source,
             source_ref=(
@@ -1141,6 +1877,53 @@ class RawNormalizer:
             ),
             account=account,
             confidence=Decimal("0.95"),
+            raw_object_id=raw_object_id,
+        )
+
+    def _binance_asset_dividend_event(
+        self,
+        source: str,
+        raw_object_id: str,
+        row: dict[str, str | None],
+    ) -> CanonicalEventCreate | None:
+        asset = self._canonical_asset(str(row.get("asset") or ""))
+        quantity = self._decimal_or_none(row.get("amount"))
+        time_raw = row.get("time iso") or row.get("time_iso") or row.get("div time") or row.get("div_time")
+        if not asset or quantity is None or not time_raw:
+            return None
+        direction = self._decimal_or_none(row.get("direction")) or Decimal("1")
+        signed_quantity = abs(quantity) if direction >= 0 else -abs(quantity)
+        en_info = str(row.get("en info") or row.get("en_info") or "").lower()
+        if signed_quantity < 0:
+            event_type = "fee"
+        elif any(token in en_info for token in ("locked", "simple earn", "staking", "reward")):
+            event_type = "reward"
+        else:
+            event_type = "income"
+        return CanonicalEventCreate(
+            source=source,
+            source_ref=(
+                row.get("source ref")
+                or row.get("source_ref")
+                or row.get("dividend id")
+                or row.get("dividend_id")
+                or row.get("tran id")
+                or row.get("tran_id")
+            ),
+            event_time=self._parse_event_datetime_for_row(
+                str(time_raw), profile_for_source(source), row
+            ),
+            event_type=event_type,
+            asset=asset,
+            quantity=signed_quantity,
+            tx_id=(
+                row.get("tran id")
+                or row.get("tran_id")
+                or row.get("dividend id")
+                or row.get("dividend_id")
+            ),
+            account="Spot",
+            confidence=Decimal("0.99"),
             raw_object_id=raw_object_id,
         )
 
@@ -1291,7 +2074,15 @@ class RawNormalizer:
             return -quantity
         return quantity
 
-    def _parse_event_datetime(self, value: str, profile: SourceProfile) -> datetime:
+    def _parse_event_datetime(
+        self,
+        value: str,
+        profile: SourceProfile,
+        *,
+        default_timezone: timezone | None = None,
+    ) -> datetime:
+        if default_timezone is not None:
+            return self._parse_datetime(value, default_timezone=default_timezone)
         if profile.source != "bitget":
             return self._parse_datetime(value)
         return self._parse_datetime(value, default_timezone=timezone(timedelta(hours=8)))
@@ -1301,12 +2092,41 @@ class RawNormalizer:
         value: str,
         profile: SourceProfile,
         row: dict[str, str | None],
+        *,
+        default_timezone: timezone | None = None,
     ) -> datetime:
-        parsed = self._parse_event_datetime(value, profile)
+        row_timezone = default_timezone or self._timezone_from_column_names(row)
+        parsed = self._parse_event_datetime(
+            value,
+            profile,
+            default_timezone=row_timezone,
+        )
         if profile.source == "helium" and row.get("period start (utc)"):
             last_day = calendar.monthrange(parsed.year, parsed.month)[1]
             return parsed.replace(day=last_day, hour=23, minute=59, second=59, microsecond=0)
         return parsed
+
+    @classmethod
+    def _timezone_from_column_names(cls, row: dict[str, str | None]) -> timezone | None:
+        for key in row:
+            parsed = cls._timezone_from_text(str(key))
+            if parsed is not None:
+                return parsed
+        return None
+
+    @staticmethod
+    def _timezone_from_text(value: str) -> timezone | None:
+        match = re.search(r"utc\s*([+-])\s*(\d{1,2})(?::(\d{2}))?", value, flags=re.IGNORECASE)
+        if match is None:
+            return None
+        hours = int(match.group(2))
+        minutes = int(match.group(3) or "0")
+        if hours > 14 or minutes > 59:
+            return None
+        offset = timedelta(hours=hours, minutes=minutes)
+        if match.group(1) == "-":
+            offset = -offset
+        return timezone(offset)
 
     def _base_asset_from_pair(self, pair: str | None) -> str | None:
         parts = self._pair_parts(pair)
@@ -1392,6 +2212,19 @@ class RawNormalizer:
         except InvalidOperation:
             return None
 
+    def _pionex_row_has_execution(self, row: dict[str, str | None]) -> bool:
+        return any(
+            (quantity := self._decimal_or_none(row.get(key))) is not None and quantity != 0
+            for key in (
+                "executed qty",
+                "executed quantity",
+                "executed amount",
+                "filled amount",
+                "filled quantity",
+                "filled size",
+            )
+        )
+
     def _normalize_decimal_text(self, value: str) -> str:
         normalized = value.strip().replace(",", ".")
         # Some legacy Fairspot/Helium CSV exports encode scientific notation as
@@ -1399,6 +2232,21 @@ class RawNormalizer:
         # falls through to mobile_amount, which is an oracle/helper column in
         # those old rows.
         return re.sub(r"([eE])\.(\d+)$", r"\1-\2", normalized)
+
+    @staticmethod
+    def _coinbase_numeric_text(value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = re.sub(r"[^0-9,.-]", "", str(value)).strip()
+        if not normalized:
+            return None
+        if "," in normalized and "." in normalized:
+            if normalized.rfind(".") > normalized.rfind(","):
+                return normalized.replace(",", "")
+            return normalized.replace(".", "").replace(",", ".")
+        if "," in normalized:
+            return normalized.replace(",", ".")
+        return normalized
 
     def _has_decimal_value(self, value: str | None) -> bool:
         decimal_value = self._decimal_or_none(value)

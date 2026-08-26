@@ -46,6 +46,46 @@ def _seed_sources(store: DuckDbStore) -> None:
     )
 
 
+def test_coinbase_transaction_history_profile_preserves_trade_fee_and_transfer_direction(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="coinbase",
+        filename="coinbase-transaction-history.csv",
+        content=(
+            "Timestamp,Transaction Type,Asset,Quantity Transacted,Spot Price Currency,Subtotal,Fees and/or Spread,Transaction ID\n"
+            "2025-09-06T10:00:00Z,Buy,SOL,1,EUR,20.00,1.00,buy-1\n"
+            "2025-09-07T10:00:00Z,Sell,SOL,0.4,EUR,10.00,0.50,sell-1\n"
+            "2025-09-08T10:00:00Z,Send,SOL,0.1,EUR,,,send-1\n"
+            "2025-09-09T10:00:00Z,Receive,SOL,0.2,EUR,,,receive-1\n"
+            "2025-09-10T10:00:00Z,Learning Reward,SOL,0.01,EUR,0.20,0,reward-1\n"
+        ),
+    )
+
+    result = RawNormalizer(store).normalize_batch(batch.batch_id)
+    events = store.list_canonical_events()
+
+    assert len(result) == 5
+    assert [event.event_type for event in events] == [
+        "trade",
+        "trade",
+        "transfer",
+        "transfer",
+        "reward",
+    ]
+    assert [event.quantity for event in events] == [
+        Decimal("1"),
+        Decimal("-0.4"),
+        Decimal("-0.1"),
+        Decimal("0.2"),
+        Decimal("0.01"),
+    ]
+    assert events[0].quote_asset == "EUR"
+    assert events[0].quote_quantity == Decimal("20.00")
+    assert events[0].fee_asset == "EUR"
+    assert events[0].fee_quantity == Decimal("1.00")
+    assert all(event.account == "coinbase" for event in events)
+
+
 def test_sources_overview_groups_readable_sources(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     _seed_sources(store)
@@ -267,6 +307,7 @@ def test_source_overview_uses_live_value_and_keeps_ledger_delta(tmp_path):
             source="manual-test",
         )
     )
+    live_at = datetime.now(timezone.utc)
     PortfolioService(store)._replace_live_balance_snapshots(
         [
             PortfolioLiveBalanceSnapshot(
@@ -275,7 +316,7 @@ def test_source_overview_uses_live_value_and_keeps_ledger_delta(tmp_path):
                 asset="USDT",
                 quantity=Decimal("0.02"),
                 source="v1_connector:bitget",
-                fetched_at=priced_at,
+                fetched_at=live_at,
             )
         ]
     )
@@ -300,6 +341,125 @@ def test_source_overview_uses_live_value_and_keeps_ledger_delta(tmp_path):
     assert detail.display_warning is not None
     assert detail.assets[0].quantity == Decimal("0.02")
     assert detail.assets[0].value_basis == "live_api"
+
+
+def test_source_overview_does_not_present_stale_expected_zero_as_live_value(
+    tmp_path,
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="pionex",
+        filename="pionex-ledger.csv",
+        content=(
+            "time,asset,amount,type,account\n"
+            "2026-01-01T00:00:00Z,USDT,4,deposit,pionex\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    BalanceLedgerBuilder(store).rebuild()
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime.now(timezone.utc),
+            source="manual-test",
+        )
+    )
+    stale_at = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="pionex:USDT:stale",
+                connector_id="pionex",
+                asset="USDT",
+                quantity=Decimal("2"),
+                source="pionex_api_v2",
+                fetched_at=stale_at,
+            )
+        ]
+    )
+
+    overview = SourceService(store).overview()
+    pionex = next(source for source in overview.sources if source.label == "Pionex")
+
+    assert overview.total_value_eur == Decimal("0")
+    assert pionex.value_eur == Decimal("0")
+    assert pionex.value_basis == "expected_zero_policy_no_current_live"
+    assert pionex.ledger_value_eur == Decimal("4.000000000000000000000000000")
+    assert pionex.live_value_eur is None
+    assert pionex.delta_value_eur is None
+    assert pionex.last_live_at == stale_at.replace(tzinfo=None)
+    assert pionex.live_freshness == "stale"
+    assert pionex.current_status == "expected_zero_live_unavailable"
+    assert pionex.display_warning is not None
+    assert pionex.top_assets == []
+
+
+def test_source_breakdown_empty_response_supersedes_old_snapshot(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="pionex",
+        filename="pionex-ledger.csv",
+        content=(
+            "time,asset,amount,type,account\n"
+            "2026-01-01T00:00:00Z,USDT,4,deposit,pionex\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    BalanceLedgerBuilder(store).rebuild()
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime.now(timezone.utc),
+            source="manual-test",
+        )
+    )
+    old_snapshot_at = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="pionex:USDT:old",
+                connector_id="pionex",
+                asset="USDT",
+                quantity=Decimal("2"),
+                source="pionex_api_v2",
+                fetched_at=old_snapshot_at,
+            )
+        ]
+    )
+    empty_at = datetime.now(timezone.utc)
+    with store.connect() as con:
+        con.execute(
+            """
+            insert into portfolio_live_connector_runs (
+                run_id, connector_id, fetched_at, status, snapshots_count,
+                source, message
+            )
+            values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                "pionex-empty-test",
+                "pionex",
+                empty_at,
+                "empty_response",
+                0,
+                "pionex_api_v2",
+                "Connector returned no balances.",
+            ],
+        )
+
+    breakdown = SourceService(store).reconciliation_breakdown("pionex")
+
+    assert breakdown is not None
+    assert breakdown.live_value_eur == Decimal("0")
+    assert breakdown.last_live_at == empty_at.replace(tzinfo=None)
+    assert breakdown.live_anchor_source == "pionex_api_v2:empty_response"
+    assert breakdown.live_components == []
+    assert breakdown.rows[0].asset == "USDT"
+    assert breakdown.rows[0].live_quantity == Decimal("0")
+    assert breakdown.rows[0].delta_quantity == Decimal("-4.000000000000000000")
+    assert breakdown.rows[0].status == "dust_delta"
 
 
 def test_source_reconciliation_breakdown_shows_expected_zero_asset_delta(tmp_path):
@@ -364,6 +524,7 @@ def test_source_reconciliation_breakdown_shows_binance_product_components(tmp_pa
             source="manual-test",
         )
     )
+    live_at = datetime.now(timezone.utc)
     PortfolioService(store)._replace_live_balance_snapshots(
         [
             PortfolioLiveBalanceSnapshot(
@@ -372,7 +533,7 @@ def test_source_reconciliation_breakdown_shows_binance_product_components(tmp_pa
                 asset="JUP",
                 quantity=Decimal("40"),
                 source="v1_connector:binance",
-                fetched_at=priced_at,
+                fetched_at=live_at,
                 account_type="simple_earn_flexible",
                 product_id="JUP001",
             ),
@@ -382,7 +543,7 @@ def test_source_reconciliation_breakdown_shows_binance_product_components(tmp_pa
                 asset="JUP",
                 quantity=Decimal("2"),
                 source="v1_connector:binance",
-                fetched_at=priced_at,
+                fetched_at=live_at,
                 account_type="spot",
             ),
         ]
@@ -406,6 +567,82 @@ def test_source_reconciliation_breakdown_shows_binance_product_components(tmp_pa
         ("spot", None, Decimal("2.000000000000000000")),
     ]
     assert components[0].value_eur == Decimal("8.000000000000000000000000000")
+
+
+def test_binance_uncredited_earn_accrual_is_visible_but_not_a_fifo_ledger_delta(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="binance",
+                source_ref="sol-ledger",
+                event_time=datetime(2026, 7, 17, tzinfo=timezone.utc),
+                event_type="transfer",
+                asset="SOL",
+                quantity=Decimal("10"),
+                account="Spot",
+            )
+        ]
+    )
+    BalanceLedgerBuilder(store).rebuild()
+    priced_at = datetime.now(timezone.utc)
+    store.add_price_point(
+        PricePointCreate(
+            asset="SOL",
+            price_eur=Decimal("70"),
+            priced_at=priced_at,
+            source="manual-test",
+        )
+    )
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="binance:SOL:locked",
+                connector_id="binance",
+                asset="SOL",
+                quantity=Decimal("10"),
+                source="binance_api",
+                fetched_at=priced_at,
+                account_type="simple_earn_locked",
+                product_id="Sol*120",
+                event_type="balance_snapshot",
+            ),
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="binance:SOL:accrual",
+                connector_id="binance",
+                asset="SOL",
+                quantity=Decimal("0.1"),
+                source="binance_api",
+                fetched_at=priced_at,
+                account_type="simple_earn_locked",
+                product_id="Sol*120",
+                event_type="earn_accrued_reward_snapshot",
+            ),
+        ]
+    )
+
+    breakdown = SourceService(store).reconciliation_breakdown("binance")
+    evidence = SourceService(store).binance_reconciliation_evidence(assets=["SOL"])
+
+    assert breakdown is not None
+    assert breakdown.live_value_eur == Decimal("707.0000000000000000000000000")
+    assert breakdown.live_nonledger_accrual_value_eur == Decimal("7.0000000000000000000")
+    assert breakdown.reconciliation_live_value_eur == Decimal("700.0000000000000000000000000")
+    assert breakdown.raw_delta_value_eur == Decimal("7.0000000000000000000000000")
+    assert breakdown.delta_value_eur == Decimal("0E-25")
+    row = breakdown.rows[0]
+    assert row.live_quantity == Decimal("10.100000000000000000")
+    assert row.live_nonledger_accrual_quantity == Decimal("0.100000000000000000")
+    assert row.reconciliation_live_quantity == Decimal("10.000000000000000000")
+    assert row.raw_delta_quantity == Decimal("0.100000000000000000")
+    assert row.delta_quantity == Decimal("0E-18")
+    assert row.status == "quantity_reconciled"
+    assert evidence is not None
+    assert evidence.live_nonledger_accrual_value_eur == Decimal("7.0000000000000000000")
+    assert evidence.asset_reports[0].live_nonledger_accrual_quantity == Decimal(
+        "0.100000000000000000"
+    )
+    assert evidence.asset_reports[0].delta_quantity == Decimal("0E-18")
 
 
 def test_source_reconciliation_breakdown_api(tmp_path):
@@ -735,7 +972,7 @@ def test_binance_reconciliation_marks_small_product_delta_as_reconciled_with_dus
                 asset="SOL",
                 quantity=Decimal("10.01"),
                 source="v1_connector:binance",
-                fetched_at=priced_at,
+                fetched_at=datetime.now(timezone.utc),
                 account_type="simple_earn_locked",
                 product_id="Sol*120",
             )
@@ -788,7 +1025,7 @@ def test_source_overview_documents_bitget_complete_export_dust_delta(tmp_path):
                 asset="USDT",
                 quantity=Decimal("0.000000006884"),
                 source="v1_connector:bitget",
-                fetched_at=priced_at,
+                fetched_at=datetime.now(timezone.utc),
             )
         ]
     )
@@ -826,6 +1063,7 @@ def test_source_overview_ignores_non_valued_live_receipt_tokens(tmp_path):
             source="manual-test",
         )
     )
+    live_at = datetime.now(timezone.utc)
     PortfolioService(store)._replace_live_balance_snapshots(
         [
             PortfolioLiveBalanceSnapshot(
@@ -834,7 +1072,7 @@ def test_source_overview_ignores_non_valued_live_receipt_tokens(tmp_path):
                 asset="JUP",
                 quantity=Decimal("10"),
                 source="v1_connector:binance",
-                fetched_at=priced_at,
+                fetched_at=live_at,
                 account_type="simple_earn_flexible",
                 product_id="JUP001",
             ),
@@ -844,7 +1082,7 @@ def test_source_overview_ignores_non_valued_live_receipt_tokens(tmp_path):
                 asset="LDJUP",
                 quantity=Decimal("99"),
                 source="v1_connector:binance",
-                fetched_at=priced_at,
+                fetched_at=live_at,
                 account_type="spot",
             ),
         ]
@@ -1064,6 +1302,68 @@ def test_connector_diagnostics_reports_fresh_wallet_snapshot(tmp_path, monkeypat
     assert solana.credential_status == "not_required"
     assert solana.last_snapshot_age_days == 0
     assert solana.last_snapshot_assets == 1
+
+
+def test_connector_diagnostics_keeps_latest_api_failure_visible(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    _seed_sources(store)
+    stale_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    attempted_at = datetime.now(timezone.utc)
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="pionex:USDT:stale-before-error",
+                connector_id="pionex",
+                asset="USDT",
+                quantity=Decimal("1"),
+                source="pionex_api_v2",
+                fetched_at=stale_at,
+            )
+        ]
+    )
+    with store.connect() as con:
+        con.execute(
+            """
+            insert into portfolio_live_connector_runs (
+                run_id, connector_id, fetched_at, status, snapshots_count,
+                source, message
+            ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                "pionex-expired-key-test",
+                "pionex",
+                attempted_at,
+                "connector_error",
+                0,
+                "pionex_api_v2",
+                "V2-pionex-Liveabruf fehlgeschlagen: APIKEY_EXPIRED",
+            ],
+        )
+    monkeypatch.setattr(
+        SourceService,
+        "_cex_credential_diagnostic",
+        lambda self, connector_id: {
+            "status": "configured",
+            "issue": None,
+            "keys_present": 2,
+            "keys_required": 2,
+            "updated_at_latest": attempted_at,
+        },
+    )
+
+    report = SourceService(store).connector_diagnostics()
+    pionex = next(
+        item for item in report.diagnostics if item.connector_id == "pionex"
+    )
+
+    assert report.failed_latest_attempts == 1
+    assert pionex.status == "connector_error"
+    assert pionex.last_attempt is not None
+    assert pionex.last_attempt.status == "connector_error"
+    assert pionex.last_attempt.snapshots_count == 0
+    assert "APIKEY_EXPIRED" in pionex.message
+    assert "API-Key/Secret" in pionex.next_action
+    assert pionex.last_snapshot_at == stale_at.replace(tzinfo=None)
 
 
 def test_connector_diagnostics_api_route_is_registered(tmp_path, monkeypatch):

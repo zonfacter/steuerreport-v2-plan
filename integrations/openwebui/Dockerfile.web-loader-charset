@@ -1,0 +1,11 @@
+ARG BASE_IMAGE=ghcr.io/open-webui/open-webui@sha256:72c0ba641ba75e7aa52655cb242570906ececd09b1140fb736483038a22b3228
+FROM ${BASE_IMAGE}
+
+COPY patch_web_loader_charset.py /tmp/patch_web_loader_charset.py
+COPY patch_rag_source_url.py /tmp/patch_rag_source_url.py
+COPY patch_web_rag_raw_query.py /tmp/patch_web_rag_raw_query.py
+RUN python /tmp/patch_web_loader_charset.py \
+    && python /tmp/patch_rag_source_url.py \
+    && python /tmp/patch_web_rag_raw_query.py \
+    && rm /tmp/patch_web_loader_charset.py /tmp/patch_rag_source_url.py \
+      /tmp/patch_web_rag_raw_query.py

@@ -1,0 +1,18 @@
+[Unit]
+Description=Steuerreport V2 official crypto tax legal freshness monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/workspace/steuerreport-v2-plan
+ExecStart=/usr/bin/python3 scripts/run_legal_source_freshness_monitor.py
+SuccessExitStatus=3
+User=root
+Group=root
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from fastapi.testclient import TestClient
 
 from steuerreport_v2.api.app import create_app
@@ -102,6 +100,35 @@ def test_import_policy_endpoint(tmp_path):
     assert data["unclassified"] == 0
     assert data["curated_primary"] == 1
     assert data["reference_only"] == 1
+
+
+def test_import_policy_classifies_moonpay_trade_history_as_evidence(tmp_path):
+    root = tmp_path / "incoming"
+    root.mkdir()
+    trade_history = root / "MoonPay_trade-history.csv"
+    trade_history.write_text("Transaction ID,Status\ntrade-1,Completed\n", encoding="utf-8")
+
+    summary = ImportPolicyService().audit(str(root))
+
+    assert summary.unclassified == 0
+    assert summary.reference_only == 1
+    assert summary.decisions[0].action == "evidence_only"
+    assert summary.decisions[0].can_be_realimport is False
+
+
+def test_import_policy_classifies_sparkasse_camt_aggregate_as_evidence(tmp_path):
+    root = tmp_path / "incoming"
+    bank_dir = root / "Sparkasse"
+    bank_dir.mkdir(parents=True)
+    bank_export = bank_dir / "20260821-account-umsatz-camt52v8.CSV"
+    bank_export.write_text("Auftragskonto;Betrag\nredacted;-250,00\n", encoding="utf-8")
+
+    summary = ImportPolicyService().audit(str(root))
+
+    assert summary.unclassified == 0
+    assert summary.reference_only == 1
+    assert summary.decisions[0].action == "evidence_only"
+    assert summary.decisions[0].can_be_realimport is False
 
 
 def test_import_policy_marks_files_already_loaded(tmp_path):

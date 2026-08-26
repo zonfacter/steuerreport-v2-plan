@@ -15,6 +15,9 @@ import urllib.parse
 import httpx
 
 from steuerreport_v2.contracts.binance_earn import (
+    BinanceAssetDividendPreview,
+    BinanceAssetDividendRecord,
+    BinanceAssetDividendRequest,
     BinanceCapitalWithdrawalPreview,
     BinanceCapitalWithdrawalRecord,
     BinanceCapitalWithdrawalRequest,
@@ -23,6 +26,7 @@ from steuerreport_v2.contracts.binance_earn import (
     BinanceEarnHistoryApiRequest,
 )
 from steuerreport_v2.contracts.binance_earn_import import (
+    BinanceAssetDividendApiImportResult,
     BinanceCapitalWithdrawalApiImportResult,
     BinanceEarnApiImportResult,
     BinanceEarnHarvestImportPreview,
@@ -39,6 +43,8 @@ class BinanceEarnHistoryService:
     BASE_URL = "https://api.binance.com"
     SIZE = 100
     WINDOW_DAYS = 29
+    DIVIDEND_WINDOW_DAYS = 179
+    DIVIDEND_LIMIT = 500
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
@@ -227,6 +233,92 @@ class BinanceEarnHistoryService:
             ),
         )
 
+    def asset_dividend_history_api_preview(
+        self,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        assets: list[str] | None = None,
+        max_records: int = 5000,
+    ) -> BinanceAssetDividendPreview:
+        since_at = since or datetime(2021, 1, 1, tzinfo=timezone.utc)
+        until_at = until or datetime.now(timezone.utc)
+        selected_assets = sorted(
+            {asset.strip().upper() for asset in (assets or ["SOL"]) if asset.strip()}
+        )
+        api_key, secret_key = self._credentials()
+        if not api_key or not secret_key:
+            return BinanceAssetDividendPreview(
+                generated_at=datetime.now(timezone.utc),
+                credential_status="missing",
+                since=since_at,
+                until=until_at,
+                assets=selected_assets,
+                methodology=(
+                    "Read-only Binance Asset-Dividend-Preview. Credentials fehlen; "
+                    "es wurden keine Binance-Aufrufe ausgefuehrt."
+                ),
+            )
+
+        endpoint = "/sapi/v1/asset/assetDividend"
+        requests: list[BinanceAssetDividendRequest] = []
+        records: list[BinanceAssetDividendRecord] = []
+        seen_refs: set[str] = set()
+        truncated = False
+        for asset in selected_assets:
+            for window_start, window_end in self._dividend_time_windows(
+                since_at, until_at
+            ):
+                if len(records) >= max_records:
+                    truncated = True
+                    break
+                request, window_records, window_truncated = (
+                    self._fetch_asset_dividend_window(
+                        api_key=api_key,
+                        secret_key=secret_key,
+                        endpoint=endpoint,
+                        asset=asset,
+                        window_start=window_start,
+                        window_end=window_end,
+                        remaining=max_records - len(records),
+                    )
+                )
+                requests.extend(request)
+                truncated = truncated or window_truncated
+                for record in window_records:
+                    provider_ref = self._asset_dividend_provider_ref(record.payload)
+                    if provider_ref in seen_refs:
+                        continue
+                    seen_refs.add(provider_ref)
+                    records.append(record)
+                    if len(records) >= max_records:
+                        truncated = True
+                        break
+
+        return BinanceAssetDividendPreview(
+            generated_at=datetime.now(timezone.utc),
+            credential_status="configured",
+            since=since_at,
+            until=until_at,
+            assets=selected_assets,
+            requests=requests,
+            records=records,
+            records_returned=len(records),
+            records_available_hint=sum(
+                request.total if request.total is not None else request.records
+                for request in requests
+                if request.status != "split"
+            ),
+            truncated=truncated,
+            methodology=(
+                "Read-only Binance USER_DATA-Abfrage ueber "
+                "/sapi/v1/asset/assetDividend. Zeitraeume werden wegen der "
+                "offiziellen 180-Tage-Grenze in hoechstens 179 Tage zerlegt; "
+                "uebervolle 500er-Antworten werden rekursiv geteilt. Es werden "
+                "keine Raw Objects, Canonical Events, FIFO-Lots oder "
+                "Ledgerbuchungen geschrieben."
+            ),
+        )
+
     def preview_harvest_import(self, harvest_path: str) -> BinanceEarnHarvestImportPreview:
         all_rows, rows, warnings, duplicate = self._prepared_rows_from_harvest(harvest_path)
         record_types = Counter(str(row.get("record_type") or "") for row in all_rows)
@@ -361,6 +453,53 @@ class BinanceEarnHistoryService:
             run=run,
         )
 
+    def import_asset_dividend_api_history(
+        self,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        assets: list[str] | None = None,
+        max_records: int = 5000,
+        execute: bool = False,
+    ) -> BinanceAssetDividendApiImportResult:
+        api_preview = self.asset_dividend_history_api_preview(
+            since=since,
+            until=until,
+            assets=assets,
+            max_records=max_records,
+        )
+        all_rows, rows, warnings, duplicate = (
+            self._prepared_rows_from_asset_dividend_preview(api_preview)
+        )
+        import_preview = self._import_preview_from_rows(
+            harvest_path=self._asset_dividend_api_history_label(api_preview),
+            all_rows=all_rows,
+            rows=rows,
+            warnings=warnings,
+            duplicate=duplicate,
+            empty_reason="Binance Asset Dividend API lieferte keine importierbaren Records.",
+            no_new_reason="Binance Asset Dividend API lieferte keine neuen Records.",
+        )
+        if not execute or not import_preview.can_execute:
+            return BinanceAssetDividendApiImportResult(
+                api_preview=api_preview,
+                import_preview=import_preview,
+            )
+        file_hash = self._harvest_hash(rows)
+        batch = CsvRawImporter(self.store).import_rows(
+            source="binance_asset_dividend_api",
+            filename=import_preview.harvest_path,
+            file_hash=file_hash,
+            rows=rows,
+        )
+        run = PipelineService(self.store).rebuild_after_import(batch.batch_id)
+        return BinanceAssetDividendApiImportResult(
+            api_preview=api_preview,
+            import_preview=import_preview,
+            batch=batch,
+            run=run,
+        )
+
     def _prepared_rows_from_harvest(
         self,
         harvest_path: str,
@@ -375,14 +514,18 @@ class BinanceEarnHistoryService:
         rows: list[dict[str, object]] = []
         seen: set[str] = set()
         for record in api_preview.records:
-            row = self._row_from_harvest_record(record.model_dump(mode="json"))
-            key = str(row.get("source_ref") or "")
-            if key in seen:
-                continue
-            seen.add(key)
-            rows.append(row)
+            for row in self._rows_from_earn_record(record.model_dump(mode="json")):
+                key = str(row.get("source_ref") or "")
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(row)
         warnings = []
-        duplicate_count = len(api_preview.records) - len(rows)
+        expanded_count = sum(
+            len(self._rows_from_earn_record(record.model_dump(mode="json")))
+            for record in api_preview.records
+        )
+        duplicate_count = expanded_count - len(rows)
         if duplicate_count:
             warnings.append(f"{duplicate_count} doppelte API-Records uebersprungen.")
         return self._prepared_rows(rows, warnings)
@@ -419,6 +562,57 @@ class BinanceEarnHistoryService:
             warnings.append(f"{skipped_existing} bereits importierte Withdrawal-API-Belege uebersprungen.")
         return rows, prepared, warnings, duplicate
 
+    def _prepared_rows_from_asset_dividend_preview(
+        self,
+        api_preview: BinanceAssetDividendPreview,
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[str], object | None]:
+        rows: list[dict[str, object]] = []
+        seen: set[str] = set()
+        for record in api_preview.records:
+            row = self._row_from_asset_dividend_record(record.payload)
+            key = str(row.get("source_ref") or "")
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+        warnings: list[str] = []
+        duplicate_count = len(api_preview.records) - len(rows)
+        if duplicate_count:
+            warnings.append(
+                f"{duplicate_count} doppelte Asset-Dividend-API-Records uebersprungen."
+            )
+        full_hash = self._harvest_hash(rows)
+        duplicate = self.store.get_import_batch_by_file_hash(
+            "binance_asset_dividend_api", full_hash
+        )
+        existing_refs = self._existing_source_refs_for_source(
+            "binance_asset_dividend_api"
+        )
+        locked_reward_counter = self._existing_locked_reward_semantic_counter()
+        prepared: list[dict[str, object]] = []
+        skipped_existing = 0
+        skipped_semantic = 0
+        for row in rows:
+            if str(row.get("source_ref") or "") in existing_refs:
+                skipped_existing += 1
+                continue
+            semantic_key = self._locked_reward_semantic_key(row)
+            if semantic_key is not None and locked_reward_counter[semantic_key] > 0:
+                locked_reward_counter[semantic_key] -= 1
+                skipped_semantic += 1
+                continue
+            prepared.append(row)
+        if skipped_existing:
+            warnings.append(
+                f"{skipped_existing} bereits importierte Asset-Dividend-Belege uebersprungen."
+            )
+        if skipped_semantic:
+            warnings.append(
+                f"{skipped_semantic} bereits durch Binance-Ledger oder Simple-Earn-API "
+                "belegte Locked-Rewards semantisch uebersprungen."
+            )
+        return rows, prepared, warnings, duplicate
+
     def _prepared_rows(
         self,
         rows: list[dict[str, object]],
@@ -428,15 +622,33 @@ class BinanceEarnHistoryService:
         duplicate = self.store.get_import_batch_by_file_hash("binance_simple_earn_api", full_hash)
         existing_refs = self._existing_source_refs()
         existing_tx_ids = self._existing_tx_ids()
-        prepared = [
-            row
-            for row in rows
-            if str(row.get("source_ref") or "") not in existing_refs
-            and self._row_tx_id(row) not in existing_tx_ids
-        ]
+        locked_reward_counter = self._existing_locked_reward_semantic_counter()
+        prepared: list[dict[str, object]] = []
+        semantic_skipped = 0
+        for row in rows:
+            if str(row.get("source_ref") or "") in existing_refs:
+                continue
+            row_tx_id = self._row_tx_id(row)
+            if (
+                str(row.get("record_type") or "") != "locked_redemption_loss"
+                and row_tx_id
+                and row_tx_id in existing_tx_ids
+            ):
+                continue
+            semantic_key = self._locked_reward_semantic_key(row)
+            if semantic_key is not None and locked_reward_counter[semantic_key] > 0:
+                locked_reward_counter[semantic_key] -= 1
+                semantic_skipped += 1
+                continue
+            prepared.append(row)
         skipped_existing = len(rows) - len(prepared)
         if skipped_existing:
             warnings.append(f"{skipped_existing} bereits importierte Simple-Earn-Records uebersprungen.")
+        if semantic_skipped:
+            warnings.append(
+                f"{semantic_skipped} bereits im Binance-Ledger belegte Locked-Rewards "
+                "semantisch erkannt."
+            )
         return rows, prepared, warnings, duplicate
 
     def _import_preview_from_rows(
@@ -482,17 +694,22 @@ class BinanceEarnHistoryService:
             return [], ["Harvest JSON enthaelt keine Records-Liste."]
         rows: list[dict[str, object]] = []
         seen: set[str] = set()
+        expanded_count = 0
         for record in records:
             if not isinstance(record, dict):
                 continue
-            row = self._row_from_harvest_record(record)
-            key = str(row.get("source_ref") or "")
-            if key in seen:
-                continue
-            seen.add(key)
-            rows.append(row)
-        if len(rows) != len(records):
-            warnings.append(f"{len(records) - len(rows)} doppelte Harvest-Records uebersprungen.")
+            expanded_rows = self._rows_from_earn_record(record)
+            expanded_count += len(expanded_rows)
+            for row in expanded_rows:
+                key = str(row.get("source_ref") or "")
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(row)
+        if len(rows) != expanded_count:
+            warnings.append(
+                f"{expanded_count - len(rows)} doppelte Harvest-Records uebersprungen."
+            )
         return rows, warnings
 
     def _existing_source_refs(self) -> set[str]:
@@ -542,6 +759,14 @@ class BinanceEarnHistoryService:
         assets = "-".join(api_preview.assets) if api_preview.assets else "all"
         return f"binance-withdrawal-api-{since}-{until}-{assets}.json"
 
+    def _asset_dividend_api_history_label(
+        self, api_preview: BinanceAssetDividendPreview
+    ) -> str:
+        since = api_preview.since.astimezone(timezone.utc).strftime("%Y%m%d")
+        until = api_preview.until.astimezone(timezone.utc).strftime("%Y%m%d")
+        assets = "-".join(api_preview.assets) if api_preview.assets else "all"
+        return f"binance-asset-dividend-api-{since}-{until}-{assets}.json"
+
     def _row_from_withdrawal_record(self, payload: dict[str, object]) -> dict[str, object]:
         amount = self._decimal_from_payload(payload.get("amount"))
         fee = self._decimal_from_payload(
@@ -574,6 +799,29 @@ class BinanceEarnHistoryService:
             "status": str(payload.get("status") or ""),
         }
 
+    def _row_from_asset_dividend_record(
+        self, payload: dict[str, object]
+    ) -> dict[str, object]:
+        asset = str(payload.get("asset") or "").upper()
+        dividend_id = str(payload.get("id") or "")
+        transaction_id = str(payload.get("tranId") or payload.get("tran_id") or "")
+        source_ref = self._asset_dividend_provider_ref(payload)
+        timestamp = payload.get("divTime") or payload.get("div_time")
+        return {
+            "record_type": "asset_dividend",
+            "asset": asset,
+            "amount": str(payload.get("amount") or "0"),
+            "direction": str(payload.get("direction") or "1"),
+            "div_time": str(timestamp or ""),
+            "time_iso": self._millis_to_iso(timestamp),
+            "en_info": str(payload.get("enInfo") or payload.get("en_info") or ""),
+            "dividend_id": dividend_id,
+            "tran_id": transaction_id,
+            "source_ref": source_ref,
+            "account": "Spot",
+            "provider_evidence": "binance_asset_dividend_user_data",
+        }
+
     @staticmethod
     def _decimal_from_payload(value: object) -> Decimal:
         if value in (None, ""):
@@ -583,14 +831,52 @@ class BinanceEarnHistoryService:
         except (InvalidOperation, ValueError):
             return Decimal("0")
 
+    def _rows_from_earn_record(
+        self, record: dict[str, object]
+    ) -> list[dict[str, object]]:
+        base = self._row_from_harvest_record(record)
+        payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
+        if not isinstance(payload, dict):
+            return [base]
+        record_type = str(record.get("record_type") or "")
+        loss_amount = self._decimal_from_payload(payload.get("lossAmount"))
+        if record_type != "locked_redemption" or loss_amount <= 0:
+            return [base]
+        asset = str(payload.get("rewardAsset") or base.get("asset") or "").upper()
+        position_id = str(payload.get("positionId") or base.get("position_id") or "")
+        redeem_id = str(payload.get("redeemId") or base.get("redeem_id") or "")
+        loss_row = {
+            **base,
+            "record_type": "locked_redemption_loss",
+            "asset": asset,
+            "amount": str(loss_amount),
+            "rewards": "",
+            "position_id": position_id,
+            "redeem_id": redeem_id,
+            "source_ref": ":".join(
+                part
+                for part in (
+                    "locked_redemption_loss",
+                    asset,
+                    position_id,
+                    redeem_id,
+                )
+                if part
+            ),
+            "loss_amount": str(loss_amount),
+            "provider_adjustment_kind": "early_redemption_reward_clawback",
+            "provider_evidence": "binance_simple_earn_redemption_record",
+        }
+        return [base, loss_row]
+
     def _row_from_harvest_record(self, record: dict[str, object]) -> dict[str, object]:
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
         if not isinstance(payload, dict):
             payload = {}
         record_type = str(record.get("record_type") or "")
         asset = str(record.get("asset") or payload.get("asset") or "").upper()
-        product_id = str(record.get("product_id") or payload.get("productId") or "")
-        position_id = str(record.get("position_id") or payload.get("positionId") or "")
+        product_id = str(payload.get("productId") or record.get("product_id") or "")
+        position_id = str(payload.get("positionId") or record.get("position_id") or "")
         timestamp = payload.get("time")
         time_iso = self._millis_to_iso(timestamp)
         amount = payload.get("amount") or payload.get("rewards") or payload.get("principal") or "0"
@@ -624,8 +910,24 @@ class BinanceEarnHistoryService:
             "redeem_id": str(payload.get("redeemId") or ""),
             "status": str(payload.get("status") or ""),
             "type": str(payload.get("type") or ""),
+            "loss_amount": str(payload.get("lossAmount") or ""),
+            "original_amount": str(payload.get("originalAmount") or ""),
+            "reward_amount": str(payload.get("rewardAmt") or ""),
+            "reward_asset": str(payload.get("rewardAsset") or ""),
+            "deliver_date": str(payload.get("deliverDate") or ""),
+            "is_complete": str(payload.get("isComplete") or ""),
             "source_ref": source_ref,
         }
+
+    @staticmethod
+    def _asset_dividend_provider_ref(payload: dict[str, object]) -> str:
+        provider_id = str(payload.get("id") or "").strip()
+        transaction_id = str(payload.get("tranId") or payload.get("tran_id") or "").strip()
+        timestamp = str(payload.get("divTime") or payload.get("div_time") or "").strip()
+        asset = str(payload.get("asset") or "").upper()
+        amount = str(payload.get("amount") or "")
+        identifier = provider_id or transaction_id or f"{timestamp}:{asset}:{amount}"
+        return f"asset_dividend:{identifier}"
 
     def _millis_to_iso(self, value: object) -> str:
         try:
@@ -638,6 +940,189 @@ class BinanceEarnHistoryService:
         return "sha256:" + hashlib.sha256(
             json.dumps(rows, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
+
+    def _existing_locked_reward_semantic_counter(
+        self,
+    ) -> Counter[tuple[str, str, Decimal]]:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select e.event_time, upper(e.asset), e.quantity, lower(e.source),
+                       r.payload_json
+                from canonical_events e
+                left join raw_objects r on r.raw_object_id = e.raw_object_id
+                where lower(e.source) in (
+                    'binance',
+                    'binance_simple_earn_api',
+                    'binance_asset_dividend_api'
+                )
+                  and e.quantity > 0
+                  and e.event_type in ('reward', 'staking', 'income')
+                """
+            ).fetchall()
+        result: Counter[tuple[str, str, Decimal]] = Counter()
+        for event_time, asset, quantity, source, payload_json in rows:
+            try:
+                payload = json.loads(payload_json or "{}")
+            except (json.JSONDecodeError, TypeError):
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            record_type = str(
+                payload.get("record_type") or payload.get("record type") or ""
+            ).lower()
+            operation = str(payload.get("Operation") or payload.get("operation") or "").lower()
+            en_info = str(payload.get("en_info") or payload.get("enInfo") or "").lower()
+            is_locked_reward = (
+                (source == "binance" and "simple earn locked rewards" in operation)
+                or (
+                    source == "binance_simple_earn_api"
+                    and record_type == "locked_rewards"
+                )
+                or (
+                    source == "binance_asset_dividend_api"
+                    and "locked" in en_info
+                )
+            )
+            if not is_locked_reward:
+                continue
+            normalized_time = (
+                event_time.replace(tzinfo=timezone.utc)
+                if event_time.tzinfo is None
+                else event_time.astimezone(timezone.utc)
+            )
+            result[(str(asset).upper(), normalized_time.date().isoformat(), abs(quantity))] += 1
+        return result
+
+    def _locked_reward_semantic_key(
+        self, row: dict[str, object]
+    ) -> tuple[str, str, Decimal] | None:
+        record_type = str(row.get("record_type") or "").lower()
+        en_info = str(row.get("en_info") or "").lower()
+        if record_type != "locked_rewards" and "locked" not in en_info:
+            return None
+        amount = self._decimal_from_payload(row.get("rewards") or row.get("amount"))
+        if amount <= 0:
+            return None
+        time_text = str(
+            row.get("time_iso") or row.get("time") or row.get("div_time") or ""
+        ).strip()
+        try:
+            if time_text.isdigit():
+                event_time = datetime.fromtimestamp(
+                    int(time_text) / 1000, tz=timezone.utc
+                )
+            else:
+                event_time = datetime.fromisoformat(time_text.replace("Z", "+00:00"))
+                if event_time.tzinfo is None:
+                    event_time = event_time.replace(tzinfo=timezone.utc)
+                else:
+                    event_time = event_time.astimezone(timezone.utc)
+        except (ValueError, OverflowError):
+            return None
+        return (
+            str(row.get("asset") or "").upper(),
+            event_time.date().isoformat(),
+            abs(amount),
+        )
+
+    def _fetch_asset_dividend_window(
+        self,
+        *,
+        api_key: str,
+        secret_key: str,
+        endpoint: str,
+        asset: str,
+        window_start: datetime,
+        window_end: datetime,
+        remaining: int,
+    ) -> tuple[
+        list[BinanceAssetDividendRequest],
+        list[BinanceAssetDividendRecord],
+        bool,
+    ]:
+        params: dict[str, object] = {
+            "asset": asset,
+            "startTime": self._millis(window_start),
+            "endTime": self._millis(window_end),
+            "limit": self.DIVIDEND_LIMIT,
+            "recvWindow": 5000,
+        }
+        try:
+            payload = self._signed_get_with_retries(
+                api_key, secret_key, endpoint, params
+            )
+            raw_rows = payload.get("rows") if isinstance(payload, dict) else []
+            if not isinstance(raw_rows, list):
+                raw_rows = []
+            total = int(payload.get("total") or len(raw_rows))
+            request = BinanceAssetDividendRequest(
+                endpoint=endpoint,
+                asset=asset,
+                window_start=window_start,
+                window_end=window_end,
+                records=len(raw_rows),
+                total=total,
+                status="ok",
+            )
+            if total > len(raw_rows) and window_end - window_start > timedelta(days=1):
+                midpoint = window_start + (window_end - window_start) / 2
+                request = request.model_copy(update={"status": "split"})
+                left_requests, left_records, left_truncated = (
+                    self._fetch_asset_dividend_window(
+                        api_key=api_key,
+                        secret_key=secret_key,
+                        endpoint=endpoint,
+                        asset=asset,
+                        window_start=window_start,
+                        window_end=midpoint,
+                        remaining=remaining,
+                    )
+                )
+                right_remaining = max(remaining - len(left_records), 0)
+                if right_remaining == 0:
+                    return [request, *left_requests], left_records, True
+                right_requests, right_records, right_truncated = (
+                    self._fetch_asset_dividend_window(
+                        api_key=api_key,
+                        secret_key=secret_key,
+                        endpoint=endpoint,
+                        asset=asset,
+                        window_start=midpoint + timedelta(milliseconds=1),
+                        window_end=window_end,
+                        remaining=right_remaining,
+                    )
+                )
+                return (
+                    [request, *left_requests, *right_requests],
+                    [*left_records, *right_records],
+                    left_truncated or right_truncated,
+                )
+            records = [
+                BinanceAssetDividendRecord(
+                    endpoint=endpoint,
+                    asset=asset,
+                    payload=dict(row),
+                )
+                for row in raw_rows[:remaining]
+                if isinstance(row, dict)
+            ]
+            return [request], records, total > len(records)
+        except Exception as exc:
+            return (
+                [
+                    BinanceAssetDividendRequest(
+                        endpoint=endpoint,
+                        asset=asset,
+                        window_start=window_start,
+                        window_end=window_end,
+                        status="error",
+                        error=str(exc)[:240],
+                    )
+                ],
+                [],
+                False,
+            )
 
     def _position_ids_for_spec(
         self,
@@ -853,6 +1338,7 @@ class BinanceEarnHistoryService:
                     "record_type": "locked_rewards",
                     "endpoint": "/sapi/v1/simple-earn/locked/history/rewardsRecord",
                     "use_position_id": "true",
+                    "discover_position_ids": "true",
                 },
             ]
         return [
@@ -899,6 +1385,23 @@ class BinanceEarnHistoryService:
         current = start
         while current <= end:
             window_end = min(current + timedelta(days=self.WINDOW_DAYS), end)
+            windows.append((current, window_end))
+            current = window_end + timedelta(milliseconds=1)
+        return windows
+
+    def _dividend_time_windows(
+        self, since: datetime, until: datetime
+    ) -> list[tuple[datetime, datetime]]:
+        start = since if since.tzinfo is not None else since.replace(tzinfo=timezone.utc)
+        end = until if until.tzinfo is not None else until.replace(tzinfo=timezone.utc)
+        if end < start:
+            return []
+        windows: list[tuple[datetime, datetime]] = []
+        current = start
+        while current <= end:
+            window_end = min(
+                current + timedelta(days=self.DIVIDEND_WINDOW_DAYS), end
+            )
             windows.append((current, window_end))
             current = window_end + timedelta(milliseconds=1)
         return windows

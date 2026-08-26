@@ -26,6 +26,18 @@ class BalanceLedgerBuilder:
     def rebuild(self) -> list[BalanceLedgerEntry]:
         events = self.store.list_canonical_events()
         account_aliases = build_account_alias_map_for_store(self.store)
+        bitget_quote_mirrors = {
+            (
+                event.event_time.replace(tzinfo=timezone.utc)
+                if event.event_time.tzinfo is None
+                else event.event_time.astimezone(timezone.utc),
+                event.asset.upper(),
+                event.quantity,
+            )
+            for event in events
+            if event.source == "bitget-tax-api-evidence"
+            and str(event.account or event.wallet or "").strip().lower() == "bitget"
+        }
         balances: defaultdict[tuple[str, str], Decimal] = defaultdict(lambda: Decimal("0"))
         entries: list[BalanceLedgerEntry] = []
 
@@ -40,7 +52,24 @@ class BalanceLedgerBuilder:
                 quote_delta = abs(event.quote_quantity)
                 if event.quantity > 0:
                     quote_delta = -quote_delta
-                movements.append((event.quote_asset, quote_delta))
+                quote_time = (
+                    event.event_time.replace(tzinfo=timezone.utc)
+                    if event.event_time.tzinfo is None
+                    else event.event_time.astimezone(timezone.utc)
+                )
+                mirrored = bool(
+                    event.source == "blockpit"
+                    and str(event.account or event.wallet or "").strip().lower()
+                    == "bitget"
+                    and any(
+                        abs((mirror_time - quote_time).total_seconds()) <= 10
+                        and mirror_asset == event.quote_asset.upper()
+                        and mirror_quantity == quote_delta
+                        for mirror_time, mirror_asset, mirror_quantity in bitget_quote_mirrors
+                    )
+                )
+                if not mirrored:
+                    movements.append((event.quote_asset, quote_delta))
             if (
                 event.event_type != "derivative"
                 and event.fee_asset is not None

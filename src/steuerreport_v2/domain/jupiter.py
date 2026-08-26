@@ -51,7 +51,9 @@ class JupiterTokenService:
         normalized_query = query.strip()
         if not normalized_query:
             raise ValueError("query_required")
-        mint_queries = [item.strip() for item in normalized_query.split(",") if item.strip()]
+        mint_queries = [
+            item.strip() for item in normalized_query.split(",") if item.strip()
+        ]
         if len(mint_queries) > 100:
             raise ValueError("query_mint_limit_100")
 
@@ -79,7 +81,9 @@ class JupiterTokenService:
             payload = response.json()
         if not isinstance(payload, list):
             raise ValueError("unexpected_jupiter_response")
-        tokens = [self._token_from_payload(item) for item in payload if isinstance(item, dict)]
+        tokens = [
+            self._token_from_payload(item) for item in payload if isinstance(item, dict)
+        ]
         return JupiterTokenSearchResult(
             generated_at=datetime.now(timezone.utc),
             query=normalized_query,
@@ -119,7 +123,9 @@ class JupiterTokenService:
             status="ok",
             candidates_count=len(candidates),
             cached_count=len(cached_mints),
-            uncached_count=len([mint for mint in candidates if mint not in cached_mints]),
+            uncached_count=len(
+                [mint for mint in candidates if mint not in cached_mints]
+            ),
             items=self._cached_items(limit=normalized_limit),
             methodology=(
                 "Read-only Jupiter-Metadata-Cache fuer Solana-Mints aus vorhandenen "
@@ -133,10 +139,17 @@ class JupiterTokenService:
         for item in sorted(self._cached_items(limit=10000), key=self._metadata_rank):
             result.setdefault(item.mint, item)
             if item.symbol:
-                result.setdefault(item.symbol.upper(), item)
+                raw_symbol = item.symbol.strip().upper()
+                normalized_symbol = raw_symbol.lstrip("$")
+                if raw_symbol:
+                    result.setdefault(raw_symbol, item)
+                if normalized_symbol:
+                    result.setdefault(normalized_symbol, item)
         return result
 
-    def risk_review(self, risk_status: str = "spam_review", limit: int = 200) -> JupiterTokenRiskReviewResult:
+    def risk_review(
+        self, risk_status: str = "spam_review", limit: int = 200
+    ) -> JupiterTokenRiskReviewResult:
         normalized_risk = str(risk_status or "spam_review").strip().lower()
         allowed = {"spam_review", "review", "unverified_plausible", "verified", "all"}
         if normalized_risk not in allowed:
@@ -153,10 +166,16 @@ class JupiterTokenService:
             status="ok",
             risk_status=normalized_risk,
             items_count=len(filtered),
-            spam_review_count=sum(1 for item in all_items if item.risk_status == "spam_review"),
+            spam_review_count=sum(
+                1 for item in all_items if item.risk_status == "spam_review"
+            ),
             review_count=sum(1 for item in all_items if item.risk_status == "review"),
-            unverified_plausible_count=sum(1 for item in all_items if item.risk_status == "unverified_plausible"),
-            verified_count=sum(1 for item in all_items if item.risk_status == "verified"),
+            unverified_plausible_count=sum(
+                1 for item in all_items if item.risk_status == "unverified_plausible"
+            ),
+            verified_count=sum(
+                1 for item in all_items if item.risk_status == "verified"
+            ),
             items=filtered,
             methodology=(
                 "Read-only Token-Risk-Review aus `jupiter_token_metadata_cache`. "
@@ -165,11 +184,17 @@ class JupiterTokenService:
             ),
         )
 
-    def refresh_metadata_cache(self, limit: int = 50, force: bool = False) -> JupiterTokenMetadataRefreshResult:
+    def refresh_metadata_cache(
+        self, limit: int = 50, force: bool = False
+    ) -> JupiterTokenMetadataRefreshResult:
         normalized_limit = min(max(int(limit), 1), 100)
         candidates = self._mint_candidates(raw_limit=50000)
         cached_before = self._cached_mints()
-        requested = candidates if force else [mint for mint in candidates if mint not in cached_before]
+        requested = (
+            candidates
+            if force
+            else [mint for mint in candidates if mint not in cached_before]
+        )
         requested = requested[:normalized_limit]
         if not self._api_key():
             return JupiterTokenMetadataRefreshResult(
@@ -180,7 +205,9 @@ class JupiterTokenService:
                 requested_count=len(requested),
                 refreshed_count=0,
                 cached_count=len(cached_before),
-                uncached_count=len([mint for mint in candidates if mint not in cached_before]),
+                uncached_count=len(
+                    [mint for mint in candidates if mint not in cached_before]
+                ),
                 skipped_count=len(requested),
                 methodology="Jupiter-Metadata-Refresh wurde nicht ausgefuehrt, weil kein API-Key konfiguriert ist.",
             )
@@ -210,7 +237,9 @@ class JupiterTokenService:
             requested_count=len(requested),
             refreshed_count=len(refreshed),
             cached_count=len(cached_after),
-            uncached_count=len([mint for mint in candidates if mint not in cached_after]),
+            uncached_count=len(
+                [mint for mint in candidates if mint not in cached_after]
+            ),
             skipped_count=max(len(requested) - len(refreshed), 0),
             items=refreshed,
             methodology=(
@@ -273,7 +302,9 @@ class JupiterTokenService:
         except sqlite3.Error:
             return
         for token_address, wallet_address in rows:
-            self._add_mint_candidate(candidates, token_address, f"v1_solscan:{wallet_address}")
+            self._add_mint_candidate(
+                candidates, token_address, f"v1_solscan:{wallet_address}"
+            )
 
     def _extract_mint_values(self, value: Any) -> list[str]:
         if isinstance(value, dict):
@@ -284,7 +315,9 @@ class JupiterTokenService:
                     if isinstance(child, str):
                         found.append(child)
                     elif isinstance(child, list):
-                        found.extend(str(item) for item in child if isinstance(item, str))
+                        found.extend(
+                            str(item) for item in child if isinstance(item, str)
+                        )
                 found.extend(self._extract_mint_values(child))
             return found
         if isinstance(value, list):
@@ -299,14 +332,18 @@ class JupiterTokenService:
         compact_hints = {item.replace("_", "") for item in self.MINT_KEY_HINTS}
         return key in self.MINT_KEY_HINTS or compact in compact_hints
 
-    def _add_mint_candidate(self, candidates: dict[str, set[str]], value: object, source: str) -> None:
+    def _add_mint_candidate(
+        self, candidates: dict[str, set[str]], value: object, source: str
+    ) -> None:
         mint = str(value or "").strip()
         if self.SOLANA_MINT_RE.match(mint):
             candidates.setdefault(mint, set()).add(source)
 
     def _cached_mints(self) -> set[str]:
         with self.store.connect() as con:
-            rows = con.execute("select mint from jupiter_token_metadata_cache").fetchall()
+            rows = con.execute(
+                "select mint from jupiter_token_metadata_cache"
+            ).fetchall()
         return {str(row[0]) for row in rows}
 
     def _cached_items(self, limit: int) -> list[JupiterTokenMetadataCacheItem]:
@@ -352,7 +389,9 @@ class JupiterTokenService:
             jupiter_updated_at=token.updated_at,
         )
 
-    def _cache_item_from_row(self, row: tuple[Any, ...]) -> JupiterTokenMetadataCacheItem:
+    def _cache_item_from_row(
+        self, row: tuple[Any, ...]
+    ) -> JupiterTokenMetadataCacheItem:
         try:
             discovered_sources = json.loads(str(row[15]))
         except json.JSONDecodeError:
@@ -457,7 +496,9 @@ class JupiterTokenService:
             holder_count=self._optional_int(data.get("holderCount")),
             organic_score=self._optional_decimal(data.get("organicScore")),
             organic_score_label=self._optional_str(data.get("organicScoreLabel")),
-            is_verified=data.get("isVerified") if isinstance(data.get("isVerified"), bool) else None,
+            is_verified=data.get("isVerified")
+            if isinstance(data.get("isVerified"), bool)
+            else None,
             tags=[str(item) for item in data.get("tags", []) if isinstance(item, str)],
             fdv_usd=self._optional_decimal(data.get("fdv")),
             market_cap_usd=self._optional_decimal(data.get("mcap")),
@@ -476,7 +517,9 @@ class JupiterTokenService:
                         if isinstance(audit.get("freezeAuthorityDisabled"), bool)
                         else None
                     ),
-                    top_holders_percentage=self._optional_decimal(audit.get("topHoldersPercentage")),
+                    top_holders_percentage=self._optional_decimal(
+                        audit.get("topHoldersPercentage")
+                    ),
                     dev_mints=self._optional_int(audit.get("devMints")),
                 )
                 if audit is not None

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from steuerreport_v2.contracts.binance_earn import BinanceCapitalWithdrawalPreview, BinanceEarnHistoryApiPreview
+from steuerreport_v2.contracts.binance_earn import (
+    BinanceAssetDividendPreview,
+    BinanceCapitalWithdrawalPreview,
+    BinanceEarnHistoryApiPreview,
+)
 from steuerreport_v2.contracts.imports import ImportBatch
 from steuerreport_v2.contracts.pipeline import ImportRunResult
 
@@ -25,6 +29,14 @@ class BinanceCapitalWithdrawalApiImportRequest(BaseModel):
     since: str | None = None
     until: str | None = None
     assets: list[str] = []
+    max_records: int = 5000
+    execute: bool = False
+
+
+class BinanceAssetDividendApiImportRequest(BaseModel):
+    since: str | None = None
+    until: str | None = None
+    assets: list[str] = Field(default_factory=list)
     max_records: int = 5000
     execute: bool = False
 
@@ -56,6 +68,13 @@ class BinanceEarnApiImportResult(BaseModel):
 
 class BinanceCapitalWithdrawalApiImportResult(BaseModel):
     api_preview: BinanceCapitalWithdrawalPreview
+    import_preview: BinanceEarnHarvestImportPreview
+    batch: ImportBatch | None = None
+    run: ImportRunResult | None = None
+
+
+class BinanceAssetDividendApiImportResult(BaseModel):
+    api_preview: BinanceAssetDividendPreview
     import_preview: BinanceEarnHarvestImportPreview
     batch: ImportBatch | None = None
     run: ImportRunResult | None = None

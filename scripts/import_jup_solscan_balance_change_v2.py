@@ -40,6 +40,7 @@ TOKEN_SYMBOLS = {
     "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux": "HNT",
     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
     "2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU": "JLWSOL",
+    "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8": "SPCXX",
 }
 
 

@@ -14,6 +14,7 @@ from steuerreport_v2.domain.account_aliases import (
     canonical_account_label,
 )
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.tax_time import reporting_tax_year, source_period_event_years
 
 FLOW_EVENT_TYPES = {"transfer", "income", "reward", "staking", "mining"}
 
@@ -71,9 +72,17 @@ class FlowService:
 
     def summary(self, year: int | None = None) -> NetFlowSummary:
         entries = self._list_entries()
-        available_years = sorted({entry.event_time.year for entry in entries})
+        period_years = source_period_event_years(self.store)
+
+        def entry_year(entry: FlowEntry) -> int:
+            return period_years.get(
+                entry.event_id,
+                reporting_tax_year(entry.event_time),
+            )
+
+        available_years = sorted({entry_year(entry) for entry in entries})
         if year is not None:
-            entries = [entry for entry in entries if entry.event_time.year == year]
+            entries = [entry for entry in entries if entry_year(entry) == year]
         net_edges: defaultdict[tuple[str, str], dict[str, Decimal | int | str]] = defaultdict(
             lambda: {
                 "signed_value_eur": Decimal("0"),

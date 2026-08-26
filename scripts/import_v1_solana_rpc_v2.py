@@ -21,10 +21,21 @@ PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_V1_DB = Path("/workspace/steuerreport/var/ai_readonly/steuerreport_ai_readonly.tmp.sqlite")
 DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs" / "crypto_price_sources.json"
+DEFAULT_OWNERSHIP_AUDIT = (
+    PROJECT_ROOT
+    / "var/solana_v1_ownership_scope"
+    / "latest_G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY_v1_ownership_scope.json"
+)
+DEFAULT_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
 SOURCE = "solana_rpc"
 
 
-def _load_v1_rows(v1_db: Path, *, max_year: int | None = None) -> list[dict[str, Any]]:
+def _load_v1_rows(
+    v1_db: Path,
+    *,
+    max_year: int | None = None,
+    ownership_audit: Path | None = DEFAULT_OWNERSHIP_AUDIT,
+) -> list[dict[str, Any]]:
     with sqlite3.connect(v1_db) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
@@ -52,7 +63,8 @@ def _load_v1_rows(v1_db: Path, *, max_year: int | None = None) -> list[dict[str,
         payload["v1_row_index"] = row["row_index"]
         result.append(payload)
     result = _drop_unconfigured_token_transfers(result)
-    return _enrich_missing_wallets(result)
+    ownership = _load_ownership_scope(ownership_audit) if ownership_audit else None
+    return _enrich_missing_wallets(result, ownership)
 
 
 def _drop_unconfigured_token_transfers(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -94,28 +106,52 @@ def _decimal_or_none(value: Any) -> Decimal | None:
         return None
 
 
-def _enrich_missing_wallets(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _load_ownership_scope(path: Path) -> dict[str, str] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    ownership = payload.get("ownership_by_txid")
+    if not isinstance(ownership, dict):
+        return None
+    return {str(tx_id): str(scope) for tx_id, scope in ownership.items() if tx_id and scope}
+
+
+def _enrich_missing_wallets(
+    rows: list[dict[str, Any]],
+    ownership_by_txid: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    if ownership_by_txid is not None:
+        owned_rows: list[dict[str, Any]] = []
+        for row in rows:
+            tx_id = _tx_id(row)
+            scope = ownership_by_txid.get(tx_id or "")
+            if not scope:
+                continue
+            row["wallet_address"] = DEFAULT_WALLET
+            row["v2_wallet_ownership_evidence"] = scope
+            owned_rows.append(row)
+        return owned_rows
+
     wallets_by_tx: dict[str, str] = {}
-    known_wallets = sorted({_wallet(row) for row in rows if _wallet(row)})
-    default_wallet = known_wallets[0] if len(known_wallets) == 1 else None
     for row in rows:
         tx_id = _tx_id(row)
         wallet = _wallet(row)
         if tx_id and wallet:
             wallets_by_tx.setdefault(tx_id, wallet)
 
+    owned_rows: list[dict[str, Any]] = []
     for row in rows:
         if _wallet(row):
+            owned_rows.append(row)
             continue
         tx_id = _tx_id(row)
         wallet = wallets_by_tx.get(tx_id or "")
         if wallet:
             row["wallet_address"] = wallet
             row["v1_wallet_inferred_from_tx"] = tx_id
-        elif default_wallet:
-            row["wallet_address"] = default_wallet
-            row["v1_wallet_inferred_from_single_wallet_source"] = True
-    return rows
+            owned_rows.append(row)
+    return owned_rows
 
 
 def _tx_id(row: dict[str, Any]) -> str | None:
@@ -173,13 +209,18 @@ def _apply(db_path: Path, rows: list[dict[str, Any]], *, replace_source: bool) -
 def run(args: argparse.Namespace) -> int:
     db_path = Path(args.db)
     v1_db = Path(args.v1_db)
-    rows = _load_v1_rows(v1_db, max_year=args.max_year)
+    rows = _load_v1_rows(
+        v1_db,
+        max_year=args.max_year,
+        ownership_audit=Path(args.ownership_audit) if args.ownership_audit else None,
+    )
     result: dict[str, Any] = {
         "mode": "execute" if args.execute else "dry-run",
         "db": str(db_path),
         "v1_db": str(v1_db),
         "source": SOURCE,
         "max_year": args.max_year,
+        "ownership_audit": args.ownership_audit,
         "rows": len(rows),
         "target_changed": False,
     }
@@ -213,6 +254,7 @@ def main() -> int:
     parser.add_argument("--db", default=str(DEFAULT_DB))
     parser.add_argument("--v1-db", default=str(DEFAULT_V1_DB))
     parser.add_argument("--max-year", type=int)
+    parser.add_argument("--ownership-audit", default=str(DEFAULT_OWNERSHIP_AUDIT))
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--replace-source", action="store_true", default=True)
     args = parser.parse_args()

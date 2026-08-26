@@ -112,6 +112,7 @@ def test_vertical_slice_routes_are_registered(tmp_path):
     assert "/api/v1/portfolio/separation-report" in paths
     assert "/api/v1/divorce/equalization-summary" in paths
     assert "/api/v1/divorce/equalization-summary/accounts.csv" in paths
+    assert "/api/v1/divorce/equalization-summary/capital-flows.csv" in paths
     assert "/api/v1/divorce/equalization-summary/evidence-package.zip" in paths
     assert "/api/v1/divorce/equalization-summary/live-reconciliation.csv" in paths
     assert "/api/v1/divorce/equalization-summary/valuation-tokens.csv" in paths

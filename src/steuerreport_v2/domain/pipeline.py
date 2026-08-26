@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 from datetime import datetime, timezone
 from decimal import Decimal
+import json
 
 from steuerreport_v2.contracts.pipeline import (
     DemoSeedResult,
@@ -31,6 +33,7 @@ class PipelineService:
             normalized_events += len(RawNormalizer(self.store).normalize_batch(batch.batch_id))
         self._suppress_solana_rpc_duplicate_reward_income_events()
         self._carry_forward_solana_rpc_legacy_helium_claim_rewards()
+        self._carry_forward_solana_defi_position_principal()
         return self._rebuild_ledgers(normalized_events)
 
     def rebuild_after_import(self, batch_id: str) -> ImportRunResult:
@@ -40,6 +43,7 @@ class PipelineService:
         _, report = RawNormalizer(self.store).normalize_batch_with_report(batch_id)
         self._suppress_solana_rpc_duplicate_reward_income_events()
         self._carry_forward_solana_rpc_legacy_helium_claim_rewards()
+        self._carry_forward_solana_defi_position_principal()
         pipeline = self._rebuild_ledgers(report.created_events)
         return ImportRunResult(
             batch_id=batch_id,
@@ -164,6 +168,115 @@ class PipelineService:
                 """
             ).fetchall()
         return len(carried)
+
+    def _carry_forward_solana_defi_position_principal(self) -> int:
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select
+                    event.event_id,
+                    event.event_time,
+                    event.event_type,
+                    event.asset,
+                    event.quantity,
+                    coalesce(event.account, event.wallet, ''),
+                    raw.payload_json
+                from canonical_events event
+                join raw_objects raw on raw.raw_object_id = event.raw_object_id
+                where event.source = 'solana_rpc'
+                  and event.event_type in ('trade', 'income')
+                  and raw.payload_json like '%swap_in_aggregated%'
+                order by event.event_time, event.event_id
+                """
+            ).fetchall()
+        sources: list[tuple[object, ...]] = []
+        targets: list[tuple[object, ...]] = []
+        for row in rows:
+            details = self._aggregated_position_leg(str(row[6] or ""))
+            if details is None:
+                continue
+            from_asset, from_quantity, to_asset, to_quantity = details
+            candidate = (*row[:6], from_asset, from_quantity, to_asset, to_quantity)
+            if (
+                str(row[2]) == "trade"
+                and Decimal(str(row[4])) < 0
+                and from_quantity == abs(Decimal(str(row[4])))
+                and to_quantity == 1
+            ):
+                sources.append(candidate)
+            elif (
+                str(row[2]) == "income"
+                and Decimal(str(row[4])) > 0
+                and to_quantity == Decimal(str(row[4]))
+                and from_quantity == 1
+            ):
+                targets.append(candidate)
+
+        updates: set[str] = set()
+        used_sources: set[str] = set()
+        for target in targets:
+            candidates = [
+                source
+                for source in sources
+                if str(source[0]) not in used_sources
+                and source[1] < target[1]
+                and str(source[3]).upper() == str(target[3]).upper()
+                and Decimal(str(source[4])).copy_abs() == Decimal(str(target[4]))
+                and str(source[5]) == str(target[5])
+                and str(source[8]).upper() == str(target[6]).upper()
+            ]
+            if not candidates:
+                continue
+            source = max(candidates, key=lambda item: (item[1], str(item[0])))
+            updates.update({str(source[0]), str(target[0])})
+            used_sources.add(str(source[0]))
+        if not updates:
+            return 0
+        with self.store.connect() as con:
+            updated = con.execute(
+                """
+                update canonical_events
+                   set event_type = 'transfer',
+                       quote_asset = null,
+                       quote_quantity = null,
+                       confidence = greatest(confidence, 0.99)
+                 where event_id in (select unnest(?))
+                returning event_id
+                """,
+                [sorted(updates)],
+            ).fetchall()
+        return len(updated)
+
+    @staticmethod
+    def _aggregated_position_leg(
+        payload_json: str,
+    ) -> tuple[str, Decimal, str, Decimal] | None:
+        try:
+            payload = json.loads(payload_json)
+        except (TypeError, ValueError):
+            return None
+        if str(payload.get("event_type") or "").strip().lower() != "swap_in_aggregated":
+            return None
+        raw_row = payload.get("raw_row")
+        if isinstance(raw_row, dict):
+            details = raw_row
+        else:
+            try:
+                details = ast.literal_eval(str(raw_row or ""))
+            except (SyntaxError, ValueError):
+                return None
+        if not isinstance(details, dict) or details.get("jupiter_aggregated") is not True:
+            return None
+        try:
+            from_asset = str(details["from_asset"]).strip()
+            from_quantity = Decimal(str(details["from_quantity"]))
+            to_asset = str(details["to_asset"]).strip()
+            to_quantity = Decimal(str(details["to_quantity"]))
+        except (KeyError, ArithmeticError, ValueError):
+            return None
+        if not from_asset or not to_asset or from_quantity <= 0 or to_quantity <= 0:
+            return None
+        return from_asset, from_quantity, to_asset, to_quantity
 
     def seed_demo(self) -> DemoSeedResult:
         self.store.delete_import_batches_by_source("demo")

@@ -40,6 +40,15 @@ from steuerreport_v2.contracts.tax_methodology import (
 )
 from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.tax_time import (
+    event_reporting_year_sql,
+    reporting_tax_year,
+    reporting_year_sql,
+)
+from steuerreport_v2.domain.fifo_methods import (
+    GLOBAL_ASSET_FIFO_SCOPE,
+    active_fifo_scope,
+)
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 from steuerreport_v2.domain.tax_years import TaxYearService
 from steuerreport_v2.domain.valuation import PriceQualityService
@@ -47,13 +56,17 @@ from steuerreport_v2.domain.valuation import PriceQualityService
 
 class TaxMethodologyService:
     METHOD_VERSION = "bmf_readiness_v2"
-    FIFO_SCOPE = "global_asset_with_wallet_fifo_evidence_overlay_v1"
+    FIFO_SCOPE = GLOBAL_ASSET_FIFO_SCOPE
     ASSET_FIFO_CORRECTION_MIN_ABS_EUR = Decimal("100")
     EXCHANGE_SEQUENCING_GAP_MAX_QUANTITY = Decimal("1")
     EXCHANGE_SEQUENCING_GAP_WINDOW = timedelta(minutes=5)
     EXCHANGE_SEQUENCING_POOLS = {"binance", "bitget", "pionex"}
-    DEFAULT_BMF_FILING_READINESS_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_filing_readiness")
-    DEFAULT_BMF_CLOSURE_BACKLOG_DIR = Path("/workspace/steuerreport-v2-plan/var/bmf_closure_backlog")
+    DEFAULT_BMF_FILING_READINESS_DIR = Path(
+        "/workspace/steuerreport-v2-plan/var/bmf_filing_readiness"
+    )
+    DEFAULT_BMF_CLOSURE_BACKLOG_DIR = Path(
+        "/workspace/steuerreport-v2-plan/var/bmf_closure_backlog"
+    )
     PRIOR_FILING_DECLARED_AMOUNTS_SETTING = "tax.prior_filing.declared_amounts"
     PRIOR_FILING_DELTA_TOLERANCE_EUR = Decimal("0.01")
     CONSERVATIVE_REVIEW_ONLY_CODES = {
@@ -69,16 +82,18 @@ class TaxMethodologyService:
         self.tax_years = TaxYearService(store)
 
     def policy(self) -> TaxMethodologyPolicy:
+        fifo_scope = self.active_fifo_scope()
         return TaxMethodologyPolicy(
             method_version=self.METHOD_VERSION,
-            fifo_scope=self.FIFO_SCOPE,
+            fifo_scope=fifo_scope,
             valuation_policy=(
                 "Historische EUR-Werte werden aus Canonical Events, quote-Werten "
                 "und Price Ledger abgeleitet; UI-Rundung erfolgt erst in der Anzeige."
             ),
             timezone_policy=(
-                "Zeitpunkte werden UTC gespeichert und in Jahresreports nach dem "
-                "gespeicherten Event-/Disposal-Jahr aggregiert."
+                "Zeitpunkte werden UTC gespeichert. Deutsche Steuerjahresberichte verwenden "
+                "Europe/Berlin inklusive CET/CEST; dokumentierte Helium-Monatsaggregate "
+                "verwenden ihr belegtes Quellperiodenjahr."
             ),
             rounding_policy=(
                 "Backend und Datenbank behalten Decimal-Genauigkeit; EUR-Anzeigen "
@@ -87,8 +102,12 @@ class TaxMethodologyService:
             transfer_policy=(
                 "Eigene Transfers muessen als Transfer-/Provenance-Kontext belegbar "
                 "sein und duerfen nicht als neue Anschaffung ohne Herkunft wirken; "
-                "Wallet-/Depot-FIFO wird als BMF-Evidence-Overlay gegen die "
-                "bestehende globale FIFO gerechnet."
+                + (
+                    "Wallet-/Depot-FIFO ist als produktive Verbrauchsfolge aktiv."
+                    if fifo_scope == "wallet_depot_fifo_v1"
+                    else "Wallet-/Depot-FIFO wird als BMF-Evidence-Overlay gegen die "
+                    "bestehende globale FIFO gerechnet."
+                )
             ),
             source_policy=(
                 "API-, CSV-, Ledger-, Review- und Belegquellen werden read-only "
@@ -100,6 +119,9 @@ class TaxMethodologyService:
                 "Nachvollziehbarkeit."
             ),
         )
+
+    def active_fifo_scope(self) -> str:
+        return active_fifo_scope(self.store)
 
     def summary(self, year: int | None = None) -> TaxMethodologySummary:
         generated_at = self._now()
@@ -132,7 +154,11 @@ class TaxMethodologyService:
     ) -> TaxBmfActionPlan:
         generated_at = self._now()
         available_years = [year] if year is not None else self._available_years()
-        if prefer_snapshot and not include_gain_evidence and self._can_use_default_bmf_snapshot():
+        if (
+            prefer_snapshot
+            and not include_gain_evidence
+            and self._can_use_default_bmf_snapshot()
+        ):
             snapshot = self.bmf_filing_readiness_snapshot()
             if snapshot.status == "available" and snapshot.report is not None:
                 return self._bmf_action_plan_from_readiness_snapshot(
@@ -154,16 +180,28 @@ class TaxMethodologyService:
             generated_at=generated_at,
             available_years=available_years,
             ready_years=[report.year for report in reports if report.status == "ok"],
-            review_years=[report.year for report in reports if report.status == "review"],
-            blocked_years=[report.year for report in reports if report.status == "blocked"],
+            review_years=[
+                report.year for report in reports if report.status == "review"
+            ],
+            blocked_years=[
+                report.year for report in reports if report.status == "blocked"
+            ],
             empty_years=[report.year for report in reports if report.status == "empty"],
-            blocking_items_count=sum(1 for item in items if item.blocks_bmf_ready or item.severity == "blocker"),
+            blocking_items_count=sum(
+                1
+                for item in items
+                if item.blocks_bmf_ready or item.severity == "blocker"
+            ),
             review_items_count=sum(1 for item in items if item.severity == "warning"),
             info_items_count=sum(1 for item in items if item.severity == "info"),
             items=sorted(
                 items,
                 key=lambda item: (
-                    0 if item.severity == "blocker" else 1 if item.severity == "warning" else 2,
+                    0
+                    if item.severity == "blocker"
+                    else 1
+                    if item.severity == "warning"
+                    else 2,
                     item.year,
                     item.category,
                     item.code,
@@ -190,14 +228,22 @@ class TaxMethodologyService:
         items: list[TaxBmfActionItem] = []
         for row in rows:
             for code in row.blocking_gap_codes:
-                items.append(self._snapshot_action_item(row.year, code, severity="blocker"))
+                items.append(
+                    self._snapshot_action_item(row.year, code, severity="blocker")
+                )
             for code in row.review_gap_codes:
-                items.append(self._snapshot_action_item(row.year, code, severity=self._snapshot_review_severity(code)))
+                items.append(
+                    self._snapshot_action_item(
+                        row.year, code, severity=self._snapshot_review_severity(code)
+                    )
+                )
         return TaxBmfActionPlan(
             generated_at=generated_at,
             available_years=[row.year for row in rows],
             ready_years=[row.year for row in rows if row.filing_status == "bmf_ready"],
-            review_years=[row.year for row in rows if row.filing_status == "review_required"],
+            review_years=[
+                row.year for row in rows if row.filing_status == "review_required"
+            ],
             blocked_years=[row.year for row in rows if row.filing_status == "blocked"],
             empty_years=[row.year for row in rows if row.filing_status == "empty"],
             blocking_items_count=sum(1 for item in items if item.severity == "blocker"),
@@ -206,7 +252,11 @@ class TaxMethodologyService:
             items=sorted(
                 items,
                 key=lambda item: (
-                    0 if item.severity == "blocker" else 1 if item.severity == "warning" else 2,
+                    0
+                    if item.severity == "blocker"
+                    else 1
+                    if item.severity == "warning"
+                    else 2,
                     item.year,
                     item.category,
                     item.code,
@@ -245,21 +295,34 @@ class TaxMethodologyService:
         )
 
     def _snapshot_review_severity(self, code: str) -> str:
-        if code in {"wallet_fifo_delta_present", "wallet_fifo_exchange_sequencing_documented"}:
+        if code in {
+            "wallet_fifo_delta_present",
+            "wallet_fifo_exchange_sequencing_documented",
+        }:
             return "warning"
         return "info"
 
-    def bmf_filing_readiness(self, year: int | None = None) -> TaxBmfFilingReadinessReport:
+    def bmf_filing_readiness(
+        self, year: int | None = None
+    ) -> TaxBmfFilingReadinessReport:
         generated_at = self._now()
-        available_years = [year] if year is not None else [
-            item_year for item_year in self._available_years() if 2021 <= item_year <= 2025
-        ]
+        available_years = (
+            [year]
+            if year is not None
+            else [
+                item_year
+                for item_year in self._available_years()
+                if 2021 <= item_year <= 2025
+            ]
+        )
         payment_rows = {
             row.year: row
             for row in self.tax_years.payment_overview(years=available_years).rows
         }
         rows = [
-            self._bmf_filing_readiness_year(item_year, payment_row=payment_rows.get(item_year))
+            self._bmf_filing_readiness_year(
+                item_year, payment_row=payment_rows.get(item_year)
+            )
             for item_year in available_years
         ]
         return TaxBmfFilingReadinessReport(
@@ -270,7 +333,9 @@ class TaxMethodologyService:
             conservative_appendix_years=[
                 row.year for row in rows if row.filing_status == "conservative_appendix"
             ],
-            review_years=[row.year for row in rows if row.filing_status == "review_required"],
+            review_years=[
+                row.year for row in rows if row.filing_status == "review_required"
+            ],
             blocked_years=[row.year for row in rows if row.filing_status == "blocked"],
             empty_years=[row.year for row in rows if row.filing_status == "empty"],
             ascii_table=self._bmf_filing_readiness_ascii(rows),
@@ -337,7 +402,9 @@ class TaxMethodologyService:
         include_reward_recheck: bool = False,
     ) -> TaxBmfFinalizationMatrix:
         generated_at = self._now()
-        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        selected_years = sorted(
+            years if years is not None else [2021, 2022, 2023, 2024, 2025]
+        )
         snapshot = self.bmf_filing_readiness_snapshot()
         if snapshot.status == "available" and snapshot.report is not None:
             readiness = snapshot.report
@@ -345,18 +412,24 @@ class TaxMethodologyService:
             readiness = self.bmf_filing_readiness()
         readiness_by_year = {row.year: row for row in readiness.years}
         filing = self.tax_years.filing_matrix()
-        if not all(year in {row.year for row in filing.rows} for year in selected_years):
+        if not all(
+            year in {row.year for row in filing.rows} for year in selected_years
+        ):
             filing = self.tax_years.filing_matrix(years=selected_years)
         filing_by_year = {row.year: row for row in filing.rows}
         correction = self.tax_years.correction_map()
-        if not all(year in {row.year for row in correction.years} for year in selected_years):
+        if not all(
+            year in {row.year for row in correction.years} for year in selected_years
+        ):
             correction = self.tax_years.correction_map(years=selected_years)
         correction_by_year = {row.year: row for row in correction.years}
         reward_by_year: dict[int, object] = {}
         if include_reward_recheck:
             reward = self.reward_bmf_recheck()
             reward_by_year = {row.year: row for row in reward.years}
-        stablecoin_anchor = PriceQualityService(self.store).stablecoin_fx_anchor_preview_latest()
+        stablecoin_anchor = PriceQualityService(
+            self.store
+        ).stablecoin_fx_anchor_preview_latest()
         stablecoin_groups_by_year: dict[int, list[object]] = {}
         for group in stablecoin_anchor.groups:
             stablecoin_groups_by_year.setdefault(group.year, []).append(group)
@@ -376,13 +449,23 @@ class TaxMethodologyService:
             generated_at=generated_at,
             years=rows,
             available_years=selected_years,
-            ready_years=[row.year for row in rows if row.finalization_status == "bmf_ready"],
-            conservative_ready_years=[
-                row.year for row in rows if row.finalization_status == "conservative_ready"
+            ready_years=[
+                row.year for row in rows if row.finalization_status == "bmf_ready"
             ],
-            review_years=[row.year for row in rows if row.finalization_status == "review_required"],
-            blocked_years=[row.year for row in rows if row.finalization_status == "blocked"],
-            empty_years=[row.year for row in rows if row.finalization_status == "empty"],
+            conservative_ready_years=[
+                row.year
+                for row in rows
+                if row.finalization_status == "conservative_ready"
+            ],
+            review_years=[
+                row.year for row in rows if row.finalization_status == "review_required"
+            ],
+            blocked_years=[
+                row.year for row in rows if row.finalization_status == "blocked"
+            ],
+            empty_years=[
+                row.year for row in rows if row.finalization_status == "empty"
+            ],
             total_taxable_private_disposals_eur=sum(
                 (row.taxable_private_disposals_eur for row in rows),
                 Decimal("0"),
@@ -391,7 +474,9 @@ class TaxMethodologyService:
                 (row.rewards_mining_staking_income_eur for row in rows),
                 Decimal("0"),
             ),
-            total_derivative_pnl_eur=sum((row.derivative_pnl_eur for row in rows), Decimal("0")),
+            total_derivative_pnl_eur=sum(
+                (row.derivative_pnl_eur for row in rows), Decimal("0")
+            ),
             ascii_table=self._bmf_finalization_ascii(rows),
             methodology=(
                 "Read-only BMF-Finalisierungsmatrix fuer 2021-2025. Kombiniert "
@@ -404,9 +489,13 @@ class TaxMethodologyService:
             ),
         )
 
-    def bmf_submission_guide(self, *, years: list[int] | None = None) -> TaxBmfSubmissionGuide:
+    def bmf_submission_guide(
+        self, *, years: list[int] | None = None
+    ) -> TaxBmfSubmissionGuide:
         generated_at = self._now()
-        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        selected_years = sorted(
+            years if years is not None else [2021, 2022, 2023, 2024, 2025]
+        )
         finalization = self.bmf_finalization_matrix(years=selected_years)
         closure = self.tax_years.filing_closure_overview(years=selected_years)
         finalization_by_year = {row.year: row for row in finalization.years}
@@ -424,11 +513,15 @@ class TaxMethodologyService:
             years=rows,
             available_years=selected_years,
             ready_years=[row.year for row in rows if row.status == "ready"],
-            conservative_ready_years=[row.year for row in rows if row.status == "conservative_ready"],
+            conservative_ready_years=[
+                row.year for row in rows if row.status == "conservative_ready"
+            ],
             review_years=[row.year for row in rows if row.status == "review_required"],
             blocked_years=[row.year for row in rows if row.status == "blocked"],
             empty_years=[row.year for row in rows if row.status == "empty"],
-            amendment_review_years=[row.year for row in rows if row.correction_review_recommended],
+            amendment_review_years=[
+                row.year for row in rows if row.correction_review_recommended
+            ],
             total_taxable_private_disposals_eur=sum(
                 (row.taxable_private_disposals_eur for row in rows),
                 Decimal("0"),
@@ -437,7 +530,9 @@ class TaxMethodologyService:
                 (row.rewards_mining_staking_income_eur for row in rows),
                 Decimal("0"),
             ),
-            total_derivative_pnl_eur=sum((row.derivative_pnl_eur for row in rows), Decimal("0")),
+            total_derivative_pnl_eur=sum(
+                (row.derivative_pnl_eur for row in rows), Decimal("0")
+            ),
             total_tax_free_private_disposals_eur=sum(
                 (row.tax_free_private_disposals_eur for row in rows),
                 Decimal("0"),
@@ -493,22 +588,32 @@ class TaxMethodologyService:
         archive_count = int(getattr(closure, "archivieren_count", 0) or 0)
         blocking_count = int(getattr(finalization, "blocking_count", 0) or 0)
         review_requirements_count = int(getattr(finalization, "review_count", 0) or 0)
-        technical_review_requirements_count = self._bmf_submission_technical_review_count(finalization)
+        technical_review_requirements_count = (
+            self._bmf_submission_technical_review_count(finalization)
+        )
         correction_review = bool(
             getattr(closure, "amendment_review_recommended", False)
             or getattr(finalization, "correction_review_recommended", False)
         )
-        amendment_reason = str(getattr(closure, "amendment_reason", "") or "").strip() or None
-        declaration_bucket = str(getattr(closure, "declaration_bucket", "") or self._bmf_submission_bucket(
-            taxable_private=taxable_private,
-            rewards=rewards,
-            derivatives=derivatives,
-        ))
-        where_to_enter = str(getattr(closure, "where_to_enter", "") or self._bmf_submission_where_to_enter(
-            taxable_private=taxable_private,
-            rewards=rewards,
-            derivatives=derivatives,
-        ))
+        amendment_reason = (
+            str(getattr(closure, "amendment_reason", "") or "").strip() or None
+        )
+        declaration_bucket = str(
+            getattr(closure, "declaration_bucket", "")
+            or self._bmf_submission_bucket(
+                taxable_private=taxable_private,
+                rewards=rewards,
+                derivatives=derivatives,
+            )
+        )
+        where_to_enter = str(
+            getattr(closure, "where_to_enter", "")
+            or self._bmf_submission_where_to_enter(
+                taxable_private=taxable_private,
+                rewards=rewards,
+                derivatives=derivatives,
+            )
+        )
         filing_summary_endpoint = str(
             getattr(closure, "filing_summary_endpoint", "")
             or getattr(finalization, "filing_summary_endpoint", "")
@@ -592,7 +697,9 @@ class TaxMethodologyService:
         row.display_line = self._bmf_submission_line(row)
         return row
 
-    def _bmf_submission_status(self, finalization: TaxBmfFinalizationYear | None) -> str:
+    def _bmf_submission_status(
+        self, finalization: TaxBmfFinalizationYear | None
+    ) -> str:
         if finalization is None:
             return "empty"
         if finalization.finalization_status == "bmf_ready":
@@ -605,7 +712,9 @@ class TaxMethodologyService:
             return "empty"
         return "review_required"
 
-    def _bmf_submission_technical_review_count(self, finalization: TaxBmfFinalizationYear | None) -> int:
+    def _bmf_submission_technical_review_count(
+        self, finalization: TaxBmfFinalizationYear | None
+    ) -> int:
         if finalization is None:
             return 0
         return sum(
@@ -686,7 +795,9 @@ class TaxMethodologyService:
             prefix += " Vorjahres-/Nachreichungspruefung ist markiert."
         return f"{prefix} Belegpaket: {evidence_package_endpoint}."
 
-    def _bmf_submission_archive_sentence(self, *, tax_free: Decimal, archive_count: int) -> str:
+    def _bmf_submission_archive_sentence(
+        self, *, tax_free: Decimal, archive_count: int
+    ) -> str:
         return (
             f"Archivieren: {archive_count} Position(en), insbesondere steuerfreie "
             f"private Veraeusserungen nach Haltefrist {self._eur(tax_free)}."
@@ -739,9 +850,13 @@ class TaxMethodologyService:
             f"{row.attach_count} | {row.review_requirements_count} | {row.next_action}"
         )
 
-    def bmf_prior_filing_comparison(self, *, years: list[int] | None = None) -> TaxBmfPriorFilingComparison:
+    def bmf_prior_filing_comparison(
+        self, *, years: list[int] | None = None
+    ) -> TaxBmfPriorFilingComparison:
         generated_at = self._now()
-        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        selected_years = sorted(
+            years if years is not None else [2021, 2022, 2023, 2024, 2025]
+        )
         submission = self.bmf_submission_guide(years=selected_years)
         declared_by_year, setting_exists = self._prior_filing_declared_amounts()
         rows = [
@@ -755,23 +870,37 @@ class TaxMethodologyService:
             years=rows,
             available_years=selected_years,
             match_years=[row.year for row in rows if row.status == "match"],
-            delta_review_years=[row.year for row in rows if row.status == "delta_review"],
-            missing_declared_years=[row.year for row in rows if row.status == "missing_declared_values"],
-            untrusted_declared_years=[row.year for row in rows if row.status == "declared_values_untrusted"],
+            delta_review_years=[
+                row.year for row in rows if row.status == "delta_review"
+            ],
+            missing_declared_years=[
+                row.year for row in rows if row.status == "missing_declared_values"
+            ],
+            untrusted_declared_years=[
+                row.year for row in rows if row.status == "declared_values_untrusted"
+            ],
             empty_years=[row.year for row in rows if row.status == "empty"],
             total_delta_taxable_private_disposals_eur=sum(
-                (row.delta_taxable_private_disposals_eur or Decimal("0") for row in rows),
+                (
+                    row.delta_taxable_private_disposals_eur or Decimal("0")
+                    for row in rows
+                ),
                 Decimal("0"),
             ),
             total_delta_rewards_mining_staking_income_eur=sum(
-                (row.delta_rewards_mining_staking_income_eur or Decimal("0") for row in rows),
+                (
+                    row.delta_rewards_mining_staking_income_eur or Decimal("0")
+                    for row in rows
+                ),
                 Decimal("0"),
             ),
             total_delta_derivative_pnl_eur=sum(
                 (row.delta_derivative_pnl_eur or Decimal("0") for row in rows),
                 Decimal("0"),
             ),
-            total_absolute_delta_eur=sum((row.absolute_delta_eur for row in rows), Decimal("0")),
+            total_absolute_delta_eur=sum(
+                (row.absolute_delta_eur for row in rows), Decimal("0")
+            ),
             example_setting_json=self._prior_filing_example_json(),
             ascii_table=self._bmf_prior_filing_ascii(rows),
             methodology=(
@@ -790,10 +919,16 @@ class TaxMethodologyService:
                 year=year,
                 declared_values_status=values["declared_values_status"],  # type: ignore[arg-type]
                 note=str(values.get("note") or "") or None,
-                taxable_private_disposals_eur=Decimal(str(values["taxable_private_disposals_eur"])),
-                rewards_mining_staking_income_eur=Decimal(str(values["rewards_mining_staking_income_eur"])),
+                taxable_private_disposals_eur=Decimal(
+                    str(values["taxable_private_disposals_eur"])
+                ),
+                rewards_mining_staking_income_eur=Decimal(
+                    str(values["rewards_mining_staking_income_eur"])
+                ),
                 derivative_pnl_eur=Decimal(str(values["derivative_pnl_eur"])),
-                tax_free_private_disposals_eur=Decimal(str(values["tax_free_private_disposals_eur"])),
+                tax_free_private_disposals_eur=Decimal(
+                    str(values["tax_free_private_disposals_eur"])
+                ),
             )
             for year, values in sorted(declared_by_year.items())
         ]
@@ -817,12 +952,18 @@ class TaxMethodologyService:
         serialized = {
             "years": {
                 str(row.year): {
-                    "taxable_private_disposals_eur": str(row.taxable_private_disposals_eur),
+                    "taxable_private_disposals_eur": str(
+                        row.taxable_private_disposals_eur
+                    ),
                     "declared_values_status": row.declared_values_status,
                     "note": row.note,
-                    "rewards_mining_staking_income_eur": str(row.rewards_mining_staking_income_eur),
+                    "rewards_mining_staking_income_eur": str(
+                        row.rewards_mining_staking_income_eur
+                    ),
                     "derivative_pnl_eur": str(row.derivative_pnl_eur),
-                    "tax_free_private_disposals_eur": str(row.tax_free_private_disposals_eur),
+                    "tax_free_private_disposals_eur": str(
+                        row.tax_free_private_disposals_eur
+                    ),
                 }
                 for row in years
             }
@@ -836,10 +977,14 @@ class TaxMethodologyService:
         return TaxBmfPriorFilingDeclaredAmountsWriteResult(
             setting_key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
             written_years=[row.year for row in years],
-            comparison=self.bmf_prior_filing_comparison(years=[row.year for row in years] or None),
+            comparison=self.bmf_prior_filing_comparison(
+                years=[row.year for row in years] or None
+            ),
         )
 
-    def _prior_filing_declared_amounts(self) -> tuple[dict[int, dict[str, object]], bool]:
+    def _prior_filing_declared_amounts(
+        self,
+    ) -> tuple[dict[int, dict[str, object]], bool]:
         raw = None
         for setting in self.store.list_admin_settings():
             if setting.key == self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING:
@@ -863,14 +1008,22 @@ class TaxMethodologyService:
             except Exception:
                 continue
             parsed[year] = {
-                "taxable_private_disposals_eur": self._optional_decimal(item.get("taxable_private_disposals_eur")),
-                "declared_values_status": self._prior_filing_status(item.get("declared_values_status")),
+                "taxable_private_disposals_eur": self._optional_decimal(
+                    item.get("taxable_private_disposals_eur")
+                ),
+                "declared_values_status": self._prior_filing_status(
+                    item.get("declared_values_status")
+                ),
                 "note": str(item.get("note") or ""),
                 "rewards_mining_staking_income_eur": self._optional_decimal(
                     item.get("rewards_mining_staking_income_eur")
                 ),
-                "derivative_pnl_eur": self._optional_decimal(item.get("derivative_pnl_eur")),
-                "tax_free_private_disposals_eur": self._optional_decimal(item.get("tax_free_private_disposals_eur")),
+                "derivative_pnl_eur": self._optional_decimal(
+                    item.get("derivative_pnl_eur")
+                ),
+                "tax_free_private_disposals_eur": self._optional_decimal(
+                    item.get("tax_free_private_disposals_eur")
+                ),
             }
         return parsed, True
 
@@ -884,7 +1037,9 @@ class TaxMethodologyService:
             result = TaxBmfPriorFilingComparisonYear(
                 year=row.year,
                 status=status,  # type: ignore[arg-type]
-                status_label="Keine Altwerte hinterlegt" if status == "missing_declared_values" else "Keine Aktivitaet",
+                status_label="Keine Altwerte hinterlegt"
+                if status == "missing_declared_values"
+                else "Keine Aktivitaet",
                 declared_values_configured=False,
                 declared_values_status="unknown",
                 v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
@@ -906,7 +1061,9 @@ class TaxMethodologyService:
             result.display_line = self._bmf_prior_filing_line(result)
             return result
 
-        declared_status = str(declared.get("declared_values_status") or "declared_values")
+        declared_status = str(
+            declared.get("declared_values_status") or "declared_values"
+        )
         declared_note = str(declared.get("note") or "") or None
         if declared_status != "declared_values":
             status_label = {
@@ -948,7 +1105,15 @@ class TaxMethodologyService:
         delta_derivatives = row.derivative_pnl_eur - declared_derivatives
         delta_tax_free = row.tax_free_private_disposals_eur - declared_tax_free
         absolute_delta = sum(
-            (abs(value) for value in [delta_taxable, delta_rewards, delta_derivatives, delta_tax_free]),
+            (
+                abs(value)
+                for value in [
+                    delta_taxable,
+                    delta_rewards,
+                    delta_derivatives,
+                    delta_tax_free,
+                ]
+            ),
             Decimal("0"),
         )
         has_delta = absolute_delta > self.PRIOR_FILING_DELTA_TOLERANCE_EUR
@@ -1015,7 +1180,9 @@ class TaxMethodologyService:
             indent=2,
         )
 
-    def _bmf_prior_filing_ascii(self, rows: list[TaxBmfPriorFilingComparisonYear]) -> str:
+    def _bmf_prior_filing_ascii(
+        self, rows: list[TaxBmfPriorFilingComparisonYear]
+    ) -> str:
         if not rows:
             return "Jahr | Status | Delta SO | Delta Rewards | Delta Derivate | Aktion"
         header = "Jahr | Status | Delta SO | Delta Rewards | Delta Derivate | Aktion"
@@ -1031,9 +1198,13 @@ class TaxMethodologyService:
             f"{row.next_action}"
         )
 
-    def bmf_amendment_worklist(self, *, years: list[int] | None = None) -> TaxBmfAmendmentWorklist:
+    def bmf_amendment_worklist(
+        self, *, years: list[int] | None = None
+    ) -> TaxBmfAmendmentWorklist:
         generated_at = self._now()
-        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        selected_years = sorted(
+            years if years is not None else [2021, 2022, 2023, 2024, 2025]
+        )
         submission = self.bmf_submission_guide(years=selected_years)
         comparison = self.bmf_prior_filing_comparison(years=selected_years)
         submission_by_year = {row.year: row for row in submission.years}
@@ -1051,9 +1222,15 @@ class TaxMethodologyService:
             generated_at=generated_at,
             years=rows,
             available_years=selected_years,
-            correction_review_years=[row.year for row in rows if row.status == "prepare_correction_review"],
-            compare_declared_years=[row.year for row in rows if row.status == "compare_declared_values"],
-            archive_only_years=[row.year for row in rows if row.status == "archive_only"],
+            correction_review_years=[
+                row.year for row in rows if row.status == "prepare_correction_review"
+            ],
+            compare_declared_years=[
+                row.year for row in rows if row.status == "compare_declared_values"
+            ],
+            archive_only_years=[
+                row.year for row in rows if row.status == "archive_only"
+            ],
             blocked_years=[row.year for row in rows if row.status == "blocked"],
             total_v2_taxable_private_disposals_eur=sum(
                 (row.v2_taxable_private_disposals_eur for row in rows),
@@ -1063,7 +1240,9 @@ class TaxMethodologyService:
                 (row.v2_rewards_mining_staking_income_eur for row in rows),
                 Decimal("0"),
             ),
-            total_v2_derivative_pnl_eur=sum((row.v2_derivative_pnl_eur for row in rows), Decimal("0")),
+            total_v2_derivative_pnl_eur=sum(
+                (row.v2_derivative_pnl_eur for row in rows), Decimal("0")
+            ),
             ascii_table=self._bmf_amendment_worklist_ascii(rows),
             methodology=(
                 "Read-only Korrekturpruefungs-Worklist fuer 2021-2025. Kombiniert "
@@ -1082,7 +1261,9 @@ class TaxMethodologyService:
         comparison: TaxBmfPriorFilingComparisonYear | None,
     ) -> TaxBmfAmendmentWorklistYear:
         prior_status = str(getattr(comparison, "declared_values_status", "unknown"))
-        technical_review = int(getattr(submission, "technical_review_requirements_count", 0) or 0)
+        technical_review = int(
+            getattr(submission, "technical_review_requirements_count", 0) or 0
+        )
         amendment_review = bool(
             getattr(submission, "correction_review_recommended", False)
             or getattr(comparison, "amendment_review_recommended", False)
@@ -1107,7 +1288,9 @@ class TaxMethodologyService:
             status = "archive_only"
             label = "Archivieren"
             priority = 9
-        correction_reason = self._bmf_amendment_reason(submission, comparison, prior_status)
+        correction_reason = self._bmf_amendment_reason(
+            submission, comparison, prior_status
+        )
         result = TaxBmfAmendmentWorklistYear(
             year=year,
             priority=priority,
@@ -1122,7 +1305,9 @@ class TaxMethodologyService:
             v2_rewards_mining_staking_income_eur=getattr(
                 submission,
                 "rewards_mining_staking_income_eur",
-                getattr(comparison, "v2_rewards_mining_staking_income_eur", Decimal("0")),
+                getattr(
+                    comparison, "v2_rewards_mining_staking_income_eur", Decimal("0")
+                ),
             ),
             v2_derivative_pnl_eur=getattr(
                 submission,
@@ -1170,7 +1355,9 @@ class TaxMethodologyService:
         prior_status: str,
     ) -> str:
         if prior_status == "probably_wrong":
-            return "Alt-Erklaerung wurde als vermutlich falsch/nicht belastbar markiert."
+            return (
+                "Alt-Erklaerung wurde als vermutlich falsch/nicht belastbar markiert."
+            )
         if prior_status == "unknown":
             return "Alt-Erklaerungswerte sind unbekannt oder noch nicht aus Bescheid/Erklaerung uebertragen."
         if prior_status == "not_filed":
@@ -1194,7 +1381,9 @@ class TaxMethodologyService:
             return "Jahrespaket archivieren."
         return "Korrekturkarte, Filing Summary und Belegpaket fuer Steuerberater/Finanzamt vorbereiten."
 
-    def _bmf_amendment_worklist_ascii(self, rows: list[TaxBmfAmendmentWorklistYear]) -> str:
+    def _bmf_amendment_worklist_ascii(
+        self, rows: list[TaxBmfAmendmentWorklistYear]
+    ) -> str:
         if not rows:
             return "Jahr | Status | Anlage SO | Rewards | Derivate | Grund | Aktion"
         header = "Jahr | Status | Anlage SO | Rewards | Derivate | Grund | Aktion"
@@ -1221,7 +1410,9 @@ class TaxMethodologyService:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         artifact = out / f"{timestamp}_bmf_filing_readiness_2021_2025.json"
         latest = out / "latest_bmf_filing_readiness_2021_2025.json"
-        content = json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8")
+        content = json.dumps(
+            report.model_dump(mode="json"), indent=2, ensure_ascii=False
+        ).encode("utf-8")
         artifact.write_bytes(content)
         latest.write_bytes(content)
         return latest
@@ -1248,7 +1439,9 @@ class TaxMethodologyService:
         )
         blocking_count = sum(1 for item in requirements if item.status == "blocked")
         review_count = sum(1 for item in requirements if item.status == "review")
-        finalization_status = self._bmf_finalization_status(readiness, blocking_count, review_count)
+        finalization_status = self._bmf_finalization_status(
+            readiness, blocking_count, review_count
+        )
         status_label = self._bmf_finalization_label(finalization_status)
         evidence_refs = [
             ref
@@ -1268,12 +1461,20 @@ class TaxMethodologyService:
             else Decimal("0")
         )
         taxable_private = (
-            getattr(filing, "taxable_private_disposals_eur", readiness.taxable_private_disposals_eur)
+            getattr(
+                filing,
+                "taxable_private_disposals_eur",
+                readiness.taxable_private_disposals_eur,
+            )
             if filing is not None
             else readiness.taxable_private_disposals_eur
         )
         rewards_income = (
-            getattr(filing, "rewards_mining_staking_income_eur", readiness.rewards_mining_staking_income_eur)
+            getattr(
+                filing,
+                "rewards_mining_staking_income_eur",
+                readiness.rewards_mining_staking_income_eur,
+            )
             if filing is not None
             else readiness.rewards_mining_staking_income_eur
         )
@@ -1292,7 +1493,8 @@ class TaxMethodologyService:
             finalization_status=finalization_status,
             status_label=status_label,
             can_submit=finalization_status == "bmf_ready",
-            can_submit_conservative=finalization_status in {"bmf_ready", "conservative_ready"},
+            can_submit_conservative=finalization_status
+            in {"bmf_ready", "conservative_ready"},
             correction_review_recommended=correction_review,
             taxable_private_disposals_eur=taxable_private,
             rewards_mining_staking_income_eur=rewards_income,
@@ -1302,7 +1504,9 @@ class TaxMethodologyService:
             review_count=review_count,
             evidence_refs=evidence_refs,
             requirements=requirements,
-            next_action=self._bmf_finalization_next_action(finalization_status, readiness, requirements),
+            next_action=self._bmf_finalization_next_action(
+                finalization_status, readiness, requirements
+            ),
             filing_summary_endpoint=readiness.filing_summary_endpoint,
             correction_map_endpoint=f"/api/v1/tax-years/{year}/correction-map",
             evidence_package_endpoint=readiness.evidence_package_endpoint,
@@ -1349,10 +1553,15 @@ class TaxMethodologyService:
 
         reward_status = "ok"
         reward_detail = "Keine offenen Reward-/Mining-Abweichungen."
-        if reward is not None and getattr(reward, "consistency_status", "ok") == "review":
+        if (
+            reward is not None
+            and getattr(reward, "consistency_status", "ok") == "review"
+        ):
             reward_status = "review"
             flags = getattr(reward, "flags", [])
-            reward_detail = "Reward-Recheck pruefen: " + (", ".join(flags) if flags else "Review-Signal vorhanden")
+            reward_detail = "Reward-Recheck pruefen: " + (
+                ", ".join(flags) if flags else "Review-Signal vorhanden"
+            )
         elif readiness.rewards_mining_staking_income_eur == 0:
             reward_status = "empty"
             reward_detail = "Keine Reward-/Mining-/Staking-Einnahmen in diesem Jahr."
@@ -1366,7 +1575,12 @@ class TaxMethodologyService:
             )
         )
 
-        private_status = "ok" if readiness.taxable_private_disposals_eur or readiness.filing_status != "empty" else "empty"
+        private_status = (
+            "ok"
+            if readiness.taxable_private_disposals_eur
+            or readiness.filing_status != "empty"
+            else "empty"
+        )
         requirement_rows.append(
             TaxBmfFinalizationRequirement(
                 key="private_disposals",
@@ -1381,8 +1595,15 @@ class TaxMethodologyService:
             )
         )
 
-        transfer_status = "blocked" if any(code.startswith("wallet_fifo") for code in blocking_codes) else (
-            "review" if readiness.appendix_items_count or any(code.startswith("wallet_fifo") for code in review_codes) else "ok"
+        transfer_status = (
+            "blocked"
+            if any(code.startswith("wallet_fifo") for code in blocking_codes)
+            else (
+                "review"
+                if readiness.appendix_items_count
+                or any(code.startswith("wallet_fifo") for code in review_codes)
+                else "ok"
+            )
         )
         requirement_rows.append(
             TaxBmfFinalizationRequirement(
@@ -1399,16 +1620,19 @@ class TaxMethodologyService:
         )
 
         stablecoin_review = [
-            group for group in stablecoin_groups if getattr(group, "status", "") in {"ready_for_review", "incomplete"}
+            group
+            for group in stablecoin_groups
+            if getattr(group, "status", "") in {"ready_for_review", "incomplete"}
         ]
         price_blocked = "missing_price_groups" in blocking_codes or any(
             getattr(group, "status", "") == "incomplete" for group in stablecoin_groups
         )
         price_review = bool(stablecoin_review) or any(
-            code in review_codes
-            for code in {"asset_fifo_possible_recalculation"}
+            code in review_codes for code in {"asset_fifo_possible_recalculation"}
         )
-        price_status = "blocked" if price_blocked else "review" if price_review else "ok"
+        price_status = (
+            "blocked" if price_blocked else "review" if price_review else "ok"
+        )
         requirement_rows.append(
             TaxBmfFinalizationRequirement(
                 key="prices_fx",
@@ -1423,8 +1647,11 @@ class TaxMethodologyService:
             )
         )
 
-        filing_status = "ok" if filing is not None and filing.action_status in {"ready", "conservative_ready"} else (
-            "review" if filing is not None else "blocked"
+        filing_status = (
+            "ok"
+            if filing is not None
+            and filing.action_status in {"ready", "conservative_ready"}
+            else ("review" if filing is not None else "blocked")
         )
         requirement_rows.append(
             TaxBmfFinalizationRequirement(
@@ -1440,8 +1667,14 @@ class TaxMethodologyService:
             )
         )
 
-        evidence_status = "blocked" if readiness.filing_status == "blocked" else (
-            "review" if correction is not None and correction.amendment_review_recommended else "ok"
+        evidence_status = (
+            "blocked"
+            if readiness.filing_status == "blocked"
+            else (
+                "review"
+                if correction is not None and correction.amendment_review_recommended
+                else "ok"
+            )
         )
         requirement_rows.append(
             TaxBmfFinalizationRequirement(
@@ -1497,7 +1730,9 @@ class TaxMethodologyService:
             return "Konservative Beilage/Korrekturkarte beilegen und offene Review-Hinweise nicht als steuerneutrale Transfers behaupten."
         if status == "empty":
             return "Keine V2-Eingabewerte; optional Jahresbeleg archivieren."
-        first_blocker = next((item for item in requirements if item.status == "blocked"), None)
+        first_blocker = next(
+            (item for item in requirements if item.status == "blocked"), None
+        )
         if first_blocker is not None:
             return f"Blocker schliessen: {first_blocker.label}."
         return readiness.next_action
@@ -1537,10 +1772,14 @@ class TaxMethodologyService:
             generated_at=generated_at,
             years=rows,
             available_years=available_years,
-            total_reward_income_eur=sum((row.reward_income_eur for row in rows), Decimal("0")),
+            total_reward_income_eur=sum(
+                (row.reward_income_eur for row in rows), Decimal("0")
+            ),
             total_reward_events_count=sum(row.reward_events_count for row in rows),
             years_with_rewards_count=sum(1 for row in rows if row.reward_events_count),
-            review_years_count=sum(1 for row in rows if row.consistency_status == "review"),
+            review_years_count=sum(
+                1 for row in rows if row.consistency_status == "review"
+            ),
             methodology=(
                 "Read-only Recheck ueber alle Steuerjahre. Verglichen werden "
                 "Tax-Year-Reward-Summen, Income-Guide-Klassifizierungen und "
@@ -1554,9 +1793,15 @@ class TaxMethodologyService:
             ),
         )
 
-    def _bmf_filing_readiness_year(self, year: int, *, payment_row) -> TaxBmfFilingReadinessYear:
+    def _bmf_filing_readiness_year(
+        self, year: int, *, payment_row
+    ) -> TaxBmfFilingReadinessYear:
         report = self.report(year, include_gain_evidence=False)
-        blocking_codes = [gap.code for gap in report.gaps if gap.blocks_bmf_ready or gap.severity == "blocker"]
+        blocking_codes = [
+            gap.code
+            for gap in report.gaps
+            if gap.blocks_bmf_ready or gap.severity == "blocker"
+        ]
         review_codes = [
             gap.code
             for gap in report.gaps
@@ -1570,18 +1815,28 @@ class TaxMethodologyService:
         can_file_with_conservative_appendix = bool(
             appendix is not None and appendix.can_file_with_conservative_appendix
         )
-        can_file_with_documented_review_only = bool(review_codes) and not blocking_codes and all(
-            code in self.CONSERVATIVE_REVIEW_ONLY_CODES for code in review_codes
+        can_file_with_documented_review_only = (
+            bool(review_codes)
+            and not blocking_codes
+            and all(
+                code in self.CONSERVATIVE_REVIEW_ONLY_CODES for code in review_codes
+            )
         )
         if report.status == "empty":
             filing_status = "empty"
             label = "Keine Aktivitaet"
-            next_action = "Kein Eintrag aus V2-Werten; Jahresbeleg optional archivieren."
+            next_action = (
+                "Kein Eintrag aus V2-Werten; Jahresbeleg optional archivieren."
+            )
         elif report.bmf_ready:
             filing_status = "bmf_ready"
             label = "BMF-ready"
-            next_action = "Filing Summary und Belegpaket fuer die Steuererklaerung verwenden."
-        elif can_file_with_conservative_appendix or can_file_with_documented_review_only:
+            next_action = (
+                "Filing Summary und Belegpaket fuer die Steuererklaerung verwenden."
+            )
+        elif (
+            can_file_with_conservative_appendix or can_file_with_documented_review_only
+        ):
             filing_status = "conservative_appendix"
             label = "Konservativ belegbar"
             if can_file_with_conservative_appendix:
@@ -1615,12 +1870,18 @@ class TaxMethodologyService:
                 appendix.manual_evidence_required_count if appendix is not None else 0
             ),
             taxable_private_disposals_eur=(
-                payment_row.private_disposals_gain_loss_eur if payment_row is not None else Decimal("0")
+                payment_row.private_disposals_gain_loss_eur
+                if payment_row is not None
+                else Decimal("0")
             ),
             rewards_mining_staking_income_eur=(
-                payment_row.rewards_mining_staking_income_eur if payment_row is not None else Decimal("0")
+                payment_row.rewards_mining_staking_income_eur
+                if payment_row is not None
+                else Decimal("0")
             ),
-            derivative_pnl_eur=payment_row.derivative_pnl_eur if payment_row is not None else Decimal("0"),
+            derivative_pnl_eur=payment_row.derivative_pnl_eur
+            if payment_row is not None
+            else Decimal("0"),
             blocking_gap_codes=blocking_codes,
             review_gap_codes=review_codes,
             next_action=next_action,
@@ -1632,22 +1893,34 @@ class TaxMethodologyService:
                 year=year,
                 label=label,
                 taxable_private_disposals_eur=(
-                    payment_row.private_disposals_gain_loss_eur if payment_row is not None else Decimal("0")
+                    payment_row.private_disposals_gain_loss_eur
+                    if payment_row is not None
+                    else Decimal("0")
                 ),
                 rewards_mining_staking_income_eur=(
-                    payment_row.rewards_mining_staking_income_eur if payment_row is not None else Decimal("0")
+                    payment_row.rewards_mining_staking_income_eur
+                    if payment_row is not None
+                    else Decimal("0")
                 ),
-                derivative_pnl_eur=payment_row.derivative_pnl_eur if payment_row is not None else Decimal("0"),
+                derivative_pnl_eur=payment_row.derivative_pnl_eur
+                if payment_row is not None
+                else Decimal("0"),
                 blocking_count=len(blocking_codes),
-                appendix_items_count=appendix.items_count if appendix is not None else 0,
+                appendix_items_count=appendix.items_count
+                if appendix is not None
+                else 0,
             ),
         )
 
     def _bmf_filing_readiness_ascii(self, rows: list[TaxBmfFilingReadinessYear]) -> str:
         if not rows:
-            return "Jahr | Status | Privat G/V | Rewards | Derivate | Blocker | Appendix"
+            return (
+                "Jahr | Status | Privat G/V | Rewards | Derivate | Blocker | Appendix"
+            )
         header = "Jahr | Status | Privat G/V | Rewards | Derivate | Blocker | Appendix"
-        separator = "-----|--------|------------|---------|----------|---------|---------"
+        separator = (
+            "-----|--------|------------|---------|----------|---------|---------"
+        )
         return "\n".join([header, separator, *(row.display_line for row in rows)])
 
     def _bmf_filing_readiness_line(
@@ -1674,10 +1947,14 @@ class TaxMethodologyService:
 
     def _bmf_filing_readiness_snapshot_path(self) -> Path:
         candidates = [
-            self.store.path.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
-            self.store.path.parent.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
-            Path.cwd() / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
-            self.DEFAULT_BMF_FILING_READINESS_DIR / "latest_bmf_filing_readiness_2021_2025.json",
+            self.store.path.parent
+            / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            self.store.path.parent.parent
+            / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            Path.cwd()
+            / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            self.DEFAULT_BMF_FILING_READINESS_DIR
+            / "latest_bmf_filing_readiness_2021_2025.json",
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -1691,12 +1968,22 @@ class TaxMethodologyService:
         except FileNotFoundError:
             return False
 
-    def bmf_closure_backlog(self, year: int | None = None) -> TaxBmfClosureBacklogReport:
+    def bmf_closure_backlog(
+        self, year: int | None = None
+    ) -> TaxBmfClosureBacklogReport:
         generated_at = self._now()
-        available_years = [year] if year is not None else [
-            item_year for item_year in self._available_years() if 2021 <= item_year <= 2025
+        available_years = (
+            [year]
+            if year is not None
+            else [
+                item_year
+                for item_year in self._available_years()
+                if 2021 <= item_year <= 2025
+            ]
+        )
+        rows = [
+            self._bmf_closure_backlog_year(item_year) for item_year in available_years
         ]
-        rows = [self._bmf_closure_backlog_year(item_year) for item_year in available_years]
         blockers = sum(row.blocker_items_count for row in rows)
         reviews = sum(row.review_items_count for row in rows)
         total_exposure = sum((row.total_exposure_eur for row in rows), Decimal("0"))
@@ -1768,7 +2055,9 @@ class TaxMethodologyService:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         artifact = out / f"{timestamp}_bmf_closure_backlog_2021_2025.json"
         latest = out / "latest_bmf_closure_backlog_2021_2025.json"
-        content = json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8")
+        content = json.dumps(
+            report.model_dump(mode="json"), indent=2, ensure_ascii=False
+        ).encode("utf-8")
         artifact.write_bytes(content)
         latest.write_bytes(content)
         return latest
@@ -1789,6 +2078,7 @@ class TaxMethodologyService:
                 "documented_binance_btt_bttc_redenomination",
                 "documented_manual_cex_deposit_history",
                 "documented_exchange_deposit_history",
+                "documented_service_mediated_jupiter_swap_tax_mapping_ready",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
             }:
@@ -1800,9 +2090,13 @@ class TaxMethodologyService:
                         appendix_item.closure_status,
                         appendix_item.carried_cost_basis_eur_total,
                     ),
-                    category=self._backlog_category_from_appendix(appendix_item.closure_status),
+                    category=self._backlog_category_from_appendix(
+                        appendix_item.closure_status
+                    ),
                     blocker_type=appendix_item.closure_status,
-                    severity="blocker" if appendix_item.manual_evidence_required else "warning",
+                    severity="blocker"
+                    if appendix_item.manual_evidence_required
+                    else "warning",
                     asset=appendix_item.asset,
                     source=appendix_item.source,
                     pool_id=appendix_item.pool_id,
@@ -1810,7 +2104,9 @@ class TaxMethodologyService:
                     quantity_total=appendix_item.quantity_total,
                     exposure_eur=appendix_item.carried_cost_basis_eur_total,
                     closure_status=appendix_item.closure_status,
-                    required_evidence=self._required_evidence_for_appendix(appendix_item.closure_status),
+                    required_evidence=self._required_evidence_for_appendix(
+                        appendix_item.closure_status
+                    ),
                     next_action=appendix_item.recommended_action,
                     evidence_refs=appendix_item.evidence_refs,
                 )
@@ -1822,9 +2118,15 @@ class TaxMethodologyService:
             if item.category in {"wallet_fifo_provenance", "solana_batch"}
         }
         for gap in report.gaps:
-            if gap.code == "wallet_fifo_unresolved_inbound_provenance" and appendix_blockers:
+            if (
+                gap.code == "wallet_fifo_unresolved_inbound_provenance"
+                and appendix_blockers
+            ):
                 continue
-            if gap.code in {"wallet_fifo_evidence_overlay_ok", "asset_fifo_quote_attribution_documented"}:
+            if gap.code in {
+                "wallet_fifo_evidence_overlay_ok",
+                "asset_fifo_quote_attribution_documented",
+            }:
                 continue
             items.append(
                 TaxBmfClosureBacklogItem(
@@ -1840,7 +2142,15 @@ class TaxMethodologyService:
                 )
             )
 
-        items.sort(key=lambda item: (item.priority, item.year, item.asset or "", item.source or "", item.blocker_type))
+        items.sort(
+            key=lambda item: (
+                item.priority,
+                item.year,
+                item.asset or "",
+                item.source or "",
+                item.blocker_type,
+            )
+        )
         blocker_count = sum(1 for item in items if item.severity == "blocker")
         review_count = sum(1 for item in items if item.severity != "blocker")
         exposure = sum((item.exposure_eur for item in items), Decimal("0"))
@@ -1860,8 +2170,13 @@ class TaxMethodologyService:
             return 10
         if code == "asset_fifo_possible_recalculation":
             return 20
-        if code in {"unverified_cex_deposit_sender", "tax_neutral_candidate_review_required"}:
+        if code in {
+            "unverified_cex_deposit_sender",
+            "tax_neutral_candidate_review_required",
+        }:
             return 30
+        if code == "documented_service_mediated_jupiter_swap_tax_mapping_review":
+            return 25
         if code in {"review_required", "external_or_unknown_origin_documented"}:
             return 40 if abs(exposure_eur) >= Decimal("1000") else 50
         if code == "wallet_fifo_unresolved_inbound_provenance":
@@ -1893,10 +2208,15 @@ class TaxMethodologyService:
             "solana_batch_incomplete": "Solana-Provenance-Batch erneut erzeugen oder Raw-TX-Belege nachziehen.",
             "unverified_cex_deposit_sender": "CEX-Deposit-Beleg plus Sender-Ownership-Nachweis.",
             "tax_neutral_candidate_review_required": "Review-Decision mit TXID, Sender, Empfaenger, Menge und FIFO-Fortfuehrung.",
+            "documented_service_mediated_jupiter_swap_tax_mapping_review": (
+                "Alchemy-Routenbeleg, CEX-Deposit und explizite Steuer-FIFO-Tauschregel."
+            ),
             "external_or_unknown_origin_documented": "Service-/Programm-/Exchange-Kontext oder konservative Offenlegung.",
             "review_required": "Withdrawal-/Deposit-/Onchain-Beleg mit Adresse, TXID, Zeitstempel und Menge.",
         }
-        return evidence_by_status.get(closure_status, "Fachlichen Beleg und Review-Entscheidung nachreichen.")
+        return evidence_by_status.get(
+            closure_status, "Fachlichen Beleg und Review-Entscheidung nachreichen."
+        )
 
     def _required_evidence_for_gap(self, code: str) -> str:
         evidence_by_code = {
@@ -1909,10 +2229,14 @@ class TaxMethodologyService:
 
     def _bmf_closure_backlog_snapshot_path(self) -> Path:
         candidates = [
-            self.store.path.parent / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
-            self.store.path.parent.parent / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
-            Path.cwd() / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
-            self.DEFAULT_BMF_CLOSURE_BACKLOG_DIR / "latest_bmf_closure_backlog_2021_2025.json",
+            self.store.path.parent
+            / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
+            self.store.path.parent.parent
+            / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
+            Path.cwd()
+            / "var/bmf_closure_backlog/latest_bmf_closure_backlog_2021_2025.json",
+            self.DEFAULT_BMF_CLOSURE_BACKLOG_DIR
+            / "latest_bmf_closure_backlog_2021_2025.json",
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -1922,7 +2246,9 @@ class TaxMethodologyService:
     def status(self, year: int) -> TaxYearComplianceStatus:
         return self._status_from_report(self.report(year))
 
-    def report(self, year: int, *, include_gain_evidence: bool = True) -> TaxMethodologyReport:
+    def report(
+        self, year: int, *, include_gain_evidence: bool = True
+    ) -> TaxMethodologyReport:
         generated_at = self._now()
         policy = self.policy()
         detail = self.tax_years.detail(year)
@@ -1930,25 +2256,31 @@ class TaxMethodologyService:
         counts = self._year_counts(year)
         wallet_fifo_service = WalletFifoPreviewService(self.store)
         wallet_fifo = wallet_fifo_service.preview(year=year)
-        wallet_fifo_exchange_sequencing_count = self._documented_exchange_sequencing_gap_count(
-            wallet_fifo_service,
-            year=year,
-            unmatched_count=wallet_fifo.unmatched_count,
+        wallet_fifo_exchange_sequencing_count = (
+            self._documented_exchange_sequencing_gap_count(
+                wallet_fifo_service,
+                year=year,
+                unmatched_count=wallet_fifo.unmatched_count,
+            )
         )
         wallet_fifo_documented_non_live_count = self._documented_non_live_count(
             wallet_fifo_service,
             year=year,
             unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
         )
-        wallet_fifo_documented_fiat_purchase_count = self._documented_fiat_purchase_count(
-            wallet_fifo_service,
-            year=year,
-            unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+        wallet_fifo_documented_fiat_purchase_count = (
+            self._documented_fiat_purchase_count(
+                wallet_fifo_service,
+                year=year,
+                unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+            )
         )
-        wallet_fifo_documented_legacy_cex_deposit_count = self._documented_legacy_cex_deposit_count(
-            wallet_fifo_service,
-            year=year,
-            unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+        wallet_fifo_documented_legacy_cex_deposit_count = (
+            self._documented_legacy_cex_deposit_count(
+                wallet_fifo_service,
+                year=year,
+                unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+            )
         )
         wallet_fifo_documented_legacy_cex_deposit_mirror_count = (
             self._documented_legacy_cex_deposit_mirror_count(
@@ -2013,6 +2345,11 @@ class TaxMethodologyService:
                 unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
             )
         )
+        wallet_fifo_documented_service_swap_count = self._documented_service_swap_count(
+            wallet_fifo_service,
+            year=year,
+            unresolved_count=wallet_fifo.unresolved_inbound_provenance_count,
+        )
         asset_fifo_review = self.tax_years.asset_fifo_correction_review(
             year,
             limit=200,
@@ -2062,19 +2399,28 @@ class TaxMethodologyService:
             wallet_fifo_documented_manual_cex_deposit_count=wallet_fifo_documented_manual_cex_deposit_count,
             wallet_fifo_documented_external_or_unknown_count=wallet_fifo_documented_external_or_unknown_count,
             wallet_fifo_documented_unverified_cex_count=wallet_fifo_documented_unverified_cex_count,
+            wallet_fifo_documented_service_swap_count=wallet_fifo_documented_service_swap_count,
             asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
             asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
             gain_evidence_price_delta_lines_count=(
-                gain_evidence.price_delta_lines_count if gain_evidence is not None else 0
+                gain_evidence.price_delta_lines_count
+                if gain_evidence is not None
+                else 0
             ),
             gain_evidence_material_price_delta_eur=(
-                gain_evidence.material_price_delta_eur if gain_evidence is not None else Decimal("0")
+                gain_evidence.material_price_delta_eur
+                if gain_evidence is not None
+                else Decimal("0")
             ),
             gain_evidence_open_price_delta_eur=(
-                gain_evidence.open_price_delta_eur if gain_evidence is not None else Decimal("0")
+                gain_evidence.open_price_delta_eur
+                if gain_evidence is not None
+                else Decimal("0")
             ),
             gain_evidence_event_level_reconciled_lines_count=(
-                gain_evidence.event_level_reconciled_lines_count if gain_evidence is not None else 0
+                gain_evidence.event_level_reconciled_lines_count
+                if gain_evidence is not None
+                else 0
             ),
             gain_evidence_acquisition_event_level_reconciled_lines_count=(
                 gain_evidence.acquisition_event_level_reconciled_lines_count
@@ -2102,10 +2448,14 @@ class TaxMethodologyService:
                 asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
                 asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
                 gain_evidence_price_delta_lines_count=(
-                    gain_evidence.price_delta_lines_count if gain_evidence is not None else 0
+                    gain_evidence.price_delta_lines_count
+                    if gain_evidence is not None
+                    else 0
                 ),
                 gain_evidence_open_price_delta_eur=(
-                    gain_evidence.open_price_delta_eur if gain_evidence is not None else Decimal("0")
+                    gain_evidence.open_price_delta_eur
+                    if gain_evidence is not None
+                    else Decimal("0")
                 ),
                 traceability_score=traceability_score,
             ),
@@ -2138,11 +2488,15 @@ class TaxMethodologyService:
     ) -> int:
         if unmatched_count <= 0:
             return 0
-        diagnosis = wallet_fifo_service.gap_diagnosis(year=year, limit=max(1, min(unmatched_count, 500)))
+        diagnosis = wallet_fifo_service.gap_diagnosis(
+            year=year, limit=max(1, min(unmatched_count, 500))
+        )
         events = self.store.list_canonical_events()
         documented = 0
         for gap in diagnosis.diagnoses:
-            if self._is_documented_exchange_sequencing_gap(wallet_fifo_service, gap, events):
+            if self._is_documented_exchange_sequencing_gap(
+                wallet_fifo_service, gap, events
+            ):
                 documented += 1
         return documented
 
@@ -2153,13 +2507,12 @@ class TaxMethodologyService:
         year: int,
         unresolved_count: int,
     ) -> int:
-        if unresolved_count <= 0:
-            return 0
-        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        _ = unresolved_count
         return sum(
-            item.events_count
-            for item in closure.items
-            if item.closure_status == "documented_fiat_purchase"
+            1
+            for event in self.store.list_canonical_events()
+            if reporting_tax_year(event.event_time) == year
+            and wallet_fifo_service._is_documented_fiat_purchase(event)
         )
 
     def _documented_non_live_count(
@@ -2306,6 +2659,23 @@ class TaxMethodologyService:
             if item.closure_status == "unverified_cex_deposit_sender"
         )
 
+    def _documented_service_swap_count(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unresolved_count: int,
+    ) -> int:
+        if unresolved_count <= 0:
+            return 0
+        closure = wallet_fifo_service.provenance_closure_report(year=year, limit=500)
+        return sum(
+            item.events_count
+            for item in closure.items
+            if item.closure_status
+            == "documented_service_mediated_jupiter_swap_tax_mapping_review"
+        )
+
     def _is_documented_exchange_sequencing_gap(
         self,
         wallet_fifo_service: WalletFifoPreviewService,
@@ -2317,9 +2687,12 @@ class TaxMethodologyService:
         if pool_source not in self.EXCHANGE_SEQUENCING_POOLS:
             return False
         missing_quantity = getattr(gap, "missing_quantity", Decimal("0"))
-        if missing_quantity <= 0 or missing_quantity > self.EXCHANGE_SEQUENCING_GAP_MAX_QUANTITY:
+        if (
+            missing_quantity <= 0
+            or missing_quantity > self.EXCHANGE_SEQUENCING_GAP_MAX_QUANTITY
+        ):
             return False
-        gap_time = getattr(gap, "event_time")
+        gap_time = wallet_fifo_service._as_utc(getattr(gap, "event_time"))
         window_end = gap_time + self.EXCHANGE_SEQUENCING_GAP_WINDOW
         asset = str(getattr(gap, "asset", "") or "").upper()
         covered_quantity = Decimal("0")
@@ -2332,7 +2705,7 @@ class TaxMethodologyService:
                 continue
             if wallet_fifo_service._pool_id(event) != pool_id:
                 continue
-            event_time = getattr(event, "event_time")
+            event_time = wallet_fifo_service._as_utc(getattr(event, "event_time"))
             if gap_time < event_time <= window_end:
                 covered_quantity += getattr(event, "quantity", Decimal("0"))
                 if covered_quantity >= missing_quantity:
@@ -2343,17 +2716,20 @@ class TaxMethodologyService:
         years = set(self.tax_years.summary().available_years)
         with self.store.connect() as con:
             rows = con.execute(
-                """
-                select distinct date_part('year', event_time)::integer as year
-                from canonical_events
+                f"""
+                select distinct {event_reporting_year_sql("event", "raw")} as year
+                from canonical_events event
+                left join raw_objects raw on raw.raw_object_id = event.raw_object_id
                 union
-                select distinct date_part('year', disposed_at)::integer as year
+                select distinct {reporting_year_sql("disposed_at")} as year
                 from tax_lines
                 union
-                select distinct date_part('year', acquired_at)::integer as year
-                from tax_lots
+                select distinct {event_reporting_year_sql("event", "raw")} as year
+                from tax_lots lot
+                join canonical_events event on event.event_id = lot.source_event_id
+                left join raw_objects raw on raw.raw_object_id = event.raw_object_id
                 union
-                select distinct date_part('year', event_time)::integer as year
+                select distinct {reporting_year_sql("event_time")} as year
                 from derivative_lines
                 order by year
                 """
@@ -2364,22 +2740,23 @@ class TaxMethodologyService:
     def _year_counts(self, year: int) -> dict:
         with self.store.connect() as con:
             row = con.execute(
-                """
+                f"""
                 with year_events as (
-                    select *
-                    from canonical_events
-                    where date_part('year', event_time)::integer = ?
+                    select event.*
+                    from canonical_events event
+                    left join raw_objects raw on raw.raw_object_id = event.raw_object_id
+                    where {event_reporting_year_sql("event", "raw")} = ?
                 ),
                 tax_year_lines as (
                     select l.*, lot.source_event_id as lot_source_event_id
                     from tax_lines l
                     left join tax_lots lot on lot.lot_id = l.lot_id
-                    where date_part('year', l.disposed_at)::integer = ?
+                    where {reporting_year_sql("l.disposed_at")} = ?
                 )
                 select
                     (select count(*)::integer from year_events) as canonical_events_count,
                     (select count(*)::integer from year_events where event_type in ('income', 'reward', 'staking', 'mining')) as income_events_count,
-                    (select count(*)::integer from derivative_lines where date_part('year', event_time)::integer = ?) as derivative_lines_count,
+                    (select count(*)::integer from derivative_lines where {reporting_year_sql("event_time")} = ?) as derivative_lines_count,
                     (select count(*)::integer from tax_year_lines) as tax_lines_count,
                     (
                         select count(distinct l.tax_line_id)::integer
@@ -2395,11 +2772,12 @@ class TaxMethodologyService:
                 [year, year, year],
             ).fetchone()
             source_rows = con.execute(
-                """
-                select distinct source
-                from canonical_events
-                where date_part('year', event_time)::integer = ?
-                order by source
+                f"""
+                select distinct event.source
+                from canonical_events event
+                left join raw_objects raw on raw.raw_object_id = event.raw_object_id
+                where {event_reporting_year_sql("event", "raw")} = ?
+                order by event.source
                 """,
                 [year],
             ).fetchall()
@@ -2417,7 +2795,9 @@ class TaxMethodologyService:
             "accounts_count": int(row[6] or 0),
             "assets_count": int(row[7] or 0),
             "sources": [str(source_row[0]) for source_row in source_rows],
-            "activity_count": canonical_events_count + derivative_lines_count + tax_lines_count,
+            "activity_count": canonical_events_count
+            + derivative_lines_count
+            + tax_lines_count,
         }
 
     def _reward_bmf_recheck_year(self, year: int) -> TaxRewardBmfRecheckYear:
@@ -2425,10 +2805,16 @@ class TaxMethodologyService:
         income = self.tax_years.income_report(year)
         classification_counts = income.classification_counts
         flags: list[str] = []
-        if abs(detail.rewards_income_eur - income.reward_income_eur) > Decimal("0.000000000001"):
+        if abs(detail.rewards_income_eur - income.reward_income_eur) > Decimal(
+            "0.000000000001"
+        ):
             flags.append("reward_sum_mismatch_between_tax_year_and_income_guide")
-        if detail.rewards_events_count != classification_counts.get("reward_income_candidate", 0):
-            flags.append("reward_event_count_mismatch_between_tax_year_and_income_guide")
+        if detail.rewards_events_count != classification_counts.get(
+            "reward_income_candidate", 0
+        ):
+            flags.append(
+                "reward_event_count_mismatch_between_tax_year_and_income_guide"
+            )
         if classification_counts.get("exchange_earn_or_wrapper_review", 0):
             flags.append("exchange_earn_or_wrapper_review_present")
         if classification_counts.get("solana_external_inflow_or_airdrop_review", 0):
@@ -2449,8 +2835,12 @@ class TaxMethodologyService:
             reward_events_count=detail.rewards_events_count,
             income_guide_reward_eur=income.reward_income_eur,
             income_guide_events_count=income.events_count,
-            reward_income_candidate_count=classification_counts.get("reward_income_candidate", 0),
-            exchange_or_wrapper_review_count=classification_counts.get("exchange_earn_or_wrapper_review", 0),
+            reward_income_candidate_count=classification_counts.get(
+                "reward_income_candidate", 0
+            ),
+            exchange_or_wrapper_review_count=classification_counts.get(
+                "exchange_earn_or_wrapper_review", 0
+            ),
             solana_external_or_airdrop_review_count=classification_counts.get(
                 "solana_external_inflow_or_airdrop_review", 0
             ),
@@ -2463,7 +2853,9 @@ class TaxMethodologyService:
             evidence_package_endpoint=f"/api/v1/export/tax-years/{year}/evidence-package.zip",
         )
 
-    def _reward_recheck_status(self, *, detail_state: str, flags: list[str]) -> TaxMethodologyStatus:
+    def _reward_recheck_status(
+        self, *, detail_state: str, flags: list[str]
+    ) -> TaxMethodologyStatus:
         if detail_state == "empty":
             return "empty"
         if detail_state == "blocked":
@@ -2501,6 +2893,7 @@ class TaxMethodologyService:
         wallet_fifo_documented_manual_cex_deposit_count: int,
         wallet_fifo_documented_external_or_unknown_count: int,
         wallet_fifo_documented_unverified_cex_count: int,
+        wallet_fifo_documented_service_swap_count: int,
         asset_fifo_possible_recalculation_count: int,
         asset_fifo_attribution_review_count: int,
         gain_evidence_price_delta_lines_count: int = 0,
@@ -2521,7 +2914,9 @@ class TaxMethodologyService:
                 )
             )
             return gaps
-        blocking_wallet_fifo_unmatched_count = max(0, wallet_fifo_unmatched_count - wallet_fifo_exchange_sequencing_count)
+        blocking_wallet_fifo_unmatched_count = max(
+            0, wallet_fifo_unmatched_count - wallet_fifo_exchange_sequencing_count
+        )
         if blocking_wallet_fifo_unmatched_count:
             gaps.append(
                 TaxMethodologyGap(
@@ -2598,7 +2993,8 @@ class TaxMethodologyService:
             - wallet_fifo_documented_token_redenomination_count
             - wallet_fifo_documented_manual_cex_deposit_count
             - wallet_fifo_documented_external_or_unknown_count
-            - wallet_fifo_documented_unverified_cex_count,
+            - wallet_fifo_documented_unverified_cex_count
+            - wallet_fifo_documented_service_swap_count,
         )
         if wallet_fifo_documented_non_live_count:
             gaps.append(
@@ -2827,6 +3223,28 @@ class TaxMethodologyService:
                     blocks_bmf_ready=False,
                 )
             )
+        if wallet_fifo_documented_service_swap_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_service_swap_tax_mapping_review",
+                    severity="warning",
+                    message=(
+                        f"{wallet_fifo_documented_service_swap_count} Wallet-/Depot-FIFO-"
+                        "Zufluss/Zufluesse sind als servicevermittelte Jupiter-Route "
+                        "vollstaendig belegt, aber noch nicht als Tausch verbucht."
+                    ),
+                    count=wallet_fifo_documented_service_swap_count,
+                    action=(
+                        "Input-Veraeusserung, Output-Anschaffung und Servicekosten in einer "
+                        "expliziten Steuer-FIFO-Regel abbilden; keine Eigenwallet behaupten."
+                    ),
+                    evidence_ref=(
+                        f"/api/v1/tax-years/{year}/"
+                        "wallet-fifo-solana-service-swap-evidence"
+                    ),
+                    blocks_bmf_ready=False,
+                )
+            )
         if unresolved_after_documented_fiat:
             gaps.append(
                 TaxMethodologyGap(
@@ -2884,7 +3302,9 @@ class TaxMethodologyService:
                     blocks_bmf_ready=False,
                 )
             )
-        if gain_evidence_price_delta_lines_count and abs(gain_evidence_open_price_delta_eur) <= Decimal("0.01"):
+        if gain_evidence_price_delta_lines_count and abs(
+            gain_evidence_open_price_delta_eur
+        ) <= Decimal("0.01"):
             reconciled_lines = max(
                 gain_evidence_event_level_reconciled_lines_count,
                 gain_evidence_acquisition_event_level_reconciled_lines_count,
@@ -2960,7 +3380,10 @@ class TaxMethodologyService:
                     blocks_bmf_ready=True,
                 )
             )
-        if tax_lines_count and traceability["tax_lines_with_event_trace"] < tax_lines_count:
+        if (
+            tax_lines_count
+            and traceability["tax_lines_with_event_trace"] < tax_lines_count
+        ):
             missing = tax_lines_count - traceability["tax_lines_with_event_trace"]
             gaps.append(
                 TaxMethodologyGap(
@@ -3002,7 +3425,10 @@ class TaxMethodologyService:
         gain_evidence_open_price_delta_eur: Decimal = Decimal("0"),
     ) -> list[TaxTraceabilityMetric]:
         tax_trace_status: TaxMethodologyStatus = "ok"
-        if detail_tax_lines_count and counts["tax_lines_with_event_trace"] < detail_tax_lines_count:
+        if (
+            detail_tax_lines_count
+            and counts["tax_lines_with_event_trace"] < detail_tax_lines_count
+        ):
             tax_trace_status = "blocked"
         return [
             TaxTraceabilityMetric(
@@ -3032,7 +3458,9 @@ class TaxMethodologyService:
             TaxTraceabilityMetric(
                 key="external_inflows_open",
                 label="Externe Zufluesse offen",
-                status="blocked" if external_review_count or external_unmatched_count else "ok",
+                status="blocked"
+                if external_review_count or external_unmatched_count
+                else "ok",
                 value=external_review_count + external_unmatched_count,
                 target=0,
                 detail="Ungeklaerte externe Zufluesse muessen vor BMF-Readiness klassifiziert sein.",
@@ -3042,12 +3470,16 @@ class TaxMethodologyService:
                 label="Wallet-FIFO offene Lots",
                 status=(
                     "blocked"
-                    if wallet_fifo_unmatched_count > wallet_fifo_exchange_sequencing_count
+                    if wallet_fifo_unmatched_count
+                    > wallet_fifo_exchange_sequencing_count
                     else "review"
                     if wallet_fifo_exchange_sequencing_count
                     else "ok"
                 ),
-                value=max(0, wallet_fifo_unmatched_count - wallet_fifo_exchange_sequencing_count),
+                value=max(
+                    0,
+                    wallet_fifo_unmatched_count - wallet_fifo_exchange_sequencing_count,
+                ),
                 target=0,
                 detail=(
                     "Wallet-/Depot-FIFO-Evidence-Overlay darf keine echten unmatched Abgaenge enthalten. "
@@ -3088,7 +3520,9 @@ class TaxMethodologyService:
             ),
         ]
 
-    def _traceability_score(self, gaps: list[TaxMethodologyGap], counts: dict) -> Decimal:
+    def _traceability_score(
+        self, gaps: list[TaxMethodologyGap], counts: dict
+    ) -> Decimal:
         if counts["activity_count"] == 0:
             return Decimal("0")
         score = Decimal("100")
@@ -3101,7 +3535,9 @@ class TaxMethodologyService:
                 score -= Decimal("10")
         return max(score, Decimal("0"))
 
-    def _status(self, gaps: list[TaxMethodologyGap], activity_count: int) -> TaxMethodologyStatus:
+    def _status(
+        self, gaps: list[TaxMethodologyGap], activity_count: int
+    ) -> TaxMethodologyStatus:
         if activity_count == 0:
             return "empty"
         if any(gap.severity == "blocker" for gap in gaps):
@@ -3110,7 +3546,9 @@ class TaxMethodologyService:
             return "review"
         return "ok"
 
-    def _status_from_report(self, report: TaxMethodologyReport) -> TaxYearComplianceStatus:
+    def _status_from_report(
+        self, report: TaxMethodologyReport
+    ) -> TaxYearComplianceStatus:
         return TaxYearComplianceStatus(
             year=report.year,
             status=report.status,
@@ -3131,7 +3569,9 @@ class TaxMethodologyService:
             evidence_package_endpoint=f"/api/v1/export/tax-years/{report.year}/evidence-package.zip",
         )
 
-    def _action_item_from_gap(self, year: int, gap: TaxMethodologyGap) -> TaxBmfActionItem:
+    def _action_item_from_gap(
+        self, year: int, gap: TaxMethodologyGap
+    ) -> TaxBmfActionItem:
         category = self._gap_category(gap.code)
         title = self._gap_title(gap.code)
         return TaxBmfActionItem(
@@ -3205,6 +3645,9 @@ class TaxMethodologyService:
             "wallet_fifo_unverified_cex_deposit_documented": (
                 "Wallet-FIFO CEX-Deposit ohne Sender-Ownership dokumentiert"
             ),
+            "wallet_fifo_service_swap_tax_mapping_review": (
+                "Wallet-FIFO Jupiter-Service-Tausch steuerlich abbilden"
+            ),
             "asset_fifo_possible_recalculation": "Asset-FIFO moegliche Neuberechnung",
             "asset_fifo_quote_attribution_documented": "Quote-/Attribution dokumentiert",
             "gain_evidence_event_level_reconciled": "Gain-Evidence Event-Level plausibilisiert",
@@ -3221,7 +3664,11 @@ class TaxMethodologyService:
         return sum(gap.count for gap in report.gaps if gap.code == code)
 
     def _external_count(self, report: TaxMethodologyReport) -> int:
-        return sum(gap.count for gap in report.gaps if gap.code == "external_inflows_need_evidence")
+        return sum(
+            gap.count
+            for gap in report.gaps
+            if gap.code == "external_inflows_need_evidence"
+        )
 
     def _label(self, status: TaxMethodologyStatus) -> str:
         if status == "ok":

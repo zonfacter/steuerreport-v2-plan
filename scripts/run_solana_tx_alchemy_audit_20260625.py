@@ -209,7 +209,6 @@ def _load_local_transactions(
 
 
 def _audit_row(local: dict[str, Any], status: str, raw: dict[str, Any] | None, error: str | None) -> dict[str, Any]:
-    tx_id = str(local["tx_id"])
     if not raw:
         return {
             **local,

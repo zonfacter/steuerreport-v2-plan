@@ -32,6 +32,8 @@ class WalletFifoPreviewLine(BaseModel):
     holding_days: int
     source_event_id: str
     lot_id: str
+    acquisition_source_event_id: str | None = None
+    origin_lot_id: str | None = None
 
 
 class WalletFifoPreviewUnmatched(BaseModel):
@@ -59,6 +61,36 @@ class WalletFifoTransferTrace(BaseModel):
     status: str
     source_event_id: str
     target_event_id: str
+    carry_mode: str | None = None
+    direction: str | None = None
+    evidence_status: str | None = None
+    evidence_raw_object_id: str | None = None
+    evidence_batch_id: str | None = None
+    evidence_filename: str | None = None
+    evidence_row_number: int | None = None
+    evidence_operation: str | None = None
+    basis_lots_count: int = 0
+    basis_covered_quantity: Decimal = Decimal("0")
+    basis_missing_quantity: Decimal = Decimal("0")
+
+
+class WalletFifoInternalTransferCarryReport(BaseModel):
+    generated_at: datetime
+    method_version: str
+    year: int | None = None
+    status: str
+    events_count: int = 0
+    fully_covered_count: int = 0
+    basis_pending_count: int = 0
+    carried_cost_basis_eur: Decimal = Decimal("0")
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    source_counts: dict[str, int] = Field(default_factory=dict)
+    evidence_status_counts: dict[str, int] = Field(default_factory=dict)
+    asset_counts: dict[str, int] = Field(default_factory=dict)
+    returned_count: int = 0
+    items_complete: bool = False
+    items: list[WalletFifoTransferTrace] = Field(default_factory=list)
+    methodology: str
 
 
 class WalletFifoYearDelta(BaseModel):
@@ -72,19 +104,45 @@ class WalletFifoYearDelta(BaseModel):
     wallet_tax_lines_count: int = 0
 
 
+class WalletFifoPreviewYearSummary(BaseModel):
+    year: int
+    global_gain_loss_eur: Decimal = Decimal("0")
+    wallet_gain_loss_eur: Decimal = Decimal("0")
+    delta_gain_loss_eur: Decimal = Decimal("0")
+    global_tax_lines_count: int = 0
+    wallet_tax_lines_count: int = 0
+    unmatched_count: int = 0
+    transfer_traces_count: int = 0
+    unresolved_inbound_provenance_count: int = 0
+
+
 class WalletFifoPreviewReport(BaseModel):
     generated_at: datetime
     method_version: str
     status: str
+    as_of: datetime | None = None
+    input_events_count: int = 0
     pools_count: int = 0
     lots_count: int = 0
     tax_lines_count: int = 0
     unmatched_count: int = 0
     transfer_traces_count: int = 0
     unresolved_inbound_provenance_count: int = 0
+    internal_transfer_carry_count: int = 0
+    internal_transfer_carry_fully_covered_count: int = 0
+    internal_transfer_carry_basis_pending_count: int = 0
+    internal_transfer_carried_cost_basis_eur: Decimal = Decimal("0")
+    internal_transfer_status_counts: dict[str, int] = Field(default_factory=dict)
+    internal_transfer_source_counts: dict[str, int] = Field(default_factory=dict)
+    internal_transfer_evidence_status_counts: dict[str, int] = Field(default_factory=dict)
+    internal_transfer_asset_counts: dict[str, int] = Field(default_factory=dict)
+    internal_transfer_basis_pending: list[WalletFifoTransferTrace] = Field(
+        default_factory=list
+    )
     global_gain_loss_eur: Decimal = Decimal("0")
     wallet_gain_loss_eur: Decimal = Decimal("0")
     delta_gain_loss_eur: Decimal = Decimal("0")
+    year_summaries: list[WalletFifoPreviewYearSummary] = Field(default_factory=list)
     year_deltas: list[WalletFifoYearDelta] = Field(default_factory=list)
     unmatched: list[WalletFifoPreviewUnmatched] = Field(default_factory=list)
     transfer_traces: list[WalletFifoTransferTrace] = Field(default_factory=list)
@@ -95,7 +153,12 @@ class WalletFifoPreviewReport(BaseModel):
 class LegacyHeliumWalletSummary(BaseModel):
     address: str
     label: str
-    role: Literal["main_legacy_wallet", "staking_counterparty", "migration_target"]
+    role: Literal[
+        "main_legacy_wallet",
+        "historical_staking_wallet",
+        "staking_counterparty",
+        "migration_target",
+    ]
     included_in_portfolio: bool = False
     current_portfolio_value_eur: Decimal = Decimal("0")
     canonical_events_count: int = 0
@@ -376,7 +439,9 @@ class WalletFifoCexExchangeOutflowEvidenceRow(BaseModel):
     status: str
     candidates_count: int = 0
     best_candidate: WalletFifoCexExchangeOutflowCandidate | None = None
-    candidates: list[WalletFifoCexExchangeOutflowCandidate] = Field(default_factory=list)
+    candidates: list[WalletFifoCexExchangeOutflowCandidate] = Field(
+        default_factory=list
+    )
     recommended_action: str
 
 
@@ -429,7 +494,9 @@ class WalletFifoCexExchangeOutflowAnchorFeasibilityReport(BaseModel):
     evidence_ready_count: int = 0
     anchor_ready_count: int = 0
     anchor_missing_count: int = 0
-    items: list[WalletFifoCexExchangeOutflowAnchorFeasibilityItem] = Field(default_factory=list)
+    items: list[WalletFifoCexExchangeOutflowAnchorFeasibilityItem] = Field(
+        default_factory=list
+    )
     methodology: str
 
 
@@ -517,7 +584,9 @@ class WalletFifoProvenancePriorityReport(BaseModel):
     unresolved_inbound_provenance_count: int = 0
     groups_count: int = 0
     groups: list[WalletFifoProvenancePriorityGroup] = Field(default_factory=list)
-    status_breakdown: list[WalletFifoProvenanceStatusBreakdown] = Field(default_factory=list)
+    status_breakdown: list[WalletFifoProvenanceStatusBreakdown] = Field(
+        default_factory=list
+    )
     methodology: str
 
 
@@ -718,7 +787,9 @@ class WalletFifoSolanaProvenanceClassificationReport(BaseModel):
     own_transfer_candidates_count: int = 0
     external_or_unknown_count: int = 0
     failed_count: int = 0
-    classifications: list[WalletFifoSolanaProvenanceClassification] = Field(default_factory=list)
+    classifications: list[WalletFifoSolanaProvenanceClassification] = Field(
+        default_factory=list
+    )
     methodology: str
 
 
@@ -742,6 +813,152 @@ class WalletFifoSolanaProvenanceBatchLatest(BaseModel):
     last_batch_offset: int | None = None
     last_batch_failed_count: int | None = None
     last_batch_status: str | None = None
+    methodology: str
+
+
+class WalletFifoSolanaProgramSettlementClosedAccount(BaseModel):
+    address: str | None = None
+    lamports: int
+
+
+class WalletFifoSolanaProgramSettlementEvidenceRecord(BaseModel):
+    event_id: str
+    event_time: datetime
+    tx_id: str
+    wallet: str
+    asset: str = "SOL"
+    quantity: Decimal
+    expected_gross_credit_lamports: int
+    wallet_delta_lamports: int
+    fee_lamports: int
+    closed_accounts_total_lamports: int
+    closed_accounts: list[WalletFifoSolanaProgramSettlementClosedAccount] = Field(
+        default_factory=list
+    )
+    wallet_is_signer: bool = False
+    signers: list[str] = Field(default_factory=list)
+    program_ids: list[str] = Field(default_factory=list)
+    transaction_succeeded: bool = False
+    exact_lamport_reconciliation: bool = False
+    classification: str
+    evidence_source: str
+
+
+class WalletFifoSolanaProgramSettlementEvidenceReport(BaseModel):
+    generated_at: datetime | None = None
+    year: int
+    asset: str = "SOL"
+    wallet: str | None = None
+    pool_id: str | None = None
+    provider: str | None = None
+    artifact_path: str
+    exists: bool = False
+    status: str = "not_available"
+    strict_ready: bool = False
+    artifact_integrity_valid: bool = False
+    database_binding_valid: bool = False
+    records_count: int = 0
+    verified_count: int = 0
+    review_count: int = 0
+    failed_count: int = 0
+    semantic_sha256: str | None = None
+    records: list[WalletFifoSolanaProgramSettlementEvidenceRecord] = Field(
+        default_factory=list
+    )
+    rpc_errors: list[dict[str, str]] = Field(default_factory=list)
+    methodology: str
+
+
+class WalletFifoSolanaServiceSwapDecisionLayer(BaseModel):
+    source_wallet_is_signer: bool = False
+    source_asset_to_route_exact: bool = False
+    funding_wallet_is_signer: bool = False
+    funding_to_route_exact: bool = False
+    route_wallet_is_swap_signer: bool = False
+    jupiter_program_present: bool = False
+    swap_input_exact: bool = False
+    swap_output_positive: bool = False
+    route_wallet_is_deposit_signer: bool = False
+    cex_deposit_address_matches: bool = False
+    route_to_cex_deposit_exact: bool = False
+    cex_deposit_completed: bool = False
+    swap_timestamp_present: bool = False
+    wallet_native_costs_reconciled: bool = False
+    route_native_balance_reconciled: bool = False
+
+
+class WalletFifoSolanaServiceSwapEvidenceRecord(BaseModel):
+    source_event_id: str
+    source_event_time: datetime
+    source_tx_id: str
+    source_wallet: str
+    source_asset: str
+    source_mint: str | None = None
+    source_quantity: Decimal
+    funding_event_id: str
+    funding_event_time: datetime
+    funding_tx_id: str
+    funding_quantity: Decimal
+    funding_transfer_lamports: int
+    swap_tx_id: str
+    swap_event_time: datetime
+    route_wallet: str
+    swap_input_quantity: Decimal
+    swap_output_lamports: int
+    swap_output_quantity: Decimal
+    deposit_event_id: str
+    deposit_event_time: datetime
+    deposit_onchain_event_time: datetime
+    deposit_tx_id: str
+    deposit_exchange: str
+    deposit_address: str
+    deposit_asset: str
+    deposit_quantity: Decimal
+    source_native_outflow_lamports: int
+    source_network_fee_lamports: int
+    funding_native_outflow_lamports: int
+    funding_network_fee_lamports: int
+    swap_network_fee_lamports: int
+    deposit_network_fee_lamports: int
+    direct_wallet_cost_lamports: int
+    direct_wallet_cost_quantity: Decimal
+    output_withheld_lamports: int
+    output_withheld_quantity: Decimal
+    route_balance_after_deposit_lamports: int
+    route_balance_after_deposit_quantity: Decimal
+    source_signers: list[str] = Field(default_factory=list)
+    funding_signers: list[str] = Field(default_factory=list)
+    swap_signers: list[str] = Field(default_factory=list)
+    deposit_signers: list[str] = Field(default_factory=list)
+    swap_program_ids: list[str] = Field(default_factory=list)
+    decision_layer: WalletFifoSolanaServiceSwapDecisionLayer
+    classification: str
+    tax_treatment: str
+    evidence_source: str
+
+
+class WalletFifoSolanaServiceSwapEvidenceReport(BaseModel):
+    generated_at: datetime | None = None
+    year: int
+    wallet: str | None = None
+    route_wallet: str | None = None
+    provider: str | None = None
+    artifact_path: str
+    exists: bool = False
+    status: str = "not_available"
+    evidence_ready: bool = False
+    tax_mapping_ready: bool = False
+    artifact_integrity_valid: bool = False
+    database_binding_valid: bool = False
+    records_count: int = 0
+    verified_count: int = 0
+    review_count: int = 0
+    failed_count: int = 0
+    semantic_sha256: str | None = None
+    records: list[WalletFifoSolanaServiceSwapEvidenceRecord] = Field(
+        default_factory=list
+    )
+    rpc_errors: list[dict[str, str]] = Field(default_factory=list)
     methodology: str
 
 
@@ -789,7 +1006,9 @@ class WalletFifoSolanaRawProvenancePriorityReport(BaseModel):
     solana_tiny_raw_credit_count: int = 0
     total_quantity: Decimal = Decimal("0")
     total_cost_basis_eur: Decimal = Decimal("0")
-    priorities: list[WalletFifoSolanaRawProvenancePriority] = Field(default_factory=list)
+    priorities: list[WalletFifoSolanaRawProvenancePriority] = Field(
+        default_factory=list
+    )
     methodology: str
 
 
@@ -831,7 +1050,9 @@ class WalletFifoSolanaRawProvenanceSenderSummaryReport(BaseModel):
     solana_tiny_raw_credit_count: int = 0
     total_quantity: Decimal = Decimal("0")
     total_cost_basis_eur: Decimal = Decimal("0")
-    senders: list[WalletFifoSolanaRawProvenanceSenderSummary] = Field(default_factory=list)
+    senders: list[WalletFifoSolanaRawProvenanceSenderSummary] = Field(
+        default_factory=list
+    )
     methodology: str
 
 
@@ -916,8 +1137,12 @@ class WalletFifoSolanaRawBmfEvidenceDrilldownReport(BaseModel):
     groups_count: int = 0
     total_quantity: Decimal = Decimal("0")
     total_cost_basis_eur: Decimal = Decimal("0")
-    signer_groups: list[WalletFifoSolanaRawBmfEvidenceSignerGroup] = Field(default_factory=list)
-    events: list[WalletFifoSolanaRawBmfEvidenceDrilldownEvent] = Field(default_factory=list)
+    signer_groups: list[WalletFifoSolanaRawBmfEvidenceSignerGroup] = Field(
+        default_factory=list
+    )
+    events: list[WalletFifoSolanaRawBmfEvidenceDrilldownEvent] = Field(
+        default_factory=list
+    )
     methodology: str
 
 
@@ -999,7 +1224,9 @@ class WalletFifoSolanaSenderClusterOutflowSample(BaseModel):
     inbound_sender_owner: str
     inbound_receiver_owner: str | None = None
     inbound_amount: Decimal
-    candidates: list[WalletFifoSolanaNearbyOutflowCandidate] = Field(default_factory=list)
+    candidates: list[WalletFifoSolanaNearbyOutflowCandidate] = Field(
+        default_factory=list
+    )
 
 
 class WalletFifoSolanaSenderClusterOutflowReport(BaseModel):
@@ -1014,7 +1241,9 @@ class WalletFifoSolanaSenderClusterOutflowReport(BaseModel):
     candidates_count: int = 0
     window_hours: int = 48
     amount_tolerance_percent: Decimal = Decimal("1")
-    samples: list[WalletFifoSolanaSenderClusterOutflowSample] = Field(default_factory=list)
+    samples: list[WalletFifoSolanaSenderClusterOutflowSample] = Field(
+        default_factory=list
+    )
     methodology: str
 
 

@@ -30,6 +30,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.flows import FlowService
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.tax import TaxService
+from steuerreport_v2.domain.tax_time import reporting_tax_year, reporting_year_sql
 
 MetricKey = tuple[str, str, str, int | None, str | None, str | None]
 DEFAULT_PRICE_CONFIG = Path("/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json")
@@ -303,7 +304,7 @@ class V1ParityService:
         canonical_asset = self._canonical_asset(asset)
         with self.store.connect() as con:
             row = con.execute(
-                """
+                f"""
                 select
                     coalesce(sum(quantity), 0) as quantity_disposed,
                     coalesce(sum(acquisition_cost_eur), 0) as acquisition_cost_eur,
@@ -311,7 +312,7 @@ class V1ParityService:
                     coalesce(sum(gain_loss_eur), 0) as gain_loss_eur
                 from tax_lines
                 where asset = ?
-                  and year(disposed_at) = ?
+                  and {reporting_year_sql('disposed_at')} = ?
                 """,
                 [canonical_asset, year],
             ).fetchone()
@@ -492,7 +493,7 @@ class V1ParityService:
     def _hnt_wallet_bridge_rows(self, year: int) -> list[HntWalletBridgeRow]:
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     source,
                     account,
@@ -504,7 +505,7 @@ class V1ParityService:
                     max(event_time) as last_event_at
                 from canonical_events
                 where asset = 'HNT'
-                  and year(event_time) = ?
+                  and {reporting_year_sql('event_time')} = ?
                 group by 1, 2, 3, 4
                 order by source, account, event_type, direction
                 """,
@@ -966,7 +967,7 @@ class V1ParityService:
             (
                 line.quantity
                 for line in TaxService(self.store).list_tax_lines()
-                if line.asset == asset.upper() and line.disposed_at.year == year
+                if line.asset == asset.upper() and reporting_tax_year(line.disposed_at) == year
             ),
             Decimal("0"),
         )
@@ -975,7 +976,7 @@ class V1ParityService:
         canonical_asset = self._canonical_asset(asset)
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     e.source,
                     e.account,
@@ -993,7 +994,7 @@ class V1ParityService:
                 left join raw_objects r on r.raw_object_id = e.raw_object_id
                 left join raw_import_batches b on b.batch_id = r.batch_id
                 where l.asset = ?
-                  and year(l.disposed_at) = ?
+                  and {reporting_year_sql('l.disposed_at')} = ?
                 group by 1, 2, 3
                 order by quantity desc
                 limit 50
@@ -1021,7 +1022,7 @@ class V1ParityService:
         canonical_asset = self._canonical_asset(asset)
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     e.event_time,
                     e.source,
@@ -1041,7 +1042,7 @@ class V1ParityService:
                 left join raw_objects r on r.raw_object_id = e.raw_object_id
                 left join raw_import_batches b on b.batch_id = r.batch_id
                 where l.asset = ?
-                  and year(l.disposed_at) = ?
+                  and {reporting_year_sql('l.disposed_at')} = ?
                 group by
                     e.event_time, e.source, e.account, e.source_ref, b.filename,
                     e.raw_object_id, e.quantity, e.quote_asset, e.quote_quantity,
@@ -1148,9 +1149,9 @@ class V1ParityService:
     def _add_tax_metrics(self, metrics: defaultdict[MetricKey, Decimal]) -> None:
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
-                    year(disposed_at) as tax_year,
+                    {reporting_year_sql('disposed_at')} as tax_year,
                     asset,
                     coalesce(sum(quantity), 0) as quantity_disposed,
                     coalesce(sum(acquisition_cost_eur), 0) as acquisition_cost_eur,

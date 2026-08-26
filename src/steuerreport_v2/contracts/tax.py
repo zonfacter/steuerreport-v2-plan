@@ -14,6 +14,9 @@ class TaxLot(BaseModel):
     quantity_remaining: Decimal
     cost_basis_eur_total: Decimal
     source_event_id: str
+    pool_id: str | None = None
+    origin_lot_id: str | None = None
+    fifo_method: str = "global_asset_with_wallet_fifo_evidence_overlay_v1"
 
 
 class TaxLine(BaseModel):
@@ -28,6 +31,10 @@ class TaxLine(BaseModel):
     holding_days: int
     source_event_id: str
     lot_id: str
+    pool_id: str | None = None
+    acquisition_source_event_id: str | None = None
+    origin_lot_id: str | None = None
+    fifo_method: str = "global_asset_with_wallet_fifo_evidence_overlay_v1"
 
 
 class TaxUnmatchedDisposal(BaseModel):
@@ -59,6 +66,8 @@ class TaxRunSummary(BaseModel):
     tax_lines_count: int
     unmatched_disposals: int
     created_at: datetime
+    fifo_method: str = "global_asset_with_wallet_fifo_evidence_overlay_v1"
+    input_fingerprint_digest: str | None = None
 
 
 class TaxHoldingPeriodLot(BaseModel):

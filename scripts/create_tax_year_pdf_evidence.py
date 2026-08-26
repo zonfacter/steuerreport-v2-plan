@@ -14,7 +14,6 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    KeepTogether,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax import TaxService
@@ -41,6 +42,48 @@ def test_fifo_tax_rebuild_creates_gain_loss_line(tmp_path):
     assert summary is not None
     assert summary.tax_lines_count == 1
     assert summary.unmatched_disposals == 0
+
+
+def test_fifo_uses_net_acquired_quantity_and_net_quote_proceeds_for_fees(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="BTC",
+                quantity=Decimal("1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("100"),
+                fee_asset="BTC",
+                fee_quantity=Decimal("0.01"),
+                account="Spot",
+            ),
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2025, 2, 1, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="BTC",
+                quantity=Decimal("-0.99"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("150"),
+                fee_asset="EUR",
+                fee_quantity=Decimal("1"),
+                account="Spot",
+            ),
+        ]
+    )
+
+    result = TaxService(store).rebuild_fifo()
+
+    assert result.unmatched_disposals == 0
+    assert result.lots[0].quantity_total == Decimal("0.99")
+    assert result.lots[0].cost_basis_eur_total == Decimal("100")
+    assert result.tax_lines[0].quantity == Decimal("0.99")
+    assert result.tax_lines[0].acquisition_cost_eur == Decimal("100")
+    assert result.tax_lines[0].disposal_proceeds_eur == Decimal("149")
+    assert result.tax_lines[0].gain_loss_eur == Decimal("49")
 
 
 def test_holding_period_report_filters_dust_and_buckets_tax_free_lots(tmp_path):
@@ -309,6 +352,53 @@ def test_fifo_creates_quote_asset_disposal_for_crypto_to_crypto_buy(tmp_path):
     assert result.tax_lines[0].disposal_proceeds_eur == Decimal("240.000000000000000000")
     lots_by_asset = {lot.asset: lot for lot in result.lots}
     assert lots_by_asset["JUP"].cost_basis_eur_total == Decimal("240.000000000000000000")
+
+
+def test_global_fifo_received_asset_first_preview_is_read_only(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="manual-csv",
+        filename="sol-jup-preview.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2024-01-01T00:00:00Z,SOL,10,buy,EUR,1000\n"
+            "2024-02-01T00:00:00Z,JUP,100,buy,SOL,2\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="SOL",
+            price_eur=Decimal("120"),
+            priced_at=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            source="sol-price",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="JUP",
+            price_eur=Decimal("3"),
+            priced_at=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            source="jup-price",
+        )
+    )
+    service = TaxService(store)
+
+    current = service.preview_global_fifo()
+    received_first = service.preview_global_fifo(received_asset_first=True)
+
+    current_jup = next(lot for lot in current.lots if lot.asset == "JUP")
+    preview_jup = next(lot for lot in received_first.lots if lot.asset == "JUP")
+    assert current_jup.cost_basis_eur_total == Decimal("240")
+    assert preview_jup.cost_basis_eur_total == Decimal("300")
+    assert current.tax_lines[0].disposal_proceeds_eur == Decimal("240")
+    assert received_first.tax_lines[0].disposal_proceeds_eur == Decimal("300")
+    with store.connect() as con:
+        assert con.execute("select count(*) from tax_lots").fetchone()[0] == 0
+        assert con.execute("select count(*) from tax_lines").fetchone()[0] == 0
+
+    persisted = service.rebuild_fifo()
+    assert persisted.tax_lines[0].disposal_proceeds_eur == Decimal("240")
 
 
 def test_fifo_reports_unmatched_quote_asset_disposal_for_crypto_buy(tmp_path):

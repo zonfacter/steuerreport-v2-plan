@@ -49,6 +49,8 @@ RULES: tuple[_PolicyRule, ...] = (
     _PolicyRule("legacy_daten/Heliumtracker/Auswertung 2022-2024.xlsx", "reference_only", False, "exclude", "Heliumtracker-Auswertung ist Beleg-/Analysequelle."),
     _PolicyRule("blockpit/blockpit 09052026 Transactions.csv", "staging_required", False, "blockpit_staging_only", "Blockpit/Solana darf nur ueber Staging-Preflight laufen."),
     _PolicyRule("2025 Transaktionen Blockpit.csv", "staging_required", False, "future_year_review", "Blockpit-2025 braucht eigene Jahres-/Quellenentscheidung."),
+    _PolicyRule("MoonPay_trade-history.csv", "reference_only", False, "evidence_only", "MoonPay-Trade-History wird ausschliesslich ueber den spezialisierten Anschaffungsnachweis verarbeitet."),
+    _PolicyRule("Sparkasse/*.CSV", "reference_only", False, "evidence_only", "Sparkassen-CAMT-Aggregate sind ausschliesslich read-only Fiat-/MoonPay-Belege und keine Krypto-Importquelle."),
     _PolicyRule("legacy_daten/Steuer-2022/Blockpit - Manual Import Template.xlsx", "reference_only", False, "exclude", "Blockpit-Template ist Arbeitsbeleg."),
     _PolicyRule("Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv", "parser_needed", False, "exclude", "Wallet-Monatsaggregat braucht eigenen Parser."),
     _PolicyRule("jup/*.csv", "parser_needed", False, "exclude", "JUP-/Perps-Datei braucht Derivate-/Perps-Parser."),

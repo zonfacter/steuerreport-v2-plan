@@ -6,9 +6,11 @@ import sqlite3
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.admin import AdminSettingWrite
-from steuerreport_v2.contracts.jupiter import JupiterTokenSearchItem, JupiterTokenSearchResult
+from steuerreport_v2.contracts.jupiter import (
+    JupiterTokenSearchItem,
+    JupiterTokenSearchResult,
+)
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.admin import AdminService
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 
 
@@ -105,7 +107,9 @@ def test_jupiter_token_search_api_route(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     monkeypatch.setattr(JupiterTokenService, "_api_key", lambda _self: "")
 
-    response = _call_get_route(create_app(store), "/api/v1/sources/jupiter/tokens/search", query="JUP")
+    response = _call_get_route(
+        create_app(store), "/api/v1/sources/jupiter/tokens/search", query="JUP"
+    )
 
     assert response.status == "warning"
     assert response.data.status == "missing_api_key"
@@ -125,12 +129,16 @@ def test_jupiter_api_key_endpoint_writes_secret_without_echo(tmp_path):
     assert response.status == "ok"
     assert response.data.provider == "jupiter"
     assert response.data.written_keys == ["secret.jupiter.api_key"]
-    stored = {setting.key: setting.value_json for setting in store.list_admin_settings()}
+    stored = {
+        setting.key: setting.value_json for setting in store.list_admin_settings()
+    }
     assert stored["secret.jupiter.api_key"] == '"dummy-jupiter-no-echo"'
     assert "dummy-jupiter-no-echo" not in str(response.data)
 
 
-def test_jupiter_metadata_cache_collects_mints_from_existing_data(tmp_path, monkeypatch):
+def test_jupiter_metadata_cache_collects_mints_from_existing_data(
+    tmp_path, monkeypatch
+):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     monkeypatch.setattr(JupiterTokenService, "V1_DB_PATH", tmp_path / "missing-v1.db")
     jup_mint = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
@@ -156,7 +164,10 @@ def test_jupiter_metadata_cache_collects_mints_from_existing_data(tmp_path, monk
             insert into raw_objects (raw_object_id, batch_id, row_number, payload_json, created_at)
             values ('raw-1', 'batch-1', 1, ?, ?)
             """,
-            [f'{{"tokenAddress":"{iot_mint}","owner":"not-a-mint"}}', datetime.now(timezone.utc)],
+            [
+                f'{{"tokenAddress":"{iot_mint}","owner":"not-a-mint"}}',
+                datetime.now(timezone.utc),
+            ],
         )
     monkeypatch.setattr(JupiterTokenService, "_api_key", lambda _self: "jup-key")
 
@@ -168,7 +179,9 @@ def test_jupiter_metadata_cache_collects_mints_from_existing_data(tmp_path, monk
     assert result.uncached_count == 2
 
 
-def test_jupiter_metadata_cache_collects_v1_solscan_token_addresses(tmp_path, monkeypatch):
+def test_jupiter_metadata_cache_collects_v1_solscan_token_addresses(
+    tmp_path, monkeypatch
+):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     v1_db = tmp_path / "steuerreport.db"
     hnt_mint = "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux"
@@ -194,7 +207,9 @@ def test_jupiter_metadata_cache_collects_v1_solscan_token_addresses(tmp_path, mo
     assert result.uncached_count == 1
 
 
-def test_jupiter_metadata_refresh_writes_cache_without_touching_tax_data(tmp_path, monkeypatch):
+def test_jupiter_metadata_refresh_writes_cache_without_touching_tax_data(
+    tmp_path, monkeypatch
+):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     monkeypatch.setattr(JupiterTokenService, "V1_DB_PATH", tmp_path / "missing-v1.db")
     jup_mint = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
@@ -278,9 +293,14 @@ def test_jupiter_metadata_cache_api_routes(tmp_path, monkeypatch):
     monkeypatch.setattr(JupiterTokenService, "_api_key", lambda _self: "")
     app = create_app(store)
 
-    cache_response = _call_get_route(app, "/api/v1/sources/jupiter/tokens/metadata-cache", limit=20)
+    cache_response = _call_get_route(
+        app, "/api/v1/sources/jupiter/tokens/metadata-cache", limit=20
+    )
     refresh_route = next(
-        route for route in app.routes if getattr(route, "path", None) == "/api/v1/sources/jupiter/tokens/metadata-cache/refresh"
+        route
+        for route in app.routes
+        if getattr(route, "path", None)
+        == "/api/v1/sources/jupiter/tokens/metadata-cache/refresh"
     )
     refresh_response = refresh_route.endpoint(limit=20, force=False)
 
@@ -320,6 +340,32 @@ def test_jupiter_risk_review_filters_spam_review(tmp_path, monkeypatch):
     assert result.verified_count == 1
     assert result.items[0].symbol == "FAKE"
     assert result.items[0].risk_status == "spam_review"
+
+
+def test_jupiter_metadata_asset_alias_strips_leading_dollar(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    monkeypatch.setattr(JupiterTokenService, "V1_DB_PATH", tmp_path / "missing-v1.db")
+    now = datetime.now(timezone.utc)
+    mint = "7atgF8KQo4wJrD5ATGX7t1V2zVvykPJbFfNeVf1icFv1"
+    with store.connect() as con:
+        con.execute(
+            """
+            insert into jupiter_token_metadata_cache (
+                mint, symbol, name, decimals, icon, token_program, is_verified,
+                organic_score, organic_score_label, holder_count, liquidity_usd,
+                usd_price, market_cap_usd, risk_status, source,
+                discovered_sources_json, refreshed_at, jupiter_updated_at
+            ) values (?, '$CWIF', 'catwifhat', 2, null, null, true,
+                      46, 'medium', 100, 1000, 0.1, 1000, 'verified',
+                      'jupiter_tokens_v2', '[]', ?, null)
+            """,
+            [mint, now],
+        )
+
+    metadata = JupiterTokenService(store).cached_metadata_by_asset()
+
+    assert metadata["$CWIF"].mint == mint
+    assert metadata["CWIF"].mint == mint
 
 
 def test_jupiter_risk_review_api_route_rejects_unknown_filter(tmp_path):

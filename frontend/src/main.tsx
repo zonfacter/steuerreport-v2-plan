@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AlertTriangle,
+  Archive,
+  ArrowRight,
   Bot,
   CalendarDays,
   Database,
@@ -12,14 +14,17 @@ import {
   FileJson,
   GitBranch,
   LayoutDashboard,
+  Menu,
   PackageCheck,
   ReceiptText,
   RefreshCcw,
+  Route,
   Scale,
   Settings,
   Trash2,
   Upload,
-  WalletCards
+  WalletCards,
+  X
 } from "lucide-react";
 import "./styles.css";
 
@@ -43,6 +48,21 @@ type ApiResponse<T> = {
   data: T;
   errors: Array<{ code: string; message: string }>;
   warnings: Array<{ code: string; message: string }>;
+};
+
+type BitgetBasisDecisionPayload = {
+  decision:
+    | "retain_provider_gap_pending_professional_review"
+    | "approve_zero_basis_estimate_for_staging"
+    | "approve_settlement_value_proxy_estimate_for_staging"
+    | "rejected_requires_rework";
+  rationale: string;
+  actor: string;
+  acknowledge_provider_fill_data_missing: true;
+  acknowledge_estimate_not_observed_transaction: true;
+  acknowledge_consistent_application: true;
+  acknowledge_no_automatic_tax_effect: true;
+  acknowledge_professional_review_before_filing: true;
 };
 
 type ReconciliationRefreshResult = {
@@ -109,6 +129,278 @@ type EvidenceHealth = {
   missing_decision_count: number;
   action_path: string;
   detail: string;
+};
+
+type DivorceValuationGate = {
+  valuation_at: string;
+  materiality_threshold_eur: string;
+  positions_count: number;
+  material_positions_count: number;
+  same_day_price_count: number;
+  prior_day_price_count: number;
+  stale_price_count: number;
+  missing_price_count: number;
+  review_asset_count: number;
+  accepted_review_asset_count: number;
+  strict_ready: boolean;
+  status: string;
+  affected_assets: string[];
+  accepted_review_assets: string[];
+  token_review_evidence_refs: string[];
+  findings: string[];
+};
+
+type AsOfPriceGateCandidate = {
+  asset: string;
+  accounts: string[];
+  quantity: string;
+  value_eur: string;
+  current_price_eur?: string | null;
+  current_priced_at?: string | null;
+  current_price_source?: string | null;
+  current_price_age_days?: number | null;
+  current_price_status: string;
+  provider_id?: string | null;
+  token_mint?: string | null;
+  token_verified?: boolean | null;
+  token_risk_status?: string | null;
+  token_review_status: "not_required" | "pending" | "accepted";
+  token_review_decision_id?: string | null;
+  token_review_evidence_ref?: string | null;
+  status: string;
+  reason: string;
+};
+
+type AsOfPriceGateReport = {
+  generated_at: string;
+  as_of: string;
+  materiality_threshold_eur: string;
+  strict_ready: boolean;
+  status: string;
+  material_assets_count: number;
+  requirements_count: number;
+  fetchable_count: number;
+  review_only_count: number;
+  not_configured_count: number;
+  candidates: AsOfPriceGateCandidate[];
+  gate: DivorceValuationGate;
+  methodology: string;
+};
+
+type DivorceCapitalFlowGate = {
+  cutoff_at: string;
+  valuation_at: string;
+  materiality_threshold_eur: string;
+  opening_value_eur: string;
+  closing_value_eur: string;
+  confirmed_contributions_eur: string;
+  provisional_contributions_eur: string;
+  total_contributions_eur: string;
+  confirmed_external_distributions_eur: string;
+  review_outflow_value_eur: string;
+  internal_transfer_value_eur: string;
+  internal_service_position_loss_value_eur: string;
+  technical_fee_value_eur: string;
+  operational_adjustment_value_eur: string;
+  flow_adjusted_change_eur: string;
+  flow_adjusted_change_if_all_review_outflows_are_external_eur: string | null;
+  outflows_count: number;
+  internal_outflows_count: number;
+  confirmed_service_position_loss_count: number;
+  confirmed_external_distributions_count: number;
+  material_review_outflows_count: number;
+  unpriced_review_outflows_count: number;
+  capital_origin_pending_count: number;
+  strict_ready: boolean;
+  status: "blocked" | "review" | "strict_ready";
+  contributions: Array<Record<string, unknown>>;
+  outflows: Array<Record<string, unknown>>;
+  findings: string[];
+  methodology: string;
+};
+
+type DivorceServiceRouteEvidenceReport = {
+  generated_at: string;
+  status: "ready_for_review" | "review_required" | "failed";
+  strict_ready: boolean;
+  end_asset_date: string;
+  tx_id: string;
+  canonical_event_id?: string | null;
+  wallet?: string | null;
+  wallet_source_id?: string | null;
+  collateral_quantity?: string | null;
+  collateral_added_usd?: string | null;
+  position_account?: string | null;
+  liquidation_tx_id?: string | null;
+  liquidation_block_time?: string | null;
+  liquidation_instruction?: string | null;
+  liquidation_net_loss_usd?: string | null;
+  residual_position_account_quantity?: string | null;
+  residual_position_account_value_eur?: string | null;
+  semantic_sha256: string;
+  evidence_files: Array<{
+    kind: string;
+    path: string;
+    size_bytes: number;
+    sha256: string;
+  }>;
+  errors: string[];
+  findings: string[];
+  methodology: string;
+};
+
+type DivorceInheritanceOriginGate = {
+  generated_at: string;
+  separation_date: string;
+  end_asset_date: string;
+  status: "blocked" | "review" | "strict_ready";
+  strict_ready: boolean;
+  bank_statement_status: "missing" | "partial" | "complete";
+  bank_statement_from?: string | null;
+  bank_statement_to?: string | null;
+  bank_files_count: number;
+  opening_balance_eur?: string | null;
+  end_asset_closing_balance_eur?: string | null;
+  minimum_closing_balance_after_inheritance_eur?: string | null;
+  inheritance_credit?: Record<string, unknown> | null;
+  inheritance_credits: Array<{
+    booking_date: string;
+    amount_eur: string;
+    evidence_status: "bank_primary_evidence" | "review";
+    evidence_source: "bank_camt" | "supporting_document";
+    date_basis: "bank_booking_date" | "document_date";
+    credit_kind: "estate_account_transfer" | "estate_asset_realization" | "estate_refund";
+    classification_source: "camt_marker" | "review_decision";
+    transaction_reference_sha256: string;
+    evidence_ref: string;
+    supporting_evidence_ref?: string | null;
+    review_decision_id?: string | null;
+    note: string;
+  }>;
+  inheritance_credit_count: number;
+  inheritance_credit_eur: string;
+  user_declaration_status: "missing" | "recorded";
+  formal_inheritance_document_status: "missing" | "documented";
+  formal_inheritance_connector: {
+    document_root: string;
+    document_files_count: number;
+    document_manifest_sha256?: string | null;
+    status: "missing" | "candidate_present" | "reviewed";
+    review_ready: boolean;
+    accepted_document_sha256?: string | null;
+    accepted_evidence_ref?: string | null;
+    documents: Array<{
+      document_sha256: string;
+      media_type: "application/pdf" | "image/jpeg" | "image/png";
+      size_bytes: number;
+      source_kind: "configured_path" | "managed_upload";
+      review_status: "candidate" | "reviewed";
+      evidence_ref: string;
+    }>;
+    note: string;
+  };
+  bank_identified_investment_eur: string;
+  platform_only_investment_eur: string;
+  total_identified_investment_eur: string;
+  declared_inheritance_headroom_eur?: string | null;
+  crypto_tracked_investment_eur: string;
+  external_asset_investment_eur: string;
+  external_asset_end_value_eur?: string | null;
+  external_asset_gain_loss_eur?: string | null;
+  provider_summaries: Array<Record<string, unknown>>;
+  investment_flows: Array<Record<string, unknown>>;
+  sparkasse_statement_connector?: {
+    status: "missing" | "parsed" | "partial" | "failed";
+    document_files_count: number;
+    parsed_documents_count: number;
+    parse_error_count: number;
+    period_from?: string | null;
+    period_to?: string | null;
+    crypto_debits_count: number;
+    crypto_debits_eur: string;
+    exact_camt_matches_count: number;
+    ambiguous_camt_matches_count: number;
+    missing_camt_matches_count: number;
+    duplicate_investment_flows_prevented_count: number;
+    calculation_effect: "corroboration_only_no_duplicate_flow";
+    findings: string[];
+    methodology: string;
+  };
+  trade_republic_connector: Record<string, unknown> & {
+    official_psd2_api_available?: boolean;
+    direct_retail_api_available?: boolean;
+    access_model?: string;
+    confirmed_api_scope?: string;
+    selected_ingestion_mode?: string;
+    document_files_count?: number;
+    document_parse_status?: "missing" | "parsed" | "partial" | "failed";
+    parsed_documents_count?: number;
+    parse_error_count?: number;
+    exact_date_documents_count?: number;
+    valuation_candidates_count?: number;
+    end_asset_statement_status?: string;
+    valuation_review_status?: "missing" | "ready" | "ambiguous" | "reviewed";
+    valuation_review_ready?: boolean;
+    candidate_end_asset_value_eur?: string | null;
+    candidate_cash_value_eur?: string | null;
+    candidate_securities_value_eur?: string | null;
+    candidate_document_sha256?: string | null;
+    accepted_end_asset_value_eur?: string | null;
+    accepted_evidence_ref?: string | null;
+    documents?: Array<{
+      document_sha256: string;
+      container_sha256?: string | null;
+      source_kind: string;
+      document_type: string;
+      extraction_status: string;
+      statement_date?: string | null;
+      period_from?: string | null;
+      period_to?: string | null;
+      end_asset_date_match_source: string;
+      cash_value_eur?: string | null;
+      securities_value_eur?: string | null;
+      total_value_eur?: string | null;
+      valuation_status: string;
+      evidence_ref: string;
+      findings: string[];
+    }>;
+    required_documents?: string[];
+    official_api_guide_url?: string;
+    official_statement_help_url?: string;
+    note?: string;
+  };
+  coinbase_connector: {
+    official_accounts_api_url: string;
+    official_transactions_api_url: string;
+    official_statements_help_url: string;
+    credential_status: "configured" | "missing";
+    latest_live_snapshot_at?: string | null;
+    latest_live_assets_count: number;
+    history_batches_count: number;
+    history_events_count: number;
+    history_from?: string | null;
+    history_to?: string | null;
+    history_manifest_sha256?: string | null;
+    history_status: "missing" | "imported_pending_review" | "reviewed";
+    valuation_review_ready: boolean;
+    candidate_end_asset_value_eur?: string | null;
+    accepted_end_asset_value_eur?: string | null;
+    accepted_evidence_ref?: string | null;
+    missing_price_assets: string[];
+    negative_quantity_assets: string[];
+    assets: Array<{
+      asset: string;
+      quantity: string;
+      value_eur?: string | null;
+      price_source?: string | null;
+      priced_at?: string | null;
+    }>;
+    note: string;
+  };
+  findings: string[];
+  next_actions: string[];
+  semantic_sha256: string;
+  methodology: string;
 };
 
 type Snapshot = {
@@ -251,6 +543,9 @@ type Snapshot = {
     source_type: string;
     ledger_value_eur: string;
     live_value_eur?: string | null;
+    live_nonledger_accrual_value_eur?: string;
+    reconciliation_live_value_eur?: string | null;
+    raw_delta_value_eur?: string | null;
     delta_value_eur?: string | null;
     last_live_at?: string | null;
     live_anchor_source?: string | null;
@@ -263,12 +558,50 @@ type Snapshot = {
   };
   sourceConnectorDiagnostics?: {
     generated_at: string;
-    diagnostics: Array<Record<string, unknown>>;
+    diagnostics: Array<Record<string, unknown> & {
+      last_attempt?: {
+        connector_id: string;
+        attempted_at: string;
+        status: string;
+        snapshots_count: number;
+        source?: string | null;
+        message?: string | null;
+      } | null;
+    }>;
     missing_credentials: number;
     stale_snapshots: number;
     missing_snapshots: number;
+    failed_latest_attempts: number;
     methodology: string;
   };
+  sourceRegistry?: {
+    generated_at: string;
+    registry_version: string;
+    status: string;
+    strict_ready: boolean;
+    entries_count: number;
+    owned_entries_count: number;
+    complete_entries_count: number;
+    partial_entries_count: number;
+    provider_coverage_gap_entries_count: number;
+    user_evidence_gap_entries_count: number;
+    documented_route_entries_count: number;
+    observed_groups_count: number;
+    unregistered_observations_count: number;
+    portfolio_policy_violations_count: number;
+    quantity_blocker_entries_count: number;
+    ledger_adjustments_count: number;
+    applied_ledger_adjustments_count: number;
+    transfer_evidence_count: number;
+    approved_transfer_evidence_count: number;
+    entries: Array<Record<string, unknown>>;
+    unregistered_observations: Array<Record<string, unknown>>;
+    portfolio_policy_violations: string[];
+    findings: string[];
+    next_actions: string[];
+    semantic_sha256: string;
+    methodology: string;
+  } | null;
   v1CexCredentialTakeover?: {
     generated_at: string;
     items: Array<Record<string, unknown>>;
@@ -283,6 +616,9 @@ type Snapshot = {
     assets: string[];
     ledger_value_eur: string;
     live_value_eur?: string | null;
+    live_nonledger_accrual_value_eur?: string;
+    reconciliation_live_value_eur?: string | null;
+    raw_delta_value_eur?: string | null;
     delta_value_eur?: string | null;
     last_live_at?: string | null;
     import_batches: Array<Record<string, unknown>>;
@@ -401,6 +737,7 @@ type Snapshot = {
     account_summary: Array<Record<string, unknown>>;
     excluded_account_summary: Array<Record<string, unknown>>;
     excluded_value_eur: string;
+    excluded_value_semantics?: string;
     separation_virtual_wallet?: {
       label: string;
       cutoff_date: string;
@@ -430,6 +767,7 @@ type Snapshot = {
     account_summary: Array<Record<string, unknown>>;
     excluded_account_summary: Array<Record<string, unknown>>;
     excluded_value_eur: string;
+    excluded_value_semantics?: string;
     resolved_account_aliases: Array<Record<string, unknown>>;
     unresolved_truncated_accounts: string[];
     methodology: string;
@@ -468,6 +806,9 @@ type Snapshot = {
   portfolioReconciliation?: {
     generated_at: string;
     total_ledger_value_eur: string;
+    ledger_adjustment_value_eur: string;
+    total_reconciled_ledger_value_eur?: string | null;
+    applied_ledger_adjustments_count: number;
     expected_zero_ledger_value_eur: string;
     live_unverified_ledger_value_eur: string;
     missing_wallets: string[];
@@ -598,6 +939,18 @@ type Snapshot = {
   };
   divorceEqualization?: {
     generated_at: string;
+    stichtage: {
+      separation_date: string;
+      separation_at_utc: string;
+      end_asset_date: string;
+      end_asset_at_utc: string;
+      timezone: string;
+      end_asset_legal_basis: string;
+      end_asset_date_source: "user_provided";
+      court_evidence_status: "pending_document" | "documented";
+      court_evidence_reference?: string | null;
+      court_evidence_note: string;
+    };
     cutoff_at: string;
     valuation_at?: string | null;
     latest_event_at?: string | null;
@@ -610,6 +963,9 @@ type Snapshot = {
     gross_portfolio_change_eur: string;
     gross_portfolio_change_without_review_assets_eur: string;
     net_external_invest_since_cutoff_eur: string;
+    confirmed_external_invest_since_cutoff_eur: string;
+    confirmed_onramp_invest_since_cutoff_eur: string;
+    provisional_onramp_invest_since_cutoff_eur: string;
     adjusted_gain_loss_excluding_new_invest_eur: string;
     adjusted_gain_loss_without_review_assets_eur: string;
     cutoff_missing_price_assets: string[];
@@ -617,6 +973,10 @@ type Snapshot = {
     fiat_deposits_since_cutoff_eur: string;
     direct_eur_buys_since_cutoff_eur: string;
     eur_asset_spent_without_quote_since_cutoff_eur: string;
+    inheritance_origin_gate: DivorceInheritanceOriginGate;
+    capital_flow_gate: DivorceCapitalFlowGate;
+    cutoff_price_gate: DivorceValuationGate;
+    valuation_price_gate: DivorceValuationGate;
     marital_pre_cutoff: Record<string, unknown> & { assets?: Array<Record<string, unknown>> };
     post_cutoff_direct_eur_invest: Record<string, unknown> & { assets?: Array<Record<string, unknown>> };
     post_cutoff_all_lots: Record<string, unknown> & { assets?: Array<Record<string, unknown>> };
@@ -626,6 +986,51 @@ type Snapshot = {
     cash_flows: Array<Record<string, unknown>>;
     caveats: string[];
     legal_note: string;
+    methodology: string;
+  };
+  divorceServiceRouteEvidence?: DivorceServiceRouteEvidenceReport;
+  divorceValuationRun?: {
+    run_id: string;
+    generated_at: string;
+    status: string;
+    strict_ready: boolean;
+    cutoff_at: string;
+    valuation_at: string;
+    cutoff_value_eur: string;
+    valuation_value_eur: string;
+    gross_change_eur: string;
+    external_invest_eur: string;
+    adjusted_gain_loss_eur: string;
+    cutoff_price_gate: DivorceValuationGate;
+    valuation_price_gate: DivorceValuationGate;
+    fifo_checkpoints: Array<Record<string, unknown>>;
+    source_registry_status: string;
+    source_registry_strict_ready: boolean;
+    source_provider_coverage_gap_count: number;
+    source_user_evidence_gap_count: number;
+    source_quantity_blocker_count: number;
+    source_registry_semantic_sha256?: string | null;
+    source_registry_report_url: string;
+    source_accounts: string[];
+    semantic_sha256: string;
+    evidence_files: Array<Record<string, unknown>>;
+    findings: string[];
+    next_actions: string[];
+    methodology: string;
+  } | null;
+  asOfPriceGate?: AsOfPriceGateReport;
+  asOfCutoffPriceGate?: AsOfPriceGateReport;
+  asOfPriceGateBackfill?: {
+    generated_at: string;
+    dry_run: boolean;
+    attempted: number;
+    imported_prices: number;
+    skipped: number;
+    failed: number;
+    gate_before: Record<string, unknown>;
+    gate_after: Record<string, unknown>;
+    jobs: Array<Record<string, unknown>>;
+    artifact_path: string;
     methodology: string;
   };
   transferCandidates?: {
@@ -797,6 +1202,560 @@ type Snapshot = {
     empty_years: number;
     methodology: string;
   };
+  taxBmfComplianceMatrix?: {
+    generated_at: string;
+    matrix_version: string;
+    bmf_reference: string;
+    bmf_reference_url: string;
+    scope_years: number[];
+    strict_bmf_ready: boolean;
+    strict_ready_years: number[];
+    conservative_years: number[];
+    review_years: number[];
+    blocked_years: number[];
+    requirements_count: number;
+    satisfied_count: number;
+    review_count: number;
+    blocked_count: number;
+    not_applicable_count: number;
+    requirements: Array<{
+      requirement_id: string;
+      title: string;
+      bmf_paragraphs: string[];
+      requirement: string;
+      implementation_status: string;
+      evidence_status: string;
+      strict_ready: boolean;
+      affected_years: number[];
+      metrics: Array<Record<string, unknown>>;
+      evidence_refs: string[];
+      findings: string[];
+      next_action: string;
+    }>;
+    caveats: string[];
+    methodology: string;
+  };
+  legalResearchFreshness?: {
+    generated_at: string;
+    fresh_until: string;
+    registry_version: string;
+    status: "fresh" | "review_required" | "error" | "stale" | "missing";
+    is_fresh: boolean;
+    official_sources_reachable: boolean;
+    source_checks: Array<{
+      source_id: string;
+      title: string;
+      authority: string;
+      kind: string;
+      url: string;
+      status: "ok" | "changed" | "error";
+    }>;
+    monitor_checks: Array<{
+      monitor_id: string;
+      title: string;
+      authority: string;
+      status: "ok" | "error";
+      hits_count: number;
+      review_required_count: number;
+    }>;
+    changed_source_ids: string[];
+    failed_check_ids: string[];
+    review_required_urls: string[];
+    findings: string[];
+    next_actions: string[];
+  };
+  walletFifoParallelRun?: {
+    run_id: string;
+    generated_at: string;
+    as_of: string;
+    years: number[];
+    report_schema_version: string;
+    method_version: string;
+    status: "blocked" | "review" | "ready_for_method_review";
+    strict_ready: boolean;
+    method_acceptance_required: boolean;
+    material_delta_threshold_eur: string;
+    semantic_sha256: string;
+    input_events_count: number;
+    pools_count: number;
+    all_lots_count: number;
+    open_lots_count: number;
+    wallet_tax_lines_count: number;
+    unmatched_count: number;
+    provider_basis_gap_count: number;
+    unexplained_unmatched_count: number;
+    transfer_traces_count: number;
+    unresolved_inbound_provenance_count: number;
+    transfer_evidence_review_count: number;
+    acquisition_cost_evidence_review_count: number;
+    global_gain_loss_eur: string;
+    wallet_gain_loss_eur: string;
+    delta_gain_loss_eur: string;
+    material_delta_years: number[];
+    event_set_parity_years: number[];
+    event_set_mismatch_years: number[];
+    proceeds_parity_years: number[];
+    valuation_review_years: number[];
+    blocked_years: number[];
+    review_years: number[];
+    ready_for_method_review_years: number[];
+    year_results: Array<{
+      year: number;
+      status: string;
+      global_gain_loss_eur: string;
+      wallet_gain_loss_eur: string;
+      delta_gain_loss_eur: string;
+      material_delta: boolean;
+      unmatched_count: number;
+      provider_basis_gap_count: number;
+      unexplained_unmatched_count: number;
+      unresolved_inbound_provenance_count: number;
+      transfer_evidence_review_count: number;
+      acquisition_cost_evidence_review_count: number;
+      affected_assets: string[];
+      event_set_parity: boolean;
+      proceeds_parity: boolean;
+      event_set_mismatch_assets: string[];
+      valuation_review_assets: string[];
+      explicit_fee_assets: string[];
+      basis_method_delta_assets: string[];
+    }>;
+    evidence_files: Array<{
+      kind: string;
+      path: string;
+      records_count: number;
+      size_bytes: number;
+      sha256: string;
+      semantic_sha256: string;
+      download_url?: string | null;
+    }>;
+    findings: string[];
+    next_actions: string[];
+    methodology: string;
+  } | null;
+  bitgetStrategyFifoGaps?: {
+    run_id: string;
+    generated_at: string;
+    as_of: string;
+    status: "no_gap" | "quantity_reconciled_basis_pending" | "blocked_unallocated_quantity" | "evidence_error";
+    strict_ready: boolean;
+    read_only: boolean;
+    productive_tables_unchanged: boolean;
+    quantity_reconciled: boolean;
+    original_acquisition_basis_complete: boolean;
+    groups_count: number;
+    assets: string[];
+    years: number[];
+    unmatched_disposals_count: number;
+    out_of_scope_bitget_unmatched_disposals_count: number;
+    linked_unmatched_disposals_count: number;
+    unallocated_unmatched_disposals_count: number;
+    blockpit_reference_count: number;
+    blockpit_classification_conflict_count: number;
+    support_package: {
+      status: string;
+      expected_files_count: number;
+      available_files_count: number;
+      missing_files: string[];
+      package_complete: boolean;
+      additional_user_export_required: boolean;
+      provider_export_field_gap: boolean;
+      strategy_rows_count: number;
+      spot_execution_rows_count: number;
+      relevant_strategy_matches_count: number;
+      strategy_linked_fill_rows_count: number;
+      same_pair_window_execution_rows_count: number;
+      semantic_sha256: string;
+      findings: string[];
+    };
+    asset_totals: Array<{
+      asset: string;
+      groups_count: number;
+      strategy_quantity_without_cost_basis: string;
+      allocated_missing_quantity: string;
+      residual_quantity: string;
+    }>;
+    api_history_boundary: {
+      status: string;
+      requested_year: number;
+      retention_days: number;
+      older_data_retrieval: string;
+      finding: string;
+    };
+    groups: Array<{
+      settlement_group_id: string;
+      year: number;
+      asset: string;
+      pool_id: string;
+      settlement_event_id: string;
+      settlement_transaction_id: string;
+      settlement_at: string;
+      settlement_quantity: string;
+      settlement_reference_value_usdt?: string | null;
+      supported_principal_carried_quantity: string;
+      strategy_quantity_without_cost_basis: string;
+      linked_disposals_count: number;
+      linked_disposal_quantity: string;
+      linked_matched_wallet_lot_quantity: string;
+      allocated_missing_quantity: string;
+      residual_quantity: string;
+      quantity_reconciled: boolean;
+      quantity_equation: string;
+      acquisition_time_status: string;
+      acquisition_cost_status: string;
+      final_tax_status: string;
+      reward_classification_effect: "none";
+      basis_gap_responsibility: string;
+      settlement_filename?: string | null;
+      settlement_row_number?: number | null;
+      blockpit_reference: {
+        available: boolean;
+        label?: string | null;
+        row_number?: number | null;
+        classification_conflict: boolean;
+        reward_classification_effect: "none";
+        note: string;
+      };
+      support_strategy_match?: {
+        strategy_id: string;
+        strategy_row_number: number;
+        asset: string;
+        trading_pair: string;
+        strategy_type: string;
+        created_at: string;
+        terminated_at: string;
+        settlement_delta_seconds: string;
+        investment_amount: string;
+        total_gains: string;
+        fee_base_asset: string;
+        fee_quote_asset: string;
+        same_pair_window_execution_rows_count: number;
+        strategy_linked_fill_rows_count: number;
+        exact_settlement_match: boolean;
+      } | null;
+      linked_disposals: Array<{
+        settlement_group_id: string;
+        source_event_id: string;
+        event_time: string;
+        asset: string;
+        disposal_quantity: string;
+        matched_wallet_lot_quantity: string;
+        missing_wallet_lot_quantity: string;
+        allocated_strategy_gap_quantity: string;
+        quantity_fully_allocated: boolean;
+        order_number?: string | null;
+        quote_asset?: string | null;
+        quote_quantity?: string | null;
+        source_filename?: string | null;
+        source_row_number?: number | null;
+      }>;
+    }>;
+    findings: string[];
+    next_actions: string[];
+    semantic_sha256: string;
+    methodology: string;
+  } | null;
+  bitgetStrategyReconstruction?: {
+    run_id: string;
+    generated_at: string;
+    as_of: string;
+    status: "no_gap" | "ready_for_professional_review" | "blocked_missing_inputs";
+    strict_ready: boolean;
+    read_only: boolean;
+    productive_tax_effect: "none";
+    provider_export_field_gap: boolean;
+    support_package_complete: boolean;
+    groups_count: number;
+    linked_disposals_count: number;
+    quantity_reconciled_groups_count: number;
+    price_evidence_complete_groups_count: number;
+    definitely_within_one_year_disposals_count: number;
+    definitely_over_one_year_disposals_count: number;
+    uncertain_holding_period_disposals_count: number;
+    attributable_disposal_proceeds_total_eur: string;
+    documented_cost_basis_floor_total_eur: string;
+    documented_cost_basis_ceiling_total_eur?: string | null;
+    settlement_value_proxy_basis_total_eur: string;
+    zero_basis_gain_sensitivity_total_eur: string;
+    settlement_value_proxy_gain_sensitivity_total_eur: string;
+    groups: Array<{
+      settlement_group_id: string;
+      year: number;
+      asset: string;
+      strategy_id: string;
+      strategy_type: string;
+      acquisition_window_start: string;
+      acquisition_window_end: string;
+      settlement_at: string;
+      allocated_missing_quantity: string;
+      quantity_reconciled: boolean;
+      strategy_investment_reference_usdt: string;
+      strategy_reported_gain_reference_usdt: string;
+      attributable_disposal_proceeds_eur?: string | null;
+      documented_cost_basis_floor_eur: string;
+      documented_cost_basis_ceiling_eur?: string | null;
+      allocated_settlement_value_proxy_eur?: string | null;
+      zero_basis_gain_sensitivity_eur?: string | null;
+      settlement_value_proxy_gain_sensitivity_eur?: string | null;
+      price_evidence_complete: boolean;
+      basis_reconstruction_status: string;
+      tax_basis_use: string;
+      productive_tax_effect: "none";
+      linked_disposals: Array<{
+        source_event_id: string;
+        event_time: string;
+        asset: string;
+        allocated_strategy_quantity: string;
+        minimum_holding_days: string;
+        maximum_holding_days: string;
+        holding_period_certainty: string;
+        attributable_disposal_proceeds_eur?: string | null;
+        zero_basis_gain_sensitivity_eur?: string | null;
+        settlement_value_proxy_basis_eur?: string | null;
+        settlement_value_proxy_gain_sensitivity_eur?: string | null;
+        tax_basis_status: string;
+      }>;
+      findings: string[];
+    }>;
+    findings: string[];
+    next_actions: string[];
+    semantic_sha256: string;
+    methodology: string;
+  } | null;
+  bitgetStrategyBasisDecision?: {
+    generated_at: string;
+    run_id?: string | null;
+    run_as_of?: string | null;
+    run_input_fingerprint_digest?: string | null;
+    current_input_fingerprint_digest?: string | null;
+    input_fingerprint_current: boolean;
+    gap_semantic_sha256?: string | null;
+    reconstruction_semantic_sha256?: string | null;
+    status: "missing" | "blocked" | "ready_for_professional_decision" | "decision_recorded";
+    decision_ready: boolean;
+    decision_status:
+      | "pending"
+      | "retain_provider_gap_pending_professional_review"
+      | "approve_zero_basis_estimate_for_staging"
+      | "approve_settlement_value_proxy_estimate_for_staging"
+      | "rejected_requires_rework";
+    selected_method: "none" | "zero_basis_estimate" | "settlement_value_proxy_estimate";
+    decision_id?: string | null;
+    decision_at?: string | null;
+    decision_actor?: string | null;
+    decision_rationale?: string | null;
+    support_package_complete: boolean;
+    provider_export_field_gap: boolean;
+    quantity_reconciled: boolean;
+    price_evidence_complete: boolean;
+    holding_period_classification_complete: boolean;
+    linked_disposals_count: number;
+    attributable_disposal_proceeds_total_eur: string;
+    selected_estimated_cost_basis_total_eur?: string | null;
+    selected_estimated_gain_loss_total_eur?: string | null;
+    estimate_selected_for_staging: boolean;
+    strict_ready: boolean;
+    staging_only: boolean;
+    productive_tax_effect: "none";
+    checks: Array<{
+      key: string;
+      label: string;
+      passed: boolean;
+      blocking: boolean;
+      detail: string;
+    }>;
+    blockers: string[];
+    findings: string[];
+    evidence_refs: string[];
+    methodology: string;
+  } | null;
+  walletFifoMethodDeltaExplanation?: {
+    run_id: string;
+    generated_at: string;
+    as_of: string;
+    method_version: string;
+    status: "blocked" | "review" | "ready_for_method_review";
+    method_acceptance_required: boolean;
+    input_fingerprint_digest: string;
+    semantic_sha256: string;
+    years: number[];
+    assets: string[];
+    material_delta_threshold_eur: string;
+    groups_count: number;
+    material_groups_count: number;
+    event_set_gap_groups_count: number;
+    quantity_gap_groups_count: number;
+    proceeds_delta_groups_count: number;
+    reconciled_proceeds_delta_groups_count: number;
+    unexplained_proceeds_delta_groups_count: number;
+    quote_asset_fee_netting_groups_count: number;
+    quote_asset_fee_netting_events_count: number;
+    pool_reordering_groups_count: number;
+    exact_groups_count: number;
+    compared_events_count: number;
+    global_gain_loss_eur: string;
+    wallet_gain_loss_eur: string;
+    gain_loss_delta_eur: string;
+    global_proceeds_eur: string;
+    wallet_proceeds_eur: string;
+    turnover_delta_eur: string;
+    proceeds_contribution_to_gain_delta_eur: string;
+    unexplained_proceeds_delta_eur: string;
+    global_cost_basis_eur: string;
+    wallet_cost_basis_eur: string;
+    cost_basis_delta_eur: string;
+    cost_basis_contribution_to_gain_delta_eur: string;
+    extra_turnover_detected: boolean;
+    material_turnover_delta_detected: boolean;
+    groups: Array<{
+      year: number;
+      asset: string;
+      compared_events_count: number;
+      material_events_count: number;
+      explicit_fee_events_count: number;
+      quantity_gap_events_count: number;
+      proceeds_delta_events_count: number;
+      pool_reordering_events_count: number;
+      quantity_delta: string;
+      proceeds_delta_eur: string;
+      cost_basis_delta_eur: string;
+      gain_loss_delta_eur: string;
+      event_set_parity: boolean;
+      quantity_parity: boolean;
+      proceeds_parity: boolean;
+      drivers: string[];
+      explanation: string;
+    }>;
+    source_run_report_url: string;
+    full_event_csv_download_url: string;
+    findings: string[];
+    methodology: string;
+  } | null;
+  walletFifoMethodAcceptance?: {
+    generated_at: string;
+    run_id?: string | null;
+    run_generated_at?: string | null;
+    run_as_of?: string | null;
+    method_version?: string | null;
+    run_status: string;
+    method_delta_status: string;
+    input_fingerprint_current: boolean;
+    provider_basis_gap_count: number;
+    unexplained_unmatched_count: number;
+    provider_basis_event_set_gap_groups_count: number;
+    provider_basis_quantity_gap_groups_count: number;
+    unexplained_method_gap_groups_count: number;
+    provider_basis_resolution_required: boolean;
+    decision_ready: boolean;
+    decision_status: string;
+    decision_id?: string | null;
+    decision_at?: string | null;
+    method_acceptance_required: boolean;
+    active_fifo_scope: string;
+    target_fifo_scope: string;
+    activation_applied: boolean;
+    activation_ready: boolean;
+    strict_ready: boolean;
+    checks: Array<{
+      key: string;
+      label: string;
+      passed: boolean;
+      blocking: boolean;
+      detail: string;
+    }>;
+    blockers: string[];
+    findings: string[];
+    evidence_refs: string[];
+    methodology: string;
+  };
+  walletFifoMigrationRehearsal?: {
+    rehearsal_id: string;
+    generated_at: string;
+    status: "blocked" | "ready_for_method_decision" | "ready_for_controlled_migration" | "already_active";
+    run_id: string;
+    run_generated_at: string;
+    run_as_of: string;
+    run_semantic_sha256: string;
+    input_fingerprint_digest: string;
+    input_fingerprint_current: boolean;
+    method_version: string;
+    decision_status: string;
+    decision_id?: string | null;
+    decision_ready: boolean;
+    approved_decision_bound: boolean;
+    active_fifo_scope: string;
+    target_fifo_scope: string;
+    technical_ready: boolean;
+    migration_ready: boolean;
+    production_write_performed: boolean;
+    production_tax_semantic_unchanged: boolean;
+    provider_basis_gap_count: number;
+    unexplained_unmatched_count: number;
+    source_all_lots_count: number;
+    source_open_lots_count: number;
+    source_tax_lines_count: number;
+    staging_lots_count: number;
+    staging_open_lots_count: number;
+    staging_tax_lines_count: number;
+    staging_orphan_tax_lines_count: number;
+    staging_negative_lots_count: number;
+    staging_arithmetic_delta_eur: string;
+    staging_tax_lots_semantic_sha256: string;
+    staging_tax_lines_semantic_sha256: string;
+    semantic_sha256: string;
+    year_checks: Array<{
+      year: number;
+      source_wallet_gain_loss_eur: string;
+      staging_gain_loss_eur: string;
+      delta_eur: string;
+      source_wallet_tax_lines_count: number;
+      staging_tax_lines_count: number;
+      parity: boolean;
+    }>;
+    checks: Array<{
+      key: string;
+      label: string;
+      gate: "technical" | "governance";
+      passed: boolean;
+      blocking: boolean;
+      detail: string;
+    }>;
+    blockers: string[];
+    findings: string[];
+    next_actions: string[];
+    evidence_refs: string[];
+    artifact_path: string;
+    latest_artifact_path: string;
+    methodology: string;
+  } | null;
+  walletFifoMigrationApplyReadiness?: {
+    generated_at: string;
+    status: "blocked" | "ready_for_controlled_apply" | "already_active";
+    ready: boolean;
+    run_id?: string | null;
+    rehearsal_id?: string | null;
+    decision_id?: string | null;
+    decision_status: string;
+    input_fingerprint_current: boolean;
+    rehearsal_bound: boolean;
+    active_fifo_scope: string;
+    target_fifo_scope: string;
+    backup_root: string;
+    required_backup_bytes: number;
+    available_backup_bytes: number;
+    checks: Array<{
+      key: string;
+      label: string;
+      gate: "technical" | "governance" | "operational";
+      passed: boolean;
+      blocking: boolean;
+      detail: string;
+    }>;
+    blockers: string[];
+    next_actions: string[];
+    evidence_refs: string[];
+    methodology: string;
+  };
   taxBmfActionPlan?: {
     generated_at: string;
     available_years: number[];
@@ -909,6 +1868,15 @@ type Snapshot = {
     unmatched_count: number;
     transfer_traces_count: number;
     unresolved_inbound_provenance_count: number;
+    internal_transfer_carry_count: number;
+    internal_transfer_carry_fully_covered_count: number;
+    internal_transfer_carry_basis_pending_count: number;
+    internal_transfer_carried_cost_basis_eur: string;
+    internal_transfer_status_counts: Record<string, number>;
+    internal_transfer_source_counts: Record<string, number>;
+    internal_transfer_evidence_status_counts: Record<string, number>;
+    internal_transfer_asset_counts: Record<string, number>;
+    internal_transfer_basis_pending: Array<Record<string, unknown>>;
     global_gain_loss_eur: string;
     wallet_gain_loss_eur: string;
     delta_gain_loss_eur: string;
@@ -1011,6 +1979,149 @@ type Snapshot = {
     tax_neutral_candidate_count: number;
     review_required_count: number;
     items: Array<Record<string, unknown>>;
+    methodology: string;
+  };
+  pionexHntReconciliation?: {
+    generated_at: string;
+    status: string;
+    preflight_ready: boolean;
+    reconciliation_ready: boolean;
+    wallet_fifo_ready: boolean;
+    strict_ready: boolean;
+    missing_primary_acquisition_evidence: boolean;
+    canceled_partial_fills_count: number;
+    canceled_buy_quantity: string;
+    canceled_sell_quantity: string;
+    canceled_base_fee_quantity: string;
+    canceled_net_quantity: string;
+    imported_raw_objects: number;
+    imported_canceled_events: number;
+    asset: string;
+    adjustment_event_time: string;
+    adjustment_quantity: string;
+    adjustment_cost_basis_eur: string;
+    balance_min_quantity: string | null;
+    balance_final_quantity: string | null;
+    zero_cost_lot_consumed_quantity: string;
+    historical_api_rows: number;
+    decision_layer: Record<string, boolean>;
+    evidence_refs: string[];
+    errors: string[];
+    methodology: string;
+  };
+  crossCexTransferEvidence?: {
+    generated_at: string;
+    status: string;
+    strict_ready: boolean;
+    source_run_id?: string | null;
+    records_count: number;
+    ready_count: number;
+    review_count: number;
+    years: number[];
+    records: Array<{
+      evidence_id: string;
+      year: number;
+      tx_id: string;
+      asset: string;
+      quantity: string;
+      fee_quantity: string;
+      source_id: string;
+      target_source_id: string;
+      source_pool_id: string;
+      target_pool_id: string;
+      source_event_time: string;
+      target_event_time: string;
+      lots_moved: number;
+      carried_cost_basis_eur: string;
+      status: string;
+      ready: boolean;
+    }>;
+    errors: string[];
+    semantic_sha256: string;
+    methodology: string;
+  };
+  fairspotStakingReconciliation?: {
+    generated_at: string;
+    status: string;
+    strict_ready: boolean;
+    main_wallet: string;
+    staking_wallet: string;
+    outbound_events_count: number;
+    return_events_count: number;
+    reward_events_count: number;
+    principal_outbound_quantity: string;
+    principal_return_quantity: string;
+    total_received_quantity: string;
+    reward_quantity: string;
+    reward_income_eur: string;
+    source_run_id?: string | null;
+    errors: string[];
+    semantic_sha256: string;
+    methodology: string;
+  };
+  solanaStakingPositionReconciliation?: {
+    generated_at: string;
+    status: string;
+    strict_ready: boolean;
+    reconciliation_id: string;
+    year: number;
+    wallet: string;
+    program_id: string;
+    asset: string;
+    mint: string;
+    principal_quantity: string;
+    received_quantity: string;
+    reward_quantity: string;
+    reward_income_eur: string;
+    wallet_fifo_run_id?: string | null;
+    wallet_fifo_lots_moved: number;
+    wallet_fifo_carried_cost_basis_eur: string;
+    native_settlement_quantity: string;
+    decision_layer: Record<string, boolean>;
+    errors: string[];
+    semantic_sha256: string;
+    methodology: string;
+  };
+  moonpayReceipts?: {
+    generated_at: string;
+    status: string;
+    strict_ready: boolean;
+    sender_address: string;
+    trade_history_path: string;
+    trade_history_exists: boolean;
+    trade_history_sha256?: string | null;
+    trade_history_rows_count: number;
+    completed_buy_rows_count: number;
+    matched_trade_rows_count: number;
+    unmatched_trade_rows_count: number;
+    candidates_count: number;
+    ready_count: number;
+    total_base_payment_amount_eur: string;
+    total_receipt_cost_basis_eur: string;
+    total_fee_components_eur: string;
+    total_bank_debits_eur: string;
+    bank_camt_exists: boolean;
+    bank_camt_files_count: number;
+    bank_camt_semantic_sha256?: string | null;
+    bank_debits_count: number;
+    bank_debits_matched_count: number;
+    bank_debits_unmatched_count: number;
+    items: Array<{
+      tx_id: string;
+      event_time: string;
+      asset: string;
+      received_quantity: string;
+      cost_basis_eur?: string | null;
+      payment_amount_eur?: string | null;
+      gross_payment_amount_eur?: string | null;
+      fee_eur?: string | null;
+      bank_debit_amount_eur?: string | null;
+      bank_booking_date?: string | null;
+      moonpay_trade_id?: string | null;
+      payment_to_chain_seconds?: number | null;
+      strict_ready: boolean;
+    }>;
+    semantic_sha256: string;
     methodology: string;
   };
   taxYearWalletFifoRawProvenanceBreakdown?: {
@@ -1277,6 +2388,204 @@ type Snapshot = {
     total_trade_tax_free_gain_loss_eur: string;
     rows: Array<Record<string, unknown>>;
     ascii_table: string;
+    methodology: string;
+  };
+  taxBusinessRewardInventoryReview?: {
+    generated_at: string;
+    assets: string[];
+    affected_years: number[];
+    strict_ready: boolean;
+    total_tax_lines_count: number;
+    potential_business_tax_lines_count: number;
+    unresolved_tax_lines_count: number;
+    potential_business_acquisition_cost_eur: string;
+    potential_business_proceeds_eur: string;
+    potential_business_gain_loss_eur: string;
+    rows: Array<Record<string, unknown>>;
+    findings: string[];
+    next_actions: string[];
+    methodology: string;
+  };
+  taxCryptoSwapValuationReview?: {
+    generated_at: string;
+    year: number | null;
+    strict_ready: boolean;
+    candidates_count: number;
+    aligned_count: number;
+    policy_mismatch_count: number;
+    material_delta_count: number;
+    received_price_fallback_review_count: number;
+    missing_both_prices_count: number;
+    current_value_eur: string;
+    bmf_preview_value_eur: string;
+    signed_value_delta_eur: string;
+    absolute_value_delta_eur: string;
+    affected_years: number[];
+    rows_returned: number;
+    rows: Array<Record<string, unknown>>;
+    findings: string[];
+    next_actions: string[];
+    current_policy: string;
+    bmf_preview_policy: string;
+    methodology: string;
+  };
+  taxCryptoSwapFifoParallelPreview?: {
+    generated_at: string;
+    year: number | null;
+    status: "matched" | "delta" | "unmatched_changed";
+    read_only: boolean;
+    current_tax_lines_count: number;
+    preview_tax_lines_count: number;
+    current_lots_count: number;
+    preview_lots_count: number;
+    current_unmatched_disposals: number;
+    preview_unmatched_disposals: number;
+    current_gain_loss_eur: string;
+    preview_gain_loss_eur: string;
+    gain_loss_delta_eur: string;
+    absolute_year_gain_loss_delta_eur: string;
+    affected_years: number[];
+    years: Array<Record<string, unknown>>;
+    top_assets: Array<Record<string, unknown>>;
+    top_events: Array<Record<string, unknown>>;
+    findings: string[];
+    next_actions: string[];
+    current_policy: string;
+    preview_policy: string;
+    methodology: string;
+  };
+  taxBmfCombinedFifoStaging?: {
+    run_id: string;
+    generated_at: string;
+    as_of: string;
+    years: number[];
+    status: "blocked" | "review" | "ready_for_professional_review";
+    strict_ready: boolean;
+    read_only: boolean;
+    productive_tax_tables_unchanged: boolean;
+    active_global: Record<string, unknown>;
+    received_first_global: Record<string, unknown>;
+    active_wallet: Record<string, unknown>;
+    received_first_wallet: Record<string, unknown>;
+    price_policy_delta_eur: string;
+    wallet_scope_delta_eur: string;
+    combined_delta_eur: string;
+    interaction_delta_eur: string;
+    absolute_year_combined_delta_eur: string;
+    potential_business_inventory_tax_lines_count: number;
+    unresolved_reward_origin_tax_lines_count: number;
+    affected_years: number[];
+    year_rows: Array<Record<string, unknown>>;
+    top_assets: Array<Record<string, unknown>>;
+    sphere_rows: Array<Record<string, unknown>>;
+    top_events: Array<Record<string, unknown>>;
+    findings: string[];
+    next_actions: string[];
+    methodology: string;
+  };
+  taxBmfFifoEventEvidence?: {
+    run_id: string;
+    generated_at: string;
+    status: "blocked" | "review" | "ready_for_professional_review";
+    strict_ready: boolean;
+    read_only: boolean;
+    staging_run_id: string;
+    staging_matches_current_input: boolean;
+    staging_matches_current_tax_component: boolean;
+    productive_tax_tables_unchanged: boolean;
+    scope_complete_for_staging_artifact: boolean;
+    full_ledger_scope: boolean;
+    ledger_events_count: number;
+    tax_graph_events_count: number;
+    tax_graph_missing_events_count: number;
+    unknown_event_type_count: number;
+    unknown_tax_graph_events_count: number;
+    staging_rows_count: number;
+    selected_discrepancy_rows_count: number;
+    unique_events_count: number;
+    ready_events_count: number;
+    review_events_count: number;
+    blocked_events_count: number;
+    raw_evidence_ready_count: number;
+    independent_price_ready_count: number;
+    derived_price_review_count: number;
+    stale_price_review_count: number;
+    missing_price_count: number;
+    missing_canonical_events_count: number;
+    missing_raw_evidence_count: number;
+    missing_required_identifiers_count: number;
+    unresolved_origin_rows_count: number;
+    documented_business_inventory_rows_count: number;
+    documented_swap_acquisition_rows_count: number;
+    internal_transfer_fifo_carry_rows_count: number;
+    opening_reconstruction_rows_count: number;
+    unclassified_origin_rows_count: number;
+    separate_income_review_rows_count: number;
+    opening_balance_events_count: number;
+    signed_combined_delta_eur: string;
+    absolute_combined_delta_eur: string;
+    groups: Array<Record<string, unknown>>;
+    ledger_groups: Array<Record<string, unknown>>;
+    origin_evidence_groups: Array<Record<string, unknown>>;
+    opening_balance_evidence: Array<Record<string, unknown>>;
+    discrepancy_rows: Array<Record<string, unknown>>;
+    discrepancy_rows_truncated: boolean;
+    event_issues: Array<{
+      event_id: string;
+      event_time: string | null;
+      source: string | null;
+      source_ref: string | null;
+      event_type: string | null;
+      asset: string | null;
+      quantity: string | null;
+      quote_asset: string | null;
+      quote_quantity: string | null;
+      tx_id: string | null;
+      wallet: string | null;
+      account: string | null;
+      source_evidence: Record<string, unknown>;
+      received_price: Record<string, unknown> | null;
+      given_price: Record<string, unknown> | null;
+      status: "blocked" | "review" | "ready";
+      issue_codes: string[];
+      evidence_digest: string;
+    }>;
+    event_issues_truncated: boolean;
+    all_event_evidence_artifact_path: string | null;
+    all_event_evidence_artifact_sha256: string | null;
+    all_event_evidence_artifact_bytes: number;
+    all_event_evidence_compression: "gzip-jsonl" | null;
+    findings: string[];
+    next_actions: string[];
+    methodology: string;
+  };
+  taxBmfEventPriceRemediation?: {
+    run_id: string;
+    generated_at: string;
+    status: "planned" | "applied" | "partial" | "blocked";
+    execute: boolean;
+    read_only: boolean;
+    productive_tax_tables_unchanged: boolean;
+    requirements_count: number;
+    planned_count: number;
+    imported_count: number;
+    already_ready_count: number;
+    failed_count: number;
+    token_risk_blocked_count: number;
+    request_limit_count: number;
+    provider_requests_count: number;
+    fx_requests_count: number;
+    unique_assets: string[];
+    unique_dates_count: number;
+    before_review_events_count: number;
+    before_derived_price_review_count: number;
+    before_stale_price_review_count: number;
+    after_review_events_count: number | null;
+    after_derived_price_review_count: number | null;
+    after_stale_price_review_count: number | null;
+    jobs: Array<Record<string, unknown>>;
+    findings: string[];
+    next_actions: string[];
     methodology: string;
   };
   taxYearDrivers?: {
@@ -1651,16 +2960,16 @@ const navItems: Array<{
   group: "workflow" | "evidence" | "expert";
   icon: React.ReactNode;
 }> = [
-  { id: "dashboard", label: "Start", description: "Gesamtstatus, naechster Schritt und Live-Datenstand", group: "workflow", icon: <LayoutDashboard size={18} /> },
-  { id: "tax", label: "Steuerjahre", description: "Eingabehilfe, BMF-Status und Jahresbelege", group: "workflow", icon: <ReceiptText size={18} /> },
+  { id: "dashboard", label: "Uebersicht", description: "Gesamtstatus, naechster Schritt und Live-Datenstand", group: "workflow", icon: <LayoutDashboard size={18} /> },
   { id: "sources", label: "Quellen & Wallets", description: "Eigene Quellen, Live-Status und Ledger-Abgleich", group: "workflow", icon: <WalletCards size={18} /> },
-  { id: "portfolio", label: "Portfolio", description: "Bestand, Preisdeckung und Haltefristen", group: "workflow", icon: <WalletCards size={18} /> },
-  { id: "zugewinn", label: "Zugewinn & Stichtage", description: "Stichtagswerte, Erbgeld und familienrechtliche Belege", group: "workflow", icon: <Scale size={18} /> },
-  { id: "export", label: "Belege & Export", description: "Report-Center, Finanzamtspakete und CSV/ZIP/PDF", group: "evidence", icon: <FileDown size={18} /> },
-  { id: "review", label: "Review", description: "Offene Fachentscheidungen und Belegspuren", group: "evidence", icon: <Database size={18} /> },
-  { id: "import", label: "Import", description: "Daten einlesen, Preflights und Importabdeckung", group: "expert", icon: <Upload size={18} /> },
-  { id: "flows", label: "Geldfluesse", description: "Transferkandidaten und Netto-Fluesse", group: "expert", icon: <GitBranch size={18} /> },
-  { id: "stichtage", label: "Stichtage", description: "Technische Stichtagsportfolio-Ansicht", group: "expert", icon: <CalendarDays size={18} /> },
+  { id: "import", label: "Daten importieren", description: "Daten einlesen, Preflights und Importabdeckung", group: "workflow", icon: <Upload size={18} /> },
+  { id: "flows", label: "Transaktionen", description: "Geldfluesse, Transferkandidaten und Netto-Fluesse", group: "workflow", icon: <GitBranch size={18} /> },
+  { id: "review", label: "Hinweise pruefen", description: "Offene Fachentscheidungen und Belegspuren", group: "workflow", icon: <ClipboardCheck size={18} /> },
+  { id: "tax", label: "Steuerjahre", description: "Eingabehilfe, BMF-Status und Jahresbelege", group: "workflow", icon: <ReceiptText size={18} /> },
+  { id: "export", label: "Berichte & Belege", description: "Report-Center, Finanzamtspakete und CSV/ZIP/PDF", group: "workflow", icon: <FileDown size={18} /> },
+  { id: "portfolio", label: "Portfolio & Haltefristen", description: "Bestand, Preisdeckung und steuerfreie Positionen", group: "evidence", icon: <WalletCards size={18} /> },
+  { id: "stichtage", label: "Stichtagswerte", description: "Historische Bestands- und Wertansicht", group: "evidence", icon: <CalendarDays size={18} /> },
+  { id: "zugewinn", label: "Zugewinndossier", description: "Stichtagswerte, Erbgeld und familienrechtliche Belege", group: "evidence", icon: <Scale size={18} /> },
   { id: "parity", label: "V1/V2 Pruefung", description: "Paritaet, Referenzen und Diagnose", group: "expert", icon: <Scale size={18} /> },
   { id: "admin", label: "Administration", description: "Settings, Credentials und Systemstatus", group: "expert", icon: <Settings size={18} /> },
   { id: "ai", label: "Lokale KI", description: "Jahrespaket-QA und KI-Aufgaben", group: "expert", icon: <Bot size={18} /> }
@@ -1668,6 +2977,11 @@ const navItems: Array<{
 
 const API_BASE = import.meta.env.VITE_API_BASE || `${window.location.protocol}//${window.location.hostname}:8010`;
 const API_TIMEOUT_MS = 60_000;
+
+function sectionFromLocation(): Section {
+  const candidate = window.location.hash.replace(/^#\/?/, "") as Section;
+  return navItems.some((item) => item.id === candidate) ? candidate : "dashboard";
+}
 
 type SnapshotLoader = {
   key: keyof Snapshot;
@@ -1698,9 +3012,14 @@ async function fetchApiResponse<T>(
 ): Promise<ApiResponse<T>> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const headers = new Headers(init.headers);
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       ...init,
+      headers,
       signal: controller.signal
     });
     if (!response.ok) {
@@ -1783,20 +3102,43 @@ async function putApi<T>(path: string, payload: unknown): Promise<T> {
 }
 
 function App() {
-  const [active, setActive] = useState<Section>("dashboard");
+  const [active, setActive] = useState<Section>(() => sectionFromLocation());
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(false);
   const [loaderStatuses, setLoaderStatuses] = useState<LoaderStatus[]>([]);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
   const [lastLoadFailureCount, setLastLoadFailureCount] = useState(0);
   const [showExpertNav, setShowExpertNav] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const refreshRunId = useRef(0);
   const [sourceRefreshLoading, setSourceRefreshLoading] = useState(false);
+  const [sourceRegistryRunLoading, setSourceRegistryRunLoading] = useState(false);
+  const [walletFifoRunLoading, setWalletFifoRunLoading] = useState(false);
+  const [bitgetBasisDecisionLoading, setBitgetBasisDecisionLoading] = useState(false);
+  const [swapFifoParallelLoading, setSwapFifoParallelLoading] = useState(false);
+  const [bmfCombinedFifoStagingLoading, setBmfCombinedFifoStagingLoading] = useState(false);
+  const [bmfFifoEventEvidenceLoading, setBmfFifoEventEvidenceLoading] = useState(false);
+  const [bmfEventPriceRemediationLoading, setBmfEventPriceRemediationLoading] = useState(false);
+  const [walletFifoMigrationLoading, setWalletFifoMigrationLoading] = useState(false);
+  const [divorceValuationRunLoading, setDivorceValuationRunLoading] = useState(false);
+  const [asOfPriceGateLoading, setAsOfPriceGateLoading] = useState(false);
+  const [serviceRouteEvidenceLoading, setServiceRouteEvidenceLoading] = useState(false);
+  const [tradeRepublicValuationLoading, setTradeRepublicValuationLoading] = useState(false);
+  const [tradeRepublicDocumentUploadLoading, setTradeRepublicDocumentUploadLoading] = useState(false);
+  const [inheritanceDocumentUploadLoading, setInheritanceDocumentUploadLoading] = useState(false);
+  const [inheritanceDocumentReviewLoading, setInheritanceDocumentReviewLoading] = useState(false);
+  const [bankCamtUploadLoading, setBankCamtUploadLoading] = useState(false);
+  const [coinbaseValuationLoading, setCoinbaseValuationLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [flowYear, setFlowYear] = useState("all");
   const [asOfDate, setAsOfDate] = useState("2025-06-13");
+  const [divorceCutoffDate, setDivorceCutoffDate] = useState("2025-06-13");
+  const [divorceValuationDate, setDivorceValuationDate] = useState("2026-07-24");
+  const [divorceMaterialityEur, setDivorceMaterialityEur] = useState("1");
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
-  const [selectedTaxYear, setSelectedTaxYear] = useState("2024");
+  const [selectedTaxYear, setSelectedTaxYear] = useState(() => window.localStorage.getItem("steuerreport:selected-tax-year") ?? "2025");
   const [taxViewMode, setTaxViewMode] = useState<TaxViewMode>("guided");
   const [portfolioViewMode, setPortfolioViewMode] = useState<PortfolioViewMode>("overview");
   const [tokenRiskFilter, setTokenRiskFilter] = useState<TokenRiskFilter>("all");
@@ -1815,7 +3157,48 @@ function App() {
     [active]
   );
 
+  useEffect(() => {
+    const expectedHash = `#${active}`;
+    if (window.location.hash !== expectedHash) {
+      window.location.hash = active;
+    }
+  }, [active]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setActive(sectionFromLocation());
+      setMobileNavOpen(false);
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileNavOpen) {
+      return undefined;
+    }
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileNavOpen(false);
+      }
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    window.localStorage.setItem("steuerreport:selected-tax-year", selectedTaxYear);
+  }, [selectedTaxYear]);
+
   async function refresh() {
+    const runId = refreshRunId.current + 1;
+    refreshRunId.current = runId;
+    setPageLoading(true);
     setLoading(true);
     setError(null);
     setNotice(null);
@@ -1826,6 +3209,7 @@ function App() {
         productReadiness: { key: "productReadiness", label: "Produkt-Readiness", load: () => getApi<Snapshot["productReadiness"]>("/api/v1/product/readiness") },
         sourcesOverview: { key: "sourcesOverview", label: "Quellen", load: () => getApi<Snapshot["sourcesOverview"]>("/api/v1/sources/overview") },
         sourceConnectorDiagnostics: { key: "sourceConnectorDiagnostics", label: "Connector-Diagnose", load: () => getApi<Snapshot["sourceConnectorDiagnostics"]>("/api/v1/sources/connector-diagnostics") },
+        sourceRegistry: { key: "sourceRegistry", label: "Quellenregistry", load: () => getApi<Snapshot["sourceRegistry"]>("/api/v1/sources/registry/runs/latest") },
         v1CexCredentialTakeover: { key: "v1CexCredentialTakeover", label: "V1-CEX-Credential-Uebernahme", load: () => getApi<Snapshot["v1CexCredentialTakeover"]>("/api/v1/admin/cex-credentials/v1-takeover") },
         sourceDetail: {
           key: "sourceDetail",
@@ -1918,7 +3302,16 @@ function App() {
         reportCenter: { key: "reportCenter", label: "Report-Center", load: () => getApi<Snapshot["reportCenter"]>("/api/v1/reports/center") },
         reportEvidenceManifest: { key: "reportEvidenceManifest", label: "Belegmanifest", load: () => getRawJson<EvidenceManifest>("/api/v1/export/evidence-manifest.json") },
         reportEvidencePackageIndex: { key: "reportEvidencePackageIndex", label: "Belegpaket-Index", load: () => getRawJson<EvidencePackageIndex>("/api/v1/export/evidence-package-index.json") },
-        divorceEqualization: { key: "divorceEqualization", label: "Zugewinn-Auswertung", load: () => getApi<Snapshot["divorceEqualization"]>("/api/v1/divorce/equalization-summary") },
+        divorceEqualization: {
+          key: "divorceEqualization",
+          label: "Zugewinn-Auswertung",
+          load: () => getApi<Snapshot["divorceEqualization"]>(
+            `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+          )
+        },
+        divorceValuationRun: { key: "divorceValuationRun", label: "Stichtags-Dossier", load: () => getApi<Snapshot["divorceValuationRun"]>("/api/v1/divorce/valuation-runs/latest") },
+        asOfCutoffPriceGate: { key: "asOfCutoffPriceGate", label: "Trennungspreise", load: () => getApi<Snapshot["asOfCutoffPriceGate"]>(`/api/v1/prices/as-of-gate?as_of_date=${encodeURIComponent(divorceCutoffDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`) },
+        asOfPriceGate: { key: "asOfPriceGate", label: "Endvermoegenspreise", load: () => getApi<Snapshot["asOfPriceGate"]>(`/api/v1/prices/as-of-gate?as_of_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`) },
         admin: { key: "admin", label: "Admin-Status", load: () => getApi<Record<string, unknown>>("/api/v1/admin/status") },
         adminSettings: { key: "adminSettings", label: "Admin-Settings", load: () => getApi<Array<Record<string, unknown>>>("/api/v1/admin/settings") },
         jupiterMetadataCache: { key: "jupiterMetadataCache", label: "Jupiter Token-Metadata", load: () => getApi<Snapshot["jupiterMetadataCache"]>("/api/v1/sources/jupiter/tokens/metadata-cache?limit=200") },
@@ -1937,6 +3330,16 @@ function App() {
         taxFilingClosureOverview: { key: "taxFilingClosureOverview", label: "Finale Abgabeuebersicht", load: () => getApi<Snapshot["taxFilingClosureOverview"]>("/api/v1/tax-years/filing-closure-overview") },
         taxYearsCorrectionMap: { key: "taxYearsCorrectionMap", label: "Korrekturkarte Jahre", load: () => getApi<Snapshot["taxYearsCorrectionMap"]>("/api/v1/tax-years/correction-map") },
         taxMethodologySummary: { key: "taxMethodologySummary", label: "BMF-Methodik", load: () => getApi<Snapshot["taxMethodologySummary"]>(`/api/v1/tax-methodology/summary?year=${encodeURIComponent(selectedTaxYear)}`) },
+        taxBmfComplianceMatrix: { key: "taxBmfComplianceMatrix", label: "BMF-Anforderungsmatrix", load: () => getApi<Snapshot["taxBmfComplianceMatrix"]>("/api/v1/tax-methodology/bmf-compliance-matrix") },
+        legalResearchFreshness: { key: "legalResearchFreshness", label: "Aktueller Rechtsstand", load: () => getApi<Snapshot["legalResearchFreshness"]>("/api/v1/tax-methodology/legal-research/freshness") },
+        walletFifoParallelRun: { key: "walletFifoParallelRun", label: "Wallet-FIFO-Prueflauf", load: () => getApi<Snapshot["walletFifoParallelRun"]>("/api/v1/tax/wallet-fifo-runs/latest") },
+        bitgetStrategyFifoGaps: { key: "bitgetStrategyFifoGaps", label: "Bitget Strategy-FIFO", load: () => getApi<Snapshot["bitgetStrategyFifoGaps"]>("/api/v1/tax/wallet-fifo/bitget-strategy-gaps") },
+        bitgetStrategyReconstruction: { key: "bitgetStrategyReconstruction", label: "Bitget Strategy-Rekonstruktion", load: () => getApi<Snapshot["bitgetStrategyReconstruction"]>("/api/v1/tax/wallet-fifo/bitget-strategy-reconstruction") },
+        bitgetStrategyBasisDecision: { key: "bitgetStrategyBasisDecision", label: "Bitget Basismethodenentscheidung", load: () => getApi<Snapshot["bitgetStrategyBasisDecision"]>("/api/v1/tax/wallet-fifo/bitget-strategy-basis-decision") },
+        walletFifoMethodDeltaExplanation: { key: "walletFifoMethodDeltaExplanation", label: "Wallet-FIFO-Erklaerung", load: () => getApi<Snapshot["walletFifoMethodDeltaExplanation"]>(`/api/v1/tax/wallet-fifo-runs/latest/method-delta-explanation?year=${encodeURIComponent(selectedTaxYear)}&event_limit=5`) },
+        walletFifoMethodAcceptance: { key: "walletFifoMethodAcceptance", label: "Wallet-FIFO-Abnahmeakte", load: () => getApi<Snapshot["walletFifoMethodAcceptance"]>("/api/v1/tax/wallet-fifo-runs/latest/method-acceptance") },
+        walletFifoMigrationRehearsal: { key: "walletFifoMigrationRehearsal", label: "Wallet-FIFO-Migrationsprobe", load: () => getApi<Snapshot["walletFifoMigrationRehearsal"]>("/api/v1/tax/wallet-fifo-migrations/rehearsals/latest") },
+        walletFifoMigrationApplyReadiness: { key: "walletFifoMigrationApplyReadiness", label: "Wallet-FIFO-Apply-Gate", load: () => getApi<Snapshot["walletFifoMigrationApplyReadiness"]>("/api/v1/tax/wallet-fifo-migrations/apply-readiness") },
         taxBmfActionPlan: { key: "taxBmfActionPlan", label: "BMF-Aktionsliste", load: () => getApi<Snapshot["taxBmfActionPlan"]>(`/api/v1/tax-methodology/bmf-action-plan?year=${encodeURIComponent(selectedTaxYear)}`) },
         taxBmfFinalizationMatrix: { key: "taxBmfFinalizationMatrix", label: "BMF-Finalisierung", load: () => getApi<Snapshot["taxBmfFinalizationMatrix"]>("/api/v1/tax-methodology/bmf-finalization-matrix") },
         taxBmfSubmissionGuide: { key: "taxBmfSubmissionGuide", label: "BMF-Abgabehilfe", load: () => getApi<Snapshot["taxBmfSubmissionGuide"]>("/api/v1/tax-methodology/bmf-submission-guide") },
@@ -1956,6 +3359,45 @@ function App() {
         taxYearCexExchangeOutflowEvidence: { key: "taxYearCexExchangeOutflowEvidence", label: "CEX Exchange Outflow Evidence", load: () => getApi<Snapshot["taxYearCexExchangeOutflowEvidence"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/cex-exchange-outflow-evidence?source_exchange=bitget&target_cex=binance&network=SOL&window_hours=72&limit=100`) },
         taxYearCexExchangeOutflowAnchorFeasibility: { key: "taxYearCexExchangeOutflowAnchorFeasibility", label: "CEX FIFO-Anker", load: () => getApi<Snapshot["taxYearCexExchangeOutflowAnchorFeasibility"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/cex-exchange-outflow-anchor-feasibility?source_exchange=bitget&target_cex=binance&network=SOL`) },
         taxYearWalletFifoProvenanceClosure: { key: "taxYearWalletFifoProvenanceClosure", label: "Wallet-FIFO Jahresampel", load: () => getApi<Snapshot["taxYearWalletFifoProvenanceClosure"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-provenance-closure?limit=20`) },
+        pionexHntReconciliation: {
+          key: "pionexHntReconciliation",
+          label: "Pionex HNT-Reconciliation",
+          load: () => selectedTaxYear === "2022"
+            ? getApi<Snapshot["pionexHntReconciliation"]>("/api/v1/tax/pionex-hnt-reconciliation")
+            : Promise.resolve(undefined)
+        },
+        crossCexTransferEvidence: {
+          key: "crossCexTransferEvidence",
+          label: "Cross-CEX Transfernachweise",
+          load: () => getApi<Snapshot["crossCexTransferEvidence"]>(
+            "/api/v1/tax/cross-cex-transfer-evidence"
+          )
+        },
+        fairspotStakingReconciliation: {
+          key: "fairspotStakingReconciliation",
+          label: "Fairspot Staking-Reconciliation",
+          load: () => selectedTaxYear === "2022"
+            ? getApi<Snapshot["fairspotStakingReconciliation"]>(
+                "/api/v1/tax/fairspot-staking-reconciliation"
+              )
+            : Promise.resolve(undefined)
+        },
+        solanaStakingPositionReconciliation: {
+          key: "solanaStakingPositionReconciliation",
+          label: "Solana Staking-Position",
+          load: () => selectedTaxYear === "2026"
+            ? getApi<Snapshot["solanaStakingPositionReconciliation"]>(
+                "/api/v1/tax/solana-staking-position-reconciliation"
+              )
+            : Promise.resolve(undefined)
+        },
+        moonpayReceipts: {
+          key: "moonpayReceipts",
+          label: "MoonPay Anschaffungsbelege",
+          load: () => selectedTaxYear === "2026"
+            ? getApi<Snapshot["moonpayReceipts"]>("/api/v1/tax/moonpay-receipts")
+            : Promise.resolve(undefined)
+        },
         taxYearWalletFifoProvenancePriorities: { key: "taxYearWalletFifoProvenancePriorities", label: "Wallet-FIFO Provenance", load: () => getApi<Snapshot["taxYearWalletFifoProvenancePriorities"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-provenance-priorities?limit=25`) },
         taxYearWalletFifoRawProvenanceBreakdown: { key: "taxYearWalletFifoRawProvenanceBreakdown", label: "Raw Provenance Breakdown", load: () => getApi<Snapshot["taxYearWalletFifoRawProvenanceBreakdown"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-raw-provenance-breakdown?limit=50`) },
         taxYearWalletFifoExchangeEvidenceGaps: { key: "taxYearWalletFifoExchangeEvidenceGaps", label: "Exchange Evidence Gaps", load: () => getApi<Snapshot["taxYearWalletFifoExchangeEvidenceGaps"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-exchange-evidence-gaps?limit=50`) },
@@ -1971,6 +3413,12 @@ function App() {
         taxLegacyHeliumOverview: { key: "taxLegacyHeliumOverview", label: "Legacy HNT", load: () => getApi<Snapshot["taxLegacyHeliumOverview"]>("/api/v1/tax/legacy-helium-overview?limit=20") },
         taxIncomeGuide: { key: "taxIncomeGuide", label: "Mining/Rewards", load: () => getApi<Snapshot["taxIncomeGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/income-guide`) },
         taxRewardTradingSeparation: { key: "taxRewardTradingSeparation", label: "Reward vs Handel", load: () => getApi<Snapshot["taxRewardTradingSeparation"]>("/api/v1/tax-years/reward-trading-separation") },
+        taxBusinessRewardInventoryReview: { key: "taxBusinessRewardInventoryReview", label: "Reward Ursprungssphaere", load: () => getApi<Snapshot["taxBusinessRewardInventoryReview"]>("/api/v1/tax-years/business-reward-inventory-review") },
+        taxCryptoSwapValuationReview: { key: "taxCryptoSwapValuationReview", label: "Krypto-Tausch Bewertung", load: () => getApi<Snapshot["taxCryptoSwapValuationReview"]>(`/api/v1/tax/crypto-swap-valuation-review?year=${encodeURIComponent(selectedTaxYear)}&limit=200`) },
+        taxCryptoSwapFifoParallelPreview: { key: "taxCryptoSwapFifoParallelPreview", label: "Preis-FIFO Parallelvergleich", load: () => getApi<Snapshot["taxCryptoSwapFifoParallelPreview"]>("/api/v1/tax/crypto-swap-fifo-parallel-preview/latest") },
+        taxBmfCombinedFifoStaging: { key: "taxBmfCombinedFifoStaging", label: "BMF Gesamt-FIFO Staging", load: () => getApi<Snapshot["taxBmfCombinedFifoStaging"]>("/api/v1/tax/bmf-combined-fifo-staging/latest") },
+        taxBmfFifoEventEvidence: { key: "taxBmfFifoEventEvidence", label: "BMF FIFO-Eventbelege", load: () => getApi<Snapshot["taxBmfFifoEventEvidence"]>("/api/v1/tax/bmf-fifo-event-evidence/latest") },
+        taxBmfEventPriceRemediation: { key: "taxBmfEventPriceRemediation", label: "BMF Event-Preisanker", load: () => getApi<Snapshot["taxBmfEventPriceRemediation"]>("/api/v1/tax/bmf-event-price-remediation/latest") },
         taxYearDrivers: { key: "taxYearDrivers", label: "Gewinntreiber", load: () => getApi<Snapshot["taxYearDrivers"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/drivers?limit=80`) },
         taxYearGainLossRealityCheck: { key: "taxYearGainLossRealityCheck", label: "Realisiert vs gehalten", load: () => getApi<Snapshot["taxYearGainLossRealityCheck"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-loss-reality-check?limit=40`) },
         taxYearGainEvidenceReview: { key: "taxYearGainEvidenceReview", label: "Gewinn-Belegcheck", load: () => getApi<Snapshot["taxYearGainEvidenceReview"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/gain-evidence-review?limit=80`) },
@@ -2007,13 +3455,21 @@ function App() {
         "health",
         "taxYearsSummary",
         "taxPaymentOverview",
+        "taxYearFilingSummary",
         "taxYearFilingMatrix",
         "taxFilingClosureOverview",
+        "taxBmfComplianceMatrix",
+        "legalResearchFreshness",
+        "walletFifoParallelRun",
+        "bitgetStrategyFifoGaps",
+        "bitgetStrategyReconstruction",
+        "bitgetStrategyBasisDecision",
+        "walletFifoMethodDeltaExplanation",
+        "walletFifoMethodAcceptance",
+        "walletFifoMigrationRehearsal",
+        "walletFifoMigrationApplyReadiness",
         "taxBmfFinalizationMatrix",
         "taxBmfPriorFilingDeclaredAmounts",
-        "taxDeclarationGuide",
-        "taxYearFilingSummary",
-        "taxYearEvidence",
         "taxHoldingPeriods",
         "taxLossRealizationPlanner",
         "taxSummary",
@@ -2025,6 +3481,8 @@ function App() {
         "taxBmfPriorFilingComparison",
         "taxBmfAmendmentWorklist",
         "taxYearDetail",
+        "taxDeclarationGuide",
+        "taxYearEvidence",
         "taxYearTurnoverAudit",
         "taxYearsTurnoverAuditSummary",
         "taxMethodologySummary",
@@ -2032,14 +3490,25 @@ function App() {
         "taxYearMethodology",
         "taxYearWalletFifoDelta",
         "taxYearWalletFifoProvenanceClosure",
+        "pionexHntReconciliation",
+        "crossCexTransferEvidence",
+        "fairspotStakingReconciliation",
+        "solanaStakingPositionReconciliation",
+        "moonpayReceipts",
         "taxLegacyHeliumOverview",
         "taxIncomeGuide",
         "taxRewardTradingSeparation",
+        "taxBusinessRewardInventoryReview",
+        "taxCryptoSwapValuationReview",
         "taxYearDrivers",
         "taxYearGainLossRealityCheck",
         "taxExternalInflows"
       ];
       const taxExpertLoaderKeys = [
+        "taxCryptoSwapFifoParallelPreview",
+        "taxBmfCombinedFifoStaging",
+        "taxBmfFifoEventEvidence",
+        "taxBmfEventPriceRemediation",
         "taxYearGainEvidenceReview",
         "taxYearGainEvidencePriceDeltas",
         "taxYearGainEvidenceEventDeltas",
@@ -2094,6 +3563,7 @@ function App() {
           "health",
           "sourcesOverview",
           "sourceConnectorDiagnostics",
+          "sourceRegistry",
           ...(sourceViewMode !== "overview"
             ? ["sourceDetail", "sourceReconciliation", "sourceReconciliationEvidence", "binanceEarnHistoryPreflight", "binanceEarnHistoryApiPreview"]
             : []),
@@ -2121,7 +3591,7 @@ function App() {
             : [])
         ],
         stichtage: ["health", "portfolioAsOf", "portfolioValueHistory", "priceCoverage"],
-        zugewinn: ["health", "divorceEqualization"],
+        zugewinn: ["health", "divorceEqualization", "divorceValuationRun", "asOfCutoffPriceGate", "asOfPriceGate"],
         flows: ["health", "flows", "transferCandidates"],
         review: [
           "health",
@@ -2151,23 +3621,27 @@ function App() {
       setLoaderStatuses(loaders.map((loader) => ({ key: loader.key, label: loader.label, status: "pending" })));
       const runLoader = async (loader: SnapshotLoader) => {
         setLoaderStatuses((current) =>
-          current.map((item) => (item.key === loader.key ? { ...item, status: "loading", detail: undefined, duration_ms: undefined } : item))
+          refreshRunId.current === runId
+            ? current.map((item) => (item.key === loader.key ? { ...item, status: "loading", detail: undefined, duration_ms: undefined } : item))
+            : current
         );
         const startedAt = performance.now();
         try {
           const value = await loader.load();
           const durationMs = performance.now() - startedAt;
           setLoaderStatuses((current) =>
-            current.map((item) =>
-              item.key === loader.key
-                ? {
-                    ...item,
-                    status: "ok",
-                    detail: `${loader.label} geladen in ${formatDurationMs(durationMs)}`,
-                    duration_ms: durationMs
-                  }
-                : item
-            )
+            refreshRunId.current === runId
+              ? current.map((item) =>
+                  item.key === loader.key
+                    ? {
+                        ...item,
+                        status: "ok",
+                        detail: `${loader.label} geladen in ${formatDurationMs(durationMs)}`,
+                        duration_ms: durationMs
+                      }
+                    : item
+                )
+              : current
           );
           setSnapshot((current) => ({ ...current, [loader.key]: value as never }));
           return value;
@@ -2175,22 +3649,26 @@ function App() {
           const durationMs = performance.now() - startedAt;
           const detail = caught instanceof Error ? caught.message : "fehlgeschlagen";
           setLoaderStatuses((current) =>
-            current.map((item) =>
-              item.key === loader.key
-                ? {
-                    ...item,
-                    status: "error",
-                    detail: `${detail} nach ${formatDurationMs(durationMs)}`,
-                    duration_ms: durationMs
-                  }
-                : item
-            )
+            refreshRunId.current === runId
+              ? current.map((item) =>
+                  item.key === loader.key
+                    ? {
+                        ...item,
+                        status: "error",
+                        detail: `${detail} nach ${formatDurationMs(durationMs)}`,
+                        duration_ms: durationMs
+                      }
+                    : item
+                )
+              : current
           );
           throw caught;
         }
       };
       const results: PromiseSettledResult<unknown>[] = [];
-      const maxParallelLoaders = active === "tax" ? 3 : active === "dashboard" ? 3 : 6;
+      // The tax-year services share one DuckDB store and several deep FIFO/price scans.
+      // Serial loading avoids cold-start contention while still streaming each result into the UI.
+      const maxParallelLoaders = active === "tax" ? 1 : active === "dashboard" ? 3 : 6;
       for (let offset = 0; offset < loaders.length; offset += maxParallelLoaders) {
         const batch = loaders.slice(offset, offset + maxParallelLoaders);
         const batchResults = await Promise.allSettled(batch.map((loader) => runLoader(loader)));
@@ -2206,6 +3684,9 @@ function App() {
         }
         failures.push(`${loader.label}: ${result.reason instanceof Error ? result.reason.message : "fehlgeschlagen"}`);
       });
+      if (refreshRunId.current !== runId) {
+        return;
+      }
       setSnapshot((current) => ({ ...current, ...nextSnapshot }));
       setLastRefreshAt(new Date().toISOString());
       setLastLoadFailureCount(failures.length);
@@ -2213,10 +3694,15 @@ function App() {
         setError(`Teilweise geladen. Fehlgeschlagen: ${failures.slice(0, 4).join(" | ")}${failures.length > 4 ? ` | +${failures.length - 4} weitere` : ""}`);
       }
     } catch (caught) {
-      setLastLoadFailureCount(1);
-      setError(caught instanceof Error ? caught.message : "Unbekannter API-Fehler");
+      if (refreshRunId.current === runId) {
+        setLastLoadFailureCount(1);
+        setError(caught instanceof Error ? caught.message : "Unbekannter API-Fehler");
+      }
     } finally {
-      setLoading(false);
+      if (refreshRunId.current === runId) {
+        setPageLoading(false);
+        setLoading(false);
+      }
     }
   }
 
@@ -2274,6 +3760,31 @@ function App() {
     }
   }
 
+  async function runSourceRegistry() {
+    setSourceRegistryRunLoading(true);
+    setError(null);
+    setNotice("Quellen, Portfolio-Policies und Live-vs-Ledger-Mengen werden read-only abgeglichen.");
+    try {
+      const sourceRegistry = await postApi<NonNullable<Snapshot["sourceRegistry"]>>(
+        "/api/v1/sources/registry/runs",
+        undefined,
+        180_000
+      );
+      setSnapshot((current) => ({ ...current, sourceRegistry }));
+      setNotice(
+        `Quellenregistry ${sourceRegistry.status}: ${sourceRegistry.entries_count} Eintraege, `
+        + `${sourceRegistry.unregistered_observations_count} unregistrierte Gruppen, `
+        + `${sourceRegistry.provider_coverage_gap_entries_count ?? 0} Provider-Grenzen, `
+        + `${sourceRegistry.user_evidence_gap_entries_count ?? 0} echte Belegluecken, `
+        + `${sourceRegistry.quantity_blocker_entries_count} materielle Mengengates.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Quellenregistry konnte nicht geprueft werden");
+    } finally {
+      setSourceRegistryRunLoading(false);
+    }
+  }
+
   async function rebuildTax() {
     setLoading(true);
     try {
@@ -2282,6 +3793,716 @@ function App() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Tax-Rebuild fehlgeschlagen");
       setLoading(false);
+    }
+  }
+
+  async function runWalletFifoParallel() {
+    setWalletFifoRunLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const walletFifoParallelRun = await postApi<NonNullable<Snapshot["walletFifoParallelRun"]>>(
+        "/api/v1/tax/wallet-fifo-runs",
+        {
+          years: [2021, 2022, 2023, 2024, 2025, 2026],
+          material_delta_threshold_eur: "0.01"
+        },
+        300_000
+      );
+      const [
+        taxBmfComplianceMatrix,
+        walletFifoMethodDeltaExplanation,
+        walletFifoMethodAcceptance,
+        bitgetStrategyFifoGaps,
+        bitgetStrategyReconstruction,
+        bitgetStrategyBasisDecision
+      ] = await Promise.all([
+        getApi<Snapshot["taxBmfComplianceMatrix"]>(
+          "/api/v1/tax-methodology/bmf-compliance-matrix"
+        ),
+        getApi<Snapshot["walletFifoMethodDeltaExplanation"]>(
+          `/api/v1/tax/wallet-fifo-runs/latest/method-delta-explanation?year=${encodeURIComponent(selectedTaxYear)}&event_limit=5`
+        ),
+        getApi<Snapshot["walletFifoMethodAcceptance"]>(
+          "/api/v1/tax/wallet-fifo-runs/latest/method-acceptance"
+        ),
+        getApi<Snapshot["bitgetStrategyFifoGaps"]>(
+          "/api/v1/tax/wallet-fifo/bitget-strategy-gaps"
+        ),
+        getApi<Snapshot["bitgetStrategyReconstruction"]>(
+          "/api/v1/tax/wallet-fifo/bitget-strategy-reconstruction"
+        ),
+        getApi<Snapshot["bitgetStrategyBasisDecision"]>(
+          "/api/v1/tax/wallet-fifo/bitget-strategy-basis-decision"
+        )
+      ]);
+      setSnapshot((current) => ({
+        ...current,
+        walletFifoParallelRun,
+        walletFifoMethodDeltaExplanation,
+        walletFifoMethodAcceptance,
+        bitgetStrategyFifoGaps,
+        bitgetStrategyReconstruction,
+        bitgetStrategyBasisDecision,
+        walletFifoMigrationRehearsal: null,
+        walletFifoMigrationApplyReadiness: undefined,
+        taxBmfComplianceMatrix
+      }));
+      setNotice(
+        `Wallet-FIFO-Prueflauf ${walletFifoParallelRun.status}: Delta ${formatCurrency(walletFifoParallelRun.delta_gain_loss_eur)} EUR, `
+        + `${walletFifoParallelRun.provider_basis_gap_count} belegte Provider-Basisluecken, `
+        + `${walletFifoParallelRun.unexplained_unmatched_count} wirklich ungeklaerte Abgaenge.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Wallet-FIFO-Prueflauf fehlgeschlagen");
+    } finally {
+      setWalletFifoRunLoading(false);
+    }
+  }
+
+  async function saveBitgetBasisDecision(payload: BitgetBasisDecisionPayload) {
+    const runId = snapshot.bitgetStrategyBasisDecision?.run_id
+      ?? snapshot.walletFifoParallelRun?.run_id;
+    if (!runId) {
+      setError("Ein gebundener Wallet-FIFO-Lauf fehlt.");
+      return;
+    }
+    setBitgetBasisDecisionLoading(true);
+    setError(null);
+    setNotice("Bitget-Basismethodenentscheidung wird hashgebunden dokumentiert.");
+    try {
+      const result = await postApi<{
+        decision_id: string;
+        created: boolean;
+        report: NonNullable<Snapshot["bitgetStrategyBasisDecision"]>;
+      }>(
+        `/api/v1/tax/wallet-fifo/bitget-strategy-basis-decision/${encodeURIComponent(runId)}`,
+        payload,
+        120_000
+      );
+      const [taxBmfComplianceMatrix, reviewDecisions] = await Promise.all([
+        getApi<Snapshot["taxBmfComplianceMatrix"]>(
+          "/api/v1/tax-methodology/bmf-compliance-matrix"
+        ),
+        getApi<Array<Record<string, unknown>>>("/api/v1/review/decisions")
+      ]);
+      setSnapshot((current) => ({
+        ...current,
+        bitgetStrategyBasisDecision: result.report,
+        taxBmfComplianceMatrix,
+        reviewDecisions
+      }));
+      setNotice(
+        `Bitget-Entscheidung ${result.created ? "gespeichert" : "war bereits vorhanden"}: `
+        + `${result.report.decision_status}. Produktive Steuerwirkung: keine.`
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Bitget-Basismethodenentscheidung konnte nicht gespeichert werden"
+      );
+    } finally {
+      setBitgetBasisDecisionLoading(false);
+    }
+  }
+
+  async function runSwapFifoParallelPreview() {
+    setSwapFifoParallelLoading(true);
+    setError(null);
+    setNotice("Preisrangfolgen-FIFO wird mit zwei unveraenderten In-Memory-Laeufen verglichen.");
+    try {
+      const report = await postApi<NonNullable<Snapshot["taxCryptoSwapFifoParallelPreview"]>>(
+        "/api/v1/tax/crypto-swap-fifo-parallel-preview/run",
+        { limit: 200 },
+        300_000
+      );
+      setSnapshot((current) => ({
+        ...current,
+        taxCryptoSwapFifoParallelPreview: report
+      }));
+      setNotice(
+        `Preis-FIFO ${report.status}: saldiertes G/V-Delta ${formatCurrency(report.gain_loss_delta_eur)} EUR, `
+        + `absolute Jahresdeltas ${formatCurrency(report.absolute_year_gain_loss_delta_eur)} EUR. Keine Steuerdaten wurden geschrieben.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Preis-FIFO-Parallelvergleich fehlgeschlagen");
+    } finally {
+      setSwapFifoParallelLoading(false);
+    }
+  }
+
+  async function runBmfCombinedFifoStaging() {
+    setBmfCombinedFifoStagingLoading(true);
+    setError(null);
+    setNotice(
+      "Gemeinsamer Preis-/Wallet-/Reward-Lauf gestartet. Die Berechnung bleibt read-only und kann mehrere Minuten dauern."
+    );
+    try {
+      const report = await postApi<NonNullable<Snapshot["taxBmfCombinedFifoStaging"]>>(
+        "/api/v1/tax/bmf-combined-fifo-staging/run",
+        { years: [2021, 2022, 2023, 2024, 2025, 2026], limit: 200 },
+        900_000
+      );
+      const eventEvidence = await postApi<NonNullable<Snapshot["taxBmfFifoEventEvidence"]>>(
+        "/api/v1/tax/bmf-fifo-event-evidence/run",
+        { limit: 200, issue_limit: 500, min_abs_delta_eur: "0.01" },
+        120_000
+      );
+      const taxBmfComplianceMatrix = await getApi<Snapshot["taxBmfComplianceMatrix"]>(
+        "/api/v1/tax-methodology/bmf-compliance-matrix"
+      );
+      setSnapshot((current) => ({
+        ...current,
+        taxBmfCombinedFifoStaging: report,
+        taxBmfFifoEventEvidence: eventEvidence,
+        taxBmfComplianceMatrix
+      }));
+      setNotice(
+        `BMF-Gesamtstaging ${report.status}: Preisdelta ${formatCurrency(report.price_policy_delta_eur)} EUR, `
+        + `Wallet-Delta ${formatCurrency(report.wallet_scope_delta_eur)} EUR, kombiniert ${formatCurrency(report.combined_delta_eur)} EUR. `
+        + "Produktive Steuerdaten blieben unveraendert."
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "BMF-Gesamtstaging fehlgeschlagen");
+    } finally {
+      setBmfCombinedFifoStagingLoading(false);
+    }
+  }
+
+  async function runBmfFifoEventEvidence(
+    scopeMode: "priority_delta" | "full_ledger" = "priority_delta"
+  ) {
+    setBmfFifoEventEvidenceLoading(true);
+    setError(null);
+    setNotice(
+      scopeMode === "full_ledger"
+        ? "Der gesamte Ledger und FIFO-Steuergraph werden mit Rohimport, Referenzen und historischen Preisen gebunden."
+        : "FIFO-Eventbelege werden mit Rohimport, TxID/CEX-Referenz und historischen Preisen neu gebunden."
+    );
+    try {
+      const report = await postApi<NonNullable<Snapshot["taxBmfFifoEventEvidence"]>>(
+        "/api/v1/tax/bmf-fifo-event-evidence/run",
+        {
+          limit: scopeMode === "full_ledger" ? 5000 : 200,
+          issue_limit: scopeMode === "full_ledger" ? 5000 : 500,
+          min_abs_delta_eur: "0.01",
+          scope_mode: scopeMode
+        },
+        scopeMode === "full_ledger" ? 300_000 : 120_000
+      );
+      const taxBmfComplianceMatrix = await getApi<Snapshot["taxBmfComplianceMatrix"]>(
+        "/api/v1/tax-methodology/bmf-compliance-matrix"
+      );
+      setSnapshot((current) => ({
+        ...current,
+        taxBmfFifoEventEvidence: report,
+        taxBmfComplianceMatrix
+      }));
+      setNotice(
+        `${report.full_ledger_scope ? "Gesamtledger" : "Eventbelege"} ${report.status}: `
+        + `${report.raw_evidence_ready_count}/${report.unique_events_count} Rohbelege, `
+        + `${report.derived_price_review_count} abgeleitete und ${report.stale_price_review_count} veraltete Preisanker. `
+        + "Produktive Steuerdaten blieben unveraendert."
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "BMF-FIFO-Eventbelegpruefung fehlgeschlagen");
+    } finally {
+      setBmfFifoEventEvidenceLoading(false);
+    }
+  }
+
+  async function runBmfEventPriceRemediation(execute: boolean) {
+    setBmfEventPriceRemediationLoading(true);
+    setError(null);
+    setNotice(
+      execute
+        ? "Belegte ECB-/DefiLlama-Tagesanker werden additiv importiert; Tax-Tabellen bleiben unveraendert."
+        : "ECB-/DefiLlama-Tagesanker werden live geprueft; der Dry-run schreibt keine Preise."
+    );
+    try {
+      const report = await postApi<NonNullable<Snapshot["taxBmfEventPriceRemediation"]>>(
+        "/api/v1/tax/bmf-event-price-remediation/run",
+        { execute, include_roles: ["received", "given"], max_jobs: 1000, timeout_seconds: 20 },
+        900_000
+      );
+      const taxBmfFifoEventEvidence = execute
+        ? await getApi<Snapshot["taxBmfFifoEventEvidence"]>("/api/v1/tax/bmf-fifo-event-evidence/latest")
+        : undefined;
+      const taxBmfComplianceMatrix = await getApi<Snapshot["taxBmfComplianceMatrix"]>(
+        "/api/v1/tax-methodology/bmf-compliance-matrix"
+      );
+      setSnapshot((current) => ({
+        ...current,
+        taxBmfEventPriceRemediation: report,
+        ...(taxBmfFifoEventEvidence ? { taxBmfFifoEventEvidence } : {}),
+        taxBmfComplianceMatrix
+      }));
+      setNotice(
+        `Preisanker ${report.status}: ${report.imported_count} importiert, ${report.planned_count} geplant, `
+        + `${report.failed_count} fehlgeschlagen, ${report.token_risk_blocked_count} durch Token-Risiko blockiert. `
+        + "Tax-Tabellen blieben unveraendert."
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "BMF-Event-Preisremediation fehlgeschlagen");
+    } finally {
+      setBmfEventPriceRemediationLoading(false);
+    }
+  }
+
+  async function runWalletFifoMigrationRehearsal() {
+    setWalletFifoMigrationLoading(true);
+    setError(null);
+    setNotice(
+      "Wallet-/Depot-FIFO wird in einer temporaeren Staging-Datenbank geprueft. Produktive Steuerdaten werden nicht veraendert."
+    );
+    try {
+      const walletFifoMigrationRehearsal = await postApi<
+        NonNullable<Snapshot["walletFifoMigrationRehearsal"]>
+      >(
+        "/api/v1/tax/wallet-fifo-migrations/rehearsals",
+        { run_id: snapshot.walletFifoParallelRun?.run_id ?? null },
+        300_000
+      );
+      const [taxBmfComplianceMatrix, walletFifoMigrationApplyReadiness] = await Promise.all([
+        getApi<Snapshot["taxBmfComplianceMatrix"]>(
+          "/api/v1/tax-methodology/bmf-compliance-matrix"
+        ),
+        getApi<Snapshot["walletFifoMigrationApplyReadiness"]>(
+          "/api/v1/tax/wallet-fifo-migrations/apply-readiness"
+        )
+      ]);
+      setSnapshot((current) => ({
+        ...current,
+        walletFifoMigrationRehearsal,
+        walletFifoMigrationApplyReadiness,
+        taxBmfComplianceMatrix
+      }));
+      const statusText = walletFifoMigrationRehearsal.migration_ready
+        ? "Technisch und fachlich fuer eine kontrollierte Migration bereit"
+        : walletFifoMigrationRehearsal.technical_ready
+          ? "Technisch bereit; die explizite Methodenentscheidung ist noch offen"
+          : "Technische Migrationsprobe blockiert";
+      setNotice(
+        `${statusText}. Produktiver Schreibzugriff: ${walletFifoMigrationRehearsal.production_write_performed ? "ja" : "nein"}.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Wallet-FIFO-Migrationsprobe fehlgeschlagen");
+    } finally {
+      setWalletFifoMigrationLoading(false);
+    }
+  }
+
+  async function runDivorceValuationDossier() {
+    setDivorceValuationRunLoading(true);
+    setError(null);
+    setNotice("Stichtagswerte und zwei Wallet-FIFO-Verlaeufe werden read-only rekonstruiert. Das kann mehrere Minuten dauern.");
+    try {
+      const divorceValuationRun = await postApi<NonNullable<Snapshot["divorceValuationRun"]>>(
+        "/api/v1/divorce/valuation-runs",
+        {
+          separation_date: divorceCutoffDate,
+          end_asset_date: divorceValuationDate,
+          materiality_threshold_eur: divorceMaterialityEur || "1",
+          material_delta_threshold_eur: "0.01"
+        },
+        900_000
+      );
+      const [divorceEqualization, taxBmfComplianceMatrix] = await Promise.all([
+        getApi<Snapshot["divorceEqualization"]>(
+          `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+        ),
+        getApi<Snapshot["taxBmfComplianceMatrix"]>("/api/v1/tax-methodology/bmf-compliance-matrix")
+      ]);
+      setSnapshot((current) => ({
+        ...current,
+        divorceValuationRun,
+        divorceEqualization,
+        taxBmfComplianceMatrix
+      }));
+      setNotice(
+        `Stichtags-Dossier ${divorceValuationRun.status}: ${formatCurrency(divorceValuationRun.cutoff_value_eur)} EUR am ${formatDate(divorceValuationRun.cutoff_at)}, `
+        + `${formatCurrency(divorceValuationRun.valuation_value_eur)} EUR am ${formatDate(divorceValuationRun.valuation_at)}. `
+        + `${divorceValuationRun.fifo_checkpoints.length} FIFO-Stichtage versioniert, `
+        + `${divorceValuationRun.fifo_checkpoints.filter((checkpoint) => checkpoint.reused_existing_run === true).length} unveraenderte Beleglaeufe wiederverwendet.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Stichtags-Dossier fehlgeschlagen");
+    } finally {
+      setDivorceValuationRunLoading(false);
+    }
+  }
+
+  async function acceptTradeRepublicValuation(documentSha256: string) {
+    setTradeRepublicValuationLoading(true);
+    setError(null);
+    setNotice("Trade-Republic-Stichtagsbeleg wird validiert und als Review Decision gebunden.");
+    try {
+      const result = await postApi<{
+        already_recorded: boolean;
+        valuation_date: string;
+        value_eur: string;
+      }>(
+        "/api/v1/divorce/trade-republic/valuation-decisions",
+        {
+          end_asset_date: divorceValuationDate,
+          document_sha256: documentSha256,
+          actor: "user"
+        },
+        120_000
+      );
+      const divorceEqualization = await getApi<Snapshot["divorceEqualization"]>(
+        `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+      );
+      setSnapshot((current) => ({ ...current, divorceEqualization }));
+      setNotice(
+        `Trade-Republic-Stichtagswert ${formatCurrency(result.value_eur)} EUR zum ${formatDate(result.valuation_date)} `
+        + (result.already_recorded ? "war bereits freigegeben." : "wurde als Review Decision gespeichert.")
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Trade-Republic-Stichtagswert konnte nicht freigegeben werden");
+    } finally {
+      setTradeRepublicValuationLoading(false);
+    }
+  }
+
+  async function uploadTradeRepublicDocuments(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+    setTradeRepublicDocumentUploadLoading(true);
+    setError(null);
+    setNotice(`${files.length} Trade-Republic-Dokument(e) werden lokal gehasht und geprueft.`);
+    try {
+      let uploaded = 0;
+      let alreadyPresent = 0;
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("end_asset_date", divorceValuationDate);
+        formData.append("file", file);
+        const response = await fetchApiResponse<{
+          already_present: boolean;
+          connector: DivorceInheritanceOriginGate["trade_republic_connector"];
+        }>(
+          "/api/v1/divorce/trade-republic/documents",
+          { method: "POST", body: formData },
+          180_000
+        );
+        if (response.data.already_present) {
+          alreadyPresent += 1;
+        } else {
+          uploaded += 1;
+        }
+      }
+      const divorceEqualization = await getApi<Snapshot["divorceEqualization"]>(
+        `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+      );
+      setSnapshot((current) => ({ ...current, divorceEqualization }));
+      setNotice(
+        `Trade Republic: ${uploaded} Dokument(e) neu gespeichert, ${alreadyPresent} bereits hashgleich vorhanden. `
+        + "Ein erkannter Stichtagswert bleibt bis zur Originalbeleg-Pruefung unfreigegeben."
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Trade-Republic-Dokumentimport fehlgeschlagen");
+    } finally {
+      setTradeRepublicDocumentUploadLoading(false);
+    }
+  }
+
+  async function uploadInheritanceDocuments(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+    setInheritanceDocumentUploadLoading(true);
+    setError(null);
+    setNotice(`${files.length} Erbnachweis-Dokument(e) werden lokal validiert und gehasht.`);
+    try {
+      let uploaded = 0;
+      let alreadyPresent = 0;
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await fetchApiResponse<{
+          already_present: boolean;
+          connector: DivorceInheritanceOriginGate["formal_inheritance_connector"];
+        }>(
+          "/api/v1/divorce/inheritance-documents",
+          { method: "POST", body: formData },
+          180_000
+        );
+        if (response.data.already_present) {
+          alreadyPresent += 1;
+        } else {
+          uploaded += 1;
+        }
+      }
+      const divorceEqualization = await getApi<Snapshot["divorceEqualization"]>(
+        `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+      );
+      setSnapshot((current) => ({ ...current, divorceEqualization }));
+      setNotice(
+        `Erbnachweis: ${uploaded} Dokument(e) neu gespeichert, ${alreadyPresent} bereits hashgleich vorhanden. `
+        + "Der Nachweis bleibt bis zum Abgleich mit dem Original als Kandidat markiert."
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Erbnachweis-Dokumentimport fehlgeschlagen");
+    } finally {
+      setInheritanceDocumentUploadLoading(false);
+    }
+  }
+
+  async function acceptInheritanceDocument(documentSha256: string) {
+    setInheritanceDocumentReviewLoading(true);
+    setError(null);
+    setNotice("Der formale Erbnachweis wird als SHA-256-gebundene Review Decision gespeichert.");
+    try {
+      const result = await postApi<{
+        already_recorded: boolean;
+        document_sha256: string;
+      }>(
+        "/api/v1/divorce/inheritance-documents/review-decisions",
+        { document_sha256: documentSha256, actor: "user" },
+        120_000
+      );
+      const divorceEqualization = await getApi<Snapshot["divorceEqualization"]>(
+        `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+      );
+      setSnapshot((current) => ({ ...current, divorceEqualization }));
+      setNotice(
+        result.already_recorded
+          ? "Der formale Erbnachweis war bereits freigegeben."
+          : "Der formale Erbnachweis wurde geprueft und unveraenderlich an seine SHA-256-Summe gebunden."
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Erbnachweis konnte nicht freigegeben werden");
+    } finally {
+      setInheritanceDocumentReviewLoading(false);
+    }
+  }
+
+  async function uploadBankCamtDocuments(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+    setBankCamtUploadLoading(true);
+    setError(null);
+    setNotice(`${files.length} Sparkassen-CAMT-Export(e) werden validiert und mit dem vorhandenen Zeitraum zusammengefuehrt.`);
+    try {
+      let uploaded = 0;
+      let alreadyPresent = 0;
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("separation_date", divorceCutoffDate);
+        formData.append("end_asset_date", divorceValuationDate);
+        formData.append("file", file);
+        const response = await fetchApiResponse<{
+          uploaded_files: number;
+          already_present_files: number;
+        }>(
+          "/api/v1/divorce/sparkasse-camt",
+          { method: "POST", body: formData },
+          240_000
+        );
+        uploaded += response.data.uploaded_files;
+        alreadyPresent += response.data.already_present_files;
+      }
+      const divorceEqualization = await getApi<Snapshot["divorceEqualization"]>(
+        `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+      );
+      setSnapshot((current) => ({ ...current, divorceEqualization }));
+      const bankStatus = divorceEqualization?.inheritance_origin_gate?.bank_statement_status ?? "missing";
+      setNotice(
+        `Sparkasse: ${uploaded} CAMT-Datei(en) neu gespeichert, ${alreadyPresent} bereits hashgleich vorhanden. `
+        + `Zeitraumstatus: ${bankStatus}.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Sparkassen-CAMT-Import fehlgeschlagen");
+    } finally {
+      setBankCamtUploadLoading(false);
+    }
+  }
+
+  async function acceptCoinbaseValuation(historyManifestSha256: string) {
+    setCoinbaseValuationLoading(true);
+    setError(null);
+    setNotice("Coinbase-Historie, Ledger-Mengen und Stichtagspreise werden an die Review Decision gebunden.");
+    try {
+      const result = await postApi<{
+        already_recorded: boolean;
+        valuation_date: string;
+        value_eur: string;
+      }>(
+        "/api/v1/divorce/coinbase/valuation-decisions",
+        {
+          end_asset_date: divorceValuationDate,
+          history_manifest_sha256: historyManifestSha256,
+          actor: "user"
+        },
+        180_000
+      );
+      const divorceEqualization = await getApi<Snapshot["divorceEqualization"]>(
+        `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+      );
+      setSnapshot((current) => ({ ...current, divorceEqualization }));
+      setNotice(
+        `Coinbase-Stichtagswert ${formatCurrency(result.value_eur)} EUR zum ${formatDate(result.valuation_date)} `
+        + (result.already_recorded ? "war bereits freigegeben." : "wurde hashgebunden freigegeben.")
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Coinbase-Stichtagswert konnte nicht freigegeben werden");
+    } finally {
+      setCoinbaseValuationLoading(false);
+    }
+  }
+
+  async function refreshDivorcePriceGates() {
+    const [asOfCutoffPriceGate, asOfPriceGate, divorceEqualization] = await Promise.all([
+      getApi<Snapshot["asOfCutoffPriceGate"]>(`/api/v1/prices/as-of-gate?as_of_date=${encodeURIComponent(divorceCutoffDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`),
+      getApi<Snapshot["asOfPriceGate"]>(`/api/v1/prices/as-of-gate?as_of_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`),
+      getApi<Snapshot["divorceEqualization"]>(
+        `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
+      )
+    ]);
+    setSnapshot((current) => ({
+      ...current,
+      asOfCutoffPriceGate,
+      asOfPriceGate,
+      divorceEqualization
+    }));
+    return { asOfCutoffPriceGate, asOfPriceGate };
+  }
+
+  async function runAsOfPriceGateBackfill(
+    dryRun: boolean,
+    targetDate = divorceValuationDate
+  ) {
+    setAsOfPriceGateLoading(true);
+    setError(null);
+    setNotice(dryRun ? "Stichtagspreise werden ohne Schreibzugriff vorgeprueft." : "Belegte Stichtagspreise werden in das Price-Ledger geschrieben.");
+    try {
+      const asOfPriceGateBackfill = await postApi<NonNullable<Snapshot["asOfPriceGateBackfill"]>>(
+        "/api/v1/prices/as-of-gate/backfill",
+        {
+          as_of_date: targetDate,
+          materiality_threshold_eur: divorceMaterialityEur || "1",
+          provider: "defillama",
+          max_requests: 25,
+          confidence: "0.99",
+          dry_run: dryRun
+        },
+        180_000
+      );
+      const refreshed = await refreshDivorcePriceGates();
+      const activeGate = targetDate === divorceCutoffDate
+        ? refreshed.asOfCutoffPriceGate
+        : refreshed.asOfPriceGate;
+      setSnapshot((current) => ({ ...current, asOfPriceGateBackfill }));
+      setNotice(
+        `${dryRun ? "Preis-Preview" : "Preisimport"}: ${asOfPriceGateBackfill.attempted} geprueft, `
+        + `${asOfPriceGateBackfill.imported_prices} importiert, ${asOfPriceGateBackfill.failed} fehlgeschlagen. `
+        + `${activeGate?.requirements_count ?? 0} Preis-/Tokenreviews bleiben offen.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Stichtagspreis-Lauf fehlgeschlagen");
+    } finally {
+      setAsOfPriceGateLoading(false);
+    }
+  }
+
+  async function acceptAsOfTokenValuation(asset: string, asOfDate: string) {
+    setAsOfPriceGateLoading(true);
+    setError(null);
+    setNotice(`${asset} wird fuer den Stichtag ${asOfDate} beleggebunden geprueft.`);
+    try {
+      const result = await postApi<{
+        already_recorded: boolean;
+        decision: { decision_id: string };
+        gate_after: AsOfPriceGateReport;
+      }>(
+        "/api/v1/prices/as-of-gate/token-review-decisions",
+        {
+          as_of_date: asOfDate,
+          asset,
+          materiality_threshold_eur: divorceMaterialityEur || "1",
+          actor: "user"
+        }
+      );
+      await refreshDivorcePriceGates();
+      setNotice(
+        `${asset}: Stichtagsbewertung ${result.already_recorded ? "war bereits dokumentiert" : "wurde dokumentiert"}. `
+        + `Entscheidung ${result.decision.decision_id}.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Token-Stichtagsbewertung konnte nicht dokumentiert werden");
+    } finally {
+      setAsOfPriceGateLoading(false);
+    }
+  }
+
+  async function refreshDivorceServiceRouteEvidence(txId: string) {
+    setServiceRouteEvidenceLoading(true);
+    setError(null);
+    setNotice("Jupiter-Perps-Position und spaeterer On-chain-Verbleib werden geprueft.");
+    try {
+      const divorceServiceRouteEvidence = await postApi<DivorceServiceRouteEvidenceReport>(
+        "/api/v1/divorce/service-route-evidence/refresh",
+        {
+          tx_id: txId,
+          end_asset_date: divorceValuationDate,
+          materiality_threshold_eur: divorceMaterialityEur || "1",
+          timeout_seconds: 30
+        },
+        180_000
+      );
+      setSnapshot((current) => ({ ...current, divorceServiceRouteEvidence }));
+      setNotice(
+        divorceServiceRouteEvidence.strict_ready
+          ? "On-chain-Lebenszyklus belegt: Collateral-Zufuehrung und vollstaendige Liquidation wurden gefunden. Die fachliche Freigabe bleibt separat."
+          : `Service-Route bleibt offen: ${divorceServiceRouteEvidence.findings.join(" ")}`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Service-Route konnte nicht geprueft werden");
+    } finally {
+      setServiceRouteEvidenceLoading(false);
+    }
+  }
+
+  async function acceptDivorceServiceRouteEvidence(txId: string, semanticSha256: string) {
+    setServiceRouteEvidenceLoading(true);
+    setError(null);
+    setNotice("Der gepruefte Jupiter-Perps-Lebenszyklus wird SHA-256-gebunden freigegeben.");
+    try {
+      const result = await postApi<{
+        already_recorded: boolean;
+        decision: { decision_id: string };
+        evidence: DivorceServiceRouteEvidenceReport;
+      }>(
+        "/api/v1/divorce/service-route-evidence/decisions",
+        {
+          tx_id: txId,
+          semantic_sha256: semanticSha256,
+          actor: "user"
+        },
+        120_000
+      );
+      const divorceEqualizationResponse = await fetchApiResponse<Snapshot["divorceEqualization"]>(
+        `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`,
+        {},
+        180_000
+      );
+      const divorceEqualization = divorceEqualizationResponse.data;
+      setSnapshot((current) => ({
+        ...current,
+        divorceEqualization,
+        divorceServiceRouteEvidence: result.evidence
+      }));
+      setNotice(
+        `Serviceposition ${result.already_recorded ? "war bereits" : "wurde"} als vollstaendig liquidierter Vermoegensverlust dokumentiert. Entscheidung ${result.decision.decision_id}; Steuer-FIFO bleibt unveraendert.`
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Service-Route konnte nicht freigegeben werden");
+    } finally {
+      setServiceRouteEvidenceLoading(false);
     }
   }
 
@@ -3061,12 +5282,28 @@ function App() {
     void refresh();
   }, [active, flowYear, asOfDate, selectedSourceId, selectedTaxYear, taxViewMode, portfolioViewMode, tokenRiskFilter, sourceViewMode, exportViewMode, reviewViewMode, importViewMode]);
 
+  function navigateTo(section: Section) {
+    setActive(section);
+    setMobileNavOpen(false);
+  }
+
   return (
-    <main className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <strong>Steuerreport Cockpit</strong>
-          <span>BMF/FIFO · Portfolio · Belege</span>
+    <main className="shell" aria-busy={pageLoading}>
+      <button
+        aria-label="Navigation schliessen"
+        className={`mobileNavBackdrop ${mobileNavOpen ? "open" : ""}`}
+        onClick={() => setMobileNavOpen(false)}
+        type="button"
+      />
+      <aside aria-label="Hauptnavigation" className={`sidebar ${mobileNavOpen ? "open" : ""}`} id="main-navigation">
+        <div className="sidebarHeader">
+          <div className="brand">
+            <strong>Steuerreport Cockpit</strong>
+            <span>BMF/FIFO · Portfolio · Belege</span>
+          </div>
+          <button className="sidebarClose" type="button" onClick={() => setMobileNavOpen(false)} title="Navigation schliessen">
+            <X size={20} />
+          </button>
         </div>
         <nav>
           {(["workflow", "evidence", "expert"] as const).map((group) => (
@@ -3080,13 +5317,13 @@ function App() {
               {group === "expert" && !showExpertNav ? null : (
                 <>
               <span className="navGroupLabel">
-                {group === "workflow" ? "Arbeitsablauf" : group === "evidence" ? "Belege" : "Werkzeuge"}
+                {group === "workflow" ? "Arbeitsablauf" : group === "evidence" ? "Auswertungen" : "Werkzeuge"}
               </span>
               {navItems.filter((item) => item.group === group).map((item) => (
                 <button
                   key={item.id}
                   className={`${active === item.id ? "active" : ""} ${item.group === "expert" ? "expertNav" : ""}`}
-                  onClick={() => setActive(item.id)}
+                  onClick={() => navigateTo(item.id)}
                   type="button"
                   title={item.description}
                 >
@@ -3108,9 +5345,21 @@ function App() {
       </aside>
       <section className="workspace">
         <header className="topbar">
-          <div>
-            <h1>{activeLabel}</h1>
-            <p>{activeDescription} · {API_BASE}</p>
+          <div className="topbarTitle">
+            <button
+              aria-controls="main-navigation"
+              aria-expanded={mobileNavOpen}
+              aria-label="Navigation oeffnen"
+              className="mobileNavToggle"
+              onClick={() => setMobileNavOpen(true)}
+              type="button"
+            >
+              <Menu size={20} />
+            </button>
+            <div>
+              <h1>{activeLabel}</h1>
+              <p>{activeDescription}</p>
+            </div>
           </div>
           <div className="topbarStatus">
             <span className={`statusPill ${readinessTone(snapshot.productReadiness?.overall_status ?? "warning")}`}>
@@ -3118,15 +5367,15 @@ function App() {
             </span>
             {snapshot.productReadiness?.next_action ? <em>{snapshot.productReadiness.next_action}</em> : null}
           </div>
-          <button className="statusButton" type="button" onClick={refresh}>
-            <RefreshCcw size={16} />
-            {loading ? "Laedt" : "Aktualisieren"}
+          <button className="statusButton" type="button" onClick={refresh} disabled={pageLoading}>
+            <RefreshCcw className={pageLoading ? "spin" : ""} size={16} />
+            {pageLoading ? "Laedt" : "Aktualisieren"}
           </button>
         </header>
         {error ? <div className="error">{error}</div> : null}
         {notice ? <div className="notice">{notice}</div> : null}
         <LoadingStatusPanel
-          loading={loading}
+          loading={pageLoading}
           statuses={loaderStatuses}
           activeLabel={activeLabel}
           lastRefreshAt={lastRefreshAt}
@@ -3137,6 +5386,40 @@ function App() {
           snapshot={snapshot}
           onRebuildFlows={rebuildFlows}
           onRebuildTax={rebuildTax}
+          onRunWalletFifoParallel={runWalletFifoParallel}
+          walletFifoRunLoading={walletFifoRunLoading}
+          onSaveBitgetBasisDecision={saveBitgetBasisDecision}
+          bitgetBasisDecisionLoading={bitgetBasisDecisionLoading}
+          onRunSwapFifoParallelPreview={runSwapFifoParallelPreview}
+          swapFifoParallelLoading={swapFifoParallelLoading}
+          onRunBmfCombinedFifoStaging={runBmfCombinedFifoStaging}
+          bmfCombinedFifoStagingLoading={bmfCombinedFifoStagingLoading}
+          onRunBmfFifoEventEvidence={runBmfFifoEventEvidence}
+          bmfFifoEventEvidenceLoading={bmfFifoEventEvidenceLoading}
+          onRunBmfEventPriceRemediation={runBmfEventPriceRemediation}
+          bmfEventPriceRemediationLoading={bmfEventPriceRemediationLoading}
+          onRunWalletFifoMigrationRehearsal={runWalletFifoMigrationRehearsal}
+          walletFifoMigrationLoading={walletFifoMigrationLoading}
+          onRunDivorceValuationDossier={runDivorceValuationDossier}
+          divorceValuationRunLoading={divorceValuationRunLoading}
+          onAcceptTradeRepublicValuation={acceptTradeRepublicValuation}
+          tradeRepublicValuationLoading={tradeRepublicValuationLoading}
+          onUploadTradeRepublicDocuments={uploadTradeRepublicDocuments}
+          tradeRepublicDocumentUploadLoading={tradeRepublicDocumentUploadLoading}
+          onUploadInheritanceDocuments={uploadInheritanceDocuments}
+          inheritanceDocumentUploadLoading={inheritanceDocumentUploadLoading}
+          onAcceptInheritanceDocument={acceptInheritanceDocument}
+          inheritanceDocumentReviewLoading={inheritanceDocumentReviewLoading}
+          onUploadBankCamtDocuments={uploadBankCamtDocuments}
+          bankCamtUploadLoading={bankCamtUploadLoading}
+          onAcceptCoinbaseValuation={acceptCoinbaseValuation}
+          coinbaseValuationLoading={coinbaseValuationLoading}
+          onRunAsOfPriceGateBackfill={runAsOfPriceGateBackfill}
+          onAcceptAsOfTokenValuation={acceptAsOfTokenValuation}
+          asOfPriceGateLoading={asOfPriceGateLoading}
+          onRefreshDivorceServiceRouteEvidence={refreshDivorceServiceRouteEvidence}
+          onAcceptDivorceServiceRouteEvidence={acceptDivorceServiceRouteEvidence}
+          serviceRouteEvidenceLoading={serviceRouteEvidenceLoading}
           onRebuildDerivatives={rebuildDerivatives}
           onImportCsv={importCsv}
           onDeleteImportBatch={deleteImportBatch}
@@ -3173,9 +5456,11 @@ function App() {
           onCanonicalizeReviewEvidenceTraces={canonicalizeReviewEvidenceTraces}
           onCreateAiTask={createAiTask}
           onDeleteAiTask={deleteAiTask}
-          onNavigate={setActive}
+          onNavigate={navigateTo}
           onRefreshConfiguredSources={refreshConfiguredSources}
           sourceRefreshLoading={sourceRefreshLoading}
+          onRunSourceRegistry={runSourceRegistry}
+          sourceRegistryRunLoading={sourceRegistryRunLoading}
           selectedSourceId={selectedSourceId}
           onSelectedSourceIdChange={setSelectedSourceId}
           sourceViewMode={sourceViewMode}
@@ -3198,6 +5483,12 @@ function App() {
           onFlowYearChange={setFlowYear}
           asOfDate={asOfDate}
           onAsOfDateChange={setAsOfDate}
+          divorceCutoffDate={divorceCutoffDate}
+          onDivorceCutoffDateChange={setDivorceCutoffDate}
+          divorceValuationDate={divorceValuationDate}
+          onDivorceValuationDateChange={setDivorceValuationDate}
+          divorceMaterialityEur={divorceMaterialityEur}
+          onDivorceMaterialityEurChange={setDivorceMaterialityEur}
           minHoldingValueEur={minHoldingValueEur}
           onMinHoldingValueEurChange={setMinHoldingValueEur}
           jupiterTokenQuery={jupiterTokenQuery}
@@ -3291,6 +5582,40 @@ function Content({
   snapshot,
   onRebuildFlows,
   onRebuildTax,
+  onRunWalletFifoParallel,
+  walletFifoRunLoading,
+  onSaveBitgetBasisDecision,
+  bitgetBasisDecisionLoading,
+  onRunSwapFifoParallelPreview,
+  swapFifoParallelLoading,
+  onRunBmfCombinedFifoStaging,
+  bmfCombinedFifoStagingLoading,
+  onRunBmfFifoEventEvidence,
+  bmfFifoEventEvidenceLoading,
+  onRunBmfEventPriceRemediation,
+  bmfEventPriceRemediationLoading,
+  onRunWalletFifoMigrationRehearsal,
+  walletFifoMigrationLoading,
+  onRunDivorceValuationDossier,
+  divorceValuationRunLoading,
+  onAcceptTradeRepublicValuation,
+  tradeRepublicValuationLoading,
+  onUploadTradeRepublicDocuments,
+  tradeRepublicDocumentUploadLoading,
+  onUploadInheritanceDocuments,
+  inheritanceDocumentUploadLoading,
+  onAcceptInheritanceDocument,
+  inheritanceDocumentReviewLoading,
+  onUploadBankCamtDocuments,
+  bankCamtUploadLoading,
+  onAcceptCoinbaseValuation,
+  coinbaseValuationLoading,
+  onRunAsOfPriceGateBackfill,
+  onAcceptAsOfTokenValuation,
+  asOfPriceGateLoading,
+  onRefreshDivorceServiceRouteEvidence,
+  onAcceptDivorceServiceRouteEvidence,
+  serviceRouteEvidenceLoading,
   onRebuildDerivatives,
   onImportCsv,
   onDeleteImportBatch,
@@ -3330,6 +5655,8 @@ function Content({
   onNavigate,
   onRefreshConfiguredSources,
   sourceRefreshLoading,
+  onRunSourceRegistry,
+  sourceRegistryRunLoading,
   selectedSourceId,
   onSelectedSourceIdChange,
   sourceViewMode,
@@ -3352,6 +5679,12 @@ function Content({
   onFlowYearChange,
   asOfDate,
   onAsOfDateChange,
+  divorceCutoffDate,
+  onDivorceCutoffDateChange,
+  divorceValuationDate,
+  onDivorceValuationDateChange,
+  divorceMaterialityEur,
+  onDivorceMaterialityEurChange,
   minHoldingValueEur,
   onMinHoldingValueEurChange,
   jupiterTokenQuery,
@@ -3361,6 +5694,45 @@ function Content({
   snapshot: Snapshot;
   onRebuildFlows: () => void;
   onRebuildTax: () => void;
+  onRunWalletFifoParallel: () => void;
+  walletFifoRunLoading: boolean;
+  onSaveBitgetBasisDecision: (payload: BitgetBasisDecisionPayload) => void;
+  bitgetBasisDecisionLoading: boolean;
+  onRunSwapFifoParallelPreview: () => void;
+  swapFifoParallelLoading: boolean;
+  onRunBmfCombinedFifoStaging: () => void;
+  bmfCombinedFifoStagingLoading: boolean;
+  onRunBmfFifoEventEvidence: (
+    scopeMode?: "priority_delta" | "full_ledger"
+  ) => void;
+  bmfFifoEventEvidenceLoading: boolean;
+  onRunBmfEventPriceRemediation: (execute: boolean) => void;
+  bmfEventPriceRemediationLoading: boolean;
+  onRunWalletFifoMigrationRehearsal: () => void;
+  walletFifoMigrationLoading: boolean;
+  onRunDivorceValuationDossier: () => void;
+  divorceValuationRunLoading: boolean;
+  onAcceptTradeRepublicValuation: (documentSha256: string) => void;
+  tradeRepublicValuationLoading: boolean;
+  onUploadTradeRepublicDocuments: (files: File[]) => void;
+  tradeRepublicDocumentUploadLoading: boolean;
+  onUploadInheritanceDocuments: (files: File[]) => void;
+  inheritanceDocumentUploadLoading: boolean;
+  onAcceptInheritanceDocument: (documentSha256: string) => void;
+  inheritanceDocumentReviewLoading: boolean;
+  onUploadBankCamtDocuments: (files: File[]) => void;
+  bankCamtUploadLoading: boolean;
+  onAcceptCoinbaseValuation: (historyManifestSha256: string) => void;
+  coinbaseValuationLoading: boolean;
+  onRunAsOfPriceGateBackfill: (dryRun: boolean, targetDate?: string) => void;
+  onAcceptAsOfTokenValuation: (asset: string, asOfDate: string) => void;
+  asOfPriceGateLoading: boolean;
+  onRefreshDivorceServiceRouteEvidence: (txId: string) => void;
+  onAcceptDivorceServiceRouteEvidence: (
+    txId: string,
+    semanticSha256: string
+  ) => void;
+  serviceRouteEvidenceLoading: boolean;
   onRebuildDerivatives: () => void;
   onImportCsv: (
     source: string,
@@ -3406,6 +5778,8 @@ function Content({
   onNavigate: (section: Section) => void;
   onRefreshConfiguredSources: () => void;
   sourceRefreshLoading: boolean;
+  onRunSourceRegistry: () => void;
+  sourceRegistryRunLoading: boolean;
   selectedSourceId: string | null;
   onSelectedSourceIdChange: (sourceId: string) => void;
   sourceViewMode: SourceViewMode;
@@ -3428,6 +5802,12 @@ function Content({
   onFlowYearChange: (year: string) => void;
   asOfDate: string;
   onAsOfDateChange: (date: string) => void;
+  divorceCutoffDate: string;
+  onDivorceCutoffDateChange: (date: string) => void;
+  divorceValuationDate: string;
+  onDivorceValuationDateChange: (date: string) => void;
+  divorceMaterialityEur: string;
+  onDivorceMaterialityEurChange: (value: string) => void;
   minHoldingValueEur: string;
   onMinHoldingValueEurChange: (value: string) => void;
   jupiterTokenQuery: string;
@@ -3459,6 +5839,7 @@ function Content({
         <SourcesPage
           overview={snapshot.sourcesOverview}
           connectorDiagnostics={snapshot.sourceConnectorDiagnostics}
+          sourceRegistry={snapshot.sourceRegistry}
           detail={snapshot.sourceDetail}
           sourceReconciliation={snapshot.sourceReconciliation}
           sourceReconciliationEvidence={snapshot.sourceReconciliationEvidence}
@@ -3469,6 +5850,8 @@ function Content({
           onNavigate={onNavigate}
           onRefreshConfiguredSources={onRefreshConfiguredSources}
           sourceRefreshLoading={sourceRefreshLoading}
+          onRunSourceRegistry={onRunSourceRegistry}
+          sourceRegistryRunLoading={sourceRegistryRunLoading}
           sourceViewMode={sourceViewMode}
           onSourceViewModeChange={onSourceViewModeChange}
         />
@@ -3540,7 +5923,7 @@ function Content({
           holdingPeriods={snapshot.taxHoldingPeriods}
           lossPlanner={snapshot.taxLossRealizationPlanner}
           priceCoverage={snapshot.priceCoverage}
-          onDownload={onDownload}
+          onViewModeChange={onPortfolioViewModeChange}
         />
         <div className="taxViewSwitch" role="tablist" aria-label="Portfolio Ansicht">
           <button
@@ -3571,7 +5954,6 @@ function Content({
           reviewDecisions={snapshot.reviewDecisions}
           filter={tokenRiskFilter}
           onFilterChange={onTokenRiskFilterChange}
-          onDownload={onDownload}
         />
         <PortfolioBreakdownPanel portfolio={snapshot.portfolio} />
         <TablePanel
@@ -3585,9 +5967,9 @@ function Content({
           footer="Bewertung je Konto/Wallet nach aktuellen Portfolio-Positionen."
         />
         <TablePanel
-          title="Aus Portfolio ausgeklammerte Quellkonten"
+          title="Technische Belegkonten (nicht Vermoegen)"
           rows={snapshot.portfolio?.excluded_account_summary ?? []}
-          footer={`Nicht geloescht, nur nicht als aktueller Bestand gewertet. Ausgeklammerter Wert: ${formatCurrency(snapshot.portfolio?.excluded_value_eur)} EUR`}
+          footer={`${snapshot.portfolio?.excluded_value_semantics ?? "Kein Konto- oder Portfoliobestand; nicht zum Gesamtwert addieren."} Rechnerischer Diagnosewert: ${formatCurrency(snapshot.portfolio?.excluded_value_eur)} EUR.`}
         />
         {portfolioViewMode !== "overview" ? (
           <>
@@ -3735,6 +6117,16 @@ function Content({
         taxFilingClosureOverview={snapshot.taxFilingClosureOverview}
         taxYearsCorrectionMap={snapshot.taxYearsCorrectionMap}
         taxMethodologySummary={snapshot.taxMethodologySummary}
+        taxBmfComplianceMatrix={snapshot.taxBmfComplianceMatrix}
+        legalResearchFreshness={snapshot.legalResearchFreshness}
+        walletFifoParallelRun={snapshot.walletFifoParallelRun}
+        bitgetStrategyFifoGaps={snapshot.bitgetStrategyFifoGaps}
+        bitgetStrategyReconstruction={snapshot.bitgetStrategyReconstruction}
+        bitgetStrategyBasisDecision={snapshot.bitgetStrategyBasisDecision}
+        walletFifoMethodDeltaExplanation={snapshot.walletFifoMethodDeltaExplanation}
+        walletFifoMethodAcceptance={snapshot.walletFifoMethodAcceptance}
+        walletFifoMigrationRehearsal={snapshot.walletFifoMigrationRehearsal}
+        walletFifoMigrationApplyReadiness={snapshot.walletFifoMigrationApplyReadiness}
         taxBmfActionPlan={snapshot.taxBmfActionPlan}
         taxBmfFinalizationMatrix={snapshot.taxBmfFinalizationMatrix}
         taxBmfSubmissionGuide={snapshot.taxBmfSubmissionGuide}
@@ -3754,6 +6146,11 @@ function Content({
         taxYearCexExchangeOutflowEvidence={snapshot.taxYearCexExchangeOutflowEvidence}
         taxYearCexExchangeOutflowAnchorFeasibility={snapshot.taxYearCexExchangeOutflowAnchorFeasibility}
         taxYearWalletFifoProvenanceClosure={snapshot.taxYearWalletFifoProvenanceClosure}
+        pionexHntReconciliation={snapshot.pionexHntReconciliation}
+        crossCexTransferEvidence={snapshot.crossCexTransferEvidence}
+        fairspotStakingReconciliation={snapshot.fairspotStakingReconciliation}
+        solanaStakingPositionReconciliation={snapshot.solanaStakingPositionReconciliation}
+        moonpayReceipts={snapshot.moonpayReceipts}
         taxYearWalletFifoProvenancePriorities={snapshot.taxYearWalletFifoProvenancePriorities}
         taxYearWalletFifoRawProvenanceBreakdown={snapshot.taxYearWalletFifoRawProvenanceBreakdown}
         taxYearWalletFifoExchangeEvidenceGaps={snapshot.taxYearWalletFifoExchangeEvidenceGaps}
@@ -3769,6 +6166,12 @@ function Content({
         taxLegacyHeliumOverview={snapshot.taxLegacyHeliumOverview}
         taxIncomeGuide={snapshot.taxIncomeGuide}
         taxRewardTradingSeparation={snapshot.taxRewardTradingSeparation}
+        taxBusinessRewardInventoryReview={snapshot.taxBusinessRewardInventoryReview}
+        taxCryptoSwapValuationReview={snapshot.taxCryptoSwapValuationReview}
+        taxCryptoSwapFifoParallelPreview={snapshot.taxCryptoSwapFifoParallelPreview}
+        taxBmfCombinedFifoStaging={snapshot.taxBmfCombinedFifoStaging}
+        taxBmfFifoEventEvidence={snapshot.taxBmfFifoEventEvidence}
+        taxBmfEventPriceRemediation={snapshot.taxBmfEventPriceRemediation}
         taxYearDrivers={snapshot.taxYearDrivers}
         taxYearGainLossRealityCheck={snapshot.taxYearGainLossRealityCheck}
         taxYearGainEvidenceReview={snapshot.taxYearGainEvidenceReview}
@@ -3799,6 +6202,20 @@ function Content({
         minHoldingValueEur={minHoldingValueEur}
         onMinHoldingValueEurChange={onMinHoldingValueEurChange}
         onRebuildTax={onRebuildTax}
+        onRunWalletFifoParallel={onRunWalletFifoParallel}
+        walletFifoRunLoading={walletFifoRunLoading}
+        onSaveBitgetBasisDecision={onSaveBitgetBasisDecision}
+        bitgetBasisDecisionLoading={bitgetBasisDecisionLoading}
+        onRunSwapFifoParallelPreview={onRunSwapFifoParallelPreview}
+        swapFifoParallelLoading={swapFifoParallelLoading}
+        onRunBmfCombinedFifoStaging={onRunBmfCombinedFifoStaging}
+        bmfCombinedFifoStagingLoading={bmfCombinedFifoStagingLoading}
+        onRunBmfFifoEventEvidence={onRunBmfFifoEventEvidence}
+        bmfFifoEventEvidenceLoading={bmfFifoEventEvidenceLoading}
+        onRunBmfEventPriceRemediation={onRunBmfEventPriceRemediation}
+        bmfEventPriceRemediationLoading={bmfEventPriceRemediationLoading}
+        onRunWalletFifoMigrationRehearsal={onRunWalletFifoMigrationRehearsal}
+        walletFifoMigrationLoading={walletFifoMigrationLoading}
         onRebuildDerivatives={onRebuildDerivatives}
         onAddCexSenderOwnershipDecision={onAddCexSenderOwnershipDecision}
         onSavePriorFilingDeclaredAmounts={onSavePriorFilingDeclaredAmounts}
@@ -3807,7 +6224,43 @@ function Content({
     );
   }
   if (active === "zugewinn") {
-    return <DivorceEqualizationPanel report={snapshot.divorceEqualization} onDownload={onDownload} />;
+    return (
+      <DivorceEqualizationPanel
+        report={snapshot.divorceEqualization}
+        valuationRun={snapshot.divorceValuationRun}
+        cutoffPriceGate={snapshot.asOfCutoffPriceGate}
+        priceGate={snapshot.asOfPriceGate}
+        cutoffDate={divorceCutoffDate}
+        onCutoffDateChange={onDivorceCutoffDateChange}
+        valuationDate={divorceValuationDate}
+        onValuationDateChange={onDivorceValuationDateChange}
+        materialityEur={divorceMaterialityEur}
+        onMaterialityEurChange={onDivorceMaterialityEurChange}
+        onRunDossier={onRunDivorceValuationDossier}
+        runLoading={divorceValuationRunLoading}
+        onAcceptTradeRepublicValuation={onAcceptTradeRepublicValuation}
+        tradeRepublicValuationLoading={tradeRepublicValuationLoading}
+        onUploadTradeRepublicDocuments={onUploadTradeRepublicDocuments}
+        tradeRepublicDocumentUploadLoading={tradeRepublicDocumentUploadLoading}
+        onUploadInheritanceDocuments={onUploadInheritanceDocuments}
+        inheritanceDocumentUploadLoading={inheritanceDocumentUploadLoading}
+        onAcceptInheritanceDocument={onAcceptInheritanceDocument}
+        inheritanceDocumentReviewLoading={inheritanceDocumentReviewLoading}
+        onUploadBankCamtDocuments={onUploadBankCamtDocuments}
+        bankCamtUploadLoading={bankCamtUploadLoading}
+        onAcceptCoinbaseValuation={onAcceptCoinbaseValuation}
+        coinbaseValuationLoading={coinbaseValuationLoading}
+        priceGateLoading={asOfPriceGateLoading}
+        onRunPriceGateBackfill={onRunAsOfPriceGateBackfill}
+        onAcceptTokenValuation={onAcceptAsOfTokenValuation}
+        serviceRouteEvidence={snapshot.divorceServiceRouteEvidence}
+        onRefreshServiceRouteEvidence={onRefreshDivorceServiceRouteEvidence}
+        onAcceptServiceRouteEvidence={onAcceptDivorceServiceRouteEvidence}
+        serviceRouteEvidenceLoading={serviceRouteEvidenceLoading}
+        onDownload={onDownload}
+        onNavigate={onNavigate}
+      />
+    );
   }
   if (active === "export") {
     return (
@@ -3892,6 +6345,9 @@ function Content({
               credential_geaendert: row.credential_updated_at_latest ? formatDateTime(row.credential_updated_at_latest) : "-",
               letzter_snapshot: row.last_snapshot_at ? formatDateTime(row.last_snapshot_at) : "-",
               snapshot_alter_tage: row.last_snapshot_age_days,
+              letzter_api_versuch: row.last_attempt?.attempted_at ? formatDateTime(row.last_attempt.attempted_at) : "-",
+              api_ergebnis: row.last_attempt?.status ?? "-",
+              api_meldung: row.last_attempt?.message ?? "-",
               naechster_schritt: row.next_action
             }))}
           compact
@@ -3974,6 +6430,7 @@ function ToolSafetyPanel({
 function SourcesPage({
   overview,
   connectorDiagnostics,
+  sourceRegistry,
   detail,
   sourceReconciliation,
   sourceReconciliationEvidence,
@@ -3984,11 +6441,14 @@ function SourcesPage({
   onNavigate,
   onRefreshConfiguredSources,
   sourceRefreshLoading,
+  onRunSourceRegistry,
+  sourceRegistryRunLoading,
   sourceViewMode,
   onSourceViewModeChange
 }: {
   overview: Snapshot["sourcesOverview"];
   connectorDiagnostics: Snapshot["sourceConnectorDiagnostics"];
+  sourceRegistry: Snapshot["sourceRegistry"];
   detail: Snapshot["sourceDetail"];
   sourceReconciliation: Snapshot["sourceReconciliation"];
   sourceReconciliationEvidence: Snapshot["sourceReconciliationEvidence"];
@@ -3999,6 +6459,8 @@ function SourcesPage({
   onNavigate: (section: Section) => void;
   onRefreshConfiguredSources: () => void;
   sourceRefreshLoading: boolean;
+  onRunSourceRegistry: () => void;
+  sourceRegistryRunLoading: boolean;
   sourceViewMode: SourceViewMode;
   onSourceViewModeChange: (mode: SourceViewMode) => void;
 }) {
@@ -4016,14 +6478,22 @@ function SourcesPage({
   const health = overview?.health;
   const healthIssues = (health?.total_open_reconciliation_issues ?? 0) + (health?.total_open_price_issues ?? 0);
   const connectorRows = connectorDiagnostics?.diagnostics ?? [];
+  const overviewReady = Boolean(overview);
+  const registryReady = Boolean(sourceRegistry);
 
   return (
     <Stack>
       <section className="sourcesHero">
         <div>
           <span className="heroKicker">Quellen-Cockpit</span>
-          <h2>{formatCurrency(totalValue)} EUR</h2>
-          <p>{overview?.methodology ?? "Quellen werden geladen."}</p>
+          <h2>{overviewReady ? `${formatCurrency(totalValue)} EUR` : "Quellen werden geladen"}</h2>
+          <p>Eigene Wallets und Handelsplattformen mit aktuellem Live-, Ledger- und Belegstatus.</p>
+          {overview?.methodology ? (
+            <details className="cockpitDetails sourceMethodology">
+              <summary>Bewertungsmethode</summary>
+              <p>{overview.methodology}</p>
+            </details>
+          ) : null}
           <div className="sourceHeroActions">
             <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading}>
               <WalletCards size={16} />
@@ -4032,12 +6502,12 @@ function SourcesPage({
           </div>
         </div>
         <div className="sourceHeroStats">
-          <Metric title="Quellen" value={String(sources.length)} />
-          <Metric title="Ausgewaehlt" value={selected ? String(selected.label) : "-"} />
-          <Metric title="Live verbunden" value={`${health?.live_connected_sources ?? 0}/${health?.sources_count ?? sources.length}`} />
-          <Metric title="Live veraltet" value={String(health?.stale_live_sources ?? 0)} />
-          <Metric title="Ledger-only" value={String(health?.ledger_only_sources ?? sources.length)} />
-          <Metric title="Issues" value={String(healthIssues)} />
+          <Metric title="Quellen" value={overviewReady ? String(sources.length) : "Wird geladen"} />
+          <Metric title="Ausgewaehlt" value={overviewReady && selected ? String(selected.label) : "Wird geladen"} />
+          <Metric title="Live verbunden" value={health ? `${health.live_connected_sources}/${health.sources_count ?? sources.length}` : "Wird geladen"} />
+          <Metric title="Live veraltet" value={health ? String(health.stale_live_sources ?? 0) : "Wird geladen"} />
+          <Metric title="Ledger-only" value={health ? String(health.ledger_only_sources ?? sources.length) : "Wird geladen"} />
+          <Metric title="Issues" value={health ? String(healthIssues) : "Wird geladen"} />
         </div>
       </section>
       {health ? (
@@ -4045,6 +6515,101 @@ function SourcesPage({
           Quellenstatus: {sourceHealthLabel(health.status)} · {health.detail}
           {health.missing_live_sources > 0 ? ` · ${health.missing_live_sources} Live-Anker fehlen` : ""}
         </div>
+      ) : null}
+      <section className="sourceRegistryBand">
+        <div className="sourceRegistryHeader">
+          <div>
+            <span className="heroKicker">Ownership und Abdeckung</span>
+            <h3>Zeitabhaengige Quellenregistry</h3>
+            <p>Legt fest, welche Adressen zum Portfolio gehoeren und welche nur Transfer- oder Servicepfade belegen.</p>
+          </div>
+          <div className="toolbarActions">
+            <span className={`statusPill ${!registryReady ? "loading" : sourceRegistry?.strict_ready ? "ok" : sourceRegistry?.status === "blocked" ? "blocked" : "warning"}`}>
+              {sourceRegistry?.status ?? "wird geladen"}
+            </span>
+            <button type="button" onClick={onRunSourceRegistry} disabled={sourceRegistryRunLoading}>
+              <ClipboardCheck size={16} />
+              {sourceRegistryRunLoading ? "Registry wird geprueft" : "Registry pruefen"}
+            </button>
+          </div>
+        </div>
+        <div className="sourceRegistryMetrics">
+          <Metric title="Eintraege" value={registryReady ? String(sourceRegistry?.entries_count ?? 0) : "Wird geladen"} />
+          <Metric title="Eigene Quellen" value={registryReady ? String(sourceRegistry?.owned_entries_count ?? 0) : "Wird geladen"} />
+          <Metric title="Abdeckung partial" value={registryReady ? String(sourceRegistry?.partial_entries_count ?? 0) : "Wird geladen"} />
+          <Metric title="Provider-Grenzen" value={registryReady ? String(sourceRegistry?.provider_coverage_gap_entries_count ?? 0) : "Wird geladen"} />
+          <Metric title="Echte Belegluecken" value={registryReady ? String(sourceRegistry?.user_evidence_gap_entries_count ?? 0) : "Wird geladen"} />
+          <Metric title="Belegte Servicepfade" value={registryReady ? String(sourceRegistry?.documented_route_entries_count ?? 0) : "Wird geladen"} />
+          <Metric title="Unregistriert" value={registryReady ? String(sourceRegistry?.unregistered_observations_count ?? 0) : "Wird geladen"} />
+          <Metric title="Portfolio-Policy" value={registryReady ? String(sourceRegistry?.portfolio_policy_violations_count ?? 0) : "Wird geladen"} />
+          <Metric title="Mengengate" value={registryReady ? String(sourceRegistry?.quantity_blocker_entries_count ?? 0) : "Wird geladen"} />
+          <Metric title="Belegkorrekturen" value={registryReady ? String(sourceRegistry?.applied_ledger_adjustments_count ?? 0) : "Wird geladen"} />
+          <Metric title="Transferbelege" value={registryReady ? String(sourceRegistry?.approved_transfer_evidence_count ?? 0) : "Wird geladen"} />
+        </div>
+        {sourceRegistry?.methodology ? (
+          <details className="cockpitDetails sourceMethodology">
+            <summary>Registry-Methode und Grenzen</summary>
+            <p>{sourceRegistry.methodology}</p>
+          </details>
+        ) : null}
+        {(sourceRegistry?.findings ?? []).length > 0 ? (
+          <div className="sourceRegistryFindings">
+            {(sourceRegistry?.findings ?? []).slice(0, 8).map((finding) => <span key={finding}>{finding}</span>)}
+          </div>
+        ) : null}
+      </section>
+      {sourceRegistry ? (
+        <TablePanel
+          title="Registrierte eigene Wallets und Plattformen"
+          rows={sourceRegistry.entries
+            .filter((entry) => ["owned", "owned_historical_route"].includes(String(entry.ownership ?? "")))
+            .map((entry) => ({
+              quelle: entry.label,
+              rolle: entry.role,
+              eigentum: entry.ownership,
+              portfolio: entry.portfolio_policy,
+              fifo: entry.fifo_policy,
+              gueltig_ab: formatDateTime(entry.valid_from),
+              gueltig_bis: entry.valid_to ? formatDateTime(entry.valid_to) : "offen",
+              abdeckung: entry.coverage_status,
+              abdeckungsart: entry.coverage_gate_status,
+              limitation: entry.coverage_limitation === "none" ? "-" : entry.coverage_limitation,
+              nutzerbeleg_noetig: entry.additional_user_evidence_required ? "ja" : "nein",
+              events: entry.observed_events_count,
+              event_zeitraum: `${formatDate(entry.observed_first_event_at)} bis ${formatDate(entry.observed_last_event_at)}`,
+              ledger_rohwert: `${formatCurrency(entry.current_ledger_value_eur)} EUR`,
+              belegkorrektur: `${formatCurrency(entry.current_ledger_adjustment_value_eur)} EUR`,
+              ledger_abgeglichen: `${formatCurrency(entry.current_reconciled_ledger_value_eur)} EUR`,
+              wertbasis: entry.live_balance_basis === "current_live_snapshot" ? "Live-API" : entry.live_balance_basis === "ledger_fallback" ? "Ledger-Fallback" : "nicht anwendbar",
+              live_stand: entry.latest_live_snapshot_at ? formatDateTime(entry.latest_live_snapshot_at) : "kein Live-Anker",
+              live_wert: entry.live_balance_basis === "current_live_snapshot" ? `${formatCurrency(entry.current_live_anchored_value_eur)} EUR` : "nicht aktuell",
+              delta: entry.live_balance_basis === "current_live_snapshot" ? `${formatCurrency(entry.current_value_delta_eur)} EUR` : "nicht belastbar",
+              mengengate: entry.quantity_gate_status,
+              strict: entry.strict_ready ? "ja" : "nein"
+            }))}
+          footer={`Registry ${sourceRegistry.registry_version} · SHA-256 ${sourceRegistry.semantic_sha256}`}
+          compact
+        />
+      ) : null}
+      {sourceRegistry?.entries.some((entry) => entry.coverage_gate_status === "documented_route") ? (
+        <TablePanel
+          title="Belegte historische Service- und Transferpfade"
+          rows={sourceRegistry.entries
+            .filter((entry) => entry.coverage_gate_status === "documented_route")
+            .map((entry) => ({
+              quelle: entry.label,
+              rolle: entry.role,
+              eigentum: "Service / Infrastruktur",
+              portfolio: "ausgeschlossen",
+              fifo: entry.fifo_policy,
+              gueltig_ab: formatDateTime(entry.valid_from),
+              gueltig_bis: entry.valid_to ? formatDateTime(entry.valid_to) : "offen",
+              nachweis: entry.coverage_gate_status,
+              hinweis: entry.coverage_limitation_note ?? "Historischer Belegpfad"
+            }))}
+          footer="Diese Adressen belegen einen Transferpfad, sind aber keine aktuellen eigenen Portfolio-Wallets."
+          compact
+        />
       ) : null}
       <SourceCommandCenter
         sources={sources}
@@ -4110,8 +6675,8 @@ function SourcesPage({
         <div className="panel">
           <div className="panelToolbar">
             <strong>Connector-Diagnose</strong>
-            <span className={`statusPill ${connectorDiagnostics.missing_credentials > 0 ? "blocked" : connectorDiagnostics.stale_snapshots > 0 || connectorDiagnostics.missing_snapshots > 0 ? "warning" : "ok"}`}>
-              {connectorDiagnostics.missing_credentials} Credentials fehlen · {connectorDiagnostics.stale_snapshots} veraltet
+            <span className={`statusPill ${connectorDiagnostics.missing_credentials > 0 || connectorDiagnostics.failed_latest_attempts > 0 ? "blocked" : connectorDiagnostics.stale_snapshots > 0 || connectorDiagnostics.missing_snapshots > 0 ? "warning" : "ok"}`}>
+              {connectorDiagnostics.missing_credentials} Credentials fehlen · {connectorDiagnostics.failed_latest_attempts} Abrufe fehlgeschlagen
             </span>
           </div>
           <div className="portfolioSummaryStrip">
@@ -4119,6 +6684,7 @@ function SourcesPage({
             <Metric title="Credentials fehlen" value={String(connectorDiagnostics.missing_credentials)} />
             <Metric title="Snapshots fehlen" value={String(connectorDiagnostics.missing_snapshots)} />
             <Metric title="Snapshots veraltet" value={String(connectorDiagnostics.stale_snapshots)} />
+            <Metric title="API-Abrufe fehlgeschlagen" value={String(connectorDiagnostics.failed_latest_attempts)} />
           </div>
           <TablePanel
             title="API-/Snapshot-Status je Quelle"
@@ -4135,6 +6701,9 @@ function SourcesPage({
               snapshot_alter_tage: row.last_snapshot_age_days,
               assets: row.last_snapshot_assets,
               snapshot_wert_eur: row.last_snapshot_value_eur,
+              letzter_api_versuch: row.last_attempt?.attempted_at ? formatDateTime(row.last_attempt.attempted_at) : "-",
+              api_ergebnis: row.last_attempt?.status ?? "-",
+              api_meldung: row.last_attempt?.message ?? "-",
               hinweis: row.message,
               naechster_schritt: row.next_action
             }))}
@@ -4324,12 +6893,14 @@ function SourceReconciliationBreakdownPanel({
       </div>
       <div className="portfolioSummaryStrip">
         <Metric title="Ledger" value={`${formatCurrency(report?.ledger_value_eur)} EUR`} />
-        <Metric title="API-Live" value={report?.live_value_eur === null || report?.live_value_eur === undefined ? "-" : `${formatCurrency(report.live_value_eur)} EUR`} />
-        <Metric title="API-Live minus Ledger" value={report?.delta_value_eur === null || report?.delta_value_eur === undefined ? "-" : `${formatCurrency(report.delta_value_eur)} EUR`} />
+        <Metric title="API-Live gesamt" value={report?.live_value_eur === null || report?.live_value_eur === undefined ? "-" : `${formatCurrency(report.live_value_eur)} EUR`} />
+        <Metric title="Earn noch nicht gutgeschrieben" value={`${formatCurrency(report?.live_nonledger_accrual_value_eur)} EUR`} />
+        <Metric title="FIFO-Abgleich Live" value={report?.reconciliation_live_value_eur === null || report?.reconciliation_live_value_eur === undefined ? "-" : `${formatCurrency(report.reconciliation_live_value_eur)} EUR`} />
+        <Metric title="FIFO-Abgleich Delta" value={report?.delta_value_eur === null || report?.delta_value_eur === undefined ? "-" : `${formatCurrency(report.delta_value_eur)} EUR`} />
         <Metric title="Live-Stand" value={report?.last_live_at ? formatDateTime(report.last_live_at) : "-"} />
       </div>
       <div className="statusRows">
-        <StatusRow label="Delta-Formel" value="API-Livewert minus steuerlicher V2-Ledgerwert" />
+        <StatusRow label="Delta-Formel" value="gutgeschriebener API-Livewert minus steuerlicher V2-Ledgerwert" />
         <StatusRow label="Ledger-Basis" value="FIFO-/Steuerledger aus importierten Canonical Events" />
         <StatusRow label="Live-Basis" value="Gespeicherter API-Snapshot; keine automatische Steuerkorrektur" />
       </div>
@@ -4341,11 +6912,15 @@ function SourceReconciliationBreakdownPanel({
           status: sourceStatusLabel(row.status),
           asset: row.asset,
           ledger_quantity: row.ledger_quantity,
-          live_quantity: row.live_quantity,
-          delta_quantity: row.delta_quantity,
+          live_quantity_gesamt: row.live_quantity,
+          earn_noch_nicht_gutgeschrieben: row.live_nonledger_accrual_quantity,
+          fifo_abgleich_live_quantity: row.reconciliation_live_quantity,
+          fifo_abgleich_delta_quantity: row.delta_quantity,
           ledger_value_eur: row.ledger_value_eur,
-          live_value_eur: row.live_value_eur,
-          delta_value_eur: row.delta_value_eur,
+          live_value_eur_gesamt: row.live_value_eur,
+          earn_noch_nicht_gutgeschrieben_eur: row.live_nonledger_accrual_value_eur,
+          fifo_abgleich_live_value_eur: row.reconciliation_live_value_eur,
+          fifo_abgleich_delta_value_eur: row.delta_value_eur,
           live_components: row.live_components,
           live_account_types: Array.isArray(row.live_account_types) ? row.live_account_types.join(", ") : "",
           live_products: Array.isArray(row.live_products) ? row.live_products.join(", ") : "",
@@ -4395,17 +6970,28 @@ function BinanceEvidencePanel({
   });
   return (
     <>
+      <div className="portfolioSummaryStrip">
+        <Metric title="Binance Ledger" value={`${formatCurrency(report.ledger_value_eur)} EUR`} />
+        <Metric title="Binance Live gesamt" value={report.live_value_eur === null || report.live_value_eur === undefined ? "-" : `${formatCurrency(report.live_value_eur)} EUR`} />
+        <Metric title="Earn noch nicht gutgeschrieben" value={`${formatCurrency(report.live_nonledger_accrual_value_eur)} EUR`} />
+        <Metric title="FIFO-Abgleich Live" value={report.reconciliation_live_value_eur === null || report.reconciliation_live_value_eur === undefined ? "-" : `${formatCurrency(report.reconciliation_live_value_eur)} EUR`} />
+        <Metric title="FIFO-Abgleich Delta" value={report.delta_value_eur === null || report.delta_value_eur === undefined ? "-" : `${formatCurrency(report.delta_value_eur)} EUR`} />
+      </div>
       <TablePanel
         title="Binance Evidence 2025+"
         rows={assetReports.map((assetReport) => ({
           asset: assetReport.asset,
           suspected_gap: assetReport.suspected_gap,
           ledger_quantity: assetReport.ledger_quantity,
-          live_quantity: assetReport.live_quantity,
-          delta_quantity: assetReport.delta_quantity,
+          live_quantity_gesamt: assetReport.live_quantity,
+          earn_noch_nicht_gutgeschrieben: assetReport.live_nonledger_accrual_quantity,
+          fifo_abgleich_live_quantity: assetReport.reconciliation_live_quantity,
+          fifo_abgleich_delta_quantity: assetReport.delta_quantity,
           ledger_value_eur: assetReport.ledger_value_eur,
-          live_value_eur: assetReport.live_value_eur,
-          delta_value_eur: assetReport.delta_value_eur,
+          live_value_eur_gesamt: assetReport.live_value_eur,
+          earn_noch_nicht_gutgeschrieben_eur: assetReport.live_nonledger_accrual_value_eur,
+          fifo_abgleich_live_value_eur: assetReport.reconciliation_live_value_eur,
+          fifo_abgleich_delta_value_eur: assetReport.delta_value_eur,
           unknown_event_count: assetReport.unknown_event_count,
           next_action: assetReport.next_action
         }))}
@@ -4593,6 +7179,7 @@ function sourceConnectorStatusLabel(status: unknown): string {
   const labels: Record<string, string> = {
     credential_check_failed: "Credential-Pruefung fehlgeschlagen",
     credential_decrypt_failed: "Credentials nicht entschluesselbar",
+    connector_error: "API-Abruf fehlgeschlagen",
     fresh: "Frisch",
     fresh_zero_or_dust: "Frisch, Null/Dust",
     missing_credentials: "Credentials fehlen",
@@ -4724,64 +7311,83 @@ function CockpitDashboard({
   onRefreshConfiguredSources: () => void;
   sourceRefreshLoading: boolean;
 }) {
+  const cockpitReady = summary !== undefined;
+  const readinessReady = readiness !== undefined;
+  const taxDataReady = Boolean(taxYearsSummary && taxPaymentOverview && taxYearFilingMatrix && taxFilingClosureOverview);
   const tasks = summary?.tasks ?? [];
   const assets = summary?.top_assets ?? [];
   const sources = summary?.top_sources ?? [];
   const priceCoverage = summary?.price_coverage;
   const live = summary?.live_reconciliation;
   const evidenceHealth = summary?.evidence_health;
-  const taxProductRows = buildTaxProductYearRows({
-    years: taxYearsSummary?.years ?? [],
-    paymentRows: taxPaymentOverview?.rows ?? [],
-    filingMatrixRows: taxYearFilingMatrix?.rows ?? [],
-    filingClosureRows: taxFilingClosureOverview?.rows ?? [],
-    submissionRows: [],
-    finalizationRows: []
-  });
+  const taxProductRows = taxDataReady
+    ? buildTaxProductYearRows({
+        years: taxYearsSummary?.years ?? [],
+        paymentRows: taxPaymentOverview?.rows ?? [],
+        filingMatrixRows: taxYearFilingMatrix?.rows ?? [],
+        filingClosureRows: taxFilingClosureOverview?.rows ?? [],
+        submissionRows: [],
+        finalizationRows: []
+      })
+    : [];
   const dashboardTaxYear = taxProductRows.some((row) => row.year === selectedTaxYear)
     ? selectedTaxYear
     : taxProductRows.at(-1)?.year ?? selectedTaxYear;
   const dashboardTaxRow = taxProductRows.find((row) => row.year === dashboardTaxYear);
   const primaryTask = tasks[0];
   const hasLiveBlockers = (live?.blocker_count ?? 0) > 0 || live?.status === "blocked";
-  const hasWarnings = hasLiveBlockers || (live?.warning_count ?? 0) > 0 || tasks.length > 0;
-  const statusClass = !summary?.export_allowed ? "blocked" : hasWarnings ? "warning" : "ok";
-  const filingHeadline = !summary?.export_allowed
-    ? "Export ist blockiert"
-    : hasWarnings
-      ? "Steuerexport frei, aber Pruefung offen"
-      : "Steuerstatus sauber";
-  const filingDetail = !summary?.export_allowed
-    ? "Mindestens ein Review- oder Belegproblem verhindert aktuell einen sauberen Export."
-    : hasWarnings
-      ? "Die Steuerfreigabe ist offen, aber Live-Abgleich oder Quellenstatus sollten vor Abgabe nachvollziehbar dokumentiert werden."
-      : "Keine priorisierten Aufgaben offen. Die Ansicht kann als Einstieg fuer Belege und Steuerjahre genutzt werden.";
-  const nextStepLabel = primaryTask?.title ?? (summary?.export_allowed ? "Steuerjahre pruefen" : "Review oeffnen");
-  const nextStepDetail = primaryTask?.detail ?? (summary?.export_allowed ? "Eingabehilfe und Jahrespakete kontrollieren." : "Blockierende Punkte bearbeiten.");
+  const hasWarnings = cockpitReady && (hasLiveBlockers || (live?.warning_count ?? 0) > 0 || tasks.length > 0);
+  const statusClass = !cockpitReady ? "loading" : !summary.export_allowed ? "blocked" : hasWarnings ? "warning" : "ok";
+  const filingHeadline = !cockpitReady
+    ? "Cockpit-Daten werden geladen"
+    : !summary.export_allowed
+      ? "Export ist blockiert"
+      : hasWarnings
+        ? "Steuerexport frei, aber Pruefung offen"
+        : "Steuerstatus sauber";
+  const filingDetail = !cockpitReady
+    ? "Portfolio, Review-Gate und Quellenstatus werden getrennt geladen. Bereits fertige Bereiche erscheinen sofort."
+    : !summary.export_allowed
+      ? "Mindestens ein Review- oder Belegproblem verhindert aktuell einen sauberen Export."
+      : hasWarnings
+        ? "Die Steuerfreigabe ist offen, aber Live-Abgleich oder Quellenstatus sollten vor Abgabe nachvollziehbar dokumentiert werden."
+        : "Keine priorisierten Aufgaben offen. Die Ansicht kann als Einstieg fuer Belege und Steuerjahre genutzt werden.";
+  const nextStepLabel = !cockpitReady
+    ? "Status wird ermittelt"
+    : primaryTask?.title ?? (summary.export_allowed ? "Steuerjahre pruefen" : "Review oeffnen");
+  const nextStepDetail = !cockpitReady
+    ? "Die priorisierte Aktion erscheint nach dem Cockpit-Paket."
+    : primaryTask?.detail ?? (summary.export_allowed ? "Eingabehilfe und Jahrespakete kontrollieren." : "Blockierende Punkte bearbeiten.");
   const nextStepTarget = primaryTask?.target ?? (summary?.export_allowed ? "tax" : "review");
   const coveragePct = formatPercent(priceCoverage?.coverage_pct ?? 0);
   const liveStatusText = live?.status === "ok" ? "belegt" : live?.status === "warning" ? "Warnung" : "offen";
   const evidenceStatusText = evidenceHealth?.status === "complete" ? "vollstaendig" : evidenceHealth?.status ?? "-";
+  const performance = summary?.portfolio_performance;
+  const livePortfolioValue = performance?.live_value_eur ?? summary?.portfolio_value_eur;
+  const hasCalculatedValue = performance?.calculated_value_eur !== undefined && performance?.calculated_value_eur !== null;
+  const hasLiveValue = livePortfolioValue !== undefined && livePortfolioValue !== null;
+  const liveLedgerDelta = hasCalculatedValue && hasLiveValue
+    ? parseNumber(livePortfolioValue) - parseNumber(performance?.calculated_value_eur)
+    : null;
 
   return (
     <Stack>
       <section className={`cockpitHero ${statusClass}`}>
         <div className="cockpitHeroMain">
-          <span className="heroKicker">Steuer- und Portfolio-Cockpit</span>
-          <h2>{filingHeadline}</h2>
-          <p className="cockpitHeroLead">{filingDetail}</p>
+          <span className="heroKicker">Portfolio, Steuern und Nachweise</span>
+          <h2>{hasLiveValue ? `${formatCurrency(livePortfolioValue)} EUR` : "Portfolio wird geladen"}</h2>
+          <p className="cockpitHeroLead"><strong>{filingHeadline}.</strong> {filingDetail}</p>
           <div className="cockpitHeroMeta">
             <span className={`statusPill ${statusClass}`}>
-              Export {summary?.export_status ?? "-"}
+              {cockpitReady ? `Export ${summary.export_status}` : "Status wird geladen"}
             </span>
-            <span>Portfolio {formatCurrency(summary?.portfolio_value_eur)} EUR</span>
-            <span>{summary?.review?.detail ?? "Review-Gate wird geladen"}</span>
-            <span>Stand {summary?.generated_at ? formatDateTime(summary.generated_at) : "-"}</span>
+            <span>Live-Stand {live?.latest_live_snapshot_at ? formatDateTime(live.latest_live_snapshot_at) : summary?.generated_at ? formatDateTime(summary.generated_at) : "-"}</span>
+            <span>Preisdeckung {coveragePct}</span>
             <span>DB {String(database?.database_type ?? "-")}</span>
           </div>
         </div>
         <div className="cockpitDecisionRail">
-          <button className={`nextActionCard ${statusClass}`} type="button" onClick={() => onNavigate(nextStepTarget)}>
+          <button className={`nextActionCard ${statusClass}`} type="button" disabled={!cockpitReady} onClick={() => onNavigate(nextStepTarget)}>
             {statusClass === "ok" ? <Check size={20} /> : <AlertTriangle size={20} />}
             <span>Naechster Schritt</span>
             <strong>{nextStepLabel}</strong>
@@ -4792,17 +7398,6 @@ function CockpitDashboard({
               <WalletCards size={16} />
               <span>{sourceRefreshLoading ? "Quellen werden abgefragt" : "Alle Quellen per API abfragen"}</span>
             </button>
-            {(summary?.quick_actions ?? []).slice(0, 4).map((action) => (
-              <button
-                key={`${action.target}-${action.label}`}
-                type="button"
-                disabled={!action.enabled}
-                onClick={() => onNavigate(action.target)}
-              >
-                {quickActionIcon(action.target)}
-                <span>{action.label}</span>
-              </button>
-            ))}
             <button
               type="button"
               onClick={onRebuildPipeline}
@@ -4814,6 +7409,24 @@ function CockpitDashboard({
         </div>
       </section>
 
+      <section className="cockpitHeadlineMetrics" aria-label="Wichtigste Kennzahlen">
+        <Metric title="API-Livewert" value={hasLiveValue ? `${formatCurrency(livePortfolioValue)} EUR` : "-"} />
+        <Metric title="Berechneter Ledgerwert" value={hasCalculatedValue ? `${formatCurrency(performance?.calculated_value_eur)} EUR` : "-"} />
+        <Metric title="Live minus Ledger" value={liveLedgerDelta === null ? "-" : `${formatCurrency(liveLedgerDelta)} EUR`} />
+        <Metric title={`Steuerpflichtiger G/V ${dashboardTaxYear}`} value={taxDataReady && dashboardTaxRow ? `${formatCurrency(dashboardTaxRow.taxablePrivateDisposalsEur)} EUR` : "wird geladen"} />
+        <Metric title="Offene Aufgaben" value={cockpitReady ? String(summary.open_tasks) : "wird geladen"} />
+      </section>
+
+      <CockpitFilingJourney
+        summary={summary}
+        readiness={readiness}
+        onNavigate={onNavigate}
+        onRefreshConfiguredSources={onRefreshConfiguredSources}
+        sourceRefreshLoading={sourceRefreshLoading}
+        onRebuildPipeline={onRebuildPipeline}
+        loading={!cockpitReady || !readinessReady}
+      />
+
       <BlockpitWorkspaceOverview
         summary={summary}
         readiness={readiness}
@@ -4823,13 +7436,7 @@ function CockpitDashboard({
         onNavigate={onNavigate}
         onRefreshConfiguredSources={onRefreshConfiguredSources}
         sourceRefreshLoading={sourceRefreshLoading}
-      />
-
-      <CockpitPriorityStrip
-        summary={summary}
-        activeTaxYear={dashboardTaxYear}
-        activeTaxRow={dashboardTaxRow}
-        onNavigate={onNavigate}
+        taxDataReady={taxDataReady}
       />
 
       <CockpitPortfolioCommand
@@ -4845,17 +7452,26 @@ function CockpitDashboard({
         activeRow={dashboardTaxRow}
         onSelectYear={onSelectedTaxYearChange}
         onDownload={onDownload}
+        loading={!taxDataReady}
       />
 
-      <ProductReadinessPanel report={readiness} onNavigate={onNavigate} />
+      <details className="cockpitDetails">
+        <summary>
+          <span>
+            <strong>Pruefstatus und technische Details</strong>
+            <em>Preisdeckung, Live-Abgleich, Prioritaeten und Pipeline</em>
+          </span>
+          <span className={`statusPill ${statusClass}`}>{tasks.length} Aufgabe(n)</span>
+        </summary>
+        <div className="cockpitDetailsBody">
+          <CockpitPriorityStrip
+            summary={summary}
+            activeTaxYear={dashboardTaxYear}
+            activeTaxRow={dashboardTaxRow}
+            onNavigate={onNavigate}
+          />
 
-      <CockpitFilingJourney
-        summary={summary}
-        readiness={readiness}
-        onNavigate={onNavigate}
-        onRefreshConfiguredSources={onRefreshConfiguredSources}
-        sourceRefreshLoading={sourceRefreshLoading}
-      />
+          <ProductReadinessPanel report={readiness} onNavigate={onNavigate} />
 
       <div className="cockpitMetricGrid">
         <Metric title="API-Livebestand" value={`${formatCurrency(summary?.portfolio_value_eur)} EUR`} />
@@ -4996,6 +7612,8 @@ function CockpitDashboard({
           <StatusRow label="Letztes Canonical Event" value={summary?.pipeline?.last_canonical_event_at ? formatDateTime(summary.pipeline.last_canonical_event_at) : "-"} />
         </div>
       </div>
+        </div>
+      </details>
     </Stack>
   );
 }
@@ -5098,7 +7716,8 @@ function BlockpitWorkspaceOverview({
   sources,
   onNavigate,
   onRefreshConfiguredSources,
-  sourceRefreshLoading
+  sourceRefreshLoading,
+  taxDataReady
 }: {
   summary: Snapshot["cockpit"];
   readiness: Snapshot["productReadiness"];
@@ -5108,12 +7727,15 @@ function BlockpitWorkspaceOverview({
   onNavigate: (section: Section) => void;
   onRefreshConfiguredSources: () => void;
   sourceRefreshLoading: boolean;
+  taxDataReady: boolean;
 }) {
+  const cockpitReady = summary !== undefined;
+  const readinessReady = readiness !== undefined;
   const live = summary?.live_reconciliation;
   const priceCoverage = summary?.price_coverage;
-  const reviewTone = summary?.export_allowed ? "ok" : "blocked";
-  const liveTone = live?.status === "ok" ? "ok" : live?.status === "warning" ? "warning" : "blocked";
-  const readinessToneValue = readinessTone(readiness?.overall_status ?? "warning");
+  const reviewTone = !cockpitReady ? "loading" : summary.export_allowed ? "ok" : "blocked";
+  const liveTone = !cockpitReady ? "loading" : live?.status === "ok" ? "ok" : live?.status === "warning" ? "warning" : "blocked";
+  const readinessToneValue = !readinessReady ? "loading" : readinessTone(readiness.overall_status);
   const sourceCount = sources.length;
   const openTasks = summary?.open_tasks ?? 0;
   return (
@@ -5121,31 +7743,31 @@ function BlockpitWorkspaceOverview({
       <button className={`workspaceCard ${liveTone}`} type="button" onClick={() => onNavigate("portfolio")}>
         <div className="workspaceCardHeader">
           <WalletCards size={20} />
-          <span className={`statusPill ${liveTone}`}>{live?.status === "ok" ? "synchron" : "abgleichen"}</span>
+          <span className={`statusPill ${liveTone}`}>{!cockpitReady ? "laedt" : live?.status === "ok" ? "synchron" : "abgleichen"}</span>
         </div>
         <strong>Portfolio</strong>
-        <em>{formatCurrency(summary?.portfolio_value_eur)} EUR</em>
+        <em>{cockpitReady ? `${formatCurrency(summary.portfolio_value_eur)} EUR` : "wird geladen"}</em>
         <p>{priceCoverage ? `${formatPercent(priceCoverage.coverage_pct)} Preisdeckung` : "Bewertung wird geladen"} · {live?.stored_live_connectors ?? 0} Live-Connectoren</p>
       </button>
 
-      <button className={`workspaceCard ${activeTaxRow?.tone ?? "warning"}`} type="button" onClick={() => onNavigate("tax")}>
+      <button className={`workspaceCard ${taxDataReady ? activeTaxRow?.tone ?? "warning" : "loading"}`} type="button" onClick={() => onNavigate("tax")}>
         <div className="workspaceCardHeader">
           <ReceiptText size={20} />
-          <span className={`statusPill ${activeTaxRow?.tone ?? "warning"}`}>{activeTaxRow?.statusLabel ?? "laedt"}</span>
+          <span className={`statusPill ${taxDataReady ? activeTaxRow?.tone ?? "warning" : "loading"}`}>{taxDataReady ? activeTaxRow?.statusLabel ?? "pruefen" : "laedt"}</span>
         </div>
         <strong>Steuern {activeTaxYear}</strong>
-        <em>{formatCurrency(activeTaxRow?.taxablePrivateDisposalsEur)} EUR</em>
+        <em>{taxDataReady && activeTaxRow ? `${formatCurrency(activeTaxRow.taxablePrivateDisposalsEur)} EUR` : "wird geladen"}</em>
         <p>{activeTaxRow?.nextAction ?? "Eingabehilfe und Jahrespaket werden geladen."}</p>
       </button>
 
       <button className={`workspaceCard ${liveTone}`} type="button" onClick={() => onNavigate("sources")}>
         <div className="workspaceCardHeader">
           <Database size={20} />
-          <span className={`statusPill ${liveTone}`}>{sourceCount} Quellen</span>
+          <span className={`statusPill ${liveTone}`}>{cockpitReady ? `${sourceCount} Quellen` : "laedt"}</span>
         </div>
         <strong>Quellen</strong>
-        <em>{live?.latest_live_snapshot_at ? formatDateTime(live.latest_live_snapshot_at) : "kein Snapshot"}</em>
-        <p>{live?.blocker_count ?? 0} Blocker · {live?.warning_count ?? 0} Warnungen · {sourceRefreshLoading ? "Sync laeuft" : "API-Sync bereit"}</p>
+        <em>{!cockpitReady ? "wird geladen" : live?.latest_live_snapshot_at ? formatDateTime(live.latest_live_snapshot_at) : "kein Snapshot"}</em>
+        <p>{cockpitReady ? `${live?.blocker_count ?? 0} Blocker · ${live?.warning_count ?? 0} Warnungen` : "Live-Status wird geladen"} · {sourceRefreshLoading ? "Sync laeuft" : "API-Sync bereit"}</p>
       </button>
 
       <button className={`workspaceCard ${reviewTone}`} type="button" onClick={() => onNavigate(openTasks > 0 ? "review" : "export")}>
@@ -5154,8 +7776,8 @@ function BlockpitWorkspaceOverview({
           <span className={`statusPill ${readinessToneValue}`}>{readiness ? readinessLabel(readiness.overall_status) : "laedt"}</span>
         </div>
         <strong>Review & Export</strong>
-        <em>{summary?.export_allowed ? "freigegeben" : "blockiert"}</em>
-        <p>{summary?.review?.detail ?? "Review-Gate wird geladen"} · {openTasks} Aufgabe(n)</p>
+        <em>{cockpitReady ? summary.export_allowed ? "freigegeben" : "blockiert" : "wird geladen"}</em>
+        <p>{summary?.review?.detail ?? "Review-Gate wird geladen"}{cockpitReady ? ` · ${openTasks} Aufgabe(n)` : ""}</p>
       </button>
 
       <div className="workspaceSyncBar">
@@ -5204,21 +7826,49 @@ function CockpitPortfolioCommand({
   onRefreshConfiguredSources: () => void;
   sourceRefreshLoading: boolean;
 }) {
+  if (!summary) {
+    return (
+      <section className="blockpitPortfolioCommand loading" aria-busy="true" aria-live="polite">
+        <div className="portfolioCommandMain">
+          <div className="portfolioCommandHeader">
+            <div>
+              <span className="heroKicker">Bestand und Entwicklung</span>
+              <h3>Portfolio wird geladen</h3>
+              <p>Live-Bestand, Ledgerwert und FIFO-Kostenbasis werden getrennt uebernommen.</p>
+            </div>
+            <span className="statusPill loading">laedt</span>
+          </div>
+          <div className="portfolioCommandMetrics">
+            <Metric title="API-Livewert" value="wird geladen" />
+            <Metric title="Berechneter Wert" value="wird geladen" />
+            <Metric title="FIFO-Kostenbasis" value="wird geladen" />
+            <Metric title="Unrealisierter G/V" value="wird geladen" />
+            <Metric title="Netto in EUR investiert" value="wird geladen" />
+          </div>
+        </div>
+        <div className="portfolioCommandSide loadingPlaceholder" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </section>
+    );
+  }
   const performance = summary?.portfolio_performance;
   const live = summary?.live_reconciliation;
   const assets = summary?.top_assets ?? [];
   const sources = summary?.top_sources ?? [];
   const unrealizedReturn = parseNumber(performance?.unrealized_return_eur);
   const unrealizedTone = unrealizedReturn < 0 ? "blocked" : unrealizedReturn > 0 ? "ok" : "warning";
-  const valueBasisLabel = performance?.display_value_basis === "live_api" ? "Live API" : "Ledger berechnet";
+  const valueBasisLabel = performance?.display_value_basis === "live_api" ? "API-Livewert" : "berechneter Ledgerwert";
   const liveTone = live?.status === "ok" ? "ok" : live?.status === "warning" ? "warning" : "blocked";
-  const costBasisLabel = performance?.cost_basis_status === "available" ? "FIFO-Kostenbasis" : "Kostenbasis pruefen";
+  const costBasisLabel = performance?.cost_basis_status === "available" ? "Offene FIFO-Kostenbasis" : "Kostenbasis pruefen";
   return (
     <section className="blockpitPortfolioCommand">
       <div className="portfolioCommandMain">
         <div className="portfolioCommandHeader">
           <div>
-            <span className="heroKicker">Portfolio Values & Performance</span>
+            <span className="heroKicker">Bestand und Entwicklung</span>
             <h3>{formatCurrency(performance?.display_value_eur ?? summary?.portfolio_value_eur)} EUR</h3>
             <p>
               {valueBasisLabel} · Stand {summary?.generated_at ? formatDateTime(summary.generated_at) : "-"}
@@ -5229,14 +7879,14 @@ function CockpitPortfolioCommand({
           </span>
         </div>
         <div className="portfolioCommandMetrics">
-          <Metric title="Live Portfolio" value={performance?.live_value_eur ? `${formatCurrency(performance.live_value_eur)} EUR` : "-"} />
-          <Metric title="Calculated Value" value={`${formatCurrency(performance?.calculated_value_eur)} EUR`} />
+          <Metric title="API-Livewert" value={performance?.live_value_eur !== undefined && performance?.live_value_eur !== null ? `${formatCurrency(performance.live_value_eur)} EUR` : "-"} />
+          <Metric title="Berechneter Wert" value={`${formatCurrency(performance?.calculated_value_eur)} EUR`} />
           <Metric title={costBasisLabel} value={`${formatCurrency(performance?.open_cost_basis_eur)} EUR`} />
           <Metric
-            title="Unrealized Return"
+            title="Unrealisierter G/V"
             value={`${formatCurrency(performance?.unrealized_return_eur)} EUR${performance?.unrealized_return_pct ? ` · ${formatPercent(performance.unrealized_return_pct)}` : ""}`}
           />
-          <Metric title="Net EUR invested" value={`${formatCurrency(performance?.net_fiat_invested_eur)} EUR`} />
+          <Metric title="Netto in EUR investiert" value={`${formatCurrency(performance?.net_fiat_invested_eur)} EUR`} />
         </div>
         <div className={`portfolioReturnBand ${unrealizedTone}`}>
           <div>
@@ -5246,15 +7896,15 @@ function CockpitPortfolioCommand({
           <div className="portfolioCommandActions">
             <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading}>
               <RefreshCcw size={16} />
-              <span>{sourceRefreshLoading ? "Sync laeuft" : "Sync all"}</span>
+              <span>{sourceRefreshLoading ? "Abgleich laeuft" : "Alle Quellen"}</span>
             </button>
             <button type="button" onClick={() => onNavigate("portfolio")}>
               <WalletCards size={16} />
-              <span>Holdings</span>
+              <span>Bestaende</span>
             </button>
             <button type="button" onClick={() => onNavigate("tax")}>
               <ReceiptText size={16} />
-              <span>Tax Optimizer</span>
+              <span>Steuerplanung</span>
             </button>
           </div>
         </div>
@@ -5262,7 +7912,7 @@ function CockpitPortfolioCommand({
       <div className="portfolioCommandSide">
         <div className="portfolioMiniPanel">
           <div className="panelToolbar">
-            <strong>Holdings</strong>
+            <strong>Bestaende</strong>
             <span>{assets.length}</span>
           </div>
           <div className="portfolioMiniList">
@@ -5288,7 +7938,7 @@ function CockpitPortfolioCommand({
         </div>
         <div className="portfolioMiniPanel">
           <div className="panelToolbar">
-            <strong>Integrations</strong>
+            <strong>Quellen</strong>
             <span>{sources.length}</span>
           </div>
           <div className="portfolioMiniList">
@@ -5322,13 +7972,17 @@ function CockpitFilingJourney({
   readiness,
   onNavigate,
   onRefreshConfiguredSources,
-  sourceRefreshLoading
+  sourceRefreshLoading,
+  onRebuildPipeline,
+  loading
 }: {
   summary: Snapshot["cockpit"];
   readiness: Snapshot["productReadiness"];
   onNavigate: (section: Section) => void;
   onRefreshConfiguredSources: () => void;
   sourceRefreshLoading: boolean;
+  onRebuildPipeline: () => void;
+  loading: boolean;
 }) {
   const checks = readiness?.checks ?? [];
   const checkByKey = new Map(checks.map((check) => [String(check.key), check]));
@@ -5339,12 +7993,13 @@ function CockpitFilingJourney({
   const liveCheck = checkByKey.get("portfolio_live");
   const live = summary?.live_reconciliation;
   const reviewStatus = reviewCheck?.status ?? (summary?.export_allowed ? "ok" : "blocked");
+  const pipelineReady = (summary?.pipeline?.import_batches ?? 0) > 0 && Boolean(summary?.pipeline?.last_canonical_event_at);
   const steps = [
     {
       key: "sources",
       title: "1. Quellen verbinden",
       detail: sourcesCheck?.detail ?? "Wallets und Handelsplattformen pruefen.",
-      status: readinessTone(String(sourcesCheck?.status ?? "warning")),
+      status: loading ? "loading" as const : readinessTone(String(sourcesCheck?.status ?? "warning")),
       target: "sources" as Section,
       action: "Quellen oeffnen",
       secondary: sourceRefreshLoading ? "API-Abfrage laeuft" : "Alle APIs abfragen",
@@ -5352,59 +8007,77 @@ function CockpitFilingJourney({
       disabled: sourceRefreshLoading
     },
     {
-      key: "tax",
-      title: "2. Steuerjahr klaeren",
-      detail: taxYearsCheck?.detail ?? "Jahreszahlen, BMF-Methodik und Eingabehilfe kontrollieren.",
-      status: readinessTone(String(taxYearsCheck?.status ?? "warning")),
-      target: "tax" as Section,
-      action: "Steuerjahre"
+      key: "pipeline",
+      title: "2. Daten berechnen",
+      detail: pipelineReady
+        ? `Letztes Canonical Event ${formatDateTime(summary?.pipeline?.last_canonical_event_at)}.`
+        : "Importe normalisieren und FIFO-/Steuerdaten berechnen.",
+      status: loading ? "loading" as const : pipelineReady ? "ok" as const : "warning" as const,
+      target: "import" as Section,
+      action: "Importstatus",
+      secondary: "Neu berechnen",
+      secondaryAction: onRebuildPipeline,
+      disabled: false
     },
     {
       key: "review",
       title: "3. Review abschliessen",
       detail: reviewCheck?.detail ?? live?.detail ?? "Offene fachliche Entscheidungen und Live-Abgleich pruefen.",
-      status: readinessTone(String(reviewStatus)),
+      status: loading ? "loading" as const : readinessTone(String(reviewStatus)),
       target: "review" as Section,
       action: "Review"
     },
     {
+      key: "tax",
+      title: "4. Steuerjahr bestaetigen",
+      detail: taxYearsCheck?.detail ?? "Jahreszahlen, BMF-Methodik und Eingabehilfe kontrollieren.",
+      status: loading ? "loading" as const : readinessTone(String(taxYearsCheck?.status ?? "warning")),
+      target: "tax" as Section,
+      action: "Steuerjahre"
+    },
+    {
       key: "export",
-      title: "4. Belege exportieren",
+      title: "5. Bericht & Belege",
       detail: evidenceCheck?.detail ?? "Finanzamtspaket, Evidence-Manifest und CSV/PDF bereitstellen.",
-      status: readinessTone(String(evidenceCheck?.status ?? "warning")),
+      status: loading ? "loading" as const : readinessTone(String(evidenceCheck?.status ?? "warning")),
       target: "export" as Section,
       action: "Export"
     }
   ];
-  const overall = readinessTone(readiness?.overall_status ?? "warning");
+  const overall = loading ? "loading" : readinessTone(readiness?.overall_status ?? "warning");
   const conservativeReadyCount = readiness?.conservative_ready_years?.length ?? 0;
   const canFileWithAppendix = readiness?.overall_status === "ready" && !readiness?.can_file_without_review && conservativeReadyCount > 0;
   return (
     <section className={`filingJourney ${overall}`}>
       <div className="filingJourneyHeader">
         <div>
-          <span className="heroKicker">Gefuehrter Abgabeablauf</span>
+          <span className="heroKicker">Ihr Arbeitsablauf</span>
           <h3>
-            {readiness?.can_file_without_review
+            {loading
+              ? "Abgabestatus wird geladen"
+              : readiness?.can_file_without_review
               ? "Der Steuerreport ist abgabefertig"
               : canFileWithAppendix
                 ? "Abgabe mit konservativen Anlagen vorbereitet"
                 : "Noch nicht abgabefertig"}
           </h3>
           <p>
-            {readiness?.headline ?? "Die Website fuehrt von Quellen ueber Steuerjahr und Review bis zum Belegpaket."}
+            {readiness?.headline ?? "Von synchronisierten Quellen ueber Berechnung und Review bis zur Eingabehilfe und zum Belegpaket."}
           </p>
         </div>
         <div className="filingJourneyFacts">
-          <Metric title="Finale Abgabe" value={readiness?.can_file_without_review ? "ohne Review" : canFileWithAppendix ? "mit Anlage" : "offen"} />
-          <Metric title="Vorbereitung" value={readiness?.can_prepare_tax_report ? "moeglich" : "offen"} />
-          <Metric title="Naechste Aktion" value={readiness?.next_action ?? "Status laden"} />
+          <Metric title="Finale Abgabe" value={loading ? "wird geladen" : readiness?.can_file_without_review ? "ohne Review" : canFileWithAppendix ? "mit Anlage" : "offen"} />
+          <Metric title="Vorbereitung" value={loading ? "wird geladen" : readiness?.can_prepare_tax_report ? "moeglich" : "offen"} />
+          <div className="filingJourneyNextAction">
+            <span>Naechste Aktion</span>
+            <strong>{loading ? "wird ermittelt" : readiness?.next_action ?? "Status pruefen"}</strong>
+          </div>
         </div>
       </div>
       <div className="filingJourneySteps">
         {steps.map((step) => (
           <div className={`filingStep ${step.status}`} key={step.key}>
-            <span className={`statusPill ${step.status}`}>{step.status === "ok" ? "ok" : step.status === "blocked" ? "blockiert" : "pruefen"}</span>
+            <span className={`statusPill ${step.status}`}>{step.status === "loading" ? "laedt" : step.status === "ok" ? "ok" : step.status === "blocked" ? "blockiert" : "pruefen"}</span>
             <strong>{step.title}</strong>
             <p>{String(step.detail)}</p>
             <div className="filingStepActions">
@@ -5413,7 +8086,7 @@ function CockpitFilingJourney({
                 <span>{step.action}</span>
               </button>
               {step.secondary ? (
-                <button type="button" className="secondary" disabled={step.disabled} onClick={step.secondaryAction}>
+                <button type="button" className="secondary" disabled={step.disabled || loading} onClick={step.secondaryAction}>
                   <RefreshCcw size={15} />
                   <span>{step.secondary}</span>
                 </button>
@@ -5528,7 +8201,8 @@ function SourceSetupBlockers({
   const rows = connectorDiagnostics?.diagnostics ?? [];
   const missingCredentials = rows.filter((row) => String(row.credential_status) === "missing");
   const staleSnapshots = rows.filter((row) => Number(row.last_snapshot_age_days ?? 0) > 3 || String(row.status) === "stale_snapshot");
-  const tone = missingCredentials.length > 0 ? "blocked" : staleSnapshots.length > 0 ? "warning" : "ok";
+  const failedAttempts = rows.filter((row) => String(row.status) === "connector_error");
+  const tone = missingCredentials.length > 0 || failedAttempts.length > 0 ? "blocked" : staleSnapshots.length > 0 ? "warning" : "ok";
   if (!connectorDiagnostics) {
     return (
       <section className="sourceSetupBlockers warning">
@@ -5548,6 +8222,8 @@ function SourceSetupBlockers({
           <h3>
             {missingCredentials.length > 0
               ? `${missingCredentials.length} CEX-Credential-Set(s) fehlen`
+              : failedAttempts.length > 0
+                ? `${failedAttempts.length} API-Abruf(e) fehlgeschlagen`
               : staleSnapshots.length > 0
                 ? `${staleSnapshots.length} Live-Snapshot(s) veraltet`
                 : "Quellen-Setup ohne Blocker"}
@@ -5571,17 +8247,19 @@ function SourceSetupBlockers({
         <Metric title="Credentials fehlen" value={String(connectorDiagnostics.missing_credentials)} />
         <Metric title="Snapshots veraltet" value={String(connectorDiagnostics.stale_snapshots)} />
         <Metric title="Snapshots fehlen" value={String(connectorDiagnostics.missing_snapshots)} />
+        <Metric title="API-Abrufe fehlgeschlagen" value={String(connectorDiagnostics.failed_latest_attempts)} />
         <Metric title="Geprueft" value={String(rows.length)} />
       </div>
       <div className="sourceSetupBlockerGrid">
         {rows.map((row) => {
           const credentialMissing = String(row.credential_status) === "missing";
           const stale = Number(row.last_snapshot_age_days ?? 0) > 3 || String(row.status) === "stale_snapshot";
-          const rowTone = credentialMissing ? "blocked" : stale ? "warning" : "ok";
+          const connectorFailed = String(row.status) === "connector_error";
+          const rowTone = credentialMissing || connectorFailed ? "blocked" : stale ? "warning" : "ok";
           return (
             <div key={`source-setup-blocker-${String(row.source_id ?? row.connector_id)}`} className={`sourceSetupBlockerCard ${rowTone}`}>
               <span className={`statusPill ${rowTone}`}>
-                {credentialMissing ? "Credentials fehlen" : stale ? "Live veraltet" : "ok"}
+                {credentialMissing ? "Credentials fehlen" : connectorFailed ? "API-Abruf fehlgeschlagen" : stale ? "Live veraltet" : "ok"}
               </span>
               <strong>{String(row.label ?? row.source_id ?? row.connector_id)}</strong>
               <p>{String(row.message ?? row.next_action ?? "-")}</p>
@@ -5590,6 +8268,8 @@ function SourceSetupBlockers({
                 <StatusRow label="Typ" value={String(row.connector_type ?? "-")} />
                 <StatusRow label="Secrets" value={`${String(row.credential_keys_present ?? 0)}/${String(row.credential_keys_required ?? 0)}`} />
                 <StatusRow label="Snapshot" value={row.last_snapshot_at ? formatDateTime(row.last_snapshot_at) : "-"} />
+                <StatusRow label="Letzter API-Versuch" value={row.last_attempt?.attempted_at ? formatDateTime(row.last_attempt.attempted_at) : "-"} />
+                <StatusRow label="API-Ergebnis" value={sourceConnectorStatusLabel(row.last_attempt?.status)} />
                 <StatusRow label="Alter" value={row.last_snapshot_age_days === null || row.last_snapshot_age_days === undefined ? "-" : `${String(row.last_snapshot_age_days)} Tage`} />
                 <StatusRow label="Wert" value={`${formatCurrency(row.last_snapshot_value_eur)} EUR`} />
               </div>
@@ -5876,22 +8556,6 @@ function readinessYearsLine(report: NonNullable<Snapshot["productReadiness"]>): 
   return parts.length > 0 ? parts.join(" · ") : "Noch kein Jahres-Snapshot fuer die Abgabe geladen.";
 }
 
-function quickActionIcon(section: Section): React.ReactNode {
-  if (section === "import") {
-    return <Upload size={16} />;
-  }
-  if (section === "portfolio") {
-    return <WalletCards size={16} />;
-  }
-  if (section === "export") {
-    return <FileDown size={16} />;
-  }
-  if (section === "review") {
-    return <Database size={16} />;
-  }
-  return <LayoutDashboard size={16} />;
-}
-
 function DashboardPortfolioStatus({
   portfolio,
   review
@@ -5900,8 +8564,7 @@ function DashboardPortfolioStatus({
   review: Snapshot["review"];
 }) {
   const total = Number(portfolio?.total_value_eur ?? 0);
-  const excluded = Number(portfolio?.excluded_value_eur ?? 0);
-  const grossTracked = total + excluded;
+  const excludedAccounts = portfolio?.excluded_account_summary ?? [];
   const topAssets = (portfolio?.asset_summary ?? []).slice(0, 5);
   const topAccounts = (portfolio?.account_summary ?? []).slice(0, 5);
   const historicalIssues = Number(review?.issues_historical_open ?? 0);
@@ -5927,8 +8590,8 @@ function DashboardPortfolioStatus({
         </div>
         <div className="statusRows">
           <StatusRow label="Aktueller Bestand" value={`${formatCurrency(total)} EUR`} />
-          <StatusRow label="Ausgeklammert" value={`${formatCurrency(excluded)} EUR`} />
-          <StatusRow label="Nachverfolgte Bruttosumme" value={`${formatCurrency(grossTracked)} EUR`} />
+          <StatusRow label="Technische Belegkonten" value={`${excludedAccounts.length} · nicht im Bestand`} />
+          <StatusRow label="Bestandslogik" value="Belegkonten nicht addieren" />
           <StatusRow label="Preisstatus" value={statusText || "-"} />
         </div>
       </div>
@@ -5990,19 +8653,19 @@ function PortfolioDecisionPanel({
   holdingPeriods,
   lossPlanner,
   priceCoverage,
-  onDownload
+  onViewModeChange
 }: {
   portfolio: Snapshot["portfolio"];
   sources: Snapshot["portfolioSources"];
   holdingPeriods: Snapshot["taxHoldingPeriods"];
   lossPlanner: Snapshot["taxLossRealizationPlanner"];
   priceCoverage: Snapshot["priceCoverage"];
-  onDownload: (path: string) => void;
+  onViewModeChange: (mode: PortfolioViewMode) => void;
 }) {
   const missingPrices = portfolio?.missing_price_assets ?? [];
-  const excludedValue = parseNumber(portfolio?.excluded_value_eur);
+  const portfolioReady = Boolean(portfolio);
   const priceCoveragePct = (priceCoverage?.missing_count ?? missingPrices.length) === 0 ? "100" : "0";
-  const tone = missingPrices.length > 0 ? "warning" : excludedValue > 0 ? "warning" : "ok";
+  const tone = !portfolioReady ? "loading" : missingPrices.length > 0 ? "warning" : "ok";
   const latestPriceAt = (portfolio?.asset_summary ?? [])
     .map((row) => String(row.priced_at_latest ?? ""))
     .filter(Boolean)
@@ -6014,41 +8677,40 @@ function PortfolioDecisionPanel({
       <section className={`portfolioDecision ${tone}`}>
         <div className="portfolioDecisionMain">
           <span className="heroKicker">Portfolio-Uebersicht</span>
-          <h2>{formatCurrency(portfolio?.total_value_eur)} EUR</h2>
+          <h2>{portfolioReady ? `${formatCurrency(portfolio?.total_value_eur)} EUR` : "Portfolio wird geladen"}</h2>
           <p>
             Aktueller Bestand mit Preisdeckung, Quellenverteilung und Haltefrist-Ausblick. Detailabgleich und Preisdiagnosen liegen in den Tabs.
           </p>
           <div className="taxFilingTargets">
-            <span className={`statusPill ${tone}`}>{missingPrices.length === 0 ? "Preise vollstaendig" : "Preise pruefen"}</span>
-            <span>Preisstand {latestPriceAt ? formatDateTime(latestPriceAt) : "-"}</span>
-            <span>Top-Quelle {topSource ? String(topSource.source_group) : "-"}</span>
+            <span className={`statusPill ${tone}`}>{!portfolioReady ? "wird geladen" : missingPrices.length === 0 ? "Preise vollstaendig" : "Preise pruefen"}</span>
+            <span>Preisstand {portfolioReady ? latestPriceAt ? formatDateTime(latestPriceAt) : "nicht belegt" : "wird geladen"}</span>
+            <span>Top-Quelle {portfolioReady ? topSource ? String(topSource.source_group) : "nicht vorhanden" : "wird geladen"}</span>
           </div>
         </div>
         <div className="portfolioDecisionActions">
-          <button type="button" onClick={() => onDownload("/api/v1/portfolio/snapshot")}>
-            <FileJson size={18} />
-            <span>Snapshot JSON</span>
+          <button type="button" onClick={() => onViewModeChange("overview")}>
+            <WalletCards size={18} />
+            <span>Bestaende</span>
           </button>
-          <button type="button" onClick={() => onDownload("/api/v1/prices/coverage")}>
-            <FileJson size={18} />
-            <span>Preisdeckung JSON</span>
+          <button type="button" onClick={() => onViewModeChange("reconciliation")}>
+            <RefreshCcw size={18} />
+            <span>Live-Abgleich</span>
           </button>
-          <button type="button" onClick={() => onDownload("/api/v1/tax/holding-periods")}>
-            <FileJson size={18} />
-            <span>Haltefristen JSON</span>
+          <button type="button" onClick={() => onViewModeChange("expert")}>
+            <Settings size={18} />
+            <span>Diagnose</span>
           </button>
         </div>
         <div className="taxFilingDecisionMetrics">
-          <Metric title="Preisdeckung" value={formatPercent(priceCoveragePct)} />
-          <Metric title="Jetzt steuerfrei" value={`${formatCurrency(holdingPeriods?.tax_free_now_value_eur)} EUR`} />
-          <Metric title="30 Tage" value={`${formatCurrency(holdingPeriods?.next_30_days_value_eur)} EUR`} />
-          <Metric title="Ausgeklammert" value={`${formatCurrency(portfolio?.excluded_value_eur)} EUR`} />
+          <Metric title="Preisdeckung" value={portfolioReady && priceCoverage ? formatPercent(priceCoveragePct) : "Wird geladen"} />
+          <Metric title="Jetzt steuerfrei" value={holdingPeriods ? `${formatCurrency(holdingPeriods.tax_free_now_value_eur)} EUR` : "Wird geladen"} />
+          <Metric title="30 Tage" value={holdingPeriods ? `${formatCurrency(holdingPeriods.next_30_days_value_eur)} EUR` : "Wird geladen"} />
+          <Metric title="Technische Belegkonten" value={portfolioReady ? String(portfolio?.excluded_account_summary?.length ?? 0) : "Wird geladen"} />
         </div>
       </section>
       <PortfolioHoldingDecisionPanel
         holdingPeriods={holdingPeriods}
         lossPlanner={lossPlanner}
-        onDownload={onDownload}
       />
     </Stack>
   );
@@ -6056,12 +8718,10 @@ function PortfolioDecisionPanel({
 
 function PortfolioHoldingDecisionPanel({
   holdingPeriods,
-  lossPlanner,
-  onDownload
+  lossPlanner
 }: {
   holdingPeriods: Snapshot["taxHoldingPeriods"];
   lossPlanner: Snapshot["taxLossRealizationPlanner"];
-  onDownload: (path: string) => void;
 }) {
   const buckets = holdingPeriods?.buckets ?? [];
   const lots = holdingPeriods?.lots ?? [];
@@ -6070,6 +8730,8 @@ function PortfolioHoldingDecisionPanel({
     .filter((row) => String(row.status) === "tax_relevant_loss_if_sold_now")
     .slice(0, 4);
   const maxBucketValue = Math.max(...buckets.map((bucket) => parseNumber(bucket.value_eur)), 1);
+  const holdingReady = Boolean(holdingPeriods);
+  const lossPlannerReady = Boolean(lossPlanner);
   return (
     <section className="holdingDecisionPanel">
       <div className="holdingDecisionHeader">
@@ -6077,31 +8739,24 @@ function PortfolioHoldingDecisionPanel({
           <span className="heroKicker">Haltefrist & Verkaufsfenster</span>
           <h3>Was kann steuerfrei oder verlustrelevant sein?</h3>
           <p>
-            Sicht aus offenen FIFO-Lots ab {holdingPeriods?.as_of ? formatDateTime(holdingPeriods.as_of) : "-"}.
-            Dust unter {formatCurrency(holdingPeriods?.min_value_eur ?? 1)} EUR wird ausgeblendet.
+            {holdingReady
+              ? `Sicht aus offenen FIFO-Lots ab ${formatDateTime(holdingPeriods?.as_of)}. Dust unter ${formatCurrency(holdingPeriods?.min_value_eur ?? 1)} EUR wird ausgeblendet.`
+              : "Offene FIFO-Lots und steuerliche Verkaufsfenster werden geladen."}
           </p>
-        </div>
-        <div className="holdingDecisionActions">
-          <button type="button" onClick={() => onDownload("/api/v1/tax/holding-periods")}>
-            <FileJson size={16} />
-            <span>Haltefristen</span>
-          </button>
-          <button type="button" onClick={() => onDownload("/api/v1/tax/loss-realization-planner?min_loss_eur=1&min_value_eur=1&limit=120")}>
-            <FileJson size={16} />
-            <span>Verlustplanung</span>
-          </button>
         </div>
       </div>
       <div className="holdingTimelineMetrics">
-        <Metric title="Jetzt steuerfrei" value={`${formatCurrency(holdingPeriods?.tax_free_now_value_eur)} EUR`} />
-        <Metric title="7 Tage" value={`${formatCurrency(holdingPeriods?.next_7_days_value_eur)} EUR`} />
-        <Metric title="7 Monate" value={`${formatCurrency(holdingPeriods?.next_7_months_value_eur)} EUR`} />
-        <Metric title="1 Jahr" value={`${formatCurrency(holdingPeriods?.next_year_value_eur)} EUR`} />
-        <Metric title="Verlust jetzt nutzbar" value={`${formatCurrency(lossPlanner?.tax_relevant_loss_if_sold_now_eur)} EUR`} />
+        <Metric title="Jetzt steuerfrei" value={holdingReady ? `${formatCurrency(holdingPeriods?.tax_free_now_value_eur)} EUR` : "Wird geladen"} />
+        <Metric title="7 Tage" value={holdingReady ? `${formatCurrency(holdingPeriods?.next_7_days_value_eur)} EUR` : "Wird geladen"} />
+        <Metric title="7 Monate" value={holdingReady ? `${formatCurrency(holdingPeriods?.next_7_months_value_eur)} EUR` : "Wird geladen"} />
+        <Metric title="1 Jahr" value={holdingReady ? `${formatCurrency(holdingPeriods?.next_year_value_eur)} EUR` : "Wird geladen"} />
+        <Metric title="Verlust jetzt nutzbar" value={lossPlannerReady ? `${formatCurrency(lossPlanner?.tax_relevant_loss_if_sold_now_eur)} EUR` : "Wird geladen"} />
       </div>
       <div className="holdingTimelineGrid">
         <div className="holdingBucketList">
-          {buckets.length === 0 ? (
+          {!holdingReady ? (
+            <div className="loadingPlaceholder" aria-label="Haltefrist-Buckets werden geladen"><span /><span /><span /></div>
+          ) : buckets.length === 0 ? (
             <div className="empty">Keine Haltefrist-Buckets vorhanden.</div>
           ) : (
             buckets.map((bucket) => (
@@ -6123,7 +8778,9 @@ function PortfolioHoldingDecisionPanel({
             <strong>Top-Verlustfenster</strong>
             <span>{topLossRows.length} Position(en)</span>
           </div>
-          {topLossRows.length === 0 ? (
+          {!lossPlannerReady ? (
+            <div className="loadingPlaceholder" aria-label="Verlustfenster werden geladen"><span /><span /><span /></div>
+          ) : topLossRows.length === 0 ? (
             <div className="empty">Keine steuerrelevanten Verlustfenster ueber Filter sichtbar.</div>
           ) : (
             topLossRows.map((row) => (
@@ -6186,9 +8843,9 @@ function PortfolioCompositionPanel({
         footer={`Top ${accountRows.length} Konten/Wallets von ${(portfolio?.account_summary ?? []).length}.`}
       />
       <TablePanel
-        title="Nicht als aktueller Bestand gewertet"
+        title="Technische Belegkonten (nicht Vermoegen)"
         rows={portfolio?.excluded_account_summary ?? []}
-        footer={`Ausgeklammert: ${formatCurrency(portfolio?.excluded_value_eur)} EUR. Diese Konten bleiben fuer Audit/Steuerdaten erhalten.`}
+        footer={`${portfolio?.excluded_value_semantics ?? "Kein Konto- oder Portfoliobestand; nicht zum Gesamtwert addieren."} Rechnerischer Diagnosewert: ${formatCurrency(portfolio?.excluded_value_eur)} EUR.`}
       />
     </Stack>
   );
@@ -6198,14 +8855,12 @@ function PortfolioTokenRiskPanel({
   report,
   reviewDecisions,
   filter,
-  onFilterChange,
-  onDownload
+  onFilterChange
 }: {
   report: Snapshot["portfolioTokenRisk"];
   reviewDecisions: Snapshot["reviewDecisions"];
   filter: TokenRiskFilter;
   onFilterChange: (mode: TokenRiskFilter) => void;
-  onDownload: (path: string) => void;
 }) {
   const documentedScopes = new Set(
     (reviewDecisions ?? [])
@@ -6249,10 +8904,6 @@ function PortfolioTokenRiskPanel({
         <span className={`statusPill ${(report?.spam_review_count ?? 0) > 0 ? "blocked" : "ok"}`}>
           {(report?.spam_review_count ?? 0) > 0 ? `${report?.spam_review_count ?? 0} Spam Review` : "keine Spam-Position"}
         </span>
-        <button type="button" onClick={() => onDownload(`/api/v1/portfolio/token-risk?risk_status=${encodeURIComponent(filter)}&min_value_eur=1`)}>
-          <FileJson size={16} />
-          JSON
-        </button>
       </div>
       <div className="taxViewSwitch compact" role="tablist" aria-label="Token-Risiko Filter">
         {filters.map((item) => (
@@ -6507,20 +9158,54 @@ function PortfolioReconciliationPanel({
   const warnings = rows.filter((row) => String(row.severity) === "warning").length;
   const expectedZero = parseNumber(report?.expected_zero_ledger_value_eur);
   const unverified = parseNumber(report?.live_unverified_ledger_value_eur);
-  const topRows = rows.slice(0, 12);
+  const rawLedgerValue = parseNumber(report?.total_ledger_value_eur);
+  const adjustmentValue = parseNumber(report?.ledger_adjustment_value_eur);
+  const reconciledLedgerValue = parseNumber(
+    report?.total_reconciled_ledger_value_eur ?? report?.total_ledger_value_eur
+  );
+  const overlayRows = rows.filter(
+    (row) => Array.isArray(row.ledger_adjustment_ids) && row.ledger_adjustment_ids.length > 0
+  );
+  const topRows = rows.filter((row) => !overlayRows.includes(row)).slice(0, 12);
 
   return (
     <div className="panel portfolioBreakdown">
       <div className="panelToolbar">
-        <strong>Live-Abgleich gegen V1-API-Anker</strong>
+        <strong>Live-Abgleich gegen API-/RPC-Anker</strong>
         <span>{blockers} Blocker · {warnings} Warnungen</span>
       </div>
       <div className="portfolioSummaryStrip">
+        <Metric title="Rohledger" value={`${formatCurrency(rawLedgerValue)} EUR`} />
+        <Metric title="Beleg-Overlays" value={String(report?.applied_ledger_adjustments_count ?? 0)} />
+        <Metric title="Overlay-Wert" value={`${formatCurrency(adjustmentValue)} EUR`} />
+        <Metric title="Abgleichswert" value={`${formatCurrency(reconciledLedgerValue)} EUR`} />
         <Metric title="Erwartet Null, Ledger offen" value={`${formatCurrency(expectedZero)} EUR`} />
         <Metric title="Noch ohne Live-Anker" value={`${formatCurrency(unverified)} EUR`} />
         <Metric title="Fehlende Wallets" value={String(report?.missing_wallets?.length ?? 0)} />
         <Metric title="Abgleichzeilen" value={String(rows.length)} />
       </div>
+      {overlayRows.length > 0 ? (
+        <TablePanel
+          title="TxID-gebundene Beleg-Overlays"
+          rows={overlayRows.map((row) => ({
+            quelle: row.source_group,
+            asset: row.asset,
+            rohledger_menge: row.raw_ledger_quantity,
+            beleg_overlay_menge: row.ledger_adjustment_quantity,
+            abgleich_menge: row.ledger_quantity,
+            live_menge: row.external_quantity ?? "0",
+            status: row.status,
+            txid: Array.isArray(row.ledger_adjustment_tx_ids)
+              ? row.ledger_adjustment_tx_ids.map((value) => shortAccount(String(value))).join(", ")
+              : "-",
+            txid_full: Array.isArray(row.ledger_adjustment_tx_ids)
+              ? row.ledger_adjustment_tx_ids.join(" | ")
+              : ""
+          }))}
+          footer="Das Overlay korrigiert ausschließlich den Live-Abgleich. Rohledger, Canonical Events, FIFO und Steuerzeilen bleiben unverändert; die vollständige TxID steht im Tooltip."
+          compact
+        />
+      ) : null}
       <TablePanel
         title="Abweichungen und offene Live-Anker"
         rows={topRows.map((row) => ({
@@ -6665,7 +9350,7 @@ function PortfolioAsOfPage({
           <span className="heroKicker">Stichtags-Cockpit</span>
           <h2>{snapshot?.label ?? "Portfolio zum Stichtag"}</h2>
           <p>
-            Mengen aus dem Ledger bis einschliesslich Stichtag, Bewertung mit dem letzten belegten EUR-Preis am oder vor dem Stichtag.
+            Mengen aus dem Ledger bis einschliesslich Stichtag, Bewertung mit dem letzten unabhaengig belegten EUR-Preis am oder vor dem Stichtag.
           </p>
         </div>
         <div className="asOfControls">
@@ -6714,7 +9399,7 @@ function PortfolioAsOfPage({
             <StatusRow label="Groesstes Asset" value={topAsset ? `${String(topAsset.asset)} · ${formatCurrency(topAsset.value_eur)} EUR` : "-"} />
             <StatusRow label="Groesster Ort" value={topAccount ? `${shortAccount(String(topAccount.account))} · ${formatCurrency(topAccount.value_eur)} EUR` : "-"} />
             <StatusRow label="Fehlende Preise" value={missing.length ? missing.join(", ") : "keine"} />
-            <StatusRow label="Ausgeklammert" value={`${formatCurrency(snapshot?.excluded_value_eur)} EUR`} />
+            <StatusRow label="Technische Belegkonten" value={`${snapshot?.excluded_account_summary?.length ?? 0} · nicht eingerechnet`} />
           </div>
         </div>
         <div className="panel">
@@ -6739,6 +9424,7 @@ function PortfolioAsOfPage({
         account_summary: snapshot.account_summary,
         excluded_account_summary: snapshot.excluded_account_summary,
         excluded_value_eur: snapshot.excluded_value_eur,
+        excluded_value_semantics: snapshot.excluded_value_semantics,
         resolved_account_aliases: snapshot.resolved_account_aliases,
         unresolved_truncated_accounts: snapshot.unresolved_truncated_accounts
       } : undefined} />
@@ -6849,7 +9535,7 @@ function ReviewPanel({
           Expertenmodus
         </button>
       </div>
-      <TokenRiskReviewPanel report={jupiterRiskReview} onDownload={onDownload} />
+      <TokenRiskReviewPanel report={jupiterRiskReview} />
       <TokenRiskDocumentationPanel decisions={decisions} onDownload={onDownload} />
       <ReviewTasksPanel tasks={reviewTasks} onDownload={onDownload} onAcceptSuggestion={onAcceptSuggestion} />
       {reviewViewMode !== "tasks" ? (
@@ -7107,11 +9793,9 @@ function ReviewTasksPanel({
 }
 
 function TokenRiskReviewPanel({
-  report,
-  onDownload
+  report
 }: {
   report: Snapshot["jupiterRiskReview"];
-  onDownload: (path: string) => void;
 }) {
   const rows = report?.items ?? [];
   const displayRows = rows.map((token) => ({
@@ -7132,10 +9816,6 @@ function TokenRiskReviewPanel({
         <span className={`statusPill ${(report?.spam_review_count ?? 0) > 0 ? "blocked" : "ok"}`}>
           {(report?.spam_review_count ?? 0) > 0 ? "spam_review sichtbar" : "keine Spam-Markierung"}
         </span>
-        <button type="button" onClick={() => onDownload("/api/v1/sources/jupiter/tokens/risk-review?risk_status=spam_review&limit=200")}>
-          <FileJson size={16} />
-          JSON
-        </button>
       </div>
       <div className="reviewSummary">
         <Metric title="Spam Review" value={String(report?.spam_review_count ?? 0)} />
@@ -7200,7 +9880,7 @@ function TokenRiskDocumentationPanel({
           {tokenRiskDecisions.length > 0 ? `${tokenRiskDecisions.length} dokumentiert` : "nichts dokumentiert"}
         </span>
         <button type="button" onClick={() => onDownload("/api/v1/export/token-risk-documentation.csv")}>
-          <FileJson size={16} />
+          <FileDown size={16} />
           CSV
         </button>
       </div>
@@ -8151,32 +10831,242 @@ function TransferCandidatesPanel({ report }: { report: Snapshot["transferCandida
 
 function DivorceEqualizationPanel({
   report,
-  onDownload
+  valuationRun,
+  cutoffPriceGate,
+  priceGate,
+  cutoffDate,
+  onCutoffDateChange,
+  valuationDate,
+  onValuationDateChange,
+  materialityEur,
+  onMaterialityEurChange,
+  onRunDossier,
+  runLoading,
+  onAcceptTradeRepublicValuation,
+  tradeRepublicValuationLoading,
+  onUploadTradeRepublicDocuments,
+  tradeRepublicDocumentUploadLoading,
+  onUploadInheritanceDocuments,
+  inheritanceDocumentUploadLoading,
+  onAcceptInheritanceDocument,
+  inheritanceDocumentReviewLoading,
+  onUploadBankCamtDocuments,
+  bankCamtUploadLoading,
+  onAcceptCoinbaseValuation,
+  coinbaseValuationLoading,
+  priceGateLoading,
+  onRunPriceGateBackfill,
+  onAcceptTokenValuation,
+  serviceRouteEvidence,
+  onRefreshServiceRouteEvidence,
+  onAcceptServiceRouteEvidence,
+  serviceRouteEvidenceLoading,
+  onDownload,
+  onNavigate
 }: {
   report: Snapshot["divorceEqualization"];
+  valuationRun: Snapshot["divorceValuationRun"];
+  cutoffPriceGate: Snapshot["asOfCutoffPriceGate"];
+  priceGate: Snapshot["asOfPriceGate"];
+  cutoffDate: string;
+  onCutoffDateChange: (date: string) => void;
+  valuationDate: string;
+  onValuationDateChange: (date: string) => void;
+  materialityEur: string;
+  onMaterialityEurChange: (value: string) => void;
+  onRunDossier: () => void;
+  runLoading: boolean;
+  onAcceptTradeRepublicValuation: (documentSha256: string) => void;
+  tradeRepublicValuationLoading: boolean;
+  onUploadTradeRepublicDocuments: (files: File[]) => void;
+  tradeRepublicDocumentUploadLoading: boolean;
+  onUploadInheritanceDocuments: (files: File[]) => void;
+  inheritanceDocumentUploadLoading: boolean;
+  onAcceptInheritanceDocument: (documentSha256: string) => void;
+  inheritanceDocumentReviewLoading: boolean;
+  onUploadBankCamtDocuments: (files: File[]) => void;
+  bankCamtUploadLoading: boolean;
+  onAcceptCoinbaseValuation: (historyManifestSha256: string) => void;
+  coinbaseValuationLoading: boolean;
+  priceGateLoading: boolean;
+  onRunPriceGateBackfill: (dryRun: boolean, targetDate?: string) => void;
+  onAcceptTokenValuation: (asset: string, asOfDate: string) => void;
+  serviceRouteEvidence: Snapshot["divorceServiceRouteEvidence"];
+  onRefreshServiceRouteEvidence: (txId: string) => void;
+  onAcceptServiceRouteEvidence: (
+    txId: string,
+    semanticSha256: string
+  ) => void;
+  serviceRouteEvidenceLoading: boolean;
   onDownload: (path: string) => void;
+  onNavigate: (section: Section) => void;
 }) {
+  const [priceGateMode, setPriceGateMode] = useState<"cutoff" | "valuation">(
+    "valuation"
+  );
   const marital = report?.marital_pre_cutoff ?? {};
   const direct = report?.post_cutoff_direct_eur_invest ?? {};
   const allLots = report?.post_cutoff_all_lots ?? {};
   const accounts = report?.accounts ?? [];
+  const capitalFlow = report?.capital_flow_gate;
+  const capitalOutflows = capitalFlow?.outflows ?? [];
+  const serviceRouteCandidate = capitalOutflows.find(
+    (row) => row.classification === "trade_or_service_route" && Boolean(row.tx_id)
+  );
+  const acceptedServiceRoute = capitalOutflows.find(
+    (row) => row.classification === "internal_service_position_loss" && Boolean(row.tx_id)
+  );
+  const serviceRouteTxId = String(
+    serviceRouteCandidate?.tx_id
+      ?? acceptedServiceRoute?.tx_id
+      ?? serviceRouteEvidence?.tx_id
+      ?? ""
+  );
+  const serviceRouteEvidenceMatches = Boolean(
+    serviceRouteEvidence
+      && serviceRouteTxId
+      && serviceRouteEvidence.tx_id === serviceRouteTxId
+  );
+  const inheritanceOrigin = report?.inheritance_origin_gate;
+  const inheritanceCredits = inheritanceOrigin?.inheritance_credits ?? [];
+  const activePriceGate = priceGateMode === "cutoff" ? cutoffPriceGate : priceGate;
+  const activePriceGateDate = priceGateMode === "cutoff" ? cutoffDate : valuationDate;
+  const bankStatementTone = inheritanceOrigin?.bank_statement_status === "complete"
+    ? "ok"
+    : inheritanceOrigin?.bank_statement_status === "partial"
+      ? "warning"
+      : "blocked";
+  const bankStatementLabel = inheritanceOrigin?.bank_statement_status === "complete"
+    ? "Zeitraum vollstaendig"
+    : inheritanceOrigin?.bank_statement_status === "partial"
+      ? "Zeitraumluecke"
+      : "Bankbeleg fehlt";
+  const sparkasseStatementConnector = inheritanceOrigin?.sparkasse_statement_connector;
+  const sparkasseStatementTone = sparkasseStatementConnector?.status === "parsed"
+    && (sparkasseStatementConnector?.missing_camt_matches_count ?? 0) === 0
+    && (sparkasseStatementConnector?.ambiguous_camt_matches_count ?? 0) === 0
+    ? "ok"
+    : sparkasseStatementConnector?.status === "partial"
+      || (sparkasseStatementConnector?.exact_camt_matches_count ?? 0) > 0
+      ? "warning"
+      : "blocked";
+  const sparkasseStatementLabel = sparkasseStatementConnector?.status === "parsed"
+    && (sparkasseStatementConnector?.missing_camt_matches_count ?? 0) === 0
+    && (sparkasseStatementConnector?.ambiguous_camt_matches_count ?? 0) === 0
+    ? "PDF und CAMT stimmen ueberein"
+    : sparkasseStatementConnector?.status === "missing"
+      ? "PDF-Auszug fehlt"
+      : "PDF-Abgleich pruefen";
+  const inheritanceDocumentConnector = inheritanceOrigin?.formal_inheritance_connector;
+  const inheritanceDocuments = inheritanceDocumentConnector?.documents ?? [];
+  const inheritanceDocumentCandidate = inheritanceDocuments.find(
+    (item) => item.review_status === "candidate"
+  );
+  const inheritanceDocumentTone = inheritanceDocumentConnector?.status === "reviewed"
+    ? "ok"
+    : inheritanceDocumentConnector?.status === "candidate_present"
+      ? "warning"
+      : "blocked";
+  const inheritanceDocumentLabel = inheritanceDocumentConnector?.status === "reviewed"
+    ? "Formal belegt"
+    : inheritanceDocumentConnector?.status === "candidate_present"
+      ? "Pruefung erforderlich"
+      : "Dokument fehlt";
+  const tradeRepublicConnector = inheritanceOrigin?.trade_republic_connector;
+  const tradeRepublicDocuments = tradeRepublicConnector?.documents ?? [];
+  const tradeRepublicStatus = String(
+    tradeRepublicConnector?.end_asset_statement_status ?? "missing"
+  );
+  const tradeRepublicStatusTone = tradeRepublicStatus === "reviewed"
+    ? "ok"
+    : tradeRepublicStatus === "exact_date_candidate" || tradeRepublicStatus === "candidate_present"
+      ? "warning"
+      : "blocked";
+  const tradeRepublicStatusLabel = tradeRepublicStatus === "reviewed"
+    ? "Stichtagswert freigegeben"
+    : tradeRepublicStatus === "exact_date_candidate"
+      ? "Pruefbarer Wert erkannt"
+      : tradeRepublicStatus === "ambiguous"
+        ? "Werte widersprechen sich"
+        : tradeRepublicStatus === "candidate_present"
+          ? "Dokument in Pruefung"
+          : "Stichtagsbeleg fehlt";
+  const coinbaseConnector = inheritanceOrigin?.coinbase_connector;
+  const coinbaseStatusTone = coinbaseConnector?.history_status === "reviewed"
+    ? "ok"
+    : coinbaseConnector?.history_status === "imported_pending_review"
+      ? "warning"
+      : "blocked";
+  const coinbaseStatusLabel = coinbaseConnector?.history_status === "reviewed"
+    ? "Stichtagswert freigegeben"
+    : coinbaseConnector?.history_status === "imported_pending_review"
+      ? "Historie in Pruefung"
+      : "Historie fehlt";
   const valuationTokenRows = equalizationValuationTokenRows(accounts);
+  const cutoffLabel = formatDate(report?.stichtage?.separation_date ?? cutoffDate);
+  const valuationLabel = formatDate(report?.stichtage?.end_asset_date ?? valuationDate);
+  const exportQuery = `?separation_date=${encodeURIComponent(cutoffDate)}&end_asset_date=${encodeURIComponent(valuationDate)}&materiality_threshold_eur=${encodeURIComponent(materialityEur || "1")}`;
+  const dossierDownload = String(
+    valuationRun?.evidence_files?.find((item) => item.kind === "evidence_package")?.download_url ?? ""
+  );
   return (
     <Stack>
+      <section className="panel valuationControlPanel">
+        <div className="panelToolbar">
+          <strong>Stichtagsdossier festlegen</strong>
+          <span className={`statusPill ${valuationRun?.strict_ready ? "ok" : valuationRun?.status === "blocked" ? "blocked" : "warning"}`}>
+            {valuationRun ? valuationRun.status : "noch kein Lauf"}
+          </span>
+        </div>
+        <div className="valuationControlGrid">
+          <label>
+            Trennungsstichtag
+            <input type="date" value={cutoffDate} onChange={(event) => onCutoffDateChange(event.target.value)} />
+          </label>
+          <label>
+            Endvermoegensstichtag
+            <input type="date" value={valuationDate} onChange={(event) => onValuationDateChange(event.target.value)} />
+          </label>
+          <label>
+            Preis-Materialitaet in EUR
+            <input min="0" step="0.01" type="number" value={materialityEur} onChange={(event) => onMaterialityEurChange(event.target.value)} />
+          </label>
+          <button type="button" onClick={onRunDossier} disabled={runLoading || !cutoffDate || !valuationDate}>
+            <RefreshCcw size={16} />
+            {runLoading ? "FIFO und Stichtage werden geprueft" : "Dossier neu erzeugen"}
+          </button>
+          {dossierDownload ? (
+            <button type="button" onClick={() => onDownload(dossierDownload)}>
+              <FileDown size={16} />
+              Letztes Dossier
+            </button>
+          ) : null}
+        </div>
+        {runLoading ? (
+          <div className="notice reviewNotice">Zwei vollstaendige Wallet-/Depot-FIFO-Replays laufen. Die Ansicht bleibt geoeffnet und meldet das Ergebnis nach Abschluss.</div>
+        ) : null}
+        <div className={`notice ${report?.stichtage?.court_evidence_status === "documented" ? "" : "reviewNotice"}`}>
+          <strong>{report?.stichtage?.end_asset_legal_basis ?? "§ 1384 BGB"}:</strong>{" "}
+          {report?.stichtage?.court_evidence_note ?? "Gerichts-/Zustellungsbeleg fuer den Endvermoegensstichtag beilegen."}
+        </div>
+      </section>
+
       <section className="divorceHero">
         <div>
           <span className="heroKicker">Zugewinnausgleich</span>
-          <h2>Stichtag 13.06.2025</h2>
+          <h2>{cutoffLabel} bis {valuationLabel}</h2>
           <p>{report?.legal_note ?? "Auswertung wird geladen."}</p>
         </div>
         <div className="reportHeroStats">
-          <Metric title="Startwert Stichtag" value={`${formatCurrency(report?.cutoff_portfolio_value_eur)} EUR`} />
-          <Metric title="Endwert Bewertung" value={`${formatCurrency(report?.valuation_portfolio_value_eur)} EUR`} />
+          <Metric title="Vermoegen bei Trennung" value={`${formatCurrency(report?.cutoff_portfolio_value_eur)} EUR`} />
+          <Metric title="Endvermoegen" value={`${formatCurrency(report?.valuation_portfolio_value_eur)} EUR`} />
           <Metric title="Bruttoveraenderung" value={`${formatCurrency(report?.gross_portfolio_change_eur)} EUR`} />
           <Metric title="Brutto ohne Review" value={`${formatCurrency(report?.gross_portfolio_change_without_review_assets_eur)} EUR`} />
-          <Metric title="Bereinigt um Invest" value={`${formatCurrency(report?.adjusted_gain_loss_excluding_new_invest_eur)} EUR`} />
-          <Metric title="Bereinigt ohne Review" value={`${formatCurrency(report?.adjusted_gain_loss_without_review_assets_eur)} EUR`} />
-          <Metric title="Bewertung" value={formatDateTime(report?.valuation_at)} />
+          <Metric title="Vorlaeufig flussbereinigt" value={`${formatCurrency(report?.adjusted_gain_loss_excluding_new_invest_eur)} EUR`} />
+          <Metric title="Vorlaeufig ohne Review-Token" value={`${formatCurrency(report?.adjusted_gain_loss_without_review_assets_eur)} EUR`} />
+          <Metric title="Trennungsstichtag" value={cutoffLabel} />
+          <Metric title="Endvermoegensstichtag" value={valuationLabel} />
+          <Metric title="Stichtags-Zeitzone" value={report?.stichtage?.timezone ?? "Europe/Berlin"} />
           <Metric title="Events bis" value={formatDateTime(report?.latest_event_at)} />
           <Metric title="Fiat ab Stichtag" value={`${formatCurrency(report?.fiat_deposits_since_cutoff_eur)} EUR`} />
           <Metric title="EUR-Kaeufe" value={`${formatCurrency(report?.direct_eur_buys_since_cutoff_eur)} EUR`} />
@@ -8189,19 +11079,769 @@ function DivorceEqualizationPanel({
             <strong>Kernrechnung Zugewinn</strong>
             <span>Portfolio-Stichtagswerte</span>
           </div>
-          <Metric title="Portfolio 13.06.2025" value={`${formatCurrency(report?.cutoff_portfolio_value_eur)} EUR`} />
-          <Metric title="Portfolio 15.06.2026" value={`${formatCurrency(report?.valuation_portfolio_value_eur)} EUR`} />
+          <Metric title={`Portfolio ${cutoffLabel}`} value={`${formatCurrency(report?.cutoff_portfolio_value_eur)} EUR`} />
+          <Metric title={`Portfolio ${valuationLabel}`} value={`${formatCurrency(report?.valuation_portfolio_value_eur)} EUR`} />
           <Metric title="ohne Review-Token" value={`${formatCurrency(report?.valuation_value_without_review_assets_eur)} EUR`} />
           <Metric title="Review-Token" value={`${formatCurrency(report?.valuation_review_value_eur)} EUR`} />
           <Metric title="Staub" value={`${formatCurrency(report?.valuation_dust_value_eur)} EUR`} />
           <Metric title="Neue externe Einzahlungen" value={`${formatCurrency(report?.net_external_invest_since_cutoff_eur)} EUR`} />
-          <Metric title="Wertveraenderung ohne Neuinvest" value={`${formatCurrency(report?.adjusted_gain_loss_excluding_new_invest_eur)} EUR`} />
-          <Metric title="ohne Review & Neuinvest" value={`${formatCurrency(report?.adjusted_gain_loss_without_review_assets_eur)} EUR`} />
+          <Metric title="davon bestaetigt" value={`${formatCurrency(report?.confirmed_external_invest_since_cutoff_eur)} EUR`} />
+          <Metric title="davon MoonPay belegt" value={`${formatCurrency(report?.confirmed_onramp_invest_since_cutoff_eur)} EUR`} />
+          <Metric title="davon Onramp vorlaeufig" value={`${formatCurrency(report?.provisional_onramp_invest_since_cutoff_eur)} EUR`} />
+          <Metric title="Vorlaeufige Flussveraenderung" value={`${formatCurrency(report?.adjusted_gain_loss_excluding_new_invest_eur)} EUR`} />
+          <Metric title="Vorlaeufig ohne Review-Token" value={`${formatCurrency(report?.adjusted_gain_loss_without_review_assets_eur)} EUR`} />
           <p className="reportYearSummary">
-            Diese Karte nutzt echte Portfolio-Stichtagswerte. Review-Token bleiben erhalten, werden aber getrennt markiert.
+            Diese Karte nutzt echte Portfolio-Stichtagswerte. Das Ergebnis ist erst belastbar, wenn Preis-, FIFO-, Quellen- und Vermoegensfluss-Gates freigegeben sind.
           </p>
         </div>
       </div>
+
+      <section className="valuationGateBand">
+        <div className="valuationGateHeader">
+          <div>
+            <span className="heroKicker">Mittelherkunft</span>
+            <h3>Erbgeld- und Depotspur</h3>
+          </div>
+          <div className="reportActionBand compactActions">
+            <span className={`statusPill ${inheritanceOrigin?.strict_ready ? "ok" : "blocked"}`}>
+              {inheritanceOrigin?.strict_ready ? "vollstaendig belegt" : "Nachweise offen"}
+            </span>
+            <button type="button" onClick={() => onDownload(`/api/v1/divorce/inheritance-origin.csv${exportQuery}`)}>
+              <FileDown size={16} />
+              Erbgeldspur CSV
+            </button>
+            <button type="button" onClick={() => onDownload(`/api/v1/divorce/inheritance-credits.csv${exportQuery}`)}>
+              <FileDown size={16} />
+              Erbmittelbelege
+            </button>
+          </div>
+        </div>
+        <div className="valuationGateMetrics">
+          <Metric title="Erbmittelzufluesse gesamt" value={`${formatCurrency(inheritanceOrigin?.inheritance_credit_eur)} EUR`} />
+          <Metric title="Belegte Erbmittelzufluesse" value={String(inheritanceOrigin?.inheritance_credit_count ?? inheritanceCredits.length)} />
+          <Metric title="Bankseitige Investments" value={`${formatCurrency(inheritanceOrigin?.bank_identified_investment_eur)} EUR`} />
+          <Metric title="Nur Plattformbeleg" value={`${formatCurrency(inheritanceOrigin?.platform_only_investment_eur)} EUR`} />
+          <Metric title="Identifizierte Investments" value={`${formatCurrency(inheritanceOrigin?.total_identified_investment_eur)} EUR`} />
+          <Metric title="Davon im Krypto-Ledger" value={`${formatCurrency(inheritanceOrigin?.crypto_tracked_investment_eur)} EUR`} />
+          <Metric title="Externe Depots" value={`${formatCurrency(inheritanceOrigin?.external_asset_investment_eur)} EUR`} />
+          <Metric
+            title="Externe Depots am Endstichtag"
+            value={inheritanceOrigin?.external_asset_end_value_eur == null
+              ? "Beleg fehlt"
+              : `${formatCurrency(inheritanceOrigin.external_asset_end_value_eur)} EUR`}
+          />
+          <Metric
+            title="Nicht zugeordneter Erbbetrag"
+            value={inheritanceOrigin?.declared_inheritance_headroom_eur == null
+              ? "nicht berechenbar"
+              : `${formatCurrency(inheritanceOrigin.declared_inheritance_headroom_eur)} EUR`}
+          />
+          <Metric title="Bankzeitraum" value={`${formatDate(inheritanceOrigin?.bank_statement_from)} bis ${formatDate(inheritanceOrigin?.bank_statement_to)}`} />
+          <Metric title="Erbnachweis" value={inheritanceOrigin?.formal_inheritance_document_status === "documented" ? "referenziert" : "Dokument fehlt"} />
+        </div>
+        <TablePanel
+          title="Belegte Erbmittelzufluesse"
+          rows={inheritanceCredits.map((credit) => ({
+            datum: formatDate(credit.booking_date),
+            betrag: `${formatCurrency(credit.amount_eur)} EUR`,
+            art: equalizationInheritanceCreditKindLabel(credit.credit_kind),
+            datumsbasis: credit.date_basis === "bank_booking_date" ? "Bankbuchung" : "Dokumentdatum",
+            primaerbeleg: credit.evidence_source === "bank_camt" ? "CAMT" : "Nachlassdokument",
+            klassifikation: credit.classification_source === "camt_marker" ? "Nachlassmarker" : "Review",
+            beleg: shortAccount(credit.transaction_reference_sha256),
+            hinweis: credit.note
+          }))}
+          footer="Die Summe dokumentiert die Mittelherkunft. Spaetere Auszahlungen geerbter Vermoegenswerte werden einzeln gezeigt und duerfen in der familienrechtlichen Anfangsvermoegensbewertung nicht doppelt angesetzt werden."
+          compact
+        />
+        <TablePanel
+          title="Investitionen je Anbieter"
+          rows={(inheritanceOrigin?.provider_summaries ?? []).filter((row) => Number(row.identified_investment_eur ?? 0) !== 0).map((row) => ({
+            anbieter: row.label,
+            bankbuchungen: row.bank_transactions_count,
+            bankabfluss: `${formatCurrency(row.bank_outflow_eur)} EUR`,
+            nur_plattform: `${formatCurrency(row.platform_only_outflow_eur)} EUR`,
+            investiert: `${formatCurrency(row.identified_investment_eur)} EUR`,
+            mittelherkunft: equalizationCapitalOriginLabel(String(row.capital_origin ?? "claimed_inheritance")),
+            herkunftsbeleg: row.capital_origin_evidence_status,
+            portfolioabdeckung: row.portfolio_coverage_status,
+            stichtagswert: row.end_asset_value_eur == null ? "Beleg fehlt" : `${formatCurrency(row.end_asset_value_eur)} EUR`,
+            hinweis: row.finding
+          }))}
+          footer="Ein belegter Bankabfluss beweist die Investitionshoehe, aber noch nicht den Depot- und Cash-Wert am Endvermoegensstichtag."
+          compact
+        />
+        <div className="valuationGateGrid">
+          <div className="valuationGateItem">
+            <div className="panelToolbar">
+              <strong>Sparkassen-Bankspur</strong>
+              <span className={`statusPill ${sparkasseStatementConnector ? sparkasseStatementTone : bankStatementTone}`}>
+                {sparkasseStatementConnector ? sparkasseStatementLabel : bankStatementLabel}
+              </span>
+            </div>
+            <div className="evidenceFactGrid">
+              <div><span>CAMT-Dateien</span><strong>{inheritanceOrigin?.bank_files_count ?? 0}</strong></div>
+              <div><span>Von</span><strong>{formatDate(inheritanceOrigin?.bank_statement_from)}</strong></div>
+              <div><span>Bis</span><strong>{formatDate(inheritanceOrigin?.bank_statement_to)}</strong></div>
+              <div><span>PDF-Auszuege</span><strong>{sparkasseStatementConnector?.parsed_documents_count ?? 0}</strong></div>
+              <div><span>PDF-Kryptobuchungen</span><strong>{sparkasseStatementConnector?.crypto_debits_count ?? 0}</strong></div>
+              <div><span>PDF-Belegsumme</span><strong>{formatCurrency(sparkasseStatementConnector?.crypto_debits_eur)} EUR</strong></div>
+              <div><span>Exakt gegen CAMT</span><strong>{sparkasseStatementConnector?.exact_camt_matches_count ?? 0}</strong></div>
+              <div><span>Abgleich offen</span><strong>{(sparkasseStatementConnector?.missing_camt_matches_count ?? 0) + (sparkasseStatementConnector?.ambiguous_camt_matches_count ?? 0)}</strong></div>
+            </div>
+            <p>
+              Fuer die lueckenlose Mittelherkunft muss der Kontozeitraum den Trennungsstichtag bis zum Endvermoegensstichtag abdecken.
+              PDF-Auszuege dienen nur als zusaetzlicher Primaerbeleg; exakt gematchte CAMT-Fluesse werden nicht doppelt gezaehlt. Rohbuchungen und Kontodaten bleiben lokal.
+            </p>
+            <div className="reportActionBand compactActions evidenceActions">
+              <label
+                className={`fileActionButton ${bankCamtUploadLoading ? "disabled" : ""}`}
+                title="Native Sparkassen-CAMT.052-Dateien als XML oder ZIP importieren"
+              >
+                <Upload size={16} />
+                {bankCamtUploadLoading ? "CAMT wird geprueft" : "CAMT-Luecke importieren"}
+                <input
+                  type="file"
+                  accept=".xml,.zip,application/xml,text/xml,application/zip"
+                  multiple
+                  disabled={bankCamtUploadLoading}
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    event.currentTarget.value = "";
+                    onUploadBankCamtDocuments(files);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => onDownload("/api/v1/divorce/sparkasse-statements.csv")}
+                disabled={(sparkasseStatementConnector?.document_files_count ?? 0) === 0}
+                title="Datensparsamen PDF-zu-CAMT-Abgleich als CSV herunterladen"
+              >
+                <FileDown size={16} />
+                PDF-Belegabgleich
+              </button>
+            </div>
+          </div>
+          <div className="valuationGateItem">
+            <div className="panelToolbar">
+              <strong>Trade-Republic-Anbindung</strong>
+              <span className={`statusPill ${tradeRepublicStatusTone}`}>{tradeRepublicStatusLabel}</span>
+            </div>
+            <div className="evidenceFactGrid">
+              <div><span>Dateien</span><strong>{tradeRepublicConnector?.document_files_count ?? 0}</strong></div>
+              <div><span>Geparst</span><strong>{tradeRepublicConnector?.parsed_documents_count ?? 0}</strong></div>
+              <div><span>Exakter Stichtag</span><strong>{tradeRepublicConnector?.exact_date_documents_count ?? 0}</strong></div>
+              <div>
+                <span>Stichtagswert</span>
+                <strong>
+                  {tradeRepublicConnector?.accepted_end_asset_value_eur != null
+                    ? `${formatCurrency(tradeRepublicConnector.accepted_end_asset_value_eur)} EUR`
+                    : tradeRepublicConnector?.candidate_end_asset_value_eur != null
+                      ? `${formatCurrency(tradeRepublicConnector.candidate_end_asset_value_eur)} EUR`
+                      : "Beleg fehlt"}
+                </strong>
+              </div>
+            </div>
+            <p>{tradeRepublicConnector?.note ?? "Connectorstatus wird geladen."}</p>
+            <div className="reportActionBand compactActions evidenceActions">
+              <label
+                className={`fileActionButton ${tradeRepublicDocumentUploadLoading ? "disabled" : ""}`}
+                title="Offizielle Trade-Republic-PDF-, CSV- oder ZIP-Dokumente importieren"
+              >
+                <Upload size={16} />
+                {tradeRepublicDocumentUploadLoading ? "Dokumente werden geprueft" : "Dokumente importieren"}
+                <input
+                  type="file"
+                  accept=".pdf,.csv,.zip,application/pdf,text/csv,application/zip"
+                  multiple
+                  disabled={tradeRepublicDocumentUploadLoading}
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    event.currentTarget.value = "";
+                    onUploadTradeRepublicDocuments(files);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => onDownload(`/api/v1/divorce/trade-republic/documents.csv?end_asset_date=${encodeURIComponent(valuationDate)}`)}
+                disabled={(tradeRepublicConnector?.document_files_count ?? 0) === 0}
+                title="Datensparsamen Dokumentnachweis als CSV herunterladen"
+              >
+                <FileDown size={16} />
+                Dokumentnachweis
+              </button>
+              <button
+                type="button"
+                disabled={!tradeRepublicConnector?.valuation_review_ready || !tradeRepublicConnector?.candidate_document_sha256 || tradeRepublicValuationLoading}
+                onClick={() => {
+                  const documentSha256 = String(tradeRepublicConnector?.candidate_document_sha256 ?? "");
+                  const value = formatCurrency(tradeRepublicConnector?.candidate_end_asset_value_eur);
+                  if (documentSha256 && window.confirm(`Trade-Republic-Stichtagswert ${value} EUR nach Abgleich mit dem Originalbeleg freigeben?`)) {
+                    onAcceptTradeRepublicValuation(documentSha256);
+                  }
+                }}
+                title="Erst nach Abgleich mit dem Originalbeleg als Stichtagswert freigeben"
+              >
+                <Check size={16} />
+                {tradeRepublicValuationLoading ? "Wird geprueft" : "Stichtagswert freigeben"}
+              </button>
+            </div>
+          </div>
+          <div className="valuationGateItem">
+            <div className="panelToolbar">
+              <strong>Formaler Erbnachweis</strong>
+              <span className={`statusPill ${inheritanceDocumentTone}`}>{inheritanceDocumentLabel}</span>
+            </div>
+            <div className="evidenceFactGrid">
+              <div><span>Dokumente</span><strong>{inheritanceDocumentConnector?.document_files_count ?? 0}</strong></div>
+              <div><span>Review</span><strong>{inheritanceDocumentConnector?.status ?? "missing"}</strong></div>
+              <div>
+                <span>Belegbindung</span>
+                <strong>{inheritanceDocumentConnector?.accepted_document_sha256
+                  ? shortAccount(inheritanceDocumentConnector.accepted_document_sha256)
+                  : "offen"}</strong>
+              </div>
+            </div>
+            <p>{inheritanceDocumentConnector?.note ?? "Erbnachweisstatus wird geladen."}</p>
+            <div className="reportActionBand compactActions evidenceActions">
+              <label
+                className={`fileActionButton ${inheritanceDocumentUploadLoading ? "disabled" : ""}`}
+                title="Formalen Erbnachweis als PDF, JPEG oder PNG lokal hinterlegen"
+              >
+                <Upload size={16} />
+                {inheritanceDocumentUploadLoading ? "Dokument wird geprueft" : "Erbnachweis importieren"}
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  multiple
+                  disabled={inheritanceDocumentUploadLoading}
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    event.currentTarget.value = "";
+                    onUploadInheritanceDocuments(files);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => onDownload("/api/v1/divorce/inheritance-documents.csv")}
+                disabled={(inheritanceDocumentConnector?.document_files_count ?? 0) === 0}
+                title="Datensparsamen SHA-256-Nachweis als CSV herunterladen"
+              >
+                <FileDown size={16} />
+                Dokumentnachweis
+              </button>
+              <button
+                type="button"
+                disabled={!inheritanceDocumentCandidate || inheritanceDocumentReviewLoading}
+                onClick={() => {
+                  const documentSha256 = inheritanceDocumentCandidate?.document_sha256 ?? "";
+                  if (
+                    documentSha256
+                    && window.confirm(
+                      "Original geprueft: Ist dieses Dokument tatsaechlich ein Erbschein, Testament/Erbvertrag oder eine belastbare Nachlassabrechnung?"
+                    )
+                  ) {
+                    onAcceptInheritanceDocument(documentSha256);
+                  }
+                }}
+                title="Nur nach Sichtpruefung des Originaldokuments als formalen Erbnachweis freigeben"
+              >
+                <Check size={16} />
+                {inheritanceDocumentReviewLoading ? "Wird gebunden" : "Nach Sichtpruefung freigeben"}
+              </button>
+            </div>
+          </div>
+          <div className="valuationGateItem">
+            <div className="panelToolbar">
+              <strong>Coinbase-Anbindung</strong>
+              <span className={`statusPill ${coinbaseStatusTone}`}>{coinbaseStatusLabel}</span>
+            </div>
+            <div className="evidenceFactGrid">
+              <div>
+                <span>CDP-Zugang</span>
+                <strong>{coinbaseConnector?.credential_status === "configured" ? "eingerichtet" : "fehlt"}</strong>
+              </div>
+              <div>
+                <span>Live-Bestand</span>
+                <strong>{coinbaseConnector?.latest_live_snapshot_at
+                  ? `${coinbaseConnector.latest_live_assets_count} Assets · ${formatDateTime(coinbaseConnector.latest_live_snapshot_at)}`
+                  : "noch nicht abgerufen"}</strong>
+              </div>
+              <div>
+                <span>Historie</span>
+                <strong>{coinbaseConnector?.history_events_count ?? 0} Events in {coinbaseConnector?.history_batches_count ?? 0} Importen</strong>
+              </div>
+              <div>
+                <span>Historienzeitraum</span>
+                <strong>{coinbaseConnector?.history_from
+                  ? `${formatDate(coinbaseConnector.history_from)} bis ${formatDate(coinbaseConnector.history_to)}`
+                  : "fehlt"}</strong>
+              </div>
+              <div>
+                <span>Stichtagswert</span>
+                <strong>{coinbaseConnector?.accepted_end_asset_value_eur != null
+                  ? `${formatCurrency(coinbaseConnector.accepted_end_asset_value_eur)} EUR`
+                  : coinbaseConnector?.candidate_end_asset_value_eur != null
+                    ? `${formatCurrency(coinbaseConnector.candidate_end_asset_value_eur)} EUR (Pruefung)`
+                    : "nicht berechenbar"}</strong>
+              </div>
+              <div>
+                <span>Preis-/Mengen-Gates</span>
+                <strong>{(coinbaseConnector?.missing_price_assets.length ?? 0) === 0
+                  && (coinbaseConnector?.negative_quantity_assets.length ?? 0) === 0
+                  ? "ohne Befund"
+                  : `${coinbaseConnector?.missing_price_assets.length ?? 0} Preise · ${coinbaseConnector?.negative_quantity_assets.length ?? 0} negative Mengen`}</strong>
+              </div>
+            </div>
+            <p>{coinbaseConnector?.note ?? "Connectorstatus wird geladen."}</p>
+            <div className="reportActionBand compactActions evidenceActions">
+              <button type="button" onClick={() => onNavigate("admin")} title="Coinbase-CDP-Zugang lokal im V2 Secret Store einrichten">
+                <Settings size={16} />
+                CDP-Zugang
+              </button>
+              <button type="button" onClick={() => onNavigate("import")} title="Offizielle Coinbase Transaction History importieren">
+                <Upload size={16} />
+                Historie importieren
+              </button>
+              <button
+                type="button"
+                onClick={() => onDownload(`/api/v1/divorce/coinbase/connector.csv?end_asset_date=${encodeURIComponent(valuationDate)}`)}
+                disabled={(coinbaseConnector?.history_events_count ?? 0) === 0}
+                title="Hashgebundenen Coinbase-Historien- und Stichtagsnachweis herunterladen"
+              >
+                <FileDown size={16} />
+                Nachweis CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(coinbaseConnector?.official_statements_help_url, "_blank", "noopener,noreferrer")}
+                disabled={!coinbaseConnector?.official_statements_help_url}
+                title="Offizielle Coinbase-Hilfe fuer Berichte und Transaction History oeffnen"
+              >
+                <ExternalLink size={16} />
+                Coinbase-Hilfe
+              </button>
+              <button
+                type="button"
+                disabled={!coinbaseConnector?.valuation_review_ready || !coinbaseConnector?.history_manifest_sha256 || coinbaseValuationLoading}
+                onClick={() => {
+                  const historyManifestSha256 = String(coinbaseConnector?.history_manifest_sha256 ?? "");
+                  const value = formatCurrency(coinbaseConnector?.candidate_end_asset_value_eur);
+                  if (
+                    historyManifestSha256
+                    && window.confirm(
+                      `Coinbase-Stichtagswert ${value} EUR freigeben? Damit bestaetigst du, dass die offizielle Historie ab Kontoeroeffnung vollstaendig ist und Mengen sowie Preise geprueft wurden.`
+                    )
+                  ) {
+                    onAcceptCoinbaseValuation(historyManifestSha256);
+                  }
+                }}
+                title="Nur nach Vollstaendigkeits-, Mengen- und Preispruefung hashgebunden freigeben"
+              >
+                <Check size={16} />
+                {coinbaseValuationLoading ? "Wird gebunden" : "Stichtagswert freigeben"}
+              </button>
+            </div>
+          </div>
+          <div className="valuationGateItem">
+            <div className="panelToolbar"><strong>Noch erforderlich</strong></div>
+            {(inheritanceOrigin?.next_actions ?? []).map((item) => <p key={item}>{item}</p>)}
+          </div>
+        </div>
+        {tradeRepublicDocuments.length > 0 ? (
+          <TablePanel
+            title="Trade-Republic-Dokumentpruefung"
+            rows={tradeRepublicDocuments.map((item) => ({
+              typ: item.document_type,
+              parser: item.extraction_status,
+              stichtag: item.statement_date ? formatDate(item.statement_date) : "-",
+              datumsbeleg: item.end_asset_date_match_source,
+              cash_eur: item.cash_value_eur == null ? "-" : formatCurrency(item.cash_value_eur),
+              depot_eur: item.securities_value_eur == null ? "-" : formatCurrency(item.securities_value_eur),
+              gesamt_eur: item.total_value_eur == null ? "-" : formatCurrency(item.total_value_eur),
+              beleg: shortAccount(item.document_sha256),
+              beleg_full: item.document_sha256
+            }))}
+            footer="Dateinamen und Rohinhalte werden nicht ausgegeben. Der vollstaendige SHA-256 steht im Zellenhinweis und im CSV-Beleg."
+            compact
+          />
+        ) : null}
+        {inheritanceDocuments.length > 0 ? (
+          <TablePanel
+            title="Erbnachweis-Dokumentpruefung"
+            rows={inheritanceDocuments.map((item) => ({
+              medientyp: item.media_type,
+              groesse_kib: (item.size_bytes / 1024).toFixed(1),
+              quelle: item.source_kind,
+              review: item.review_status,
+              beleg: shortAccount(item.document_sha256),
+              beleg_full: item.document_sha256
+            }))}
+            footer="Dateinamen und Rohdokumente werden nicht ausgegeben. Die Freigabe bestaetigt nur die Sichtpruefung und bindet den Nachweis an SHA-256."
+            compact
+          />
+        ) : null}
+        {(coinbaseConnector?.assets.length ?? 0) > 0 ? (
+          <TablePanel
+            title={`Coinbase-Bestand zum ${valuationLabel}`}
+            rows={(coinbaseConnector?.assets ?? []).map((item) => ({
+              asset: item.asset,
+              menge: formatAmount(item.quantity),
+              wert_eur: item.value_eur == null ? "Preis fehlt" : formatCurrency(item.value_eur),
+              preisquelle: item.price_source ?? "-",
+              preiszeitpunkt: formatDateTime(item.priced_at)
+            }))}
+            footer="Der Bestand wird aus der importierten Coinbase-Historie rekonstruiert. Eine Freigabe bindet Historienmanifest, Mengen, Preise und EUR-Stichtagswert gemeinsam."
+            compact
+          />
+        ) : null}
+        <div className="valuationGateFindings">
+          {(inheritanceOrigin?.findings ?? []).map((finding) => <span key={finding}>{finding}</span>)}
+        </div>
+        <p className="reportYearSummary">{inheritanceOrigin?.methodology ?? "Erbgeldspur wird geladen."}</p>
+      </section>
+
+      <section className="valuationGateBand">
+        <div className="valuationGateHeader">
+          <div>
+            <span className="heroKicker">Kapitalbewegungen</span>
+            <h3>Vermoegensfluss-Gate</h3>
+          </div>
+          <div className="reportActionBand compactActions">
+            <span className={`statusPill ${capitalFlow?.strict_ready ? "ok" : capitalFlow?.status === "blocked" ? "blocked" : "warning"}`}>
+              {capitalFlow?.strict_ready ? "belegt" : capitalFlow?.status === "blocked" ? "Nachweise offen" : "Herkunft offen"}
+            </span>
+            <button type="button" onClick={() => onDownload(`/api/v1/divorce/equalization-summary/capital-flows.csv${exportQuery}`)}>
+              <FileDown size={16} />
+              Flussbeleg CSV
+            </button>
+            {serviceRouteTxId ? (
+              <button
+                type="button"
+                onClick={() => onRefreshServiceRouteEvidence(serviceRouteTxId)}
+                disabled={serviceRouteEvidenceLoading}
+                title="Signer, Collateral, Positionskonto und spaetere Liquidation per Solana RPC pruefen"
+              >
+                <RefreshCcw size={16} />
+                {serviceRouteEvidenceLoading ? "On-chain-Pruefung laeuft" : "Servicepfad pruefen"}
+              </button>
+            ) : null}
+            {serviceRouteCandidate && serviceRouteEvidenceMatches && serviceRouteEvidence?.strict_ready ? (
+              <button
+                type="button"
+                disabled={serviceRouteEvidenceLoading}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "On-chain-Beleg geprueft: Soll dieser Jupiter-Perps-Abfluss als vor dem Endstichtag vollstaendig liquidierte Serviceposition dokumentiert werden? Steuer-FIFO und Steuerklassifikation bleiben unveraendert."
+                    )
+                  ) {
+                    onAcceptServiceRouteEvidence(
+                      serviceRouteEvidence.tx_id,
+                      serviceRouteEvidence.semantic_sha256
+                    );
+                  }
+                }}
+                title="Nur den familienrechtlichen Vermoegensfluss SHA-256-gebunden freigeben"
+              >
+                <Check size={16} />
+                Liquidationspfad freigeben
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div className="valuationGateMetrics">
+          <Metric title="Vermoegen bei Trennung" value={`${formatCurrency(capitalFlow?.opening_value_eur)} EUR`} />
+          <Metric title="Endvermoegen" value={`${formatCurrency(capitalFlow?.closing_value_eur)} EUR`} />
+          <Metric title="Kapitalzufluesse" value={`${formatCurrency(capitalFlow?.total_contributions_eur)} EUR`} />
+          <Metric title="Bestaetigte externe Auszahlungen" value={`${formatCurrency(capitalFlow?.confirmed_external_distributions_eur)} EUR`} />
+          <Metric title="Vorlaeufig flussbereinigt" value={`${formatCurrency(capitalFlow?.flow_adjusted_change_eur)} EUR`} />
+          <Metric
+            title="Szenario: bewertete Reviews extern"
+            value={capitalFlow?.flow_adjusted_change_if_all_review_outflows_are_external_eur == null
+              ? "nicht berechenbar"
+              : `${formatCurrency(capitalFlow?.flow_adjusted_change_if_all_review_outflows_are_external_eur)} EUR`}
+          />
+          <Metric title="Internes Transfer-Volumen" value={`${formatCurrency(capitalFlow?.internal_transfer_value_eur)} EUR`} />
+          <Metric title="Belegter Servicepositionsverlust" value={`${formatCurrency(capitalFlow?.internal_service_position_loss_value_eur)} EUR`} />
+          <Metric title="Materielle Reviews" value={String(capitalFlow?.material_review_outflows_count ?? 0)} />
+        </div>
+        <div className="valuationGateFindings">
+          {(capitalFlow?.findings ?? []).map((finding) => <span key={finding}>{finding}</span>)}
+        </div>
+        {serviceRouteEvidenceMatches && serviceRouteEvidence ? (
+          <div className="valuationGateItem serviceRouteEvidence">
+            <div className="panelToolbar">
+              <strong>Jupiter-Perps-On-chain-Beleg</strong>
+              <span className={`statusPill ${serviceRouteEvidence.strict_ready ? "ok" : serviceRouteEvidence.status === "failed" ? "blocked" : "warning"}`}>
+                {acceptedServiceRoute
+                  ? "im Vermoegensfluss belegt"
+                  : serviceRouteEvidence.strict_ready
+                    ? "freigabebereit"
+                    : "Pruefung offen"}
+              </span>
+            </div>
+            <div className="evidenceFactGrid">
+              <div>
+                <span>Eigene Wallet</span>
+                <strong title={serviceRouteEvidence.wallet ?? ""}>{shortAccount(serviceRouteEvidence.wallet ?? "-")}</strong>
+              </div>
+              <div>
+                <span>Collateral</span>
+                <strong>{formatAmount(serviceRouteEvidence.collateral_quantity)} SOL</strong>
+              </div>
+              <div>
+                <span>Positionskonto</span>
+                <strong title={serviceRouteEvidence.position_account ?? ""}>{shortAccount(serviceRouteEvidence.position_account ?? "-")}</strong>
+              </div>
+              <div>
+                <span>Liquidation</span>
+                <strong>{formatDateTime(serviceRouteEvidence.liquidation_block_time)}</strong>
+              </div>
+              <div>
+                <span>On-chain-Nettoverlust</span>
+                <strong>{formatAmount(serviceRouteEvidence.liquidation_net_loss_usd)} USD</strong>
+              </div>
+              <div>
+                <span>Rest-Rent am Stichtag</span>
+                <strong>{formatCurrency(serviceRouteEvidence.residual_position_account_value_eur)} EUR</strong>
+              </div>
+            </div>
+            <div className="valuationGateFindings">
+              {serviceRouteEvidence.findings.map((finding) => <span key={finding}>{finding}</span>)}
+            </div>
+            <div className="reportActionBand compactActions evidenceActions">
+              {serviceRouteEvidence.evidence_files.map((item) => {
+                const filename = item.path.split("/").pop() ?? "";
+                return (
+                  <button
+                    type="button"
+                    key={item.sha256}
+                    onClick={() => onDownload(`/api/v1/divorce/service-route-evidence/${encodeURIComponent(serviceRouteEvidence.tx_id)}/artifacts/${encodeURIComponent(filename)}`)}
+                    title={`SHA-256 ${item.sha256}`}
+                  >
+                    <FileDown size={16} />
+                    {item.kind === "opening_get_transaction"
+                      ? "Positionsaufbau"
+                      : item.kind === "position_signatures"
+                        ? "Lebenszyklus"
+                        : "Liquidation"}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="reportYearSummary">SHA-256: {serviceRouteEvidence.semantic_sha256}</p>
+          </div>
+        ) : null}
+        <TablePanel
+          title="Kapitalzufluesse und Mittelherkunft"
+          rows={(capitalFlow?.contributions ?? []).filter((row) => Number(row.amount_eur ?? 0) !== 0).map((row) => ({
+            zuflussgruppe: row.label,
+            betrag: `${formatCurrency(row.amount_eur)} EUR`,
+            transaktionsbeleg: row.transaction_evidence_status,
+            mittelherkunft: equalizationCapitalOriginLabel(String(row.capital_origin ?? "unclassified")),
+            herkunftsbeleg: row.capital_origin_evidence_status,
+            beleg: row.evidence_ref ?? "-",
+            hinweis: row.note
+          }))}
+          footer="Eine Behauptung wie Erbgeld wird erst nach referenziertem Zahlungs- und Herkunftsbeleg als dokumentiert behandelt."
+          compact
+        />
+        <TablePanel
+          title="Abfluss- und Service-Pruefung"
+          rows={capitalOutflows.map((row) => ({
+            zeitpunkt: formatDateTime(row.event_time),
+            quelle: row.source,
+            konto: shortAccount(String(row.account ?? "")),
+            konto_voll: String(row.account ?? ""),
+            asset: row.asset,
+            menge: formatAmount(row.quantity),
+            wert: row.value_eur === null || row.value_eur === undefined ? "nicht bewertet" : `${formatCurrency(row.value_eur)} EUR`,
+            einordnung: equalizationCapitalFlowClassificationLabel(String(row.classification ?? "")),
+            belegstatus: row.evidence_status,
+            tx: row.tx_id ? shortAccount(String(row.tx_id)) : "-",
+            tx_voll: row.tx_id ?? "",
+            hinweis: row.note
+          }))}
+          footer="Interne Transfers, CEX-Produktumbuchungen und Gebuehren werden nicht als Entnahmen gerechnet. Nur bestaetigte externe Auszahlungen veraendern die Flussrechnung."
+          compact
+        />
+        <p className="reportYearSummary">{capitalFlow?.methodology ?? "Vermoegensfluss wird geladen."}</p>
+      </section>
+
+      <section className="valuationGateBand">
+        <div className="valuationGateHeader">
+          <div>
+            <span className="heroKicker">Nachweisstatus</span>
+            <h3>Preis- und FIFO-Gates</h3>
+          </div>
+          <span className={`statusPill ${valuationRun?.strict_ready ? "ok" : valuationRun?.status === "blocked" ? "blocked" : "warning"}`}>
+            {valuationRun?.strict_ready ? "stichtagsfest" : valuationRun?.status === "blocked" ? "Belege offen" : "fachliche Abnahme offen"}
+          </span>
+        </div>
+        <div className="valuationGateGrid">
+          {[report?.cutoff_price_gate, report?.valuation_price_gate].map((gate, index) => (
+            <div className="valuationGateItem" key={index === 0 ? "cutoff-price-gate" : "valuation-price-gate"}>
+              <div className="panelToolbar">
+                <strong>{index === 0 ? `Trennungspreise ${cutoffLabel}` : `Endvermoegenspreise ${valuationLabel}`}</strong>
+                <span className={`statusPill ${gate?.strict_ready ? "ok" : "blocked"}`}>{gate?.strict_ready ? "vollstaendig" : "offen"}</span>
+              </div>
+              <div className="valuationGateMetrics">
+                <Metric title="Same Day" value={String(gate?.same_day_price_count ?? 0)} />
+                <Metric title="Vortag" value={String(gate?.prior_day_price_count ?? 0)} />
+                <Metric title="veraltet" value={String(gate?.stale_price_count ?? 0)} />
+                <Metric title="ohne Preis" value={String(gate?.missing_price_count ?? 0)} />
+              </div>
+              <p>{(gate?.findings ?? []).join(" ") || "Preis-Gate wird geladen."}</p>
+              {(gate?.affected_assets ?? []).length > 0 ? <span>Betroffen: {(gate?.affected_assets ?? []).join(", ")}</span> : null}
+            </div>
+          ))}
+          <div className="valuationGateItem">
+            <div className="panelToolbar">
+              <strong>Quellen und Mengen</strong>
+              <span className={`statusPill ${valuationRun?.source_registry_strict_ready ? "ok" : "blocked"}`}>
+                {valuationRun?.source_registry_strict_ready ? "vollstaendig" : "offen"}
+              </span>
+            </div>
+            <div className="valuationGateMetrics">
+              <Metric title="Registry" value={valuationRun?.source_registry_status ?? "fehlt"} />
+              <Metric title="Konten" value={String(valuationRun?.source_accounts?.length ?? 0)} />
+              <Metric title="Provider-Grenzen" value={String(valuationRun?.source_provider_coverage_gap_count ?? 0)} />
+              <Metric title="Eigene Belege offen" value={String(valuationRun?.source_user_evidence_gap_count ?? 0)} />
+              <Metric title="Mengendifferenzen" value={String(valuationRun?.source_quantity_blocker_count ?? 0)} />
+            </div>
+            <p>
+              Historische Ledger-Mengen werden gegen registrierte Eigentumsrollen und aktuelle Live-Anker geprueft.
+              Provider-Grenzen verlangen keine erneute Lieferung bereits vorhandener Exporte; eigene Belegpflichten stehen separat.
+            </p>
+            {valuationRun?.source_registry_semantic_sha256 ? <span>SHA-256: {valuationRun.source_registry_semantic_sha256}</span> : null}
+          </div>
+        </div>
+        <div className="valuationGateFindings">
+          {(valuationRun?.findings ?? []).map((finding) => <span key={finding}>{finding}</span>)}
+        </div>
+      </section>
+
+      <TablePanel
+        title="Versionierte FIFO-Stichtage"
+        rows={(valuationRun?.fifo_checkpoints ?? []).map((checkpoint) => ({
+          stichtag: checkpoint.label === "cutoff" ? "Trennung" : "Endvermoegen",
+          zeitpunkt_utc: formatDateTime(checkpoint.as_of),
+          laufbasis: checkpoint.reused_existing_run === true ? "Fingerprint-Lauf wiederverwendet" : "neu berechnet",
+          status: String(checkpoint.status ?? ""),
+          jahre: Array.isArray(checkpoint.years) ? checkpoint.years.join(", ") : "",
+          mengenabweichung_jahre: Array.isArray(checkpoint.event_set_mismatch_years) ? checkpoint.event_set_mismatch_years.join(", ") || "keine" : "-",
+          bewertungsreview_jahre: Array.isArray(checkpoint.valuation_review_years) ? checkpoint.valuation_review_years.join(", ") || "keine" : "-",
+          provider_basis_offen: checkpoint.unmatched_classification_complete === true ? checkpoint.provider_basis_gap_count ?? 0 : "noch nicht klassifiziert",
+          wirklich_ungeklaert: checkpoint.unmatched_classification_complete === true ? checkpoint.unexplained_unmatched_count ?? 0 : checkpoint.unmatched_count,
+          provider_event_gaps: checkpoint.method_gap_classification_complete === true ? checkpoint.provider_basis_event_set_gap_groups_count ?? 0 : "noch nicht klassifiziert",
+          provider_mengen_gaps: checkpoint.method_gap_classification_complete === true ? checkpoint.provider_basis_quantity_gap_groups_count ?? 0 : "noch nicht klassifiziert",
+          methodisch_ungeklaert: checkpoint.method_gap_classification_complete === true ? checkpoint.unexplained_method_gap_groups_count ?? 0 : "noch nicht klassifiziert",
+          offene_herkunft: checkpoint.unresolved_inbound_provenance_count,
+          kaufbeleg_review: checkpoint.acquisition_cost_evidence_review_count,
+          run_id: checkpoint.run_id
+        }))}
+        footer={valuationRun ? `Lauf ${valuationRun.run_id} · SHA-256 ${valuationRun.semantic_sha256}` : "Noch kein versionierter Dossierlauf vorhanden."}
+        compact
+      />
+
+      <section className="priceGateActionBand">
+        <div>
+          <span className="heroKicker">Historische Kurse</span>
+          <h3>
+            {priceGateMode === "cutoff" ? "Trennungspreise" : "Endvermoegenspreise"}{" "}
+            {priceGateMode === "cutoff" ? cutoffLabel : valuationLabel}
+          </h3>
+          <p>{activePriceGate?.methodology ?? "Preis-Gate wird geladen."}</p>
+        </div>
+        <div className="modeSelector" role="tablist" aria-label="Preisstichtag">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={priceGateMode === "cutoff"}
+            className={priceGateMode === "cutoff" ? "active" : ""}
+            onClick={() => setPriceGateMode("cutoff")}
+          >
+            Trennung
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={priceGateMode === "valuation"}
+            className={priceGateMode === "valuation" ? "active" : ""}
+            onClick={() => setPriceGateMode("valuation")}
+          >
+            Endvermoegen
+          </button>
+        </div>
+        <div className="priceGateActionMetrics">
+          <Metric title="materielle Assets" value={String(activePriceGate?.material_assets_count ?? 0)} />
+          <Metric title="fetchable" value={String(activePriceGate?.fetchable_count ?? 0)} />
+          <Metric title="Tokenreview offen" value={String(activePriceGate?.review_only_count ?? 0)} />
+          <Metric title="Tokenreview belegt" value={String(activePriceGate?.gate.accepted_review_asset_count ?? 0)} />
+          <Metric title="nicht konfiguriert" value={String(activePriceGate?.not_configured_count ?? 0)} />
+        </div>
+        <div className="toolbarActions">
+          <button type="button" onClick={() => onRunPriceGateBackfill(true, activePriceGateDate)} disabled={priceGateLoading || !activePriceGate?.fetchable_count}>
+            <ClipboardCheck size={16} />
+            {priceGateLoading ? "Preis-Lauf aktiv" : "Backfill pruefen"}
+          </button>
+          <button type="button" onClick={() => onRunPriceGateBackfill(false, activePriceGateDate)} disabled={priceGateLoading || !activePriceGate?.fetchable_count}>
+            <Database size={16} />
+            Belegte Preise importieren
+          </button>
+          <button
+            type="button"
+            onClick={() => onDownload(`/api/v1/prices/as-of-gate/token-review-decisions.csv?separation_date=${encodeURIComponent(cutoffDate)}&end_asset_date=${encodeURIComponent(valuationDate)}`)}
+          >
+            <FileDown size={16} />
+            Tokenentscheide CSV
+          </button>
+        </div>
+      </section>
+      <TablePanel
+        title={`Preisbedarf am ${priceGateMode === "cutoff" ? "Trennungsstichtag" : "Endvermoegensstichtag"}`}
+        rows={(activePriceGate?.candidates ?? []).filter((candidate) => candidate.status !== "satisfied").map((candidate) => ({
+          asset: candidate.asset,
+          konten: Array.isArray(candidate.accounts) ? candidate.accounts.map(String).map(shortAccount).join(" | ") : "",
+          wert: `${formatCurrency(candidate.value_eur)} EUR`,
+          bisheriger_preisstand: candidate.current_priced_at ? formatDateTime(candidate.current_priced_at) : "fehlt",
+          preisalter_tage: candidate.current_price_age_days ?? "-",
+          preisstatus: equalizationPriceStatusLabel(String(candidate.current_price_status ?? "missing")),
+          provider: candidate.provider_id ?? "-",
+          tokenreview: candidate.token_review_status,
+          aktion: candidate.status,
+          grund: candidate.reason
+        }))}
+        footer="Der Import schreibt ausschliesslich belegte Price-Ledger-Punkte. Eine Tokenentscheidung gilt nur fuer den ausgewaehlten Stichtag und veraendert weder FIFO noch Steuerdaten."
+        compact
+      />
+      <TablePanel
+        title="Freigabebereite Tokenbewertungen"
+        rows={(activePriceGate?.candidates ?? [])
+          .filter((candidate) => candidate.token_review_status === "pending" && candidate.current_price_status === "same_day")
+          .map((candidate) => ({
+            asset: candidate.asset,
+            mint: candidate.token_mint ?? "-",
+            risiko: candidate.token_risk_status ?? "-",
+            wert: `${formatCurrency(candidate.value_eur)} EUR`,
+            preis: `${formatCurrency(candidate.current_price_eur)} EUR`,
+            preisquelle: candidate.current_price_source ?? "-",
+            stichtag: activePriceGateDate
+          }))}
+        rowActions={[
+          {
+            label: "Same-Day-Bewertung beleggebunden annehmen",
+            icon: <ClipboardCheck size={16} />,
+            onClick: (row) => onAcceptTokenValuation(String(row.asset ?? ""), activePriceGateDate)
+          }
+        ]}
+        footer="Die Annahme bestaetigt nur Mint und Same-Day-Preis fuer diesen Stichtag. Bestand, Ledger, FIFO, Steuerzeilen und Tokenmenge bleiben unveraendert."
+        compact
+      />
 
       <div className="equalizationGrid">
         <EqualizationSummaryCard title="Technische FIFO-Kontrollsicht Alt-Lots" bucket={marital} tone="neutral" />
@@ -8213,10 +11853,12 @@ function DivorceEqualizationPanel({
         <div className="panelToolbar">
           <strong>BMF-Abgrenzung zur Steuererklaerung</strong>
           <div className="reportActionBand compactActions">
-            <button type="button" onClick={() => onDownload("/api/v1/divorce/equalization-summary/evidence-package.zip")}>
+            <button type="button" onClick={() => onDownload(`/api/v1/divorce/equalization-summary/evidence-package.zip${exportQuery}`)}>
+              <FileDown size={16} />
               Belegpaket ZIP
             </button>
-            <button type="button" onClick={() => onDownload(String(report?.bmf_tax_boundary?.tax_methodology_summary_endpoint ?? "/api/v1/tax-methodology/summary"))}>
+            <button type="button" onClick={() => onNavigate("tax")}>
+              <ReceiptText size={16} />
               BMF-Methodik
             </button>
           </div>
@@ -8259,7 +11901,8 @@ function DivorceEqualizationPanel({
       <div className="panel">
         <div className="panelToolbar">
           <strong>Wallets / Konten getrennt</strong>
-          <button type="button" onClick={() => onDownload("/api/v1/divorce/equalization-summary/accounts.csv")}>
+          <button type="button" onClick={() => onDownload(`/api/v1/divorce/equalization-summary/accounts.csv${exportQuery}`)}>
+            <FileDown size={16} />
             CSV herunterladen
           </button>
         </div>
@@ -8270,14 +11913,17 @@ function DivorceEqualizationPanel({
             konto_voll: String(account.account ?? ""),
             klasse: equalizationAccountLabel(String(account.classification ?? "")),
             wertbasis: equalizationValuationBasisLabel(String(account.valuation_basis ?? "")),
-            wert_13_06_2025: `${formatCurrency(account.cutoff_value_eur)} EUR`,
-            wert_15_06_2026: `${formatCurrency(account.valuation_value_eur)} EUR`,
+            wert_ausgang: `${formatCurrency(account.cutoff_value_eur)} EUR`,
+            wert_bewertung: `${formatCurrency(account.valuation_value_eur)} EUR`,
             wert_ohne_review_token: `${formatCurrency(account.valuation_value_without_review_assets_eur)} EUR`,
             review_token_wert: `${formatCurrency(account.valuation_review_value_eur)} EUR`,
             veraenderung: `${formatCurrency(account.gross_change_eur)} EUR`,
-            assets_13_06: Array.isArray(account.asset_labels_cutoff) ? account.asset_labels_cutoff.join(", ") : "",
-            assets_15_06: Array.isArray(account.asset_labels_valuation) ? account.asset_labels_valuation.join(", ") : "",
-            token_details_15_06: equalizationAccountAssetSummary(account.valuation_assets),
+            externe_einzahlung: `${formatCurrency(account.external_invest_since_cutoff_eur)} EUR`,
+            bereinigte_veraenderung: `${formatCurrency(account.adjusted_gain_loss_eur)} EUR`,
+            quellkonten: Array.isArray(account.source_accounts) ? account.source_accounts.join(" | ") : "",
+            assets_ausgang: Array.isArray(account.asset_labels_cutoff) ? account.asset_labels_cutoff.join(", ") : "",
+            assets_bewertung: Array.isArray(account.asset_labels_valuation) ? account.asset_labels_valuation.join(", ") : "",
+            token_details_bewertung: equalizationAccountAssetSummary(account.valuation_assets),
             hinweis: String(account.note ?? "")
           }))}
           footer="Wallet-Adressen werden links gekuerzt angezeigt; konto_voll enthaelt die vollstaendige Adresse fuer Belege und Drilldown."
@@ -8287,7 +11933,8 @@ function DivorceEqualizationPanel({
       <div className="panel">
         <div className="panelToolbar">
           <strong>Token je Wallet zum Bewertungsstand</strong>
-          <button type="button" onClick={() => onDownload("/api/v1/divorce/equalization-summary/valuation-tokens.csv")}>
+          <button type="button" onClick={() => onDownload(`/api/v1/divorce/equalization-summary/valuation-tokens.csv${exportQuery}`)}>
+            <FileDown size={16} />
             CSV herunterladen
           </button>
         </div>
@@ -8302,7 +11949,8 @@ function DivorceEqualizationPanel({
       <div className="panel">
         <div className="panelToolbar">
           <strong>Live-/Solscan-Abgleich</strong>
-          <button type="button" onClick={() => onDownload("/api/v1/divorce/equalization-summary/live-reconciliation.csv")}>
+          <button type="button" onClick={() => onDownload(`/api/v1/divorce/equalization-summary/live-reconciliation.csv${exportQuery}`)}>
+            <FileDown size={16} />
             CSV herunterladen
           </button>
         </div>
@@ -8310,18 +11958,23 @@ function DivorceEqualizationPanel({
           title="Reconciliation fuer relevante Wallets und Quellen"
           rows={(report?.live_reconciliation ?? []).map((row) => ({
             quelle: row.source_group,
-            typ: row.source_type,
             asset: row.asset ?? "-",
-            v2_menge: row.ledger_quantity === null || row.ledger_quantity === undefined ? "-" : formatAmount(row.ledger_quantity),
-            v2_wert: `${formatCurrency(row.ledger_value_eur)} EUR`,
+            rohledger_menge: row.raw_ledger_quantity === null || row.raw_ledger_quantity === undefined
+              ? row.ledger_quantity === null || row.ledger_quantity === undefined ? "-" : formatAmount(row.ledger_quantity)
+              : formatAmount(row.raw_ledger_quantity),
+            beleg_overlay: formatAmount(row.ledger_adjustment_quantity ?? 0),
+            abgleich_menge: row.ledger_quantity === null || row.ledger_quantity === undefined ? "-" : formatAmount(row.ledger_quantity),
             live_menge: row.external_quantity === null || row.external_quantity === undefined ? "-" : formatAmount(row.external_quantity),
-            live_wert: row.external_value_eur === null || row.external_value_eur === undefined ? "-" : `${formatCurrency(row.external_value_eur)} EUR`,
             delta_wert: row.delta_value_eur === null || row.delta_value_eur === undefined ? "-" : `${formatCurrency(row.delta_value_eur)} EUR`,
             status: row.status,
-            schwere: row.severity,
-            naechster_schritt: row.next_action
+            txid: Array.isArray(row.ledger_adjustment_tx_ids)
+              ? row.ledger_adjustment_tx_ids.map((value) => shortAccount(String(value))).join(", ")
+              : "-",
+            txid_full: Array.isArray(row.ledger_adjustment_tx_ids)
+              ? row.ledger_adjustment_tx_ids.join(" | ")
+              : ""
           }))}
-          footer="Live- und Solscan-Werte sind Kontrollquellen. Steuerliche Historie bleibt ueber importierte Transaktionen, FIFO und Belege nachzuweisen."
+          footer="Live- und RPC-Werte sind Kontrollquellen. Beleg-Overlays schließen nur nach TxID-Prüfung fehlende Gegenposten im Abgleich; Rohledger, FIFO und Steuerdaten bleiben unverändert."
           compact
         />
       </div>
@@ -8446,13 +12099,68 @@ function equalizationAccountLabel(classification: string): string {
   if (classification === "solana_main_wallet") {
     return "Solana Main Wallet";
   }
-  if (classification === "binance_jup_product") {
-    return "Binance JUP-Produkt";
+  if (classification === "exchange_binance") {
+    return "Binance";
+  }
+  if (classification === "exchange_bitget") {
+    return "Bitget";
+  }
+  if (classification === "exchange_pionex") {
+    return "Pionex";
+  }
+  if (classification === "exchange_coinbase") {
+    return "Coinbase";
   }
   return "Portfolio-Konto";
 }
 
+function equalizationCapitalOriginLabel(origin: string): string {
+  if (origin === "inheritance") {
+    return "Erbe belegt";
+  }
+  if (origin === "claimed_inheritance") {
+    return "Erbe angegeben, Beleg offen";
+  }
+  if (origin === "marital_funds") {
+    return "Eheliche Mittel";
+  }
+  if (origin === "other_separate_property") {
+    return "Sonstiges Anfangsvermoegen";
+  }
+  return "Noch nicht eingeordnet";
+}
+
+function equalizationInheritanceCreditKindLabel(kind: string): string {
+  if (kind === "estate_account_transfer") {
+    return "Nachlasskonto-Uebertrag";
+  }
+  if (kind === "estate_asset_realization") {
+    return "Auszahlung geerbter Vermoegenswert";
+  }
+  if (kind === "estate_refund") {
+    return "Nachlassbezogene Erstattung";
+  }
+  return "Erbmittelzufluss";
+}
+
+function equalizationCapitalFlowClassificationLabel(classification: string): string {
+  const labels: Record<string, string> = {
+    internal_transfer_confirmed: "Interner Transfer belegt",
+    internal_product_transfer: "Interne Produktumbuchung",
+    internal_service_position_loss: "Serviceposition vollstaendig liquidiert",
+    trade_or_service_route: "Trade-/Service-Route pruefen",
+    technical_fee: "Technische Gebuehr",
+    operational_adjustment_review: "Operative Korrektur pruefen",
+    external_distribution_confirmed: "Externe Auszahlung belegt",
+    external_distribution_review: "Moegliche externe Auszahlung pruefen"
+  };
+  return labels[classification] ?? classification;
+}
+
 function equalizationValuationBasisLabel(basis: string): string {
+  if (basis === "historical_ledger_as_of") {
+    return "Historisches Ledger zum Stichtag";
+  }
   if (basis === "current_live_anchored_snapshot") {
     return "Live-Anker Snapshot";
   }
@@ -8487,9 +12195,20 @@ function equalizationValuationTokenRows(accounts: Array<Record<string, unknown>>
       markierung: equalizationAssetFlagLabel(String(asset.valuation_flag ?? "valued")),
       preisquelle: String(asset.price_source ?? ""),
       preisstand: asset.priced_at ? formatDateTime(asset.priced_at) : "-",
+      preisalter_tage: asset.price_age_days ?? "-",
+      preisstatus: equalizationPriceStatusLabel(String(asset.price_status ?? "missing")),
       hinweis: String(asset.note ?? "")
     }));
   });
+}
+
+function equalizationPriceStatusLabel(status: string): string {
+  if (status === "same_day") return "Stichtag";
+  if (status === "prior_day") return "Vortag";
+  if (status === "stale") return "veraltet";
+  if (status === "derived_event_quote") return "abgeleitet";
+  if (status === "missing") return "fehlt";
+  return status;
 }
 
 function equalizationAssetFlagLabel(flag: string): string {
@@ -9127,8 +12846,8 @@ function ReportCenterPanel({
                 <ReceiptText size={16} />
                 Eingabehilfe
               </button>
-              <button type="button" onClick={() => onDownload(String(year.evidence_endpoint ?? `/api/v1/tax-years/${String(year.year)}/evidence`))}>
-                <FileJson size={16} />
+              <button type="button" onClick={() => onDownload(humanReadableTaxEndpoint(String(year.evidence_endpoint ?? `/api/v1/tax-years/${String(year.year)}/evidence`)))}>
+                <FileDown size={16} />
                 Belegkarte
               </button>
               <button type="button" onClick={() => onDownload(String(year.evidence_package_endpoint ?? `/api/v1/export/tax-years/${String(year.year)}/evidence-package.zip`))}>
@@ -9137,23 +12856,23 @@ function ReportCenterPanel({
               </button>
               <button type="button" onClick={() => onDownload(String(year.wallet_fifo_endpoint ?? `/api/v1/tax-years/${String(year.year)}/wallet-fifo-delta`))}>
                 <GitBranch size={16} />
-                FIFO
+                FIFO JSON
               </button>
               <button type="button" onClick={() => onDownload(String(year.wallet_fifo_gaps_endpoint ?? `/api/v1/tax-years/${String(year.year)}/wallet-fifo-gaps?limit=80`))}>
                 <AlertTriangle size={16} />
-                FIFO-Gaps
+                FIFO-Gaps JSON
               </button>
               {year.cex_fifo_anchor_endpoint ? (
                 <button type="button" onClick={() => onDownload(String(year.cex_fifo_anchor_endpoint))}>
                   <ClipboardCheck size={16} />
-                  CEX-Anker
+                  CEX-Anker JSON
                 </button>
               ) : null}
             </div>
             {Array.isArray(year.required_evidence_refs) && year.required_evidence_refs.length > 0 ? (
               <div className="reportEvidenceRefs">
                 {year.required_evidence_refs.slice(0, 6).map((ref, index) => (
-                  <button key={String(ref)} type="button" onClick={() => onDownload(String(ref))} title={String(ref)}>
+                  <button key={String(ref)} type="button" onClick={() => onDownload(humanReadableTaxEndpoint(String(ref)))} title={String(ref)}>
                     {String(Array.isArray(year.required_evidence_labels) ? year.required_evidence_labels[index] : "").trim() || String(ref).split("/").pop() || String(ref)}
                   </button>
                 ))}
@@ -9584,6 +13303,576 @@ function V1ReferenceForm({
   );
 }
 
+function BmfComplianceMatrixPanel({
+  matrix,
+  legalFreshness,
+  run,
+  methodDelta,
+  methodAcceptance,
+  migrationRehearsal,
+  applyReadiness,
+  running,
+  migrationRunning,
+  onRun,
+  onRunMigration,
+  onDownload
+}: {
+  matrix: Snapshot["taxBmfComplianceMatrix"];
+  legalFreshness: Snapshot["legalResearchFreshness"];
+  run: Snapshot["walletFifoParallelRun"];
+  methodDelta: Snapshot["walletFifoMethodDeltaExplanation"];
+  methodAcceptance: Snapshot["walletFifoMethodAcceptance"];
+  migrationRehearsal: Snapshot["walletFifoMigrationRehearsal"];
+  applyReadiness: Snapshot["walletFifoMigrationApplyReadiness"];
+  running: boolean;
+  migrationRunning: boolean;
+  onRun: () => void;
+  onRunMigration: () => void;
+  onDownload: (path: string) => void;
+}) {
+  if (!matrix) {
+    return (
+      <section className="bmfMatrixPanel isLoading" aria-live="polite">
+        <div className="sectionHeading">
+          <div>
+            <span className="heroKicker">BMF-Anforderungsmatrix</span>
+            <h3>Pruefstatus wird geladen</h3>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  const statusRank: Record<string, number> = { blocked: 0, review: 1, satisfied: 2, not_applicable: 3 };
+  const rows = [...matrix.requirements].sort(
+    (left, right) => (statusRank[left.evidence_status] ?? 9) - (statusRank[right.evidence_status] ?? 9)
+  );
+  const statusLabel = (status: string) => {
+    if (status === "satisfied") return "erfuellt";
+    if (status === "review") return "pruefen";
+    if (status === "blocked") return "blockiert";
+    return "nicht relevant";
+  };
+  const tone = (status: string) => status === "satisfied" ? "ok" : status === "blocked" ? "blocked" : "warning";
+  const runTone = run?.status === "ready_for_method_review" ? "ok" : run?.status === "blocked" ? "blocked" : "warning";
+  const acceptanceTone = methodAcceptance?.strict_ready
+    ? "ok"
+    : methodAcceptance?.decision_ready
+      ? "warning"
+      : "blocked";
+  const acceptedChecks = methodAcceptance?.checks.filter((item) => item.passed).length ?? 0;
+  const providerOnlyMethodGaps = Boolean(
+    methodAcceptance?.provider_basis_resolution_required
+    && methodAcceptance.unexplained_unmatched_count === 0
+    && methodAcceptance.unexplained_method_gap_groups_count === 0
+  );
+  const migrationTechnicalChecks = migrationRehearsal?.checks.filter((item) => item.gate === "technical") ?? [];
+  const migrationTechnicalChecksPassed = migrationTechnicalChecks.filter((item) => item.passed).length;
+  const migrationParityYears = migrationRehearsal?.year_checks.filter((item) => item.parity).length ?? 0;
+  const migrationTone = migrationRehearsal?.status === "already_active"
+    ? "ok"
+    : migrationRehearsal?.status === "blocked"
+      ? "blocked"
+      : "warning";
+  const migrationHeadline = migrationRehearsal?.status === "already_active"
+    ? "Wallet-/Depot-FIFO ist produktiv aktiv"
+    : migrationRehearsal?.status === "ready_for_controlled_migration"
+      ? "Bereit zur kontrollierten Migration"
+      : migrationRehearsal?.status === "ready_for_method_decision"
+        ? "Technisch bereit, Methodenentscheidung offen"
+        : migrationRehearsal?.status === "blocked"
+          ? "Migrationsprobe technisch blockiert"
+          : "Noch keine Migrationsprobe vorhanden";
+  const applyChecksPassed = applyReadiness?.checks.filter((item) => item.passed).length ?? 0;
+  const applyTone = applyReadiness?.status === "already_active"
+    ? "ok"
+    : applyReadiness?.status === "ready_for_controlled_apply"
+      ? "warning"
+      : "blocked";
+  const applyHeadline = applyReadiness?.status === "already_active"
+    ? "Wallet-/Depot-FIFO produktiv aktiv"
+    : applyReadiness?.status === "ready_for_controlled_apply"
+      ? "Kontrollierter Apply technisch freigegeben"
+      : "Produktivaktivierung gesperrt";
+  const formatStorage = (bytes: number) => `${new Intl.NumberFormat("de-DE", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(bytes / (1024 ** 3))} GB`;
+  const acceptanceDecisionLabel = methodAcceptance?.decision_status === "approved_for_controlled_migration"
+    ? "Migration freigegeben"
+    : methodAcceptance?.decision_status === "retain_global_fifo_pending_professional_review"
+      ? "Globale Methode in Fachpruefung"
+      : methodAcceptance?.decision_status === "rejected_requires_rework"
+        ? "Nacharbeit angefordert"
+        : "Entscheidung offen";
+  const materialDeltaGroups = [...(methodDelta?.groups ?? [])]
+    .sort((left, right) => Math.abs(Number(right.gain_loss_delta_eur)) - Math.abs(Number(left.gain_loss_delta_eur)))
+    .slice(0, 6);
+  const legalTone = legalFreshness?.is_fresh
+    ? "ok"
+    : legalFreshness?.status === "review_required" || legalFreshness?.status === "stale"
+      ? "warning"
+      : "blocked";
+  const legalHeadline = legalFreshness?.is_fresh
+    ? "Offizielle Rechtsquellen sind aktuell geprueft"
+    : legalFreshness?.status === "review_required"
+      ? "Neue Fundstellen warten auf fachliche Pruefung"
+      : legalFreshness?.status === "stale"
+        ? "Rechtsstands-Pruefung ist abgelaufen"
+        : "Aktueller Rechtsstand ist nicht bestaetigt";
+  const legalFinding = legalFreshness?.findings[0]
+    ?? "Ohne aktuellen Lauf werden keine Aussagen als aktueller Rechtsstand freigegeben.";
+  return (
+    <section className={`bmfMatrixPanel ${matrix.strict_bmf_ready ? "ok" : "blocked"}`}>
+      <div className="sectionHeading bmfMatrixHeading">
+        <div>
+          <span className="heroKicker">BMF-Anforderungsmatrix</span>
+          <h3>{matrix.strict_bmf_ready ? "Streng BMF-ready" : "Noch nicht streng BMF-ready"}</h3>
+          <p>Freigabe nach Anforderung, Datenbeleg und produktiver Berechnungsmethode.</p>
+        </div>
+        <span className={`statusPill ${matrix.strict_bmf_ready ? "ok" : "blocked"}`}>
+          {matrix.strict_bmf_ready ? <Check size={15} /> : <AlertTriangle size={15} />}
+          {matrix.strict_bmf_ready ? "vollstaendig" : `${matrix.blocked_count} Blocker`}
+        </span>
+      </div>
+      <div className="bmfMatrixMetrics">
+        <Metric title="Erfuellt" value={String(matrix.satisfied_count)} />
+        <Metric title="Zu pruefen" value={String(matrix.review_count)} />
+        <Metric title="Blockiert" value={String(matrix.blocked_count)} />
+        <Metric title="Konservative Jahre" value={matrix.conservative_years.join(", ") || "keine"} />
+      </div>
+      <div className={`legalFreshnessNotice ${legalTone}`} aria-live="polite">
+        <div className="legalFreshnessIcon" aria-hidden="true">
+          {legalFreshness?.is_fresh ? <ClipboardCheck size={19} /> : <AlertTriangle size={19} />}
+        </div>
+        <div className="legalFreshnessMain">
+          <span className="heroKicker">Rechtsstand und neue Urteile</span>
+          <strong>{legalHeadline}</strong>
+          <p>{legalFinding}</p>
+          <div className="legalFreshnessMeta">
+            <span>Geprueft: {legalFreshness ? formatDateTime(legalFreshness.generated_at) : "noch nicht"}</span>
+            <span>Gueltig bis: {legalFreshness ? formatDateTime(legalFreshness.fresh_until) : "-"}</span>
+            <span>{legalFreshness?.source_checks.length ?? 0} Quellen · {legalFreshness?.monitor_checks.length ?? 0} Suchmonitore</span>
+          </div>
+        </div>
+        <a href={matrix.bmf_reference_url} target="_blank" rel="noreferrer" title="Aktuelles BMF-Schreiben in der offiziellen Quelle oeffnen">
+          <ExternalLink size={16} />
+          BMF-Quelle
+        </a>
+      </div>
+      <div className={`walletFifoRunSummary ${runTone}`}>
+        <div className="walletFifoRunHeader">
+          <div>
+            <span className="heroKicker">Wallet-/Depot-FIFO {run?.years[0] ?? 2021}-{run?.years.at(-1) ?? 2026}</span>
+            <strong>{run ? (run.status === "ready_for_method_review" ? "Bereit zur Methodenpruefung" : run.status === "blocked" ? "Prueflauf blockiert" : "Delta fachlich pruefen") : "Noch kein versionierter Prueflauf"}</strong>
+            <p>{run?.findings[0] ?? "Erzeugt einen read-only Stichtagslauf mit vollstaendigen CSV-Belegspuren, ohne produktive Steuerdaten zu veraendern."}</p>
+          </div>
+          <button type="button" onClick={onRun} disabled={running} title="Wallet-/Depot-FIFO fuer den aktuellen Datenstand neu berechnen">
+            <RefreshCcw size={16} />
+            {running ? "Prueflauf laeuft" : "Prueflauf starten"}
+          </button>
+        </div>
+        {run ? (
+          <>
+            <div className="walletFifoRunMetrics">
+              <Metric title="Stichtag" value={formatDateTime(run.as_of)} />
+              <Metric title="Globales G/V" value={`${formatCurrency(run.global_gain_loss_eur)} EUR`} />
+              <Metric title="Wallet-FIFO G/V" value={`${formatCurrency(run.wallet_gain_loss_eur)} EUR`} />
+              <Metric title="Delta" value={`${formatCurrency(run.delta_gain_loss_eur)} EUR`} />
+              <Metric title="Pool-Luecken" value={String(run.unmatched_count)} />
+              <Metric title="Provider-Basisluecken" value={run.report_schema_version === "wallet_fifo_run_v2_provider_basis_classification" ? String(run.provider_basis_gap_count) : "noch nicht klassifiziert"} />
+              <Metric title="Wirklich ungeklaert" value={run.report_schema_version === "wallet_fifo_run_v2_provider_basis_classification" ? String(run.unexplained_unmatched_count) : String(run.unmatched_count)} />
+              <Metric title="Offene Herkunft" value={String(run.unresolved_inbound_provenance_count)} />
+              <Metric title="Transferbeleg-Review" value={String(run.transfer_evidence_review_count)} />
+              <Metric title="Kaufbeleg-Review" value={String(run.acquisition_cost_evidence_review_count)} />
+            </div>
+            <div className={`walletFifoParityNotice ${run.event_set_mismatch_years.length ? "blocked" : "ok"}`}>
+              {run.event_set_mismatch_years.length ? <AlertTriangle size={18} /> : <Check size={18} />}
+              <div>
+                <strong>
+                  {run.event_set_mismatch_years.length
+                    ? providerOnlyMethodGaps
+                      ? `Provider-Kostenbasis in ${run.event_set_mismatch_years.join(", ")} offen`
+                      : `Mengenabweichung in ${run.event_set_mismatch_years.join(", ")}`
+                    : "Veraeusserungsmengen je Jahr/Asset stimmen"}
+                </strong>
+                <span>
+                  {providerOnlyMethodGaps
+                    ? `${methodAcceptance?.provider_basis_gap_count ?? 0} Bitget-Abgaenge sind mengenmaessig belegt; nur die vom Provider nicht exportierten Bot-Fill-Anschaffungskosten fehlen.`
+                    : <>Explizite Netzwerkgebuehren, Bewertungserloese und Cost Basis werden getrennt ausgewiesen
+                      {run.valuation_review_years.length ? `; Bewertungsreview: ${run.valuation_review_years.join(", ")}.` : "."}</>}
+                </span>
+              </div>
+            </div>
+            {methodAcceptance ? (
+              <div className={`walletFifoParityNotice ${acceptanceTone}`}>
+                {methodAcceptance.strict_ready ? <Check size={18} /> : <ClipboardCheck size={18} />}
+                <div>
+                  <strong>
+                    {methodAcceptance.strict_ready
+                      ? "Wallet-/Depot-FIFO ist abgenommen und produktiv aktiv"
+                      : methodAcceptance.decision_ready
+                        ? "Methodenakte ist entscheidungsreif"
+                        : "Methodenakte ist noch nicht entscheidungsreif"}
+                  </strong>
+                  <span>{methodAcceptance.blockers[0] ?? methodAcceptance.findings[0]}</span>
+                  <div className="walletFifoRunMetrics">
+                    <Metric title="Run-Bindung" value={methodAcceptance.input_fingerprint_current ? "aktuell" : "veraltet"} />
+                    <Metric title="Checks" value={`${acceptedChecks}/${methodAcceptance.checks.length}`} />
+                    <Metric title="Provider-Basis" value={String(methodAcceptance.provider_basis_gap_count)} />
+                    <Metric title="Wirklich ungeklaert" value={String(methodAcceptance.unexplained_unmatched_count)} />
+                    <Metric title="Methodengruppen ungeklaert" value={String(methodAcceptance.unexplained_method_gap_groups_count)} />
+                    <Metric title="Entscheidung" value={acceptanceDecisionLabel} />
+                    <Metric title="Aktive Methode" value={methodAcceptance.activation_applied ? "Wallet-/Depot-FIFO" : "Globales Asset-FIFO"} />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            <div className={`walletFifoParityNotice ${migrationTone}`}>
+              {migrationRehearsal?.technical_ready ? <Database size={18} /> : <AlertTriangle size={18} />}
+              <div>
+                <strong>{migrationHeadline}</strong>
+                <span>
+                  {migrationRehearsal?.blockers[0]
+                    ?? migrationRehearsal?.findings[0]
+                    ?? "Die Zieltabellen werden nur temporaer aufgebaut und gegen den gebundenen Wallet-FIFO-Lauf geprueft."}
+                </span>
+                {migrationRehearsal ? (
+                  <div className="walletFifoRunMetrics">
+                    <Metric title="Technische Checks" value={`${migrationTechnicalChecksPassed}/${migrationTechnicalChecks.length}`} />
+                    <Metric title="Provider-Basis" value={String(migrationRehearsal.provider_basis_gap_count)} />
+                    <Metric title="Wirklich ungeklaert" value={String(migrationRehearsal.unexplained_unmatched_count)} />
+                    <Metric title="Lots im Staging" value={String(migrationRehearsal.staging_lots_count)} />
+                    <Metric title="Tax-Lines im Staging" value={String(migrationRehearsal.staging_tax_lines_count)} />
+                    <Metric title="Jahresparitaet" value={`${migrationParityYears}/${migrationRehearsal.year_checks.length}`} />
+                    <Metric title="Verwaiste Tax-Lines" value={String(migrationRehearsal.staging_orphan_tax_lines_count)} />
+                    <Metric title="Produktiver Schreibzugriff" value={migrationRehearsal.production_write_performed ? "ja" : "nein"} />
+                  </div>
+                ) : null}
+                <div className="walletFifoEvidenceActions">
+                  <button
+                    type="button"
+                    onClick={onRunMigration}
+                    disabled={running || migrationRunning}
+                    title="Wallet-/Depot-FIFO ausschliesslich in einer temporaeren Staging-Datenbank pruefen"
+                  >
+                    <Database size={16} />
+                    {migrationRunning ? "Migrationsprobe laeuft" : "Migrationsprobe starten"}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className={`walletFifoParityNotice ${applyTone}`}>
+              {applyReadiness?.status === "already_active" ? <Check size={18} /> : <GitBranch size={18} />}
+              <div>
+                <strong>{applyHeadline}</strong>
+                <span>
+                  {applyReadiness?.blockers[0]
+                    ?? applyReadiness?.next_actions[0]
+                    ?? "Run-, Rehearsal-, Entscheidungs-, Backup- und Atomaritaetsgate werden gemeinsam geprueft."}
+                </span>
+                {applyReadiness ? (
+                  <div className="walletFifoRunMetrics">
+                    <Metric title="Apply-Gates" value={`${applyChecksPassed}/${applyReadiness.checks.length}`} />
+                    <Metric title="Entscheidung" value={acceptanceDecisionLabel} />
+                    <Metric title="Run/Rehearsal" value={applyReadiness.input_fingerprint_current && applyReadiness.rehearsal_bound ? "gebunden" : "offen"} />
+                    <Metric title="Backup erforderlich" value={formatStorage(applyReadiness.required_backup_bytes)} />
+                    <Metric title="Backup verfuegbar" value={formatStorage(applyReadiness.available_backup_bytes)} />
+                    <Metric title="Aktive Methode" value={applyReadiness.status === "already_active" ? "Wallet-/Depot-FIFO" : "Globales Asset-FIFO"} />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            {methodDelta ? (
+              <div className="walletFifoDeltaExplanation">
+                <div className="walletFifoDeltaHeading">
+                  <div>
+                    <span className="heroKicker">Warum weichen die Ergebnisse ab?</span>
+                    <strong>
+                      {methodDelta.extra_turnover_detected
+                        ? "Zusaetzlicher Veraeusserungsumsatz muss geprueft werden"
+                        : "Kein zusaetzlicher Veraeusserungsumsatz erkannt"}
+                    </strong>
+                    <p>
+                      Ergebnisdelta = Erlosbeitrag plus Cost-Basis-Beitrag. Andere historische Lots
+                      veraendern den Gewinn, ohne dass dadurch ein weiterer Verkauf entsteht.
+                    </p>
+                  </div>
+                  <span className={`statusPill ${methodDelta.status === "blocked" ? "blocked" : methodDelta.status === "review" ? "warning" : "ok"}`}>
+                    {methodDelta.status === "blocked"
+                      ? providerOnlyMethodGaps ? "Provider-Kostenbasis offen" : "Primaerdaten offen"
+                      : "rechnerisch erklaert"}
+                  </span>
+                </div>
+                <div className="walletFifoRunMetrics">
+                  <Metric title="Ergebnisdelta" value={`${formatCurrency(methodDelta.gain_loss_delta_eur)} EUR`} />
+                  <Metric title="Erlosbeitrag" value={`${formatCurrency(methodDelta.proceeds_contribution_to_gain_delta_eur)} EUR`} />
+                  <Metric title="Cost-Basis-Beitrag" value={`${formatCurrency(methodDelta.cost_basis_contribution_to_gain_delta_eur)} EUR`} />
+                  <Metric title="Verglichene Ereignisse" value={String(methodDelta.compared_events_count)} />
+                  <Metric
+                    title={providerOnlyMethodGaps ? "Provider-Mengengruppen" : "Mengenluecken"}
+                    value={String(methodDelta.quantity_gap_groups_count)}
+                  />
+                  <Metric title="Lot-Reihenfolge" value={String(methodDelta.pool_reordering_groups_count)} />
+                  <Metric title="Unerklaerte Erlosreviews" value={String(methodDelta.unexplained_proceeds_delta_groups_count)} />
+                  <Metric title="Gebuehren-Events" value={String(methodDelta.quote_asset_fee_netting_events_count)} />
+                </div>
+                {materialDeltaGroups.length ? (
+                  <div className="walletFifoDeltaRows" aria-label="Groesste Wallet-FIFO Methodendifferenzen">
+                    {materialDeltaGroups.map((group) => (
+                      <div className="walletFifoDeltaRow" key={`${group.year}-${group.asset}`}>
+                        <strong>{group.year} · {group.asset}</strong>
+                        <span>{formatCurrency(group.gain_loss_delta_eur)} EUR G/V</span>
+                        <small>
+                          Erlos {formatCurrency(group.proceeds_delta_eur)} EUR · Cost Basis {formatCurrency(group.cost_basis_delta_eur)} EUR
+                        </small>
+                        <span className={`statusPill ${group.quantity_parity ? "warning" : "blocked"}`}>
+                          {group.quantity_parity
+                            ? "andere Lots"
+                            : providerOnlyMethodGaps ? "Provider-Basis offen" : "Menge offen"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="walletFifoEvidenceActions">
+                  <button type="button" onClick={() => onDownload(methodDelta.full_event_csv_download_url)}>
+                    <FileDown size={15} />
+                    Vollstaendige Ereignis-CSV
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <div className="walletFifoRunYears" aria-label="Wallet-FIFO Jahresstatus">
+              {run.year_results.map((item) => (
+                <span
+                  className={`statusPill ${item.status === "ready_for_method_review" ? "ok" : item.status === "blocked" ? "blocked" : "warning"}`}
+                  key={item.year}
+                  title={item.event_set_parity
+                    ? `Mengen paritaetisch; Bewertung: ${item.proceeds_parity ? "gleich" : item.valuation_review_assets.join(", ")}; Cost-Basis-Assets: ${item.basis_method_delta_assets.join(", ") || "keine"}`
+                    : `Menge pruefen: ${item.event_set_mismatch_assets.join(", ")}`}
+                >
+                  {item.year}: {formatCurrency(item.delta_gain_loss_eur)} EUR · {item.event_set_parity ? (item.proceeds_parity ? "Menge/Wert ok" : "Menge ok, Wert pruefen") : "Menge offen"}
+                </span>
+              ))}
+            </div>
+            <div className="walletFifoEvidenceActions">
+              {run.evidence_files.filter((file) => file.download_url).map((file) => (
+                <button type="button" key={file.kind} onClick={() => onDownload(String(file.download_url))}>
+                  <FileDown size={15} />
+                  {file.kind.replace("wallet_fifo_", "").replaceAll("_", " ")}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
+      <div className="bmfMatrixRows">
+        {rows.map((row) => (
+          <article className={`bmfMatrixRow ${tone(row.evidence_status)}`} key={row.requirement_id}>
+            <div className="bmfMatrixRowIcon" aria-hidden="true">
+              {row.evidence_status === "satisfied" ? <ClipboardCheck size={18} /> : <AlertTriangle size={18} />}
+            </div>
+            <div className="bmfMatrixRowMain">
+              <div className="bmfMatrixRowTitle">
+                <strong>{row.title}</strong>
+                <span>Rn. {row.bmf_paragraphs.join(", ")}</span>
+              </div>
+              <p>{row.findings[0] ?? row.requirement}</p>
+              <small>{row.next_action}</small>
+            </div>
+            <div className="bmfMatrixRowStatus">
+              <span className={`statusPill ${tone(row.evidence_status)}`}>{statusLabel(row.evidence_status)}</span>
+              <span>{row.implementation_status === "implemented" ? "implementiert" : "teilweise"}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+      <footer>
+        Stand {formatDateTime(matrix.generated_at)} · Version {matrix.matrix_version}
+      </footer>
+    </section>
+  );
+}
+
+function BitgetStrategyBasisDecisionPanel({
+  report,
+  reconstruction,
+  loading,
+  onSave
+}: {
+  report: Snapshot["bitgetStrategyBasisDecision"];
+  reconstruction: Snapshot["bitgetStrategyReconstruction"];
+  loading: boolean;
+  onSave: (payload: BitgetBasisDecisionPayload) => void;
+}) {
+  const [decision, setDecision] = useState<BitgetBasisDecisionPayload["decision"]>(
+    "retain_provider_gap_pending_professional_review"
+  );
+  const [actor, setActor] = useState("user");
+  const [rationale, setRationale] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+
+  useEffect(() => {
+    if (report?.decision_status && report.decision_status !== "pending") {
+      setDecision(report.decision_status);
+      setActor(report.decision_actor || "user");
+      setRationale(report.decision_rationale || "");
+    }
+  }, [report?.decision_id]);
+
+  if (!report || !reconstruction) {
+    return null;
+  }
+
+  const estimateDecision = decision === "approve_zero_basis_estimate_for_staging"
+    || decision === "approve_settlement_value_proxy_estimate_for_staging";
+  const technicallyAllowed = report.input_fingerprint_current
+    && (!estimateDecision || report.decision_ready);
+  const canSave = technicallyAllowed
+    && rationale.trim().length >= 30
+    && actor.trim().length >= 2
+    && acknowledged
+    && !loading;
+  const statusTone = report.decision_status === "pending"
+    ? report.decision_ready ? "warning" : "blocked"
+    : report.estimate_selected_for_staging ? "warning" : "ok";
+  const decisionLabel = {
+    pending: "Fachentscheidung offen",
+    retain_provider_gap_pending_professional_review: "Providerluecke bleibt offen",
+    approve_zero_basis_estimate_for_staging: "Nullbasis nur im Staging",
+    approve_settlement_value_proxy_estimate_for_staging: "Settlement-Proxy nur im Staging",
+    rejected_requires_rework: "Rekonstruktion abgelehnt"
+  }[report.decision_status];
+
+  return (
+    <div className="bitgetDecisionBand">
+      <div className="panelToolbar">
+        <div>
+          <span className="heroKicker">Bitget 2024</span>
+          <strong>Basismethodenentscheidung</strong>
+        </div>
+        <span className={`statusPill ${statusTone}`}>{decisionLabel}</span>
+      </div>
+      <p>
+        Die Mengen und Verkaeufe sind belegt; nur die nicht exportierten Bot-Fills fehlen.
+        Ein Kontoauszug wuerde diese interne Providerluecke nicht schliessen. Keine der
+        folgenden Varianten veraendert automatisch FIFO, Lots oder Steuerwerte.
+      </p>
+      <div className="fifoProofMetrics">
+        <Metric
+          title="Belegte Erloese"
+          value={`${formatCurrency(reconstruction.attributable_disposal_proceeds_total_eur)} EUR`}
+        />
+        <Metric
+          title="Nullbasis G/V"
+          value={`${formatCurrency(reconstruction.zero_basis_gain_sensitivity_total_eur)} EUR`}
+        />
+        <Metric
+          title="Settlement-Basis"
+          value={`${formatCurrency(reconstruction.settlement_value_proxy_basis_total_eur)} EUR`}
+        />
+        <Metric
+          title="Settlement G/V"
+          value={`${formatCurrency(reconstruction.settlement_value_proxy_gain_sensitivity_total_eur)} EUR`}
+        />
+      </div>
+      <div className="formGrid bitgetDecisionForm">
+        <label>
+          Entscheidung
+          <select
+            value={decision}
+            onChange={(event) => setDecision(
+              event.target.value as BitgetBasisDecisionPayload["decision"]
+            )}
+          >
+            <option value="retain_provider_gap_pending_professional_review">
+              Offen lassen bis zur Fachpruefung
+            </option>
+            <option value="approve_settlement_value_proxy_estimate_for_staging">
+              Settlement-Proxy fuer Staging
+            </option>
+            <option value="approve_zero_basis_estimate_for_staging">
+              Nullbasis fuer Staging
+            </option>
+            <option value="rejected_requires_rework">
+              Rekonstruktion zur Ueberarbeitung ablehnen
+            </option>
+          </select>
+        </label>
+        <label>
+          Bearbeiter
+          <input value={actor} onChange={(event) => setActor(event.target.value)} />
+        </label>
+        <label className="bitgetDecisionRationale">
+          Begruendung
+          <textarea
+            value={rationale}
+            onChange={(event) => setRationale(event.target.value)}
+            placeholder="Mindestens 30 Zeichen; verwendete Belege und fachliche Begruendung festhalten."
+          />
+        </label>
+        <label className="checkboxLabel bitgetDecisionAcknowledge">
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.target.checked)}
+          />
+          <span>
+            Provider-Fills fehlen; Schaetzwerte sind keine beobachteten Transaktionen,
+            gelten konsistent nur im Staging und werden vor einer Abgabe fachlich geprueft.
+          </span>
+        </label>
+      </div>
+      {report.blockers.length ? (
+        <div className="walletFifoParityNotice blocked">
+          <AlertTriangle size={18} />
+          <div>
+            <strong>Entscheidung noch blockiert</strong>
+            <span>{report.blockers[0]}</span>
+          </div>
+        </div>
+      ) : null}
+      <div className="reportActionBand compactActions">
+        <button
+          type="button"
+          disabled={!canSave}
+          onClick={() => onSave({
+            decision,
+            rationale: rationale.trim(),
+            actor: actor.trim(),
+            acknowledge_provider_fill_data_missing: true,
+            acknowledge_estimate_not_observed_transaction: true,
+            acknowledge_consistent_application: true,
+            acknowledge_no_automatic_tax_effect: true,
+            acknowledge_professional_review_before_filing: true
+          })}
+          title="Entscheidung an Run und Evidenzhashes binden"
+        >
+          <ClipboardCheck size={16} />
+          {loading ? "Wird dokumentiert" : "Entscheidung dokumentieren"}
+        </button>
+        <button
+          type="button"
+          onClick={() => window.open(
+            `${API_BASE}/api/v1/tax/wallet-fifo/bitget-strategy-review.html`,
+            "_blank",
+            "noopener,noreferrer"
+          )}
+        >
+          <ExternalLink size={16} />
+          Fachakte
+        </button>
+      </div>
+      {report.decision_id ? (
+        <div className="footer">
+          Entscheidung {shortAccount(report.decision_id)} · {formatDateTime(report.decision_at)} ·
+          produktive Steuerwirkung: keine
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function TaxPanel({
   taxSummary,
   taxHoldingPeriods,
@@ -9594,6 +13883,16 @@ function TaxPanel({
   taxFilingClosureOverview,
   taxYearsCorrectionMap,
   taxMethodologySummary,
+  taxBmfComplianceMatrix,
+  legalResearchFreshness,
+  walletFifoParallelRun,
+  bitgetStrategyFifoGaps,
+  bitgetStrategyReconstruction,
+  bitgetStrategyBasisDecision,
+  walletFifoMethodDeltaExplanation,
+  walletFifoMethodAcceptance,
+  walletFifoMigrationRehearsal,
+  walletFifoMigrationApplyReadiness,
   taxBmfActionPlan,
   taxBmfFinalizationMatrix,
   taxBmfSubmissionGuide,
@@ -9613,6 +13912,11 @@ function TaxPanel({
   taxYearCexExchangeOutflowEvidence,
   taxYearCexExchangeOutflowAnchorFeasibility,
   taxYearWalletFifoProvenanceClosure,
+  pionexHntReconciliation,
+  crossCexTransferEvidence,
+  fairspotStakingReconciliation,
+  solanaStakingPositionReconciliation,
+  moonpayReceipts,
   taxYearWalletFifoProvenancePriorities,
   taxYearWalletFifoRawProvenanceBreakdown,
   taxYearWalletFifoExchangeEvidenceGaps,
@@ -9628,6 +13932,12 @@ function TaxPanel({
   taxLegacyHeliumOverview,
   taxIncomeGuide,
   taxRewardTradingSeparation,
+  taxBusinessRewardInventoryReview,
+  taxCryptoSwapValuationReview,
+  taxCryptoSwapFifoParallelPreview,
+  taxBmfCombinedFifoStaging,
+  taxBmfFifoEventEvidence,
+  taxBmfEventPriceRemediation,
   taxYearDrivers,
   taxYearGainLossRealityCheck,
   taxYearGainEvidenceReview,
@@ -9658,6 +13968,20 @@ function TaxPanel({
   minHoldingValueEur,
   onMinHoldingValueEurChange,
   onRebuildTax,
+  onRunWalletFifoParallel,
+  walletFifoRunLoading,
+  onSaveBitgetBasisDecision,
+  bitgetBasisDecisionLoading,
+  onRunSwapFifoParallelPreview,
+  swapFifoParallelLoading,
+  onRunBmfCombinedFifoStaging,
+  bmfCombinedFifoStagingLoading,
+  onRunBmfFifoEventEvidence,
+  bmfFifoEventEvidenceLoading,
+  onRunBmfEventPriceRemediation,
+  bmfEventPriceRemediationLoading,
+  onRunWalletFifoMigrationRehearsal,
+  walletFifoMigrationLoading,
   onRebuildDerivatives,
   onAddCexSenderOwnershipDecision,
   onSavePriorFilingDeclaredAmounts,
@@ -9672,6 +13996,16 @@ function TaxPanel({
   taxFilingClosureOverview: Snapshot["taxFilingClosureOverview"];
   taxYearsCorrectionMap: Snapshot["taxYearsCorrectionMap"];
   taxMethodologySummary: Snapshot["taxMethodologySummary"];
+  taxBmfComplianceMatrix: Snapshot["taxBmfComplianceMatrix"];
+  legalResearchFreshness: Snapshot["legalResearchFreshness"];
+  walletFifoParallelRun: Snapshot["walletFifoParallelRun"];
+  bitgetStrategyFifoGaps: Snapshot["bitgetStrategyFifoGaps"];
+  bitgetStrategyReconstruction: Snapshot["bitgetStrategyReconstruction"];
+  bitgetStrategyBasisDecision: Snapshot["bitgetStrategyBasisDecision"];
+  walletFifoMethodDeltaExplanation: Snapshot["walletFifoMethodDeltaExplanation"];
+  walletFifoMethodAcceptance: Snapshot["walletFifoMethodAcceptance"];
+  walletFifoMigrationRehearsal: Snapshot["walletFifoMigrationRehearsal"];
+  walletFifoMigrationApplyReadiness: Snapshot["walletFifoMigrationApplyReadiness"];
   taxBmfActionPlan: Snapshot["taxBmfActionPlan"];
   taxBmfFinalizationMatrix: Snapshot["taxBmfFinalizationMatrix"];
   taxBmfSubmissionGuide: Snapshot["taxBmfSubmissionGuide"];
@@ -9691,6 +14025,11 @@ function TaxPanel({
   taxYearCexExchangeOutflowEvidence: Snapshot["taxYearCexExchangeOutflowEvidence"];
   taxYearCexExchangeOutflowAnchorFeasibility: Snapshot["taxYearCexExchangeOutflowAnchorFeasibility"];
   taxYearWalletFifoProvenanceClosure: Snapshot["taxYearWalletFifoProvenanceClosure"];
+  pionexHntReconciliation: Snapshot["pionexHntReconciliation"];
+  crossCexTransferEvidence: Snapshot["crossCexTransferEvidence"];
+  fairspotStakingReconciliation: Snapshot["fairspotStakingReconciliation"];
+  solanaStakingPositionReconciliation: Snapshot["solanaStakingPositionReconciliation"];
+  moonpayReceipts: Snapshot["moonpayReceipts"];
   taxYearWalletFifoProvenancePriorities: Snapshot["taxYearWalletFifoProvenancePriorities"];
   taxYearWalletFifoRawProvenanceBreakdown: Snapshot["taxYearWalletFifoRawProvenanceBreakdown"];
   taxYearWalletFifoExchangeEvidenceGaps: Snapshot["taxYearWalletFifoExchangeEvidenceGaps"];
@@ -9706,6 +14045,12 @@ function TaxPanel({
   taxLegacyHeliumOverview: Snapshot["taxLegacyHeliumOverview"];
   taxIncomeGuide: Snapshot["taxIncomeGuide"];
   taxRewardTradingSeparation: Snapshot["taxRewardTradingSeparation"];
+  taxBusinessRewardInventoryReview: Snapshot["taxBusinessRewardInventoryReview"];
+  taxCryptoSwapValuationReview: Snapshot["taxCryptoSwapValuationReview"];
+  taxCryptoSwapFifoParallelPreview: Snapshot["taxCryptoSwapFifoParallelPreview"];
+  taxBmfCombinedFifoStaging: Snapshot["taxBmfCombinedFifoStaging"];
+  taxBmfFifoEventEvidence: Snapshot["taxBmfFifoEventEvidence"];
+  taxBmfEventPriceRemediation: Snapshot["taxBmfEventPriceRemediation"];
   taxYearDrivers: Snapshot["taxYearDrivers"];
   taxYearGainLossRealityCheck: Snapshot["taxYearGainLossRealityCheck"];
   taxYearGainEvidenceReview: Snapshot["taxYearGainEvidenceReview"];
@@ -9736,6 +14081,22 @@ function TaxPanel({
   minHoldingValueEur: string;
   onMinHoldingValueEurChange: (value: string) => void;
   onRebuildTax: () => void;
+  onRunWalletFifoParallel: () => void;
+  walletFifoRunLoading: boolean;
+  onSaveBitgetBasisDecision: (payload: BitgetBasisDecisionPayload) => void;
+  bitgetBasisDecisionLoading: boolean;
+  onRunSwapFifoParallelPreview: () => void;
+  swapFifoParallelLoading: boolean;
+  onRunBmfCombinedFifoStaging: () => void;
+  bmfCombinedFifoStagingLoading: boolean;
+  onRunBmfFifoEventEvidence: (
+    scopeMode?: "priority_delta" | "full_ledger"
+  ) => void;
+  bmfFifoEventEvidenceLoading: boolean;
+  onRunBmfEventPriceRemediation: (execute: boolean) => void;
+  bmfEventPriceRemediationLoading: boolean;
+  onRunWalletFifoMigrationRehearsal: () => void;
+  walletFifoMigrationLoading: boolean;
   onRebuildDerivatives: () => void;
   onAddCexSenderOwnershipDecision: (row: Record<string, unknown>, decisionStatus: string) => void;
   onSavePriorFilingDeclaredAmounts: (years: Array<Record<string, unknown>>) => void;
@@ -9768,22 +14129,47 @@ function TaxPanel({
     : [];
   const checklistWarnings = paymentChecklist.filter((item) => String(item.severity ?? "") === "warning");
   const blockingMethodologyGaps = methodologyGaps.filter((gap) => gap.blocks_bmf_ready);
-  const yearNeedsReview = checklistWarnings.length > 0 || blockingMethodologyGaps.length > 0 || taxYearFilingSummary?.export_ready === false;
-  const yearDecisionTone = yearNeedsReview ? "warning" : activePaymentRow || taxYearFilingSummary ? "ok" : "blocked";
-  const yearDecisionHeadline = yearNeedsReview
+  const taxCoreReady = Boolean(activePaymentRow || taxYearFilingSummary || taxYearDetail);
+  const yearNeedsReview = taxCoreReady
+    && (checklistWarnings.length > 0
+      || blockingMethodologyGaps.length > 0
+      || taxYearFilingSummary?.export_ready === false);
+  const taxReadyTone: "ok" | "warning" = yearNeedsReview ? "warning" : "ok";
+  const yearDecisionTone = !taxCoreReady ? "loading" : taxReadyTone;
+  const yearDecisionHeadline = !taxCoreReady
+    ? `${activeYearValue}: Daten werden geladen`
+    : yearNeedsReview
     ? `${activeYearValue}: vor Abgabe pruefen`
-    : activePaymentRow || taxYearFilingSummary
-      ? `${activeYearValue}: Eingabewerte vorbereitet`
-      : `${activeYearValue}: Daten werden geladen`;
+    : `${activeYearValue}: Eingabewerte vorbereitet`;
   const yearDecisionText = activePaymentRow?.what_to_do
     ? String(activePaymentRow.what_to_do)
     : taxYearFilingSummary?.plain_language_summary ?? "Jahreswerte werden geladen. Die Ansicht zeigt danach die eintragbaren Betraege und Belege.";
   const nextChecklistItem = checklistWarnings[0] ?? paymentChecklist[0];
-  const nextChecklistEvidence = humanReadableFilingEndpoint(
+  const nextChecklistEvidence = humanReadableTaxEndpoint(
     String(nextChecklistItem?.evidence_ref ?? taxYearFilingSummaryHtmlPath(activeYearValue))
   );
   const walletFifoUnmatched = Number(taxYearWalletFifoDelta?.unmatched_count ?? 0);
   const walletFifoTransfers = taxYearWalletFifoDelta?.transfer_traces ?? [];
+  const internalTransferBasisPending = taxYearWalletFifoDelta?.internal_transfer_basis_pending ?? [];
+  const activeBitgetStrategyGroups = (bitgetStrategyFifoGaps?.groups ?? []).filter(
+    (group) => String(group.year) === activeYearValue
+  );
+  const activeBitgetStrategyDisposals = activeBitgetStrategyGroups.flatMap(
+    (group) => group.linked_disposals
+  );
+  const bitgetStrategyQuantityExplained = activeBitgetStrategyGroups.length > 0
+    && Boolean(bitgetStrategyFifoGaps?.quantity_reconciled)
+    && Number(bitgetStrategyFifoGaps?.unallocated_unmatched_disposals_count ?? 0) === 0;
+  const activeBitgetReconstructionGroups = (bitgetStrategyReconstruction?.groups ?? []).filter(
+    (group) => String(group.year) === activeYearValue
+  );
+  const activeBitgetReconstructionDisposals = activeBitgetReconstructionGroups.flatMap(
+    (group) => group.linked_disposals
+  );
+  const bitgetReconstructionReady = activeBitgetReconstructionGroups.length > 0
+    && activeBitgetReconstructionGroups.every(
+      (group) => group.basis_reconstruction_status === "ready_for_professional_review"
+    );
   const walletFifoProvenanceGroups = taxYearWalletFifoProvenancePriorities?.groups ?? [];
   const unresolvedInboundProvenance = Number(
     taxYearWalletFifoProvenancePriorities?.unresolved_inbound_provenance_count
@@ -9791,18 +14177,59 @@ function TaxPanel({
       ?? 0
   );
   const walletFifoFeeTransfers = walletFifoTransfers.filter((trace) => Number(trace.fee_quantity ?? 0) > 0);
+  const acquisitionCostReviewTransfers = walletFifoTransfers.filter((trace) => {
+    const status = String(trace.status ?? "");
+    return status.includes("cost_basis_pending") || status.includes("reward_component_review");
+  });
   const walletFifoOk = Boolean(taxYearWalletFifoDelta) && walletFifoUnmatched === 0 && unresolvedInboundProvenance === 0;
   const cexOutflowAnchorItems = taxYearCexExchangeOutflowAnchorFeasibility?.items ?? [];
   const cexOutflowAnchorTone = Number(taxYearCexExchangeOutflowAnchorFeasibility?.anchor_missing_count ?? 0) > 0 ? "warning" : "ok";
   const legacyHeliumWallets = taxLegacyHeliumOverview?.wallets ?? [];
   const legacyHeliumTransfers = taxLegacyHeliumOverview?.fairspot_transfers ?? [];
   const walletFifoClosureItems = taxYearWalletFifoProvenanceClosure?.items ?? [];
+  const serviceSwapClosureItems = walletFifoClosureItems.filter(
+    (item) => String(item.category ?? "") === "service_mediated_jupiter_swap"
+  );
+  const readyServiceSwapCount = serviceSwapClosureItems.filter(
+    (item) => String(item.closure_status ?? "").endsWith("tax_mapping_ready")
+  ).length;
   const walletFifoClosureTone = Number(taxYearWalletFifoProvenanceClosure?.review_required_count ?? 0) > 0 ? "warning" : "ok";
+  const pionexReconciliationTone = pionexHntReconciliation?.reconciliation_ready
+    ? "ok"
+    : pionexHntReconciliation?.preflight_ready
+      ? "warning"
+      : "blocked";
+  const activeCrossCexRecords = (crossCexTransferEvidence?.records ?? []).filter(
+    (record) => String(record.year) === activeYearValue
+  );
+  const crossCexEvidenceTone = activeCrossCexRecords.length > 0
+    && activeCrossCexRecords.every((record) => record.ready)
+      ? "ok"
+      : activeCrossCexRecords.length > 0
+        ? "warning"
+        : "blocked";
+  const fairspotReconciliationTone = fairspotStakingReconciliation?.strict_ready
+    ? "ok"
+    : fairspotStakingReconciliation
+      ? "warning"
+      : "blocked";
+  const solanaStakingReconciliationTone = solanaStakingPositionReconciliation?.strict_ready
+    ? "ok"
+    : solanaStakingPositionReconciliation
+      ? "warning"
+      : "blocked";
+  const moonpayReceiptTone = moonpayReceipts?.strict_ready
+    ? "ok"
+    : moonpayReceipts
+      ? "warning"
+      : "blocked";
   const walletFifoTone = walletFifoOk ? "ok" : walletFifoUnmatched > 0 ? "blocked" : "warning";
   const walletFifoProofLabel = walletFifoOk
     ? "FIFO-Nachverfolgung ohne offene Pool-Luecken"
     : walletFifoUnmatched > 0
-      ? `${walletFifoUnmatched} offene Pool-Luecke(n)`
+      ? bitgetStrategyQuantityExplained
+        ? `${walletFifoUnmatched} Mengen erklaert, Basis offen`
+        : `${walletFifoUnmatched} offene Pool-Luecke(n)`
       : unresolvedInboundProvenance > 0
         ? `${unresolvedInboundProvenance} offene Zufluss-Herkunft(en)`
       : "FIFO-Nachverfolgung wird geladen";
@@ -9816,6 +14243,57 @@ function TaxPanel({
   const activeRewardTradingRows = (taxRewardTradingSeparation?.rows ?? []).filter(
     (row) => String(row.year) === activeYearValue
   );
+  const activeBusinessInventoryRows = (taxBusinessRewardInventoryReview?.rows ?? []).filter(
+    (row) => String(row.disposal_year) === activeYearValue
+  );
+  const activeBusinessInventoryTotals = activeBusinessInventoryRows.reduce(
+    (
+      totals: { potentialLines: number; unresolvedLines: number; potentialGainLoss: number },
+      row
+    ) => {
+      const classification = String(row.classification ?? "");
+      const lines = Number(row.tax_lines_count ?? 0);
+      if (classification === "potential_business_inventory") {
+        totals.potentialLines += lines;
+        totals.potentialGainLoss += Number(row.gain_loss_eur ?? 0);
+      } else if (classification !== "non_reward_origin") {
+        totals.unresolvedLines += lines;
+      }
+      return totals;
+    },
+    { potentialLines: 0, unresolvedLines: 0, potentialGainLoss: 0 }
+  );
+  const activeSwapFifoParallelYear = (taxCryptoSwapFifoParallelPreview?.years ?? []).find(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeSwapFifoParallelAssets = (taxCryptoSwapFifoParallelPreview?.top_assets ?? []).filter(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeSwapFifoParallelEvents = (taxCryptoSwapFifoParallelPreview?.top_events ?? []).filter(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeCombinedFifoYear = (taxBmfCombinedFifoStaging?.year_rows ?? []).find(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeCombinedFifoAssets = (taxBmfCombinedFifoStaging?.top_assets ?? []).filter(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeCombinedFifoEvents = (taxBmfCombinedFifoStaging?.top_events ?? []).filter(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeCombinedFifoSpheres = (taxBmfCombinedFifoStaging?.sphere_rows ?? []).filter(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeFifoEventEvidenceRows = (taxBmfFifoEventEvidence?.discrepancy_rows ?? []).filter(
+    (row) => String(row.year) === activeYearValue
+  );
+  const activeFifoEventIssues = (taxBmfFifoEventEvidence?.event_issues ?? []).filter(
+    (row) => row.event_time && String(new Date(row.event_time).getUTCFullYear()) === activeYearValue
+  );
+  const activeCombinedActiveGlobal = (activeCombinedFifoYear?.active_global ?? {}) as Record<string, unknown>;
+  const activeCombinedReceivedGlobal = (activeCombinedFifoYear?.received_first_global ?? {}) as Record<string, unknown>;
+  const activeCombinedActiveWallet = (activeCombinedFifoYear?.active_wallet ?? {}) as Record<string, unknown>;
+  const activeCombinedReceivedWallet = (activeCombinedFifoYear?.received_first_wallet ?? {}) as Record<string, unknown>;
   const incomeAssets = taxIncomeGuide?.assets ?? [];
   const declarationIncomeAssets = incomeAssets.filter(
     (row) => String(row.classification ?? "") === "reward_income_candidate"
@@ -9897,7 +14375,7 @@ function TaxPanel({
       label: "Anlage SO G/V",
       value: `${formatCurrency(activePaymentRow?.private_disposals_gain_loss_eur ?? taxYearFilingSummary?.taxable_private_disposals_eur)} EUR`,
       detail: String(activePaymentRow?.where_to_enter ?? "In die Eingabehilfe fuer das Steuerjahr uebernehmen."),
-      tone: yearDecisionTone
+      tone: taxReadyTone
     },
     {
       label: "Rewards / Mining / Staking",
@@ -9923,14 +14401,14 @@ function TaxPanel({
       label: String(item.label ?? item.evidence_id ?? "Beleg"),
       value: item.required ? "Pflicht" : "Nachweis",
       detail: String(item.note ?? item.endpoint ?? "Beleg im Jahrespaket enthalten."),
-      endpoint: item.endpoint ? String(item.endpoint) : undefined,
+      endpoint: item.endpoint ? humanReadableTaxEndpoint(String(item.endpoint)) : undefined,
       tone: item.required ? "warning" as const : "ok" as const
     })),
     ...proofLines.slice(0, 4).map((line) => ({
       label: String(line.label ?? line.source_topic ?? "Nachweis"),
       value: String(line.topic ?? "Beleg"),
       detail: String(line.target ?? line.action ?? line.done_when ?? ""),
-      endpoint: line.evidence_ref ? String(line.evidence_ref) : undefined,
+      endpoint: line.evidence_ref ? humanReadableTaxEndpoint(String(line.evidence_ref)) : undefined,
       tone: String(line.topic) === "review" ? "warning" as const : "ok" as const
     }))
   ].slice(0, 6);
@@ -9945,7 +14423,7 @@ function TaxPanel({
       label: String(item.label ?? "Checkliste"),
       value: String(item.severity ?? "warning"),
       detail: String(item.done_when ?? item.action ?? item.evidence_ref ?? ""),
-      endpoint: item.evidence_ref ? String(item.evidence_ref) : undefined,
+      endpoint: item.evidence_ref ? humanReadableTaxEndpoint(String(item.evidence_ref)) : undefined,
       tone: "warning" as const
     })),
     ...blockingMethodologyGaps.slice(0, 4).map((gap) => ({
@@ -9978,11 +14456,26 @@ function TaxPanel({
               ))}
             </select>
           </label>
-          <span className={`statusPill ${taxYearTone(String(selectedYear?.state ?? ""))}`}>
-            {String(selectedYear?.label ?? "-")}
+          <span className={`statusPill ${taxCoreReady ? taxYearTone(String(selectedYear?.state ?? "")) : "loading"}`}>
+            {taxCoreReady ? String(selectedYear?.label ?? "Jahresdaten vorhanden") : "wird geladen"}
           </span>
         </div>
       </section>
+
+      <BmfComplianceMatrixPanel
+        matrix={taxBmfComplianceMatrix}
+        legalFreshness={legalResearchFreshness}
+        run={walletFifoParallelRun}
+        methodDelta={walletFifoMethodDeltaExplanation}
+        methodAcceptance={walletFifoMethodAcceptance}
+        migrationRehearsal={walletFifoMigrationRehearsal}
+        applyReadiness={walletFifoMigrationApplyReadiness}
+        running={walletFifoRunLoading}
+        migrationRunning={walletFifoMigrationLoading}
+        onRun={onRunWalletFifoParallel}
+        onRunMigration={onRunWalletFifoMigrationRehearsal}
+        onDownload={onDownload}
+      />
 
       <section className={`taxFilingDecision ${yearDecisionTone}`}>
         <div className="taxFilingDecisionMain">
@@ -9991,7 +14484,7 @@ function TaxPanel({
           <p>{yearDecisionText}</p>
           <div className="taxFilingTargets">
             <span className={`statusPill ${yearDecisionTone}`}>
-              {String(activePaymentRow?.declaration_bucket ?? (yearNeedsReview ? "pruefen" : "bereit"))}
+              {taxCoreReady ? String(activePaymentRow?.declaration_bucket ?? (yearNeedsReview ? "pruefen" : "bereit")) : "wird geladen"}
             </span>
             {activeFilingMatrixRow?.action_status ? (
               <span className={`statusPill ${String(activeFilingMatrixRow.action_status) === "blocked" ? "blocked" : String(activeFilingMatrixRow.action_status) === "review" ? "warning" : "ok"}`}>
@@ -10002,41 +14495,49 @@ function TaxPanel({
           </div>
         </div>
         <div className="taxFilingDecisionActions">
-          <button type="button" onClick={() => onDownload(nextChecklistEvidence)}>
+          <button type="button" disabled={!taxCoreReady} onClick={() => onDownload(nextChecklistEvidence)}>
             {yearNeedsReview ? <AlertTriangle size={18} /> : <Check size={18} />}
             <span>{String(nextChecklistItem?.label ?? "Eingabehilfe oeffnen")}</span>
           </button>
-          <button type="button" onClick={() => onDownload(taxYearFilingSummaryHtmlPath(activeYearValue))}>
+          <button type="button" disabled={!taxCoreReady} onClick={() => onDownload(taxYearFilingSummaryHtmlPath(activeYearValue))}>
             <ReceiptText size={18} />
             <span>Eingabehilfe Website</span>
           </button>
-          <button type="button" onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`)}>
+          <button type="button" disabled={!taxCoreReady} onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`)}>
             <PackageCheck size={18} />
             <span>Jahres-Belegpaket</span>
           </button>
         </div>
         <div className="taxFilingDecisionMetrics">
-          <Metric title="Anlage SO G/V" value={`${formatCurrency(activePaymentRow?.private_disposals_gain_loss_eur ?? taxYearFilingSummary?.taxable_private_disposals_eur)} EUR`} />
-          <Metric title="Rewards eintragen" value={`${formatCurrency(activePaymentRow?.rewards_mining_staking_income_eur ?? taxYearFilingSummary?.rewards_mining_staking_income_eur)} EUR`} />
-          <Metric title="Derivate" value={`${formatCurrency(activePaymentRow?.derivative_pnl_eur ?? taxYearFilingSummary?.derivative_pnl_eur)} EUR`} />
-          <Metric title="Steuerfrei" value={`${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR`} />
+          <Metric title="Anlage SO G/V" value={taxCoreReady ? `${formatCurrency(activePaymentRow?.private_disposals_gain_loss_eur ?? taxYearFilingSummary?.taxable_private_disposals_eur)} EUR` : "Wird geladen"} />
+          <Metric title="Rewards eintragen" value={taxCoreReady ? `${formatCurrency(activePaymentRow?.rewards_mining_staking_income_eur ?? taxYearFilingSummary?.rewards_mining_staking_income_eur)} EUR` : "Wird geladen"} />
+          <Metric title="Derivate" value={taxCoreReady ? `${formatCurrency(activePaymentRow?.derivative_pnl_eur ?? taxYearFilingSummary?.derivative_pnl_eur)} EUR` : "Wird geladen"} />
+          <Metric title="Steuerfrei" value={taxCoreReady ? `${formatCurrency(activePaymentRow?.tax_free_private_disposals_eur ?? taxYearFilingSummary?.tax_free_private_disposals_eur)} EUR` : "Wird geladen"} />
         </div>
       </section>
 
-      <TaxFilingAtAGlance
-        year={activeYearValue}
-        tone={yearDecisionTone}
-        headline={activeTaxProductRow?.statusLabel ?? yearDecisionHeadline}
-        summary={taxYearFilingSummary?.plain_language_summary ?? yearDecisionText}
-        entries={atAGlanceEntryItems}
-        evidence={atAGlanceEvidenceItems}
-        reviews={atAGlanceReviewItems}
-        generatedAt={taxYearFilingSummary?.generated_at ?? taxDeclarationGuide?.generated_at}
-        filingEndpoint={taxYearFilingSummaryHtmlPath(activeYearValue)}
-        guideEndpoint={`/api/v1/tax-years/${activeYearValue}/declaration-guide`}
-        evidencePackageEndpoint={`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`}
-        onDownload={onDownload}
-      />
+      {taxCoreReady ? (
+        <TaxFilingAtAGlance
+          year={activeYearValue}
+          tone={taxReadyTone}
+          headline={activeTaxProductRow?.statusLabel ?? yearDecisionHeadline}
+          summary={taxYearFilingSummary?.plain_language_summary ?? yearDecisionText}
+          entries={atAGlanceEntryItems}
+          evidence={atAGlanceEvidenceItems}
+          reviews={atAGlanceReviewItems}
+          generatedAt={taxYearFilingSummary?.generated_at ?? taxDeclarationGuide?.generated_at}
+          filingEndpoint={taxYearFilingSummaryHtmlPath(activeYearValue)}
+          guideEndpoint={taxYearDeclarationGuideHtmlPath(activeYearValue)}
+          evidencePackageEndpoint={`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`}
+          onDownload={onDownload}
+        />
+      ) : (
+        <section className="loadingPlaceholder" aria-label="Steuerjahr-Kernwerte werden geladen">
+          <span />
+          <span />
+          <span />
+        </section>
+      )}
 
       <TaxProductCommandCenter
         rows={taxProductRows}
@@ -10044,6 +14545,7 @@ function TaxPanel({
         activeRow={activeTaxProductRow}
         onSelectYear={onSelectedTaxYearChange}
         onDownload={onDownload}
+        loading={!taxCoreReady}
       />
 
       {taxViewMode === "guided" ? (
@@ -10117,9 +14619,9 @@ function TaxPanel({
                 onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
               },
               {
-                label: "Filing Summary",
-                icon: <FileJson size={16} />,
-                onClick: (row) => onDownload(String(row.filing ?? ""))
+                label: "Eingabehilfe",
+                icon: <ReceiptText size={16} />,
+                onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.filing ?? "")))
               },
               {
                 label: "Checkliste CSV",
@@ -10201,14 +14703,14 @@ function TaxPanel({
                 onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
               },
               {
-                label: "Filing Summary",
-                icon: <FileJson size={16} />,
-                onClick: (row) => onDownload(String(row.summary ?? ""))
+                label: "Eingabehilfe",
+                icon: <ReceiptText size={16} />,
+                onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.summary ?? "")))
               },
               {
-                label: "Korrekturkarte",
-                icon: <FileJson size={16} />,
-                onClick: (row) => onDownload(String(row.korrektur ?? ""))
+                label: "Korrekturkarte CSV",
+                icon: <FileDown size={16} />,
+                onClick: (row) => onDownload(String(row.korrektur_csv ?? row.korrektur ?? ""))
               },
               {
                 label: "Belegpaket",
@@ -10258,6 +14760,7 @@ function TaxPanel({
               naechster_schritt: row.next_action,
               filing: row.filing_summary_endpoint,
               korrektur: row.correction_map_endpoint,
+              korrektur_csv: row.correction_map_csv_endpoint,
               paket: row.evidence_package_endpoint
             }))}
             compact
@@ -10268,9 +14771,9 @@ function TaxPanel({
                 onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
               },
               {
-                label: "Korrekturkarte",
-                icon: <FileJson size={16} />,
-                onClick: (row) => onDownload(String(row.korrektur ?? ""))
+                label: "Korrekturkarte CSV",
+                icon: <FileDown size={16} />,
+                onClick: (row) => onDownload(String(row.korrektur_csv ?? row.korrektur ?? ""))
               },
               {
                 label: "Belegpaket",
@@ -10336,6 +14839,7 @@ function TaxPanel({
               naechster_schritt: row.next_action,
               summary: row.filing_summary_endpoint,
               korrektur: row.correction_map_endpoint,
+              korrektur_csv: row.correction_map_csv_endpoint,
               paket: row.evidence_package_endpoint
             }))}
             compact
@@ -10346,14 +14850,14 @@ function TaxPanel({
                 onClick: (row) => onSelectedTaxYearChange(String(row.jahr ?? activeYearValue))
               },
               {
-                label: "Filing Summary",
-                icon: <FileJson size={16} />,
-                onClick: (row) => onDownload(String(row.summary ?? ""))
+                label: "Eingabehilfe",
+                icon: <ReceiptText size={16} />,
+                onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.summary ?? "")))
               },
               {
-                label: "Korrekturkarte",
-                icon: <FileJson size={16} />,
-                onClick: (row) => onDownload(String(row.korrektur ?? ""))
+                label: "Korrekturkarte CSV",
+                icon: <FileDown size={16} />,
+                onClick: (row) => onDownload(String(row.korrektur_csv ?? row.korrektur ?? ""))
               },
               {
                 label: "Belegpaket",
@@ -10418,7 +14922,7 @@ function TaxPanel({
               },
               {
                 label: "Korrekturkarte CSV",
-                icon: <FileJson size={16} />,
+                icon: <FileDown size={16} />,
                 onClick: (row) => onDownload(String(row.korrektur_csv ?? ""))
               },
               {
@@ -10463,7 +14967,7 @@ function TaxPanel({
                         <span>{formatCurrency(item.amount_eur)} EUR</span>
                       ) : null}
                       {item.evidence_ref ? (
-                        <button type="button" onClick={() => onDownload(String(item.evidence_ref))} title="Beleg oeffnen">
+                        <button type="button" onClick={() => onDownload(humanReadableTaxEndpoint(String(item.evidence_ref)))} title="Beleg oeffnen">
                           <FileDown size={14} />
                         </button>
                       ) : null}
@@ -10579,7 +15083,7 @@ function TaxPanel({
               {
                 label: "Beleg oeffnen",
                 icon: <FileDown size={16} />,
-                onClick: (row) => onDownload(String(row.beleg ?? ""))
+                onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.beleg ?? "")))
               }
             ]}
             footer={String(activeCorrectionMap?.methodology ?? "")}
@@ -11204,6 +15708,8 @@ function TaxPanel({
             <p>
               {walletFifoOk
                 ? "Alle Wallet-/Depot-Abgaenge des Jahres haben in der Preview einen passenden Pool-Bestand oder einen belegten Transferanker."
+                : bitgetStrategyQuantityExplained
+                  ? "Die Bitget-Abgangsmengen sind vollstaendig gegen vier Strategy-Settlements abgeglichen. Fuer eine strikte FIFO fehlen weiterhin die originalen Bot-Fills mit Anschaffungszeitpunkt und Kostenbasis."
                 : unresolvedInboundProvenance > 0
                   ? "FIFO kann rechnerisch weiterlaufen, aber Zufluss-Herkunft ist noch nicht vollstaendig mit Transfer-, Deposit-, Withdrawal- oder Anfangsbestandsbelegen nachgewiesen."
                   : "Mindestens ein Abgang kann in der wallet-/depotbezogenen FIFO-Preview noch nicht vollstaendig aus Lots gedeckt werden."}
@@ -11213,9 +15719,197 @@ function TaxPanel({
             <Metric title="Offene FIFO-Luecken" value={String(walletFifoUnmatched)} />
             <Metric title="Offene Herkunft" value={String(unresolvedInboundProvenance)} />
             <Metric title="Belegte Transfers" value={String(taxYearWalletFifoDelta?.transfer_traces_count ?? 0)} />
+            <Metric title="Interne Uebertraege" value={String(taxYearWalletFifoDelta?.internal_transfer_carry_count ?? 0)} />
+            <Metric title="Interne Basis offen" value={String(taxYearWalletFifoDelta?.internal_transfer_carry_basis_pending_count ?? 0)} />
             <Metric title="Fee-Transfers" value={String(walletFifoFeeTransfers.length)} />
           </div>
         </div>
+        {internalTransferBasisPending.length > 0 ? (
+          <TablePanel
+            title="Interne Umbuchungen mit offener Alt-Basis"
+            rows={internalTransferBasisPending.map((trace) => ({
+              datum: formatDateTime(trace.event_time),
+              asset: trace.asset ?? "-",
+              richtung: trace.direction ?? "-",
+              menge: formatQuantity(trace.quantity),
+              belegt: formatQuantity(trace.basis_covered_quantity),
+              offen: formatQuantity(trace.basis_missing_quantity),
+              vorgang: trace.evidence_operation ?? trace.evidence_status ?? "-",
+              beleg: `${String(trace.evidence_filename ?? "-").split("/").pop() ?? "-"}:${String(trace.evidence_row_number ?? "-")}`,
+            }))}
+            compact
+          />
+        ) : null}
+        {activeBitgetStrategyGroups.length > 0 ? (
+          <div className={`panelInlineBlock ${bitgetStrategyQuantityExplained ? "warning" : "blocked"}`}>
+            <div className="panelToolbar">
+              <strong>Bitget Bot-Settlements {activeYearValue}</strong>
+              <span className={`statusPill ${bitgetStrategyQuantityExplained ? "warning" : "blocked"}`}>
+                {bitgetStrategyFifoGaps?.support_package.package_complete
+                  ? "Supportpaket vollstaendig"
+                  : bitgetStrategyQuantityExplained
+                    ? "Mengen belegt, Basis offen"
+                    : "Mengen offen"}
+              </span>
+            </div>
+            <div className="fifoProofBand">
+              <div className="fifoProofSummary">
+                <span className="heroKicker">Primaerbeleg-Abgrenzung</span>
+                <strong>{activeBitgetStrategyDisposals.length} Abgaenge in {activeBitgetStrategyGroups.length} Ketten</strong>
+                <p>
+                  Alle vom Bitget-Support gelieferten Dateien sind vorhanden und hashgebunden.
+                  Strategy.csv ordnet alle vier Settlements sekundengenau zu. Der Anbieterexport
+                  enthaelt jedoch keine Bot-Einzelfills mit Strategy-ID; deshalb bleibt die exakte
+                  Kaufzeit- und Kostenbasis offen. Es werden keine weiteren Dateien von dir verlangt.
+                </p>
+              </div>
+              <div className="fifoProofMetrics">
+                <Metric title="Zugeordnet" value={`${activeBitgetStrategyDisposals.length}/${bitgetStrategyFifoGaps?.unmatched_disposals_count ?? 0}`} />
+                <Metric title="Nicht zugeordnet" value={String(bitgetStrategyFifoGaps?.unallocated_unmatched_disposals_count ?? 0)} />
+                <Metric title="Supportdateien" value={`${bitgetStrategyFifoGaps?.support_package.available_files_count ?? 0}/${bitgetStrategyFifoGaps?.support_package.expected_files_count ?? 6}`} />
+                <Metric title="Strategien belegt" value={`${bitgetStrategyFifoGaps?.support_package.relevant_strategy_matches_count ?? 0}/${activeBitgetStrategyGroups.length}`} />
+                <Metric title="Bot-Fills mit ID" value={String(bitgetStrategyFifoGaps?.support_package.strategy_linked_fill_rows_count ?? 0)} />
+                <Metric title="Blockpit Konflikte" value={String(bitgetStrategyFifoGaps?.blockpit_classification_conflict_count ?? 0)} />
+                <Metric title="API Historie" value={`${bitgetStrategyFifoGaps?.api_history_boundary.retention_days ?? 90} Tage`} />
+              </div>
+            </div>
+            <TablePanel
+              title="Settlement-Ketten"
+              rows={activeBitgetStrategyGroups.map((group) => ({
+                datum: formatDateTime(group.settlement_at),
+                asset: group.asset,
+                settlement: formatQuantity(group.settlement_quantity),
+                principal_belegt: formatQuantity(group.supported_principal_carried_quantity),
+                basis_offen: formatQuantity(group.strategy_quantity_without_cost_basis),
+                abgaenge: group.linked_disposals_count,
+                zugeordnet: formatQuantity(group.allocated_missing_quantity),
+                rest: formatQuantity(group.residual_quantity),
+                strategie: group.support_strategy_match
+                  ? `${group.support_strategy_match.strategy_type} · ${group.support_strategy_match.strategy_id}`
+                  : "-",
+                export_gewinn: group.support_strategy_match
+                  ? `${formatQuantity(group.support_strategy_match.total_gains)} USDT`
+                  : "-",
+                blockpit: group.blockpit_reference.classification_conflict
+                  ? `${group.blockpit_reference.label ?? "-"} verworfen`
+                  : group.blockpit_reference.label ?? "-",
+                beleg: `${group.settlement_filename ?? "-"}:${group.settlement_row_number ?? "-"}`,
+              }))}
+              compact
+            />
+            <TablePanel
+              title="Zugeordnete FIFO-Abgaenge"
+              rows={activeBitgetStrategyDisposals.map((disposal) => ({
+                datum: formatDateTime(disposal.event_time),
+                asset: disposal.asset,
+                verkauf: formatQuantity(disposal.disposal_quantity),
+                lot_belegt: formatQuantity(disposal.matched_wallet_lot_quantity),
+                settlement_belegt: formatQuantity(disposal.allocated_strategy_gap_quantity),
+                offen: disposal.quantity_fully_allocated
+                  ? "0"
+                  : formatQuantity(disposal.missing_wallet_lot_quantity),
+                order: disposal.order_number ?? "-",
+                beleg: `${disposal.source_filename ?? "-"}:${disposal.source_row_number ?? "-"}`,
+              }))}
+              footer={bitgetStrategyFifoGaps?.api_history_boundary.finding}
+              compact
+            />
+            {activeBitgetReconstructionGroups.length > 0 ? (
+              <div className="fifoReconstructionBand">
+                <div className="panelToolbar">
+                  <strong>Konservative Basis-Rekonstruktionsakte</strong>
+                  <span className={`statusPill ${bitgetReconstructionReady ? "warning" : "blocked"}`}>
+                    {bitgetReconstructionReady ? "Pruefakte bereit" : "Referenzbeleg offen"}
+                  </span>
+                </div>
+                <p>
+                  Die Akte grenzt Erwerbszeitfenster und anteilige Verkaufserloese ein.
+                  Nullbasis und Settlement-Zeitwert sind nur Sensitivitaeten. Sie aendern keine
+                  Lots, keine FIFO und keinen Steuerwert; die fehlenden Bot-Fills bleiben sichtbar.
+                </p>
+                <div className="fifoProofMetrics">
+                  <Metric title="Abgaenge" value={String(activeBitgetReconstructionDisposals.length)} />
+                  <Metric
+                    title="Verkaufserloese"
+                    value={`${formatCurrency(activeBitgetReconstructionGroups.reduce(
+                      (total, group) => total + parseNumber(group.attributable_disposal_proceeds_eur),
+                      0
+                    ))} EUR`}
+                  />
+                  <Metric
+                    title="Nullbasis-Sensitivitaet"
+                    value={`${formatCurrency(activeBitgetReconstructionGroups.reduce(
+                      (total, group) => total + parseNumber(group.zero_basis_gain_sensitivity_eur),
+                      0
+                    ))} EUR`}
+                  />
+                  <Metric title="Basis-Obergrenze" value="nicht belegbar" />
+                </div>
+                <TablePanel
+                  title="Rekonstruktionskorridor je Strategy"
+                  rows={activeBitgetReconstructionGroups.map((group) => ({
+                    asset: group.asset,
+                    strategie: group.strategy_id,
+                    erwerbsfenster: `${formatDateTime(group.acquisition_window_start)} bis ${formatDateTime(group.acquisition_window_end)}`,
+                    menge: formatQuantity(group.allocated_missing_quantity),
+                    erloes_eur: `${formatCurrency(group.attributable_disposal_proceeds_eur)} EUR`,
+                    basis_floor_eur: `${formatCurrency(group.documented_cost_basis_floor_eur)} EUR`,
+                    settlement_proxy_eur: `${formatCurrency(group.allocated_settlement_value_proxy_eur)} EUR`,
+                    proxy_gv_eur: `${formatCurrency(group.settlement_value_proxy_gain_sensitivity_eur)} EUR`,
+                    haltefrist: group.linked_disposals.every(
+                      (row) => row.holding_period_certainty === "definitely_within_one_year"
+                    )
+                      ? "innerhalb 1 Jahr"
+                      : group.linked_disposals.every(
+                          (row) => row.holding_period_certainty === "definitely_over_one_year"
+                        )
+                        ? "ueber 1 Jahr"
+                        : "zeitlich offen",
+                    steuerwirkung: "keine",
+                  }))}
+                  footer="Settlement-Proxy ist kein Anschaffungskostenbeleg und darf erst nach dokumentierter Methodenentscheidung verwendet werden."
+                  compact
+                />
+              </div>
+            ) : null}
+            {activeBitgetReconstructionGroups.length > 0 ? (
+              <BitgetStrategyBasisDecisionPanel
+                report={bitgetStrategyBasisDecision}
+                reconstruction={bitgetStrategyReconstruction}
+                loading={bitgetBasisDecisionLoading}
+                onSave={onSaveBitgetBasisDecision}
+              />
+            ) : null}
+            <div className="reportActionBand compactActions">
+              {activeBitgetReconstructionGroups.length > 0 ? (
+                <button type="button" onClick={() => onDownload("/api/v1/tax/wallet-fifo/bitget-strategy-review.html")}>
+                  <ExternalLink size={16} />
+                  Fachakte oeffnen
+                </button>
+              ) : null}
+              {activeBitgetReconstructionGroups.length > 0 ? (
+                <button type="button" onClick={() => onDownload("/api/v1/tax/wallet-fifo/bitget-strategy-review-package.zip")}>
+                  <Archive size={16} />
+                  Pruefpaket ZIP
+                </button>
+              ) : null}
+              <button type="button" onClick={() => onDownload("/api/v1/tax/wallet-fifo/bitget-strategy-gaps.csv")}>
+                <FileDown size={16} />
+                Mengenbeleg CSV
+              </button>
+              {activeBitgetReconstructionGroups.length > 0 ? (
+                <button type="button" onClick={() => onDownload("/api/v1/tax/wallet-fifo/bitget-strategy-reconstruction.csv")}>
+                  <FileDown size={16} />
+                  Rekonstruktionsakte CSV
+                </button>
+              ) : null}
+              <button type="button" onClick={() => onDownload("/api/v1/tax/wallet-fifo/bitget-support-package.zip")}>
+                <Archive size={16} />
+                Bitget Supportpaket
+              </button>
+            </div>
+          </div>
+        ) : null}
         {taxLegacyHeliumOverview ? (
           <div className="fifoProofBand legacyHeliumBand">
             <div className="fifoProofSummary">
@@ -11283,6 +15977,7 @@ function TaxPanel({
               <Metric title="Anfangsbestand" value={String(taxYearWalletFifoProvenanceClosure.documented_non_live_count ?? 0)} />
               <Metric title="Extern/unklar" value={String(taxYearWalletFifoProvenanceClosure.external_or_unknown_count ?? 0)} />
               <Metric title="CEX ungeprueft" value={String(taxYearWalletFifoProvenanceClosure.unverified_cex_count ?? 0)} />
+              <Metric title="Service-Swaps" value={`${readyServiceSwapCount}/${serviceSwapClosureItems.length}`} />
               <Metric title="Review" value={String(taxYearWalletFifoProvenanceClosure.review_required_count ?? 0)} />
             </div>
             <TablePanel
@@ -11309,6 +16004,197 @@ function TaxPanel({
               <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/wallet-fifo-provenance-closure?limit=100`)}>
                 <FileJson size={16} />
                 Jahresampel JSON
+              </button>
+              {serviceSwapClosureItems.length > 0 ? (
+                <button type="button" onClick={() => onDownload("/api/v1/tax/service-swap-mappings")}>
+                  <Route size={16} />
+                  Service-Swap Beleg
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {activeYearValue === "2022" && pionexHntReconciliation ? (
+          <div className={`panelInlineBlock ${pionexReconciliationTone}`}>
+            <div className="panelToolbar">
+              <strong>Pionex HNT Bestandsnachweis</strong>
+              <span className={`statusPill ${pionexReconciliationTone}`}>
+                {pionexHntReconciliation.reconciliation_ready
+                  ? "konservativ belegt"
+                  : pionexHntReconciliation.preflight_ready
+                    ? "Migration vorbereitet"
+                    : "Pruefung offen"}
+              </span>
+            </div>
+            <div className="portfolioSummaryStrip">
+              <Metric title="Teilfills erhalten" value={String(pionexHntReconciliation.canceled_partial_fills_count ?? 0)} />
+              <Metric title="Rekonstruiert HNT" value={formatQuantity(pionexHntReconciliation.adjustment_quantity)} />
+              <Metric title="Kostenbasis" value={formatCurrency(pionexHntReconciliation.adjustment_cost_basis_eur)} />
+              <Metric title="Mindestbestand" value={formatQuantity(pionexHntReconciliation.balance_min_quantity)} />
+              <Metric title="Restbestand HNT" value={formatQuantity(pionexHntReconciliation.balance_final_quantity)} />
+              <Metric title="Historische API-Zeilen" value={String(pionexHntReconciliation.historical_api_rows ?? 0)} />
+            </div>
+            <p className="panelHint">
+              Die sechs ausgefuehrten Teilfills bleiben trotz spaeterem Orderstatus CANCELED erhalten.
+              Der historische Mindestbestand von {formatQuantity(pionexHntReconciliation.adjustment_quantity)} HNT
+              wird mangels abrufbarem Primaerbeleg mit {formatCurrency(pionexHntReconciliation.adjustment_cost_basis_eur)}
+              Kostenbasis angesetzt. Er wird weder als Reward noch als externer Deposit behauptet.
+            </p>
+            <div className="reportActionBand compactActions">
+              <button type="button" onClick={() => onDownload("/api/v1/tax/pionex-hnt-reconciliation")}>
+                <ClipboardCheck size={16} />
+                Pionex HNT Beleg
+              </button>
+              <button type="button" onClick={() => onDownload("/api/v1/export/tax-years/2022/evidence-package.zip")}>
+                <PackageCheck size={16} />
+                Jahres-Belegpaket
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {activeYearValue === "2022" && fairspotStakingReconciliation ? (
+          <div className={`panelInlineBlock ${fairspotReconciliationTone}`}>
+            <div className="panelToolbar">
+              <strong>Fairspot HNT Principal und Reward</strong>
+              <span className={`statusPill ${fairspotReconciliationTone}`}>
+                {fairspotStakingReconciliation.strict_ready ? "vollstaendig belegt" : "Review offen"}
+              </span>
+            </div>
+            <div className="portfolioSummaryStrip">
+              <Metric title="Principal gesendet" value={`${formatQuantity(fairspotStakingReconciliation.principal_outbound_quantity)} HNT`} />
+              <Metric title="Principal erhalten" value={`${formatQuantity(fairspotStakingReconciliation.principal_return_quantity)} HNT`} />
+              <Metric title="Reward" value={`${formatQuantity(fairspotStakingReconciliation.reward_quantity)} HNT`} />
+              <Metric title="Reward-Zuflusswert" value={`${formatCurrency(fairspotStakingReconciliation.reward_income_eur)} EUR`} />
+              <Metric title="Ausgaenge / Ruecklaeufe" value={`${fairspotStakingReconciliation.outbound_events_count} / ${fairspotStakingReconciliation.return_events_count}`} />
+            </div>
+            <div className="proofRouteLine">
+              <code title={fairspotStakingReconciliation.main_wallet}>{shortAccount(fairspotStakingReconciliation.main_wallet)}</code>
+              <ArrowRight size={15} />
+              <code title={fairspotStakingReconciliation.staking_wallet}>{shortAccount(fairspotStakingReconciliation.staking_wallet)}</code>
+              <ArrowRight size={15} />
+              <code title={fairspotStakingReconciliation.main_wallet}>{shortAccount(fairspotStakingReconciliation.main_wallet)}</code>
+            </div>
+            <div className="reportActionBand compactActions">
+              <button type="button" onClick={() => onDownload("/api/v1/export/tax-years/2022/evidence-package.zip")}>
+                <PackageCheck size={16} />
+                Jahres-Belegpaket 2022
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {activeYearValue === "2026" && moonpayReceipts ? (
+          <div className={`panelInlineBlock ${moonpayReceiptTone}`}>
+            <div className="panelToolbar">
+              <strong>MoonPay EUR-Anschaffungen</strong>
+              <span className={`statusPill ${moonpayReceiptTone}`}>
+                {moonpayReceipts.strict_ready
+                  ? `${moonpayReceipts.matched_trade_rows_count}/${moonpayReceipts.completed_buy_rows_count} belegt`
+                  : `${moonpayReceipts.unmatched_trade_rows_count} Zuordnung(en) offen`}
+              </span>
+            </div>
+            <div className="portfolioSummaryStrip">
+              <Metric title="Brutto vom Bankkonto" value={`${formatCurrency(moonpayReceipts.total_bank_debits_eur)} EUR`} />
+              <Metric title="FIFO-Kostenbasis" value={`${formatCurrency(moonpayReceipts.total_receipt_cost_basis_eur)} EUR`} />
+              <Metric title="MoonPay-Basisbetrag" value={`${formatCurrency(moonpayReceipts.total_base_payment_amount_eur)} EUR`} />
+              <Metric title="Gebuehren addiert" value={`${formatCurrency(moonpayReceipts.total_fee_components_eur)} EUR`} />
+              <Metric title="Bankabgleich" value={`${moonpayReceipts.bank_debits_matched_count}/${moonpayReceipts.bank_debits_count}`} />
+              <Metric title="On-chain gebunden" value={`${moonpayReceipts.ready_count}/${moonpayReceipts.candidates_count}`} />
+              <Metric title="Nicht zugeordnet" value={String(moonpayReceipts.unmatched_trade_rows_count)} />
+              <Metric title="CAMT-Dateien" value={String(moonpayReceipts.bank_camt_files_count)} />
+            </div>
+            <TablePanel
+              title="Fiat-Onramp mit exakter FIFO-Kostenbasis"
+              rows={moonpayReceipts.items.map((item) => ({
+                status: item.strict_ready ? "belegt" : "pruefen",
+                zeit_utc: formatDateTime(item.event_time),
+                asset: item.asset,
+                menge: formatQuantity(item.received_quantity),
+                brutto_eur: formatCurrency(item.gross_payment_amount_eur),
+                bank_eur: formatCurrency(item.bank_debit_amount_eur),
+                bank_buchung: item.bank_booking_date ?? "-",
+                basis_eur: formatCurrency(item.payment_amount_eur),
+                gebuehr_eur: formatCurrency(item.fee_eur),
+                chain_delta_s: item.payment_to_chain_seconds ?? "-",
+                trade: shortAccount(item.moonpay_trade_id ?? "-"),
+                txid: shortAccount(item.tx_id)
+              }))}
+              footer={moonpayReceipts.methodology}
+              compact
+            />
+            <div className="reportActionBand compactActions">
+              <button type="button" onClick={() => onDownload("/api/v1/tax/moonpay-receipts/trade-history.csv")}>
+                <ReceiptText size={16} />
+                MoonPay Original-CSV
+              </button>
+              <button type="button" onClick={() => onDownload("/api/v1/export/tax-years/2026/evidence-package.zip")}>
+                <PackageCheck size={16} />
+                Jahres-Belegpaket 2026
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {activeYearValue === "2026" && solanaStakingPositionReconciliation ? (
+          <div className={`panelInlineBlock ${solanaStakingReconciliationTone}`}>
+            <div className="panelToolbar">
+              <strong>Solana Staking-Position: {solanaStakingPositionReconciliation.asset}</strong>
+              <span className={`statusPill ${solanaStakingReconciliationTone}`}>
+                {solanaStakingPositionReconciliation.strict_ready ? "FIFO und Reward belegt" : "Review offen"}
+              </span>
+            </div>
+            <div className="portfolioSummaryStrip">
+              <Metric title="Principal" value={`${formatQuantity(solanaStakingPositionReconciliation.principal_quantity)} ${solanaStakingPositionReconciliation.asset}`} />
+              <Metric title="Ruecklauf gesamt" value={`${formatQuantity(solanaStakingPositionReconciliation.received_quantity)} ${solanaStakingPositionReconciliation.asset}`} />
+              <Metric title="Reward" value={`${formatQuantity(solanaStakingPositionReconciliation.reward_quantity)} ${solanaStakingPositionReconciliation.asset}`} />
+              <Metric title="Reward-Zuflusswert" value={`${formatCurrency(solanaStakingPositionReconciliation.reward_income_eur)} EUR`} />
+              <Metric title="Fortgefuehrte Kostenbasis" value={`${formatCurrency(solanaStakingPositionReconciliation.wallet_fifo_carried_cost_basis_eur)} EUR`} />
+              <Metric title="FIFO-Lots" value={String(solanaStakingPositionReconciliation.wallet_fifo_lots_moved)} />
+              <Metric title="SOL Rent-Ruecklauf" value={`${formatQuantity(solanaStakingPositionReconciliation.native_settlement_quantity)} SOL`} />
+            </div>
+            <div className="proofRouteLine">
+              <code title={solanaStakingPositionReconciliation.wallet}>{shortAccount(solanaStakingPositionReconciliation.wallet)}</code>
+              <ArrowRight size={15} />
+              <code title={solanaStakingPositionReconciliation.program_id}>{shortAccount(solanaStakingPositionReconciliation.program_id)}</code>
+              <ArrowRight size={15} />
+              <code title={solanaStakingPositionReconciliation.wallet}>{shortAccount(solanaStakingPositionReconciliation.wallet)}</code>
+            </div>
+            <div className="reportActionBand compactActions">
+              <button type="button" onClick={() => onDownload("/api/v1/export/tax-years/2026/evidence-package.zip")}>
+                <PackageCheck size={16} />
+                Jahres-Belegpaket 2026
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {activeCrossCexRecords.length > 0 ? (
+          <div className={`panelInlineBlock ${crossCexEvidenceTone}`}>
+            <div className="panelToolbar">
+              <strong>Cross-CEX Transferketten</strong>
+              <span className={`statusPill ${crossCexEvidenceTone}`}>
+                {activeCrossCexRecords.every((record) => record.ready)
+                  ? `${activeCrossCexRecords.length}/${activeCrossCexRecords.length} belegt`
+                  : `${activeCrossCexRecords.filter((record) => record.ready).length}/${activeCrossCexRecords.length} belegt`}
+              </span>
+            </div>
+            <TablePanel
+              title="Steuerneutrale Depotwechsel mit fortgefuehrter FIFO"
+              rows={activeCrossCexRecords.map((record) => ({
+                status: record.ready ? "belegt" : "pruefen",
+                asset: record.asset,
+                menge: formatQuantity(record.quantity),
+                gebuehr: formatQuantity(record.fee_quantity),
+                route: `${record.source_id} -> ${record.target_source_id}`,
+                lots: record.lots_moved,
+                basis_eur: formatCurrency(record.carried_cost_basis_eur),
+                zeit: formatDateTime(record.target_event_time),
+                txid: shortAccount(record.tx_id)
+              }))}
+              footer={crossCexTransferEvidence?.methodology}
+              compact
+            />
+            <div className="reportActionBand compactActions">
+              <button type="button" onClick={() => onDownload(`/api/v1/export/tax-years/${activeYearValue}/evidence-package.zip`)}>
+                <PackageCheck size={16} />
+                Jahres-Belegpaket {activeYearValue}
               </button>
             </div>
           </div>
@@ -11931,6 +16817,26 @@ function TaxPanel({
           }))}
           compact
         />
+        {acquisitionCostReviewTransfers.length > 0 ? (
+          <TablePanel
+            title="Offene Anschaffungs- und Reward-Belege"
+            rows={acquisitionCostReviewTransfers.map((row) => ({
+              zeit_utc: formatDateTime(row.event_time),
+              asset: row.asset,
+              menge: formatQuantity(row.quantity),
+              vorlaeufige_basis_eur: formatCurrency(row.carried_cost_basis_eur),
+              quelle: row.source_pool_id,
+              ziel: row.target_pool_id,
+              status: row.status,
+              txid: row.tx_id,
+              benoetigt: String(row.status ?? "").includes("reward_component_review")
+                ? "Staking-Abrechnung und Reward-Wert bestaetigen"
+                : "MoonPay-/Apple-Pay-Beleg mit EUR-Betrag und Gebuehr"
+            }))}
+            footer="Marktkurse sind nur vorlaeufig. Fuer die Kostenbasis gilt der tatsaechliche EUR-Aufwand inklusive belegter Gebuehren."
+            compact
+          />
+        ) : null}
         {(taxYearWalletFifoDelta?.unmatched ?? []).length > 0 ? (
           <TablePanel
             title="Offene Pool-Luecken"
@@ -12058,7 +16964,7 @@ function TaxPanel({
               <div className="declarationEntryMeta">
                 <span>{String(line.tax_treatment ?? "-")}</span>
                 {line.evidence_ref ? (
-                  <button type="button" onClick={() => onDownload(String(line.evidence_ref))} title={String(line.evidence_ref)}>
+                  <button type="button" onClick={() => onDownload(humanReadableTaxEndpoint(String(line.evidence_ref)))} title={String(line.evidence_ref)}>
                     <FileDown size={16} />
                     Beleg
                   </button>
@@ -12076,9 +16982,9 @@ function TaxPanel({
             <FileDown size={16} />
             Checkliste CSV
           </button>
-          <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/evidence`)}>
-            <FileJson size={16} />
-            Belegkarte JSON
+          <button type="button" onClick={() => onDownload(taxYearEvidenceHtmlPath(activeYearValue))}>
+            <FileDown size={16} />
+            Belegkarte Website
           </button>
           <button type="button" onClick={() => onDownload("/api/v1/export/tax-payment-overview.json")}>
             <FileJson size={16} />
@@ -12105,7 +17011,7 @@ function TaxPanel({
               {
                 label: "Beleg oeffnen",
                 icon: <FileDown size={16} />,
-                onClick: (row) => onDownload(String(row.beleg ?? ""))
+                onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.beleg ?? "")))
               }
             ]}
             footer="Eintragen sind Steuererklaerungswerte. Beilegen und Archivieren sind Nachweise, keine zusaetzlichen Betragszeilen."
@@ -12127,7 +17033,7 @@ function TaxPanel({
             {
               label: "Beleg oeffnen",
               icon: <FileDown size={16} />,
-              onClick: (row) => onDownload(String(row.beleg ?? ""))
+              onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.beleg ?? "")))
             }
           ]}
         />
@@ -12146,7 +17052,7 @@ function TaxPanel({
               {
                 label: "Beleg oeffnen",
                 icon: <FileDown size={16} />,
-                onClick: (row) => onDownload(String(row.beleg ?? ""))
+                onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.beleg ?? "")))
               }
             ]}
           />
@@ -12168,7 +17074,7 @@ function TaxPanel({
               {
                 label: "Beleg oeffnen",
                 icon: <FileDown size={16} />,
-                onClick: (row) => onDownload(String(row.beleg ?? ""))
+                onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.beleg ?? "")))
               }
             ]}
             footer="Jahresbezogene Review-Entscheidungen sind Beleg-/Methodikentscheidungen. Sie werden nicht als zusaetzlicher Betrag eingetragen."
@@ -12181,7 +17087,7 @@ function TaxPanel({
                 type="button"
                 className={`evidenceQuickCard ${String(item.status ?? "available")}`}
                 key={String(item.evidence_id)}
-                onClick={() => onDownload(String(item.endpoint))}
+                onClick={() => onDownload(humanReadableTaxEndpoint(String(item.endpoint)))}
                 title={String(item.endpoint)}
               >
                 <span>{String(item.category ?? "-")}</span>
@@ -12469,7 +17375,7 @@ function TaxPanel({
             {
               label: "Beleg herunterladen",
               icon: <FileDown size={16} />,
-              onClick: (row) => onDownload(String(row.endpoint ?? ""))
+              onClick: (row) => onDownload(humanReadableTaxEndpoint(String(row.endpoint ?? "")))
             }
           ]}
           compact
@@ -12514,28 +17420,50 @@ function TaxPanel({
         </div>
         <div className="panel">
           <div className="panelToolbar">
-            <strong>Reward vs Handel HNT / IOT / MOBILE</strong>
-            <span>{formatDateTime(taxRewardTradingSeparation?.generated_at)}</span>
+            <strong>Reward-Ursprung und Verwertung HNT / IOT / MOBILE</strong>
+            <span className={`statusPill ${activeBusinessInventoryRows.length === 0 || (activeBusinessInventoryTotals.potentialLines === 0 && activeBusinessInventoryTotals.unresolvedLines === 0) ? "ok" : "blocked"}`}>
+              {activeBusinessInventoryRows.length === 0
+                ? "keine Zeilen"
+                : activeBusinessInventoryTotals.potentialLines === 0 && activeBusinessInventoryTotals.unresolvedLines === 0
+                  ? "Sphaere geklaert"
+                  : "Sphaere pruefen"}
+            </span>
           </div>
           <div className="portfolioSummaryStrip">
             <Metric title="Reward Einnahme" value={`${formatCurrency(activeRewardTradingTotals.reward)} EUR`} />
-            <Metric title="Handel steuerpfl." value={`${formatCurrency(activeRewardTradingTotals.taxableTrade)} EUR`} />
-            <Metric title="Handel steuerfrei" value={`${formatCurrency(activeRewardTradingTotals.taxFreeTrade)} EUR`} />
-            <Metric title="Assets" value={String(activeRewardTradingRows.length)} />
+            <Metric title="Aktuelle FIFO bis 365 T." value={`${formatCurrency(activeRewardTradingTotals.taxableTrade)} EUR`} />
+            <Metric title="Potenziell betrieblich" value={String(activeBusinessInventoryTotals.potentialLines)} />
+            <Metric title="Ursprung offen" value={String(activeBusinessInventoryTotals.unresolvedLines)} />
           </div>
           <TablePanel
-            title={`BMF-Trennung ${activeYearValue}`}
+            title={`Aktuelle FIFO-Berechnung ${activeYearValue}`}
             rows={activeRewardTradingRows.map((row) => ({
               asset: row.asset,
               reward_einnahme_eur: formatCurrency(row.reward_income_eur),
               reward_menge: row.reward_quantity,
               reward_events: row.reward_events_count,
-              handel_steuerpflichtig_eur: formatCurrency(row.trade_taxable_gain_loss_eur),
-              handel_steuerfrei_eur: formatCurrency(row.trade_tax_free_gain_loss_eur),
+              fifo_bis_365_tage_eur: formatCurrency(row.trade_taxable_gain_loss_eur),
+              fifo_ueber_365_tage_eur: formatCurrency(row.trade_tax_free_gain_loss_eur),
               fifo_zeilen: Number(row.trade_taxable_lines_count ?? 0) + Number(row.trade_tax_free_lines_count ?? 0),
               einordnung: row.tax_note
             }))}
             footer={taxRewardTradingSeparation?.methodology ?? "Reward-/Handels-Trennung wird geladen."}
+            compact
+          />
+          <TablePanel
+            title={`Ursprungssphaere der Verwertungen ${activeYearValue}`}
+            rows={activeBusinessInventoryRows.map((row) => ({
+              asset: row.asset,
+              origin_source: row.origin_source,
+              origin_event_type: row.origin_event_type,
+              origin_account: row.origin_account,
+              tax_lines: row.tax_lines_count,
+              anschaffung_eur: formatCurrency(row.acquisition_cost_eur),
+              veraeusserung_eur: formatCurrency(row.disposal_proceeds_eur),
+              gewinn_verlust_eur: formatCurrency(row.gain_loss_eur),
+              classification: row.classification
+            }))}
+            footer={taxBusinessRewardInventoryReview?.methodology ?? "Reward-Ursprungslot-Audit wird geladen."}
             compact
           />
         </div>
@@ -12543,6 +17471,38 @@ function TaxPanel({
           title="Review-only Income Event Preview"
           rows={reviewOnlyIncomeEvents.slice(0, 80)}
           footer="Diese Ereignisse sind nicht automatisch als steuerpflichtige Reward-/Mining-Summe eingetragen. Volle Nachweise bleiben in Canonical Events und Exporten."
+        />
+      </section>
+
+      <section className="panel">
+        <div className="panelToolbar">
+          <strong>Krypto-zu-Krypto-Bewertung {activeYearValue}</strong>
+          <span className={`statusPill ${taxCryptoSwapValuationReview?.strict_ready ? "ok" : "blocked"}`}>
+            {taxCryptoSwapValuationReview?.strict_ready ? "BMF-Rangfolge erfuellt" : "Preisrangfolge pruefen"}
+          </span>
+        </div>
+        <div className="portfolioSummaryStrip">
+          <Metric title="Tauschvorgaenge" value={String(taxCryptoSwapValuationReview?.candidates_count ?? 0)} />
+          <Metric title="Rangfolge abweichend" value={String(taxCryptoSwapValuationReview?.policy_mismatch_count ?? 0)} />
+          <Metric title="Materialdelta" value={String(taxCryptoSwapValuationReview?.material_delta_count ?? 0)} />
+          <Metric title="Preis-Fallback Review" value={String(taxCryptoSwapValuationReview?.received_price_fallback_review_count ?? 0)} />
+          <Metric title="Delta saldiert" value={`${formatCurrency(taxCryptoSwapValuationReview?.signed_value_delta_eur)} EUR`} />
+          <Metric title="Delta absolut" value={`${formatCurrency(taxCryptoSwapValuationReview?.absolute_value_delta_eur)} EUR`} />
+        </div>
+        <TablePanel
+          title={`Groesste direkte Bewertungsdeltas ${activeYearValue}`}
+          rows={(taxCryptoSwapValuationReview?.rows ?? []).map((row) => ({
+            zeitpunkt: formatDateTime(row.event_time),
+            quelle: row.source,
+            erhalten: `${formatQuantity(row.received_quantity)} ${String(row.received_asset ?? "")}`,
+            hingegeben: `${formatQuantity(row.given_quantity)} ${String(row.given_asset ?? "")}`,
+            aktuell_eur: formatCurrency(row.current_value_eur),
+            bmf_preview_eur: formatCurrency(row.bmf_preview_value_eur),
+            delta_eur: formatCurrency(row.value_delta_eur),
+            status: row.status
+          }))}
+          footer={`${taxCryptoSwapValuationReview?.bmf_preview_policy ?? ""} ${taxCryptoSwapValuationReview?.methodology ?? "Bewertungs-Delta wird geladen."}`}
+          compact
         />
       </section>
 
@@ -12816,6 +17776,414 @@ function TaxPanel({
 
       {taxViewMode === "expert" ? (
         <>
+      <section className="panel">
+        <div className="panelToolbar">
+          <div>
+            <strong>BMF Gesamtstaging {activeYearValue}</strong>
+            <span>{formatDateTime(taxBmfCombinedFifoStaging?.generated_at)}</span>
+          </div>
+          <div className="buttonRow">
+            <span className={`statusPill ${taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "ok" : "blocked"}`}>
+              {taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "pruefbereit" : "fachlich blockiert"}
+            </span>
+            <button
+              type="button"
+              onClick={onRunBmfCombinedFifoStaging}
+              disabled={bmfCombinedFifoStagingLoading}
+            >
+              <RefreshCcw size={16} />
+              <span>{bmfCombinedFifoStagingLoading ? "Berechnet" : "Gesamtlauf starten"}</span>
+            </button>
+          </div>
+        </div>
+        <div className="portfolioSummaryStrip">
+          <Metric title="Global aktiv" value={`${formatCurrency(activeCombinedActiveGlobal.gain_loss_eur)} EUR`} />
+          <Metric title="Global BMF-Preis" value={`${formatCurrency(activeCombinedReceivedGlobal.gain_loss_eur)} EUR`} />
+          <Metric title="Wallet aktiv" value={`${formatCurrency(activeCombinedActiveWallet.gain_loss_eur)} EUR`} />
+          <Metric title="Wallet + BMF-Preis" value={`${formatCurrency(activeCombinedReceivedWallet.gain_loss_eur)} EUR`} />
+          <Metric title="Preisdelta" value={`${formatCurrency(activeCombinedFifoYear?.price_policy_delta_eur)} EUR`} />
+          <Metric title="Wallet-Delta" value={`${formatCurrency(activeCombinedFifoYear?.wallet_scope_delta_eur)} EUR`} />
+          <Metric title="Kombiniertes Delta" value={`${formatCurrency(activeCombinedFifoYear?.combined_delta_eur)} EUR`} />
+          <Metric title="Interaktion" value={`${formatCurrency(activeCombinedFifoYear?.interaction_delta_eur)} EUR`} />
+        </div>
+        <TablePanel
+          title={`Kombinierte Assetwirkung ${activeYearValue}`}
+          rows={activeCombinedFifoAssets.map((row) => ({
+            asset: row.asset,
+            global_aktiv_eur: formatCurrency(row.active_global_gain_loss_eur),
+            global_bmf_eur: formatCurrency(row.received_first_global_gain_loss_eur),
+            wallet_aktiv_eur: formatCurrency(row.active_wallet_gain_loss_eur),
+            wallet_bmf_eur: formatCurrency(row.received_first_wallet_gain_loss_eur),
+            preisdelta_eur: formatCurrency(row.price_policy_delta_eur),
+            wallet_delta_eur: formatCurrency(row.wallet_scope_delta_eur),
+            kombiniert_eur: formatCurrency(row.combined_delta_eur),
+            reward_betriebsvermoegen_zeilen: row.potential_business_inventory_tax_lines_count,
+            reward_ursprung_offen: row.unresolved_reward_origin_tax_lines_count
+          }))}
+          footer={taxBmfCombinedFifoStaging?.methodology ?? "Noch kein gemeinsamer Staging-Lauf vorhanden."}
+          compact
+        />
+        <section className="cockpitDataGrid">
+          <TablePanel
+            title={`Reward-Ursprungsgruppen ${activeYearValue}`}
+            rows={activeCombinedFifoSpheres.map((row) => ({
+              asset: row.asset,
+              klassifikation: row.classification,
+              ursprungs_events: row.origin_events_count,
+              tax_lines: row.tax_lines_count,
+              menge: row.quantity,
+              anschaffung_eur: formatCurrency(row.acquisition_cost_eur),
+              erloes_eur: formatCurrency(row.disposal_proceeds_eur),
+              gv_eur: formatCurrency(row.gain_loss_eur)
+            }))}
+            footer="Technische Ursprungsklassifikation; keine automatische private oder betriebliche Buchung."
+            compact
+          />
+          <TablePanel
+            title={`Groesste kombinierte Eventdeltas ${activeYearValue}`}
+            rows={activeCombinedFifoEvents.map((row) => ({
+              asset: row.asset,
+              source: row.source,
+              account: row.account,
+              tx_id: row.tx_id,
+              preisdelta_eur: formatCurrency(row.price_policy_delta_eur),
+              wallet_delta_eur: formatCurrency(row.wallet_scope_delta_eur),
+              kombiniert_eur: formatCurrency(row.combined_delta_eur),
+              ursprung: Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : "",
+              disposal_event_id: row.disposal_event_id
+            }))}
+            footer="Vollstaendige IDs bleiben im API-Artefakt und im Zellen-Tooltip erhalten."
+            compact
+          />
+        </section>
+      </section>
+      <section className="panel">
+        <div className="panelToolbar">
+          <div>
+            <strong>FIFO-Eventbelege {activeYearValue}</strong>
+            <span>{formatDateTime(taxBmfFifoEventEvidence?.generated_at)}</span>
+          </div>
+          <div className="buttonRow">
+            <span
+              className={`statusPill ${
+                taxBmfFifoEventEvidence?.status === "ready_for_professional_review"
+                  ? "ok"
+                  : taxBmfFifoEventEvidence?.status === "review"
+                    ? "warning"
+                    : "blocked"
+              }`}
+            >
+              {taxBmfFifoEventEvidence?.status === "ready_for_professional_review"
+                ? "belege pruefbereit"
+                : taxBmfFifoEventEvidence?.status === "review"
+                  ? "preispruefung offen"
+                  : "belege blockiert"}
+            </span>
+            <button
+              type="button"
+              onClick={() => onRunBmfFifoEventEvidence("priority_delta")}
+              disabled={bmfFifoEventEvidenceLoading || bmfEventPriceRemediationLoading}
+            >
+              <RefreshCcw size={16} />
+              <span>{bmfFifoEventEvidenceLoading ? "Prueft" : "Eventbelege aktualisieren"}</span>
+            </button>
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => onRunBmfFifoEventEvidence("full_ledger")}
+              disabled={bmfFifoEventEvidenceLoading || bmfEventPriceRemediationLoading}
+              title="Alle Canonical Events und FIFO-Anschaffungs-/Veraeusserungsreferenzen pruefen"
+            >
+              <Database size={16} />
+              <span>{bmfFifoEventEvidenceLoading ? "Prueft" : "Gesamtledger pruefen"}</span>
+            </button>
+            {taxBmfFifoEventEvidence?.all_event_evidence_artifact_path ? (
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => onDownload("/api/v1/tax/bmf-fifo-event-evidence/events.jsonl.gz")}
+                title="Komprimierten, SHA-256-gebundenen Einzelnachweis herunterladen"
+              >
+                <FileDown size={16} />
+                <span>Vollnachweis</span>
+              </button>
+            ) : null}
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => onRunBmfEventPriceRemediation(false)}
+              disabled={bmfEventPriceRemediationLoading || bmfFifoEventEvidenceLoading}
+            >
+              <RefreshCcw size={16} />
+              <span>{bmfEventPriceRemediationLoading ? "Prueft" : "Preisanker pruefen"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onRunBmfEventPriceRemediation(true)}
+              disabled={bmfEventPriceRemediationLoading || bmfFifoEventEvidenceLoading}
+            >
+              <Check size={16} />
+              <span>{bmfEventPriceRemediationLoading ? "Verarbeitet" : "Belegte Anker anwenden"}</span>
+            </button>
+          </div>
+        </div>
+        <div className="portfolioSummaryStrip">
+          <Metric
+            title="Rohbelege"
+            value={`${taxBmfFifoEventEvidence?.raw_evidence_ready_count ?? 0} / ${taxBmfFifoEventEvidence?.unique_events_count ?? 0}`}
+          />
+          <Metric
+            title="Ledgerumfang"
+            value={taxBmfFifoEventEvidence?.full_ledger_scope
+              ? String(taxBmfFifoEventEvidence.ledger_events_count ?? 0)
+              : "priorisiert"}
+          />
+          <Metric title="FIFO-Graph" value={String(taxBmfFifoEventEvidence?.tax_graph_events_count ?? 0)} />
+          <Metric title="Unabhaengige Preise" value={String(taxBmfFifoEventEvidence?.independent_price_ready_count ?? 0)} />
+          <Metric title="Abgeleitete Preise" value={String(taxBmfFifoEventEvidence?.derived_price_review_count ?? 0)} />
+          <Metric title="Veraltete Preise" value={String(taxBmfFifoEventEvidence?.stale_price_review_count ?? 0)} />
+          <Metric title="Fehlende Preise" value={String(taxBmfFifoEventEvidence?.missing_price_count ?? 0)} />
+          <Metric title="Betriebsinventar belegt" value={String(taxBmfFifoEventEvidence?.documented_business_inventory_rows_count ?? 0)} />
+          <Metric title="Swap-Erwerbe belegt" value={String(taxBmfFifoEventEvidence?.documented_swap_acquisition_rows_count ?? 0)} />
+          <Metric title="Transfer-FIFO offen" value={String(taxBmfFifoEventEvidence?.internal_transfer_fifo_carry_rows_count ?? 0)} />
+          <Metric title="Rekonstruktionsgrenzen" value={String(taxBmfFifoEventEvidence?.opening_reconstruction_rows_count ?? 0)} />
+          <Metric title="Echt unklassifiziert" value={String(taxBmfFifoEventEvidence?.unclassified_origin_rows_count ?? 0)} />
+          <Metric title="Separate Einkunft" value={String(taxBmfFifoEventEvidence?.separate_income_review_rows_count ?? 0)} />
+          <Metric title="Opening Balances" value={String(taxBmfFifoEventEvidence?.opening_balance_events_count ?? 0)} />
+          <Metric
+            title="Eventtyp unknown"
+            value={`${taxBmfFifoEventEvidence?.unknown_tax_graph_events_count ?? 0} FIFO / ${taxBmfFifoEventEvidence?.unknown_event_type_count ?? 0} gesamt`}
+          />
+          <Metric title="Absolute Deltawirkung" value={`${formatCurrency(taxBmfFifoEventEvidence?.absolute_combined_delta_eur)} EUR`} />
+          <Metric
+            title="An aktuelles Staging gebunden"
+            value={taxBmfFifoEventEvidence?.staging_matches_current_input ? "ja" : "nein"}
+          />
+        </div>
+        <TablePanel
+          title="Belegstatus nach Pruefgruppe"
+          rows={(taxBmfFifoEventEvidence?.groups ?? []).map((row) => ({
+            gruppe: row.label,
+            status: row.status,
+            delta_events: row.discrepancy_rows_count,
+            referenzierte_events: row.unique_events_count,
+            rohbelege: row.raw_evidence_ready_count,
+            unabhaengige_preise: row.independent_price_ready_count,
+            abgeleitete_preise: row.derived_price_review_count,
+            veraltete_preise: row.stale_price_review_count,
+            blockiert: row.blocked_events_count,
+            absolutes_delta_eur: formatCurrency(row.absolute_combined_delta_eur),
+            pruefgruende: Array.isArray(row.issue_codes) ? row.issue_codes.join(", ") : ""
+          }))}
+          footer="HNT Legacy/Solana sowie JUP, SOL, TRUMP, USDT und MXC werden getrennt bewertet; leere Gruppen erzeugen keinen Scheinfehler."
+          compact
+        />
+        <TablePanel
+          title="Ursprungsnachweis nach Steuersphaere"
+          rows={(taxBmfFifoEventEvidence?.origin_evidence_groups ?? []).map((row) => ({
+            status: row.status,
+            steuersphaere: row.tax_sphere,
+            klassifikation: row.classification,
+            asset: row.asset,
+            canonical_assets: Array.isArray(row.canonical_event_assets) ? row.canonical_event_assets.join(", ") : "",
+            source: row.source,
+            event_typ: row.event_type,
+            ursprungs_events: row.unique_origin_events_count,
+            delta_zeilen: row.affected_discrepancy_rows_count,
+            rohbelege: row.raw_evidence_ready_count,
+            fifo_fortfuehrung: row.fifo_carry_forward_required ? "offen" : "nicht erforderlich",
+            belegmarker: Array.isArray(row.evidence_markers) ? row.evidence_markers.join(" | ") : "",
+            entscheidungsbasis: row.decision_basis
+          }))}
+          footer="Reward, Swap, CEX-Umbuchung und Rekonstruktionsgrenze werden getrennt ausgewiesen. Interne Transfers erzeugen keinen Ertrag, benoetigen aber die belegte Fortfuehrung des Vorlots."
+          compact
+        />
+        {(taxBmfFifoEventEvidence?.opening_balance_evidence ?? []).length > 0 ? (
+          <TablePanel
+            title="Opening-Balance-Nachweise und Grenzen"
+            rows={(taxBmfFifoEventEvidence?.opening_balance_evidence ?? []).map((row) => ({
+              datum: formatDateTime(row.event_time),
+              status: row.documentation_status,
+              asset: row.asset,
+              menge: row.quantity,
+              account: row.account,
+              rohdatei: row.raw_filename,
+              zeile: row.raw_row_number,
+              originaltransaktion: row.original_transaction_available ? "vorhanden" : "nicht vorhanden",
+              portfolio_wirkung: row.live_balance_effect,
+              steuer_event: row.tax_event_effect,
+              grenzen: Array.isArray(row.limitations) ? row.limitations.join(" | ") : "",
+              event_id: row.event_id
+            }))}
+            footer="Opening Balances sind Anfangslots oder Rekonstruktionsgrenzen. Sie erzeugen weder einen Live-Bestand noch automatisch einen Reward, Kauf oder Eigenwallet-Transfer."
+            compact
+          />
+        ) : null}
+        {taxBmfFifoEventEvidence?.full_ledger_scope ? (
+          <TablePanel
+            title={`Ledger-Vollstaendigkeit ${activeYearValue}`}
+            rows={(taxBmfFifoEventEvidence.ledger_groups ?? [])
+              .filter((row) => String(row.year) === activeYearValue)
+              .map((row) => ({
+                source: row.source,
+                event_typ: row.event_type,
+                events: row.events_count,
+                fifo_graph: row.tax_graph_events_count,
+                rohbelege: row.raw_evidence_ready_count,
+                bereit: row.ready_events_count,
+                review: row.review_events_count,
+                blockiert: row.blocked_events_count,
+                unabhaengige_preise: row.independent_price_ready_count,
+                fehlende_preise: row.missing_price_count,
+                pruefgruende: Array.isArray(row.issue_codes) ? row.issue_codes.join(", ") : ""
+              }))}
+            footer={`Komprimierter Vollnachweis: ${taxBmfFifoEventEvidence.all_event_evidence_artifact_bytes ?? 0} Bytes; SHA-256 ${taxBmfFifoEventEvidence.all_event_evidence_artifact_sha256 ?? "-"}.`}
+            compact
+          />
+        ) : null}
+        <TablePanel
+          title={`Letzte Preisanker-Pruefung ${activeYearValue}`}
+          rows={(taxBmfEventPriceRemediation?.jobs ?? [])
+            .filter((row) => String(row.price_date ?? "").startsWith(activeYearValue))
+            .map((row) => ({
+              status: row.status,
+              asset: row.asset,
+              tag: row.price_date,
+              rollen: Array.isArray(row.roles) ? row.roles.join(", ") : "",
+              bisher: Array.isArray(row.previous_qualities) ? row.previous_qualities.join(", ") : "",
+              token_risiko: row.token_risk_status ?? "-",
+              preis_eur: formatCurrency(row.price_eur),
+              provider: row.provider_id,
+              provider_confidence: row.provider_confidence,
+              fx_quelltag: row.fx_rate_date,
+              betroffene_events: Array.isArray(row.affected_event_ids) ? row.affected_event_ids.length : 0,
+              ergebnis: row.reason
+            }))}
+          footer={taxBmfEventPriceRemediation
+            ? `${taxBmfEventPriceRemediation.status}: ${taxBmfEventPriceRemediation.imported_count} importiert, ${taxBmfEventPriceRemediation.planned_count} geplant, ${taxBmfEventPriceRemediation.failed_count} fehlgeschlagen, ${taxBmfEventPriceRemediation.token_risk_blocked_count} durch Token-Risiko blockiert. Tax-Tabellen unveraendert: ${taxBmfEventPriceRemediation.productive_tax_tables_unchanged ? "ja" : "nein"}.`
+            : "Noch keine gezielte Event-Preisankerpruefung vorhanden."}
+          compact
+        />
+        <section className="cockpitDataGrid">
+          <TablePanel
+            title={`Delta-Worklist ${activeYearValue}`}
+            rows={activeFifoEventEvidenceRows.map((row) => ({
+              status: row.status,
+              datum: formatDateTime(row.disposed_at),
+              asset: row.asset,
+              source: row.source,
+              account: row.account,
+              tx_id: row.tx_id,
+              kombiniert_eur: formatCurrency(row.combined_delta_eur),
+              disposal_beleg: row.disposal_evidence_status,
+              anschaffungsbelege: `${row.acquisition_raw_ready_count ?? 0} / ${row.acquisition_events_count ?? 0}`,
+              unabhaengige_anschaffungspreise: `${row.acquisition_independent_price_count ?? 0} / ${row.acquisition_events_count ?? 0}`,
+              reward_ursprung: Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : "",
+              pruefgruende: Array.isArray(row.issue_codes) ? row.issue_codes.join(", ") : "",
+              disposal_event_id: row.disposal_event_id
+            }))}
+            footer="Vollstaendige TxIDs, Accounts, Event-IDs und Acquisition-Fingerprints bleiben im API-Artefakt erhalten."
+            compact
+          />
+          <TablePanel
+            title={`Konkrete Event-/Preispruefungen ${activeYearValue}`}
+            rows={activeFifoEventIssues.slice(0, 80).map((row) => {
+              const sourceEvidence = row.source_evidence ?? {};
+              const receivedPrice = row.received_price ?? {};
+              return {
+                status: row.status,
+                datum: formatDateTime(row.event_time),
+                source: row.source,
+                typ: row.event_type,
+                asset: row.asset,
+                menge: row.quantity,
+                quote_asset: row.quote_asset,
+                quote_menge: row.quote_quantity,
+                tx_oder_cex_ref: row.tx_id ?? row.source_ref,
+                rohdatei: sourceEvidence.filename,
+                zeile: sourceEvidence.row_number,
+                preis_asset: receivedPrice.asset,
+                preis_eur: formatCurrency(receivedPrice.price_eur),
+                preisquelle: receivedPrice.source,
+                preisalter_stunden: receivedPrice.age_hours,
+                pruefgruende: row.issue_codes.join(", "),
+                event_id: row.event_id
+              };
+            })}
+            footer={taxBmfFifoEventEvidence?.event_issues_truncated
+              ? "Anzeige ist durch das Issue-Limit gekuerzt; das Artefakt weist dies explizit aus."
+              : "Nur Events mit konkretem Preis- oder Quellenreview; Rohpayloads sind per SHA-256 gebunden."}
+            compact
+          />
+        </section>
+        {(taxBmfFifoEventEvidence?.next_actions ?? []).length > 0 ? (
+          <div className="valuationGateFindings">
+            {(taxBmfFifoEventEvidence?.next_actions ?? []).map((action) => (
+              <span key={action}>{action}</span>
+            ))}
+          </div>
+        ) : null}
+        <p className="panelFooter">{taxBmfFifoEventEvidence?.methodology ?? "Eventbeleg-Report wird geladen."}</p>
+      </section>
+      <section className="panel">
+        <div className="panelToolbar">
+          <div>
+            <strong>Preisrangfolgen-FIFO Parallelvergleich {activeYearValue}</strong>
+            <span>{formatDateTime(taxCryptoSwapFifoParallelPreview?.generated_at)}</span>
+          </div>
+          <div className="buttonRow">
+            <span className={`statusPill ${taxCryptoSwapFifoParallelPreview?.status === "matched" ? "ok" : "blocked"}`}>
+              {taxCryptoSwapFifoParallelPreview?.status === "matched" ? "paritaet" : "jahresdelta"}
+            </span>
+            <button
+              type="button"
+              onClick={onRunSwapFifoParallelPreview}
+              disabled={swapFifoParallelLoading}
+            >
+              <RefreshCcw size={16} />
+              <span>{swapFifoParallelLoading ? "Berechnet" : "Neu berechnen"}</span>
+            </button>
+          </div>
+        </div>
+        <div className="portfolioSummaryStrip">
+          <Metric title="Aktueller G/V" value={`${formatCurrency(activeSwapFifoParallelYear?.current_gain_loss_eur)} EUR`} />
+          <Metric title="BMF-Preispreview G/V" value={`${formatCurrency(activeSwapFifoParallelYear?.preview_gain_loss_eur)} EUR`} />
+          <Metric title="Jahresdelta" value={`${formatCurrency(activeSwapFifoParallelYear?.gain_loss_delta_eur)} EUR`} />
+          <Metric title="Bis 365 Tage Delta" value={`${formatCurrency(activeSwapFifoParallelYear?.short_holding_gain_loss_delta_eur)} EUR`} />
+          <Metric title="Ueber 365 Tage Delta" value={`${formatCurrency(activeSwapFifoParallelYear?.long_holding_gain_loss_delta_eur)} EUR`} />
+          <Metric title="Unmatched aktuell / Preview" value={`${taxCryptoSwapFifoParallelPreview?.current_unmatched_disposals ?? 0} / ${taxCryptoSwapFifoParallelPreview?.preview_unmatched_disposals ?? 0}`} />
+        </div>
+        <TablePanel
+          title={`Groesste Assetdeltas ${activeYearValue}`}
+          rows={activeSwapFifoParallelAssets.map((row) => ({
+            asset: row.asset,
+            aktuell_gv_eur: formatCurrency(row.current_gain_loss_eur),
+            preview_gv_eur: formatCurrency(row.preview_gain_loss_eur),
+            delta_eur: formatCurrency(row.gain_loss_delta_eur),
+            bis_365_tage_delta_eur: formatCurrency(row.short_holding_gain_loss_delta_eur),
+            ueber_365_tage_delta_eur: formatCurrency(row.long_holding_gain_loss_delta_eur),
+            tax_lines_aktuell: row.current_tax_lines_count,
+            tax_lines_preview: row.preview_tax_lines_count
+          }))}
+          footer={taxCryptoSwapFifoParallelPreview?.methodology ?? "FIFO-Parallelvergleich wird geladen."}
+          compact
+        />
+        <TablePanel
+          title={`Groesste Eventdeltas ${activeYearValue}`}
+          rows={activeSwapFifoParallelEvents.map((row) => ({
+            asset: row.asset,
+            source: row.source,
+            account: row.account,
+            tx_id: row.tx_id,
+            aktuell_gv_eur: formatCurrency(row.current_gain_loss_eur),
+            preview_gv_eur: formatCurrency(row.preview_gain_loss_eur),
+            delta_eur: formatCurrency(row.gain_loss_delta_eur),
+            disposal_event_id: row.disposal_event_id
+          }))}
+          footer="Vollstaendige Account-, TxID- und Eventwerte stehen im Zellen-Tooltip und im API-Artefakt."
+          compact
+        />
+      </section>
       <div className="panel">
         <div className="panelToolbar">
           <strong>Steuerlaeufe und Detailtabellen</strong>
@@ -13002,7 +18370,7 @@ function TaxAtAGlanceColumn({
               <div className="taxAtAGlanceValue">
                 <em>{item.value}</em>
                 {item.endpoint ? (
-                  <button type="button" onClick={() => onDownload(item.endpoint ?? "")} title="Nachweis oeffnen">
+                  <button type="button" onClick={() => onDownload(humanReadableTaxEndpoint(item.endpoint ?? ""))} title="Nachweis oeffnen">
                     <FileDown size={14} />
                   </button>
                 ) : null}
@@ -13020,14 +18388,41 @@ function TaxProductCommandCenter({
   activeYear,
   activeRow,
   onSelectYear,
-  onDownload
+  onDownload,
+  loading = false
 }: {
   rows: TaxProductYearRow[];
   activeYear: string;
   activeRow: TaxProductYearRow | undefined;
   onSelectYear: (year: string) => void;
   onDownload: (path: string) => void;
+  loading?: boolean;
 }) {
+  if (loading) {
+    return (
+      <section className="taxProductCenter loading" aria-busy="true" aria-live="polite">
+        <div className="taxProductHeader">
+          <div>
+            <span className="heroKicker">Abgabe-Navigator</span>
+            <h3>{activeYear}: Jahresdaten werden geladen</h3>
+            <p>Fertige Jahrespakete werden sofort angezeigt; bis dahin werden keine Nullwerte angenommen.</p>
+          </div>
+          <span className="statusPill loading">laedt</span>
+        </div>
+        <div className="taxProductSummary">
+          <Metric title="Eintragen Anlage SO" value="wird geladen" />
+          <Metric title="Rewards/Mining" value="wird geladen" />
+          <Metric title="Derivate" value="wird geladen" />
+          <Metric title="Steuerfrei archivieren" value="wird geladen" />
+        </div>
+        <div className="taxProductLoadingRows" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </section>
+    );
+  }
   const readyCount = rows.filter((row) => row.tone === "ok").length;
   const reviewCount = rows.filter((row) => row.tone === "warning").length;
   const blockedCount = rows.filter((row) => row.tone === "blocked").length;
@@ -13056,8 +18451,12 @@ function TaxProductCommandCenter({
           <strong>{activeRow?.declarationBucket ?? "Eingabeziel offen"}</strong>
           <span>{activeRow?.whereToEnter ?? "Eingabeziel wird aus der Jahreslogik geladen."}</span>
         </div>
-        <button type="button" disabled={!activeRow?.filingEndpoint} onClick={() => onDownload(activeRow?.filingEndpoint ?? "")}>
-          <FileJson size={16} />
+        <button
+          type="button"
+          disabled={!activeRow?.filingEndpoint}
+          onClick={() => onDownload(humanReadableTaxEndpoint(activeRow?.filingEndpoint ?? ""))}
+        >
+          <ReceiptText size={16} />
           <span>Eingabehilfe</span>
         </button>
         <button type="button" disabled={!activeRow?.checklistEndpoint} onClick={() => onDownload(activeRow?.checklistEndpoint ?? "")}>
@@ -13244,8 +18643,22 @@ function taxYearFilingSummaryHtmlPath(year: unknown): string {
   return `/api/v1/tax-years/${encodeURIComponent(String(year))}/filing-summary.html`;
 }
 
+function taxYearDeclarationGuideHtmlPath(year: unknown): string {
+  return `/api/v1/tax-years/${encodeURIComponent(String(year))}/declaration-guide.html`;
+}
+
+function taxYearEvidenceHtmlPath(year: unknown): string {
+  return `/api/v1/tax-years/${encodeURIComponent(String(year))}/evidence.html`;
+}
+
 function humanReadableFilingEndpoint(endpoint: string): string {
   return endpoint.replace(/\/filing-summary($|\?)/, "/filing-summary.html$1");
+}
+
+function humanReadableTaxEndpoint(endpoint: string): string {
+  return humanReadableFilingEndpoint(endpoint)
+    .replace(/\/declaration-guide($|\?)/, "/declaration-guide.html$1")
+    .replace(/\/evidence($|\?)/, "/evidence.html$1");
 }
 
 function PriorFilingDeclaredAmountsForm({
@@ -13477,13 +18890,15 @@ function ImportForm({
       { value: "manual-csv", label: "Manuelles CSV" },
       { value: "pionex", label: "Pionex" },
       { value: "binance", label: "Binance" },
+      { value: "coinbase", label: "Coinbase Transaction History" },
       { value: "bitget", label: "Bitget" },
       { value: "helium", label: "Helium Legacy/Fairspot" }
     ],
     api: [
       { value: "binance", label: "Binance" },
       { value: "bitget", label: "Bitget" },
-      { value: "pionex", label: "Pionex" }
+      { value: "pionex", label: "Pionex" },
+      { value: "coinbase", label: "Coinbase Live-Bestand" }
     ],
     onchain: [
       { value: "solana_wallet", label: "Solana Wallet" },
@@ -14530,15 +19945,22 @@ function AdminCexCredentialForm({
             <option value="binance">Binance</option>
             <option value="bitget">Bitget</option>
             <option value="pionex">Pionex</option>
+            <option value="coinbase">Coinbase</option>
           </select>
         </label>
         <label>
-          API Key
+          {connectorId === "coinbase" ? "CDP Key Name" : "API Key"}
           <input value={apiKey} type="password" autoComplete="off" onChange={(event) => setApiKey(event.target.value)} />
         </label>
         <label>
-          API Secret
-          <input value={apiSecret} type="password" autoComplete="off" onChange={(event) => setApiSecret(event.target.value)} />
+          {connectorId === "coinbase" ? "ECDSA Private Key" : "API Secret"}
+          <textarea
+            value={apiSecret}
+            autoComplete="off"
+            rows={connectorId === "coinbase" ? 5 : 2}
+            placeholder={connectorId === "coinbase" ? "-----BEGIN EC PRIVATE KEY-----" : ""}
+            onChange={(event) => setApiSecret(event.target.value)}
+          />
         </label>
         <label>
           Passphrase {needsPassphrase ? "" : "(falls erforderlich)"}
@@ -15128,7 +20550,7 @@ function TablePanel({
                   {columns.map((column) => {
                     const value = formatValue(row[column], column);
                     return (
-                      <td key={column} title={fullValue(row[column])} className={cellClass(column)}>
+                      <td key={column} title={fullValue(row[`${column}_full`] ?? row[column])} className={cellClass(column)}>
                         {value}
                       </td>
                     );

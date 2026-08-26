@@ -350,6 +350,55 @@ def test_cockpit_summary_reports_review_and_price_tasks(tmp_path):
     assert {task.target for task in summary.tasks} >= {"review", "portfolio"}
 
 
+def test_cockpit_excludes_stale_expected_zero_ledger_from_current_total(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="pionex",
+        filename="pionex-ledger.csv",
+        content=(
+            "time,asset,amount,type,account\n"
+            "2026-01-01T00:00:00Z,USDT,4,deposit,pionex\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    BalanceLedgerBuilder(store).rebuild()
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("1"),
+            priced_at=datetime.now(timezone.utc),
+            source="manual-test",
+        )
+    )
+    PortfolioService(store)._replace_live_balance_snapshots(
+        [
+            PortfolioLiveBalanceSnapshot(
+                snapshot_id="pionex:USDT:stale",
+                connector_id="pionex",
+                asset="USDT",
+                quantity=Decimal("2"),
+                source="pionex_api_v2",
+                fetched_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            )
+        ]
+    )
+
+    summary = CockpitService(store).summary()
+    pionex = next(
+        source for source in summary.top_sources if source.source_group == "Pionex"
+    )
+
+    assert summary.portfolio_value_eur == Decimal("0")
+    assert sum((source.value_eur for source in summary.top_sources), Decimal("0")) == Decimal("0")
+    assert pionex.value_eur == Decimal("0")
+    assert pionex.ledger_value_eur == Decimal("4.000000000000000000000000000")
+    assert pionex.live_value_eur is None
+    assert pionex.last_live_at == datetime(2026, 1, 2)
+    assert pionex.value_basis == "expected_zero_policy_no_current_live"
+    assert pionex.current_status == "expected_zero_live_unavailable"
+    assert pionex.display_warning is not None
+
+
 def test_cockpit_ignores_unpriced_live_token_identifiers_for_price_task(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     live_at = datetime.now(timezone.utc)

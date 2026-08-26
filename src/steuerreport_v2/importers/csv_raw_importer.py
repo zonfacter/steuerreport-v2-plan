@@ -140,7 +140,11 @@ class CsvRawImporter:
         values = {str(key).strip().lower().replace("_", " "): value for key, value in row.items()}
         if not self._has_any_value(values):
             return True
-        if source == "pionex" and str(values.get("state") or "").strip().upper() == "CANCELED":
+        if (
+            source == "pionex"
+            and str(values.get("state") or "").strip().upper() == "CANCELED"
+            and not self._pionex_row_has_execution(values)
+        ):
             return True
         if not self._has_any_value(
             {
@@ -210,3 +214,16 @@ class CsvRawImporter:
             return Decimal(str(value).replace(",", "."))
         except InvalidOperation:
             return Decimal("0")
+
+    def _pionex_row_has_execution(self, values: dict[str, object]) -> bool:
+        return any(
+            self._decimal_or_zero(values.get(key)) != 0
+            for key in (
+                "executed qty",
+                "executed quantity",
+                "executed amount",
+                "filled amount",
+                "filled quantity",
+                "filled size",
+            )
+        )

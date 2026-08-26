@@ -46,6 +46,103 @@ def test_tax_year_summary_aggregates_fifo_gain_loss(tmp_path):
     assert year.top_assets[0].asset == "BTC"
 
 
+def test_tax_year_assigns_utc_year_end_disposal_to_german_calendar_year(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2021, 1, 1, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("10"),
+                account="pionex",
+            ),
+            CanonicalEventCreate(
+                source="pionex",
+                event_time=datetime(2021, 12, 31, 23, 30, tzinfo=timezone.utc),
+                event_type="trade",
+                asset="HNT",
+                quantity=Decimal("-1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("12"),
+                account="pionex",
+            ),
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    service = TaxYearService(store)
+
+    assert service.detail(2021).tax_lines_count == 0
+    assert service.detail(2022).tax_lines_count == 1
+    assert service.detail(2022).realized_gain_loss_eur == Decimal("2")
+
+
+def test_tax_year_assigns_actual_utc_year_end_reward_to_german_calendar_year(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2021, 12, 31, 23, 30, tzinfo=timezone.utc),
+                event_type="mining",
+                asset="HNT",
+                quantity=Decimal("1"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("10"),
+                account="legacy-wallet",
+            )
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    service = TaxYearService(store)
+
+    assert service.detail(2021).rewards_events_count == 0
+    assert service.detail(2022).rewards_events_count == 1
+    assert service.detail(2022).rewards_income_eur == Decimal("10")
+
+
+def test_tax_year_preserves_helium_source_period_aggregate_year(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = store.create_import_batch(
+        ImportBatchCreate(
+            source="helium",
+            filename="helium-period-aggregate.csv",
+            file_hash="helium-period-aggregate",
+        )
+    )
+    raw = store.add_raw_objects(
+        batch.batch_id,
+        [RawObjectCreate(row_number=1, payload_json='{"Period Start (UTC)":"01.12.23"}')],
+    )[0]
+    store.add_canonical_events(
+        [
+            CanonicalEventCreate(
+                source="helium",
+                event_time=datetime(2023, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+                event_type="mining",
+                asset="IOT",
+                quantity=Decimal("100"),
+                quote_asset="EUR",
+                quote_quantity=Decimal("4"),
+                account="legacy-wallet",
+                raw_object_id=raw.raw_object_id,
+            )
+        ]
+    )
+    TaxService(store).rebuild_fifo()
+
+    service = TaxYearService(store)
+
+    assert service.detail(2023).rewards_events_count == 1
+    assert service.detail(2023).rewards_income_eur == Decimal("4")
+    assert service.detail(2024).rewards_events_count == 0
+
+
 def test_tax_year_summary_separates_tax_free_holding_period_lines(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
@@ -158,6 +255,8 @@ def test_reward_trading_separation_splits_helium_rewards_from_fifo_trading(tmp_p
     assert iot_2025.trade_tax_free_gain_loss_eur == Decimal("-3.000000000000000000000000000000000000")
     assert iot_2025.trade_tax_free_lines_count == 1
     assert "Reward/Mining ist der Einnahmevorgang" in hnt.tax_note
+    assert "Betriebsvermoegen" in hnt.tax_note
+    assert "aktuell aktive FIFO-Berechnung" in report.methodology
     assert "Handel steuerpfl." in report.ascii_table
 
 
@@ -2283,6 +2382,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/{year}/declaration-guide"
     )
+    guide_html_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/declaration-guide.html"
+    )
     filing_route = next(
         route
         for route in app.routes
@@ -2342,6 +2446,11 @@ def test_tax_year_api_routes_are_registered(tmp_path):
         route
         for route in app.routes
         if getattr(route, "path", None) == "/api/v1/tax-years/{year}/evidence"
+    )
+    evidence_html_route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/tax-years/{year}/evidence.html"
     )
     external_inflows_route = next(
         route
@@ -2437,6 +2546,9 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert summary_route.endpoint().status == "ok"
     assert detail_route.endpoint(2021).status == "ok"
     assert guide_route.endpoint(2021).status == "ok"
+    guide_html_response = guide_html_route.endpoint(2021)
+    assert guide_html_response.media_type == "text/html; charset=utf-8"
+    assert "Steuerjahr 2021" in guide_html_response.body.decode("utf-8")
     assert filing_route.endpoint(2021).status == "ok"
     filing_html_response = filing_html_route.endpoint(2021)
     assert filing_html_response.media_type == "text/html; charset=utf-8"
@@ -2452,6 +2564,10 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert asset_fifo_correction_route.endpoint(2021).status == "ok"
     assert turnover_route.endpoint(2021).status == "ok"
     assert evidence_route.endpoint(2021).status == "ok"
+    evidence_html_response = evidence_html_route.endpoint(2021)
+    assert evidence_html_response.media_type == "text/html; charset=utf-8"
+    assert "Steuerjahr 2021" in evidence_html_response.body.decode("utf-8")
+    assert "Belege und Nachweise" in evidence_html_response.body.decode("utf-8")
     assert external_inflows_route.endpoint(2021).status == "ok"
     assert payment_overview_route.endpoint().status == "ok"
     assert filing_matrix_route.endpoint().status == "ok"
@@ -2470,3 +2586,47 @@ def test_tax_year_api_routes_are_registered(tmp_path):
     assert solana_stablecoin_swap_year_route.endpoint(2021).status == "ok"
     assert solana_stablecoin_fx_summary_route.endpoint().status == "ok"
     assert solana_stablecoin_fx_year_route.endpoint(2021).status == "ok"
+
+
+def test_tax_year_declaration_guide_returns_html_for_browser_accept(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    client = TestClient(create_app(store))
+
+    html_response = client.get(
+        "/api/v1/tax-years/2021/declaration-guide",
+        headers={"Accept": "text/html,application/xhtml+xml"},
+    )
+    assert html_response.status_code == 200
+    assert html_response.headers["content-type"] == "text/html; charset=utf-8"
+    assert "Steuerjahr 2021" in html_response.text
+    assert "Finanzamt-Checkliste" in html_response.text
+
+    json_response = client.get(
+        "/api/v1/tax-years/2021/declaration-guide",
+        headers={"Accept": "application/json"},
+    )
+    assert json_response.status_code == 200
+    assert json_response.headers["content-type"].startswith("application/json")
+    assert json_response.json()["status"] == "ok"
+
+
+def test_tax_year_evidence_returns_html_for_browser_accept(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    client = TestClient(create_app(store))
+
+    html_response = client.get(
+        "/api/v1/tax-years/2021/evidence",
+        headers={"Accept": "text/html,application/xhtml+xml"},
+    )
+    assert html_response.status_code == 200
+    assert html_response.headers["content-type"] == "text/html; charset=utf-8"
+    assert "Steuerjahr 2021" in html_response.text
+    assert "Belege und Nachweise" in html_response.text
+
+    json_response = client.get(
+        "/api/v1/tax-years/2021/evidence",
+        headers={"Accept": "application/json"},
+    )
+    assert json_response.status_code == 200
+    assert json_response.headers["content-type"].startswith("application/json")
+    assert json_response.json()["status"] == "ok"

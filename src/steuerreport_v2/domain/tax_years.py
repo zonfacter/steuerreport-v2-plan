@@ -98,11 +98,26 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.derivatives import DerivativesManager
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.tax import TaxService
+from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
+from steuerreport_v2.domain.tax_time import (
+    event_reporting_year_sql,
+    reporting_tax_year,
+    reporting_year_sql,
+)
 from steuerreport_v2.domain.valuation import PriceCoverageService
 
 
 INCOME_EVENT_TYPES = {"income", "reward", "staking", "mining"}
-STABLECOIN_LIKE_ASSETS = {"USDC", "USDT", "DAI", "BUSD", "FDUSD", "TUSD", "EURC", "EURS"}
+STABLECOIN_LIKE_ASSETS = {
+    "USDC",
+    "USDT",
+    "DAI",
+    "BUSD",
+    "FDUSD",
+    "TUSD",
+    "EURC",
+    "EURS",
+}
 HELIUM_REWARD_ASSETS = ("HNT", "IOT", "MOBILE")
 HELIUM_SWAP_ALCHEMY_AUDIT_PATH = (
     Path("/workspace/steuerreport-v2-plan")
@@ -122,21 +137,35 @@ class TaxYearService:
         self._missing_prices_cache: list[object] | None = None
         self._derivative_lines_cache: list[object] | None = None
         self._tax_totals_cache: dict[int, dict[str, Decimal | int]] | None = None
-        self._payment_tax_totals_cache: dict[int, dict[str, Decimal | int]] | None = None
-        self._asset_breakdown_cache: dict[int, list[TaxYearAssetBreakdown]] | None = None
+        self._payment_tax_totals_cache: dict[int, dict[str, Decimal | int]] | None = (
+            None
+        )
+        self._asset_breakdown_cache: dict[int, list[TaxYearAssetBreakdown]] | None = (
+            None
+        )
         self._income_totals_cache: dict[int, dict[str, Decimal | int]] | None = None
         self._fees_cache: dict[int, Decimal] | None = None
         self._derivatives_cache: dict[int, dict[str, Decimal | int]] | None = None
-        self._payment_derivatives_cache: dict[int, dict[str, Decimal | int]] | None = None
+        self._payment_derivatives_cache: dict[int, dict[str, Decimal | int]] | None = (
+            None
+        )
         self._payment_missing_price_groups_cache: dict[int, int] | None = None
         self._payment_unmatched_disposals_cache: dict[int, int] | None = None
         self._income_reports_cache: dict[int, TaxIncomeReport] | None = None
-        self._income_asset_breakdown_from_lots_cache: dict[int, list[TaxIncomeAssetBreakdown]] = {}
+        self._moonpay_onramp_event_ids_cache: set[str] | None = None
+        self._income_asset_breakdown_from_lots_cache: dict[
+            int, list[TaxIncomeAssetBreakdown]
+        ] = {}
         self._external_solana_inflow_counts_cache: dict[int, int] | None = None
         self._status_cache: dict[int, TaxYearStatus] = {}
         self._declaration_guide_cache: dict[int, TaxDeclarationGuide] = {}
-        self._external_inflow_report_cache: dict[tuple[int, int], TaxExternalInflowReport] = {}
-        self._bmf_closure_appendix_cache: dict[tuple[int, int], TaxYearBmfClosureAppendix] = {}
+        self._external_inflow_report_cache: dict[
+            tuple[int, int], TaxExternalInflowReport
+        ] = {}
+        self._bmf_closure_appendix_cache: dict[
+            tuple[int, int], TaxYearBmfClosureAppendix
+        ] = {}
+        self._source_period_event_years_cache: dict[str, int] | None = None
 
     def summary(self) -> TaxYearsSummary:
         years = self._available_years()
@@ -158,8 +187,16 @@ class TaxYearService:
     def detail(self, year: int) -> TaxYearDetail:
         status = self._status_for_year(year)
         missing = [item for item in self._missing_prices() if item.year == year]
-        unmatched = [item for item in self._unmatched_disposals() if item.event_time.year == year]
-        tax_lines = [item for item in self._tax_lines() if item.disposed_at.year == year]
+        unmatched = [
+            item
+            for item in self._unmatched_disposals()
+            if reporting_tax_year(item.event_time) == year
+        ]
+        tax_lines = [
+            item
+            for item in self._tax_lines()
+            if reporting_tax_year(item.disposed_at) == year
+        ]
         return TaxYearDetail(
             **status.model_dump(),
             asset_breakdown=self._asset_breakdown(year),
@@ -179,9 +216,7 @@ class TaxYearService:
         for status in statuses:
             caveats = self._payment_caveats(status)
             blocking_caveats = [
-                issue.message
-                for issue in status.issues
-                if issue.blocks_export
+                issue.message for issue in status.issues if issue.blocks_export
             ]
             caveats = blocking_caveats + caveats
             declaration_parts = []
@@ -191,7 +226,11 @@ class TaxYearService:
                 declaration_parts.append("Sonstige Einkuenfte/EUR")
             if status.derivative_pnl_eur:
                 declaration_parts.append("Derivate/Termingeschaefte pruefen")
-            declaration_bucket = " + ".join(declaration_parts) if declaration_parts else "keine Eingabe aus V2-Werten"
+            declaration_bucket = (
+                " + ".join(declaration_parts)
+                if declaration_parts
+                else "keine Eingabe aus V2-Werten"
+            )
             where_to_enter = self._where_to_enter(status)
             what_to_do = self._tax_year_next_action(status)
             rows.append(
@@ -208,7 +247,9 @@ class TaxYearService:
                     evidence_refs=self._payment_evidence_exports(),
                     caveats=caveats[:5],
                     checklist=self._payment_checklist(status, caveats),
-                    display_line=self._payment_overview_line(status, declaration_bucket, what_to_do),
+                    display_line=self._payment_overview_line(
+                        status, declaration_bucket, what_to_do
+                    ),
                 )
             )
         return TaxPaymentOverview(
@@ -223,25 +264,30 @@ class TaxYearService:
             ),
         )
 
-    def _payment_statuses(self, *, years: list[int] | None = None) -> list[TaxYearStatus]:
-        selected_years = sorted(years if years is not None else self._payment_available_years())
+    def _payment_statuses(
+        self, *, years: list[int] | None = None
+    ) -> list[TaxYearStatus]:
+        selected_years = sorted(
+            years if years is not None else self._payment_available_years()
+        )
         return [self._payment_status_for_year(year) for year in selected_years]
 
     def _payment_available_years(self) -> list[int]:
         years = set(self.DEFAULT_YEARS)
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select year from (
-                    select distinct date_part('year', disposed_at)::integer as year from tax_lines
+                    select distinct {reporting_year_sql("disposed_at")} as year from tax_lines
                     union
-                    select distinct date_part('year', event_time)::integer as year from tax_unmatched_disposals
+                    select distinct {reporting_year_sql("event_time")} as year from tax_unmatched_disposals
                     union
-                    select distinct date_part('year', event_time)::integer as year from derivative_lines
+                    select distinct {reporting_year_sql("event_time")} as year from derivative_lines
                     union
-                    select distinct date_part('year', event_time)::integer as year
-                    from canonical_events
-                    where event_type in ('income', 'reward', 'staking', 'mining')
+                    select distinct {event_reporting_year_sql("event", "raw")} as year
+                    from canonical_events event
+                    left join raw_objects raw on raw.raw_object_id = event.raw_object_id
+                    where event.event_type in ('income', 'reward', 'staking', 'mining')
                 )
                 order by year
                 """
@@ -325,7 +371,9 @@ class TaxYearService:
             tax_lines_count=int(tax.get("tax_lines_count", 0) or 0),
             tax_free_gain_loss_eur=tax.get("tax_free_gain_loss", Decimal("0")),
             tax_free_disposal_proceeds_eur=tax.get("tax_free_proceeds", Decimal("0")),
-            tax_free_acquisition_cost_eur=tax.get("tax_free_acquisition_cost", Decimal("0")),
+            tax_free_acquisition_cost_eur=tax.get(
+                "tax_free_acquisition_cost", Decimal("0")
+            ),
             tax_free_lines_count=int(tax.get("tax_free_lines_count", 0) or 0),
             rewards_income_eur=income.get("income_eur", Decimal("0")),
             rewards_events_count=int(income.get("events", 0) or 0),
@@ -345,9 +393,9 @@ class TaxYearService:
         totals: dict[int, dict[str, Decimal | int]] = {}
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
-                    date_part('year', disposed_at)::integer as year,
+                    {reporting_year_sql("disposed_at")} as year,
                     coalesce(sum(case when holding_days <= 365 then gain_loss_eur else 0 end), 0) as gain_loss,
                     coalesce(sum(case when holding_days <= 365 then disposal_proceeds_eur else 0 end), 0) as proceeds,
                     coalesce(sum(case when holding_days <= 365 then acquisition_cost_eur else 0 end), 0) as acquisition_cost,
@@ -391,9 +439,9 @@ class TaxYearService:
         totals: dict[int, dict[str, Decimal | int]] = {}
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
-                    date_part('year', event_time)::integer as year,
+                    {reporting_year_sql("event_time")} as year,
                     coalesce(sum(value_eur), 0) as pnl,
                     count(*)::integer as lines,
                     count(*) filter (where price_source is null)::integer as missing_price_count
@@ -415,15 +463,15 @@ class TaxYearService:
         if self._payment_missing_price_groups_cache is not None:
             return self._payment_missing_price_groups_cache
         query = PriceCoverageService(self.store)._missing_price_query(
-            """
-            date_part('year', req.event_time)::integer as year,
+            f"""
+            {reporting_year_sql("req.event_time")} as year,
             req.asset,
             req.source,
             req.event_type,
             req.role
             """,
-            """
-            date_part('year', req.event_time),
+            f"""
+            {reporting_year_sql("req.event_time")},
             req.asset,
             req.source,
             req.event_type,
@@ -447,8 +495,7 @@ class TaxYearService:
                 """
             ).fetchall()
         self._payment_missing_price_groups_cache = {
-            int(year): int(groups_count or 0)
-            for year, groups_count in rows
+            int(year): int(groups_count or 0) for year, groups_count in rows
         }
         return self._payment_missing_price_groups_cache
 
@@ -457,9 +504,9 @@ class TaxYearService:
             return self._payment_unmatched_disposals_cache
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
-                    date_part('year', event_time)::integer as year,
+                    {reporting_year_sql("event_time")} as year,
                     count(*)::integer as unmatched_count
                 from tax_unmatched_disposals
                 group by year
@@ -467,13 +514,20 @@ class TaxYearService:
                 """
             ).fetchall()
         self._payment_unmatched_disposals_cache = {
-            int(year): int(unmatched_count or 0)
-            for year, unmatched_count in rows
+            int(year): int(unmatched_count or 0) for year, unmatched_count in rows
         }
         return self._payment_unmatched_disposals_cache
 
     def _payment_ascii_table(self, rows: list[TaxPaymentOverviewRow]) -> str:
-        headers = ["Jahr", "SO G/V", "Rewards", "Derivate", "Steuerfrei", "Eintragen", "Status"]
+        headers = [
+            "Jahr",
+            "SO G/V",
+            "Rewards",
+            "Derivate",
+            "Steuerfrei",
+            "Eintragen",
+            "Status",
+        ]
         body = [
             [
                 str(row.year),
@@ -501,7 +555,13 @@ class TaxYearService:
         sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
 
         def fmt(row: list[str]) -> str:
-            return "| " + " | ".join(str(value).ljust(widths[index]) for index, value in enumerate(row)) + " |"
+            return (
+                "| "
+                + " | ".join(
+                    str(value).ljust(widths[index]) for index, value in enumerate(row)
+                )
+                + " |"
+            )
 
         return "\n".join([sep, fmt(headers), sep, *(fmt(row) for row in body), sep])
 
@@ -519,7 +579,11 @@ class TaxYearService:
                 section="Private Veraeusserungsgeschaefte / Anlage SO",
                 field_label="Gewinn oder Verlust aus privaten Veraeusserungsgeschaeften mit Kryptowerten",
                 amount_eur=status.realized_gain_loss_eur,
-                sign="loss" if status.realized_gain_loss_eur < 0 else "gain" if status.realized_gain_loss_eur > 0 else "neutral",
+                sign="loss"
+                if status.realized_gain_loss_eur < 0
+                else "gain"
+                if status.realized_gain_loss_eur > 0
+                else "neutral",
                 evidence_ref="/api/v1/export/tax-lines.csv",
                 note=(
                     "Saldo aus FIFO-Tax-Lines des Jahres. Negative Werte sind als Verlust "
@@ -578,7 +642,11 @@ class TaxYearService:
                     section="HNT Schwerpunkt",
                     field_label="HNT Gewinn/Verlust",
                     amount_eur=hnt.gain_loss_eur,
-                    sign="loss" if hnt.gain_loss_eur < 0 else "gain" if hnt.gain_loss_eur > 0 else "neutral",
+                    sign="loss"
+                    if hnt.gain_loss_eur < 0
+                    else "gain"
+                    if hnt.gain_loss_eur > 0
+                    else "neutral",
                     evidence_ref="/api/v1/export/hnt-provenance-events.csv",
                     note="HNT-spezifischer FIFO-Saldo mit Bridge-/Fairspot-/Legacy-Nachweisen.",
                 )
@@ -590,7 +658,8 @@ class TaxYearService:
                 TaxDeclarationGuideEntry(
                     section="Pruefbereich externe Solana-Zufluesse",
                     field_label="Review/Unmatched externe Solana-Zufluesse",
-                    amount_eur=external_inflows.review_value_eur + external_inflows.unmatched_value_eur,
+                    amount_eur=external_inflows.review_value_eur
+                    + external_inflows.unmatched_value_eur,
                     sign="neutral",
                     evidence_ref="/api/v1/export/tax-external-inflows.csv",
                     note=(
@@ -605,7 +674,9 @@ class TaxYearService:
         if status.missing_price_groups:
             caveats.append(f"{status.missing_price_groups} Preisgruppe(n) fehlen.")
         if status.unmatched_disposals:
-            caveats.append(f"{status.unmatched_disposals} FIFO-Abgaenge sind unmatched.")
+            caveats.append(
+                f"{status.unmatched_disposals} FIFO-Abgaenge sind unmatched."
+            )
         if external_inflows.review_count or external_inflows.unmatched_count:
             caveats.append(
                 "Externe Solana-Zufluesse pruefen: "
@@ -633,8 +704,12 @@ class TaxYearService:
             rewards_income_eur=status.rewards_income_eur,
             derivative_pnl_eur=status.derivative_pnl_eur,
             hnt_gain_loss_eur=hnt.gain_loss_eur if hnt is not None else Decimal("0"),
-            hnt_disposal_proceeds_eur=hnt.proceeds_eur if hnt is not None else Decimal("0"),
-            hnt_acquisition_cost_eur=hnt.acquisition_cost_eur if hnt is not None else Decimal("0"),
+            hnt_disposal_proceeds_eur=hnt.proceeds_eur
+            if hnt is not None
+            else Decimal("0"),
+            hnt_acquisition_cost_eur=hnt.acquisition_cost_eur
+            if hnt is not None
+            else Decimal("0"),
             hnt_tax_line_count=hnt.tax_line_count if hnt is not None else 0,
             loss_assets=loss_assets,
             gain_assets=gain_assets,
@@ -662,14 +737,24 @@ class TaxYearService:
     def _where_to_enter(self, status: TaxYearStatus) -> str:
         targets = []
         if status.realized_gain_loss_eur:
-            targets.append("Private Veraeusserungsgeschaefte mit Kryptowerten: Gewinn/Verlust, Erloese, Anschaffungskosten")
+            targets.append(
+                "Private Veraeusserungsgeschaefte mit Kryptowerten: Gewinn/Verlust, Erloese, Anschaffungskosten"
+            )
         if status.rewards_income_eur:
-            targets.append("Einzutragende Rewards/Mining/Staking als sonstige Einkuenfte bzw. EÜR-nahe Einnahmen pruefen")
+            targets.append(
+                "Einzutragende Rewards/Mining/Staking als sonstige Einkuenfte bzw. EÜR-nahe Einnahmen pruefen"
+            )
         if status.derivative_pnl_eur:
             targets.append("Derivate/Termingeschaefte separat pruefen")
         if status.tax_free_lines_count:
-            targets.append("Steuerfreie >365-Tage-Verkaeufe nur nachrichtlich/belegseitig aufbewahren")
-        return " | ".join(targets) if targets else "Keine steuerliche Eingabe aus aktuellen V2-Jahreswerten."
+            targets.append(
+                "Steuerfreie >365-Tage-Verkaeufe nur nachrichtlich/belegseitig aufbewahren"
+            )
+        return (
+            " | ".join(targets)
+            if targets
+            else "Keine steuerliche Eingabe aus aktuellen V2-Jahreswerten."
+        )
 
     def _tax_year_next_action(self, status: TaxYearStatus) -> str:
         if status.export_blocked:
@@ -678,9 +763,15 @@ class TaxYearService:
             return "Historisch offen: nur als Altjahres-Hinweis pruefen; aktuelle Exportfreigabe wird nicht blockiert."
         if status.realized_gain_loss_eur < 0:
             return "Verlust belegbar erfassen und mit Tax-Lines/Exportpaket nachweisen."
-        if status.realized_gain_loss_eur > 0 or status.rewards_income_eur > 0 or status.derivative_pnl_eur:
+        if (
+            status.realized_gain_loss_eur > 0
+            or status.rewards_income_eur > 0
+            or status.derivative_pnl_eur
+        ):
             return "Betrag in Steuererklaerung uebernehmen und Exportpaket als Beleg bereithalten."
-        return "Keine Zahlung aus V2-Jahreswerten erkennbar; Belege trotzdem archivieren."
+        return (
+            "Keine Zahlung aus V2-Jahreswerten erkennbar; Belege trotzdem archivieren."
+        )
 
     def _payment_checklist(
         self,
@@ -822,7 +913,9 @@ class TaxYearService:
         if status.missing_price_groups:
             caveats.append(f"{status.missing_price_groups} Preisgruppe(n) fehlen.")
         if status.unmatched_disposals:
-            caveats.append(f"{status.unmatched_disposals} FIFO-Abgaenge sind unmatched.")
+            caveats.append(
+                f"{status.unmatched_disposals} FIFO-Abgaenge sind unmatched."
+            )
         external_inflows_count = self._external_solana_inflow_count(status.year)
         if external_inflows_count:
             caveats.append(
@@ -849,7 +942,9 @@ class TaxYearService:
             f"{declaration_bucket} | {what_to_do}"
         )
 
-    def _review_decisions_for_year(self, year: int) -> list[TaxYearReviewDecisionSummary]:
+    def _review_decisions_for_year(
+        self, year: int
+    ) -> list[TaxYearReviewDecisionSummary]:
         decisions: list[TaxYearReviewDecisionSummary] = []
         for decision in self.store.list_review_decisions():
             if not self._decision_matches_year(decision.scope, decision.payload, year):
@@ -861,7 +956,9 @@ class TaxYearService:
                     scope=decision.scope,
                     title=decision.title,
                     evidence_ref=decision.evidence_ref,
-                    category="pruefen" if self._decision_needs_review(decision.payload) else "beleg",
+                    category="pruefen"
+                    if self._decision_needs_review(decision.payload)
+                    else "beleg",
                     effect_summary=self._decision_effect_summary(decision.payload),
                     created_at=decision.created_at.isoformat(),
                 )
@@ -869,7 +966,9 @@ class TaxYearService:
         return decisions
 
     @staticmethod
-    def _decision_matches_year(scope: str, payload: dict[str, object], year: int) -> bool:
+    def _decision_matches_year(
+        scope: str, payload: dict[str, object], year: int
+    ) -> bool:
         year_text = str(year)
         if f"year:{year_text}" in scope or f"jahr:{year_text}" in scope:
             return True
@@ -884,8 +983,12 @@ class TaxYearService:
 
     @staticmethod
     def _decision_needs_review(payload: dict[str, object]) -> bool:
-        status = str(payload.get("decision_status") or payload.get("status") or "").lower()
-        return any(marker in status for marker in ("review", "manual", "required", "pruef"))
+        status = str(
+            payload.get("decision_status") or payload.get("status") or ""
+        ).lower()
+        return any(
+            marker in status for marker in ("review", "manual", "required", "pruef")
+        )
 
     @staticmethod
     def _decision_effect_summary(payload: dict[str, object]) -> str:
@@ -901,7 +1004,9 @@ class TaxYearService:
                 effects.append(f"{label}: {value}")
         if effects:
             return " | ".join(effects)
-        return "Beleg-/Methodikentscheidung; keine automatische Datenwirkung dokumentiert."
+        return (
+            "Beleg-/Methodikentscheidung; keine automatische Datenwirkung dokumentiert."
+        )
 
     @staticmethod
     def _fmt_eur(value: Decimal) -> str:
@@ -917,7 +1022,11 @@ class TaxYearService:
 
         if status.realized_gain_loss_eur:
             label = "Privates Veraeusserungsergebnis"
-            treatment = "steuerpflichtiger Verlust" if status.realized_gain_loss_eur < 0 else "steuerpflichtiger Gewinn"
+            treatment = (
+                "steuerpflichtiger Verlust"
+                if status.realized_gain_loss_eur < 0
+                else "steuerpflichtiger Gewinn"
+            )
             lines.append(
                 TaxYearFilingSummaryLine(
                     order=order,
@@ -1001,7 +1110,9 @@ class TaxYearService:
         try:
             from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 
-            cex_anchor_feasibility = WalletFifoPreviewService(self.store).cex_exchange_outflow_anchor_feasibility(
+            cex_anchor_feasibility = WalletFifoPreviewService(
+                self.store
+            ).cex_exchange_outflow_anchor_feasibility(
                 year,
                 source_exchange="bitget",
                 target_cex="binance",
@@ -1157,15 +1268,23 @@ class TaxYearService:
     def _filing_plain_language_summary(self, status: TaxYearStatus) -> str:
         parts = []
         if status.realized_gain_loss_eur < 0:
-            parts.append(f"privater Verlust {self._fmt_eur(status.realized_gain_loss_eur)}")
+            parts.append(
+                f"privater Verlust {self._fmt_eur(status.realized_gain_loss_eur)}"
+            )
         elif status.realized_gain_loss_eur > 0:
-            parts.append(f"privater Gewinn {self._fmt_eur(status.realized_gain_loss_eur)}")
+            parts.append(
+                f"privater Gewinn {self._fmt_eur(status.realized_gain_loss_eur)}"
+            )
         if status.rewards_income_eur:
-            parts.append(f"einzutragende Rewards/Mining/Staking {self._fmt_eur(status.rewards_income_eur)}")
+            parts.append(
+                f"einzutragende Rewards/Mining/Staking {self._fmt_eur(status.rewards_income_eur)}"
+            )
         if status.derivative_pnl_eur:
             parts.append(f"Derivate {self._fmt_eur(status.derivative_pnl_eur)}")
         if status.tax_free_lines_count:
-            parts.append(f"steuerfrei nach Haltefrist {self._fmt_eur(status.tax_free_gain_loss_eur)}")
+            parts.append(
+                f"steuerfrei nach Haltefrist {self._fmt_eur(status.tax_free_gain_loss_eur)}"
+            )
         if not parts:
             parts.append("keine V2-Eingabebetraege")
         if status.export_blocked:
@@ -1177,7 +1296,9 @@ class TaxYearService:
             snapshot_matrix = self._filing_matrix_from_readiness_snapshot()
             if snapshot_matrix is not None:
                 return snapshot_matrix
-        selected_years = sorted(years if years is not None else self._payment_available_years())
+        selected_years = sorted(
+            years if years is not None else self._payment_available_years()
+        )
         rows: list[TaxYearFilingMatrixRow] = []
         for year in selected_years:
             summary = self.filing_summary(year)
@@ -1191,7 +1312,9 @@ class TaxYearService:
                     status_label=summary.status_label,
                     export_ready=summary.export_ready,
                     action_status=action_status,
-                    next_action=self._filing_matrix_next_action(summary, counts, action_status),
+                    next_action=self._filing_matrix_next_action(
+                        summary, counts, action_status
+                    ),
                     taxable_private_disposals_eur=summary.taxable_private_disposals_eur,
                     rewards_mining_staking_income_eur=summary.rewards_mining_staking_income_eur,
                     derivative_pnl_eur=summary.derivative_pnl_eur,
@@ -1207,14 +1330,18 @@ class TaxYearService:
                     filing_summary_endpoint=f"/api/v1/tax-years/{year}/filing-summary",
                     filing_checklist_csv_endpoint=f"/api/v1/export/tax-years/{year}/filing-checklist.csv",
                     evidence_package_endpoint=f"/api/v1/export/tax-years/{year}/evidence-package.zip",
-                    display_line=self._filing_matrix_display_line(summary, counts, action_status),
+                    display_line=self._filing_matrix_display_line(
+                        summary, counts, action_status
+                    ),
                 )
             )
         return TaxYearFilingMatrix(
             generated_at=datetime.now(timezone.utc).isoformat(),
             rows=rows,
             ready_years=[row.year for row in rows if row.action_status == "ready"],
-            conservative_ready_years=[row.year for row in rows if row.action_status == "conservative_ready"],
+            conservative_ready_years=[
+                row.year for row in rows if row.action_status == "conservative_ready"
+            ],
             review_years=[row.year for row in rows if row.action_status == "review"],
             blocked_years=[row.year for row in rows if row.action_status == "blocked"],
             ascii_table=self._filing_matrix_ascii_table(rows),
@@ -1225,17 +1352,23 @@ class TaxYearService:
             ),
         )
 
-    def correction_map(self, *, years: list[int] | None = None) -> TaxYearsCorrectionMap:
+    def correction_map(
+        self, *, years: list[int] | None = None
+    ) -> TaxYearsCorrectionMap:
         if years is None:
             snapshot_map = self._correction_map_from_readiness_snapshot()
             if snapshot_map is not None:
                 return snapshot_map
-        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+        selected_years = sorted(
+            years if years is not None else [2021, 2022, 2023, 2024, 2025]
+        )
         maps = [self.year_correction_map(year) for year in selected_years]
         return TaxYearsCorrectionMap(
             generated_at=datetime.now(timezone.utc).isoformat(),
             years=maps,
-            amendment_review_years=[item.year for item in maps if item.amendment_review_recommended],
+            amendment_review_years=[
+                item.year for item in maps if item.amendment_review_recommended
+            ],
             archive_only_years=[
                 item.year
                 for item in maps
@@ -1256,14 +1389,22 @@ class TaxYearService:
             ),
         )
 
-    def filing_closure_overview(self, *, years: list[int] | None = None) -> TaxYearsFilingClosureOverview:
-        selected_years = sorted(years if years is not None else [2021, 2022, 2023, 2024, 2025])
+    def filing_closure_overview(
+        self, *, years: list[int] | None = None
+    ) -> TaxYearsFilingClosureOverview:
+        selected_years = sorted(
+            years if years is not None else [2021, 2022, 2023, 2024, 2025]
+        )
         payment = self.payment_overview(years=selected_years)
         filing = self.filing_matrix()
-        if not all(year in {row.year for row in filing.rows} for year in selected_years):
+        if not all(
+            year in {row.year for row in filing.rows} for year in selected_years
+        ):
             filing = self.filing_matrix(years=selected_years)
         correction = self.correction_map()
-        if not all(year in {row.year for row in correction.years} for year in selected_years):
+        if not all(
+            year in {row.year for row in correction.years} for year in selected_years
+        ):
             correction = self.correction_map(years=selected_years)
         payment_by_year = {row.year: row for row in payment.rows}
         filing_by_year = {row.year: row for row in filing.rows}
@@ -1274,7 +1415,9 @@ class TaxYearService:
             filing_row = filing_by_year.get(year)
             correction_row = correction_by_year.get(year)
             counts = filing_row.checklist_counts if filing_row is not None else {}
-            action_status: TaxYearFilingActionStatus = filing_row.action_status if filing_row is not None else "review"
+            action_status: TaxYearFilingActionStatus = (
+                filing_row.action_status if filing_row is not None else "review"
+            )
             private_disposals = (
                 filing_row.taxable_private_disposals_eur
                 if filing_row is not None
@@ -1305,19 +1448,32 @@ class TaxYearService:
             )
             correction_action = (
                 "Korrektur/Nachreichung pruefen"
-                if correction_row is not None and correction_row.amendment_review_recommended
+                if correction_row is not None
+                and correction_row.amendment_review_recommended
                 else "Archivieren"
             )
-            next_action = filing_row.next_action if filing_row is not None else "Jahresdaten pruefen."
+            next_action = (
+                filing_row.next_action
+                if filing_row is not None
+                else "Jahresdaten pruefen."
+            )
             row = TaxYearFilingClosureRow(
                 year=year,
                 filing_status=action_status,
-                filing_status_label=filing_row.status_label if filing_row is not None else "Pruefen",
-                export_ready=filing_row.export_ready if filing_row is not None else False,
+                filing_status_label=filing_row.status_label
+                if filing_row is not None
+                else "Pruefen",
+                export_ready=filing_row.export_ready
+                if filing_row is not None
+                else False,
                 declaration_bucket=(
-                    payment_row.declaration_bucket if payment_row is not None else "keine Eingabe aus V2-Werten"
+                    payment_row.declaration_bucket
+                    if payment_row is not None
+                    else "keine Eingabe aus V2-Werten"
                 ),
-                where_to_enter=payment_row.where_to_enter if payment_row is not None else "Pruefen",
+                where_to_enter=payment_row.where_to_enter
+                if payment_row is not None
+                else "Pruefen",
                 private_disposals_gain_loss_eur=private_disposals,
                 rewards_mining_staking_income_eur=rewards,
                 derivative_pnl_eur=derivative,
@@ -1327,10 +1483,14 @@ class TaxYearService:
                 pruefen_count=int(counts.get("pruefen", 0) or 0),
                 archivieren_count=int(counts.get("archivieren", 0) or 0),
                 amendment_review_recommended=(
-                    correction_row.amendment_review_recommended if correction_row is not None else False
+                    correction_row.amendment_review_recommended
+                    if correction_row is not None
+                    else False
                 ),
                 amendment_reason=(
-                    correction_row.amendment_reason if correction_row is not None else "Korrekturkarte nicht geladen."
+                    correction_row.amendment_reason
+                    if correction_row is not None
+                    else "Korrekturkarte nicht geladen."
                 ),
                 next_action=next_action,
                 correction_action=correction_action,
@@ -1350,17 +1510,23 @@ class TaxYearService:
             generated_at=datetime.now(timezone.utc).isoformat(),
             rows=rows,
             ready_years=[row.year for row in rows if row.filing_status == "ready"],
-            conservative_ready_years=[row.year for row in rows if row.filing_status == "conservative_ready"],
+            conservative_ready_years=[
+                row.year for row in rows if row.filing_status == "conservative_ready"
+            ],
             review_years=[row.year for row in rows if row.filing_status == "review"],
             blocked_years=[row.year for row in rows if row.filing_status == "blocked"],
-            amendment_review_years=[row.year for row in rows if row.amendment_review_recommended],
+            amendment_review_years=[
+                row.year for row in rows if row.amendment_review_recommended
+            ],
             total_private_disposals_gain_loss_eur=sum(
                 (row.private_disposals_gain_loss_eur for row in rows), Decimal("0")
             ),
             total_rewards_mining_staking_income_eur=sum(
                 (row.rewards_mining_staking_income_eur for row in rows), Decimal("0")
             ),
-            total_derivative_pnl_eur=sum((row.derivative_pnl_eur for row in rows), Decimal("0")),
+            total_derivative_pnl_eur=sum(
+                (row.derivative_pnl_eur for row in rows), Decimal("0")
+            ),
             total_tax_free_private_disposals_eur=sum(
                 (row.tax_free_private_disposals_eur for row in rows), Decimal("0")
             ),
@@ -1372,19 +1538,34 @@ class TaxYearService:
             ),
         )
 
-    def _year_correction_map_from_readiness_snapshot(self, year: int) -> TaxYearCorrectionMap | None:
+    def _year_correction_map_from_readiness_snapshot(
+        self, year: int
+    ) -> TaxYearCorrectionMap | None:
         snapshot_map = self._correction_map_from_readiness_snapshot()
         if snapshot_map is None:
             return None
-        snapshot_year = next((item for item in snapshot_map.years if item.year == year), None)
+        snapshot_year = next(
+            (item for item in snapshot_map.years if item.year == year), None
+        )
         if snapshot_year is None:
             return None
-        payment_row = next((row for row in self.payment_overview(years=[year]).rows if row.year == year), None)
-        if self._correction_snapshot_is_stale_for_year(snapshot_year, payment_row=payment_row):
+        payment_row = next(
+            (
+                row
+                for row in self.payment_overview(years=[year]).rows
+                if row.year == year
+            ),
+            None,
+        )
+        if self._correction_snapshot_is_stale_for_year(
+            snapshot_year, payment_row=payment_row
+        ):
             return None
         return snapshot_year
 
-    def _correction_snapshot_is_stale_for_year(self, snapshot_year: TaxYearCorrectionMap, *, payment_row) -> bool:
+    def _correction_snapshot_is_stale_for_year(
+        self, snapshot_year: TaxYearCorrectionMap, *, payment_row
+    ) -> bool:
         if payment_row is None:
             return False
         live_values = (
@@ -1419,14 +1600,20 @@ class TaxYearService:
             for item in years_payload
             if isinstance(item, dict) and item.get("year") is not None
         ]
-        payment_rows = {row.year: row for row in self.payment_overview(years=selected_years).rows}
+        payment_rows = {
+            row.year: row for row in self.payment_overview(years=selected_years).rows
+        }
         maps: list[TaxYearCorrectionMap] = []
         for item in years_payload:
             if not isinstance(item, dict):
                 continue
             year = int(item.get("year"))
-            taxable_private = Decimal(str(item.get("taxable_private_disposals_eur") or "0"))
-            rewards_income = Decimal(str(item.get("rewards_mining_staking_income_eur") or "0"))
+            taxable_private = Decimal(
+                str(item.get("taxable_private_disposals_eur") or "0")
+            )
+            rewards_income = Decimal(
+                str(item.get("rewards_mining_staking_income_eur") or "0")
+            )
             derivative_pnl = Decimal(str(item.get("derivative_pnl_eur") or "0"))
             payment_row = payment_rows.get(year)
             if payment_row is not None and any(
@@ -1444,9 +1631,19 @@ class TaxYearService:
             else:
                 tax_free = Decimal("0")
             appendix_items = int(item.get("appendix_items_count") or 0)
-            appendix_manual = int(item.get("appendix_manual_evidence_required_count") or 0)
-            blocking_codes = item.get("blocking_gap_codes") if isinstance(item.get("blocking_gap_codes"), list) else []
-            review_codes = item.get("review_gap_codes") if isinstance(item.get("review_gap_codes"), list) else []
+            appendix_manual = int(
+                item.get("appendix_manual_evidence_required_count") or 0
+            )
+            blocking_codes = (
+                item.get("blocking_gap_codes")
+                if isinstance(item.get("blocking_gap_codes"), list)
+                else []
+            )
+            review_codes = (
+                item.get("review_gap_codes")
+                if isinstance(item.get("review_gap_codes"), list)
+                else []
+            )
             lines = self._snapshot_correction_lines(
                 year=year,
                 taxable_private=taxable_private,
@@ -1459,7 +1656,8 @@ class TaxYearService:
                 blocking_codes_count=len(blocking_codes),
             )
             amendment_relevant = any(
-                line.action_category in {"eintragen", "korrigieren_pruefen"} or line.risk_level == "blocked"
+                line.action_category in {"eintragen", "korrigieren_pruefen"}
+                or line.risk_level == "blocked"
                 for line in lines
             )
             if blocking_codes:
@@ -1475,7 +1673,9 @@ class TaxYearService:
                 TaxYearCorrectionMap(
                     year=year,
                     generated_at=datetime.now(timezone.utc).isoformat(),
-                    filing_status=str(item.get("status_label") or item.get("filing_status") or "-"),
+                    filing_status=str(
+                        item.get("status_label") or item.get("filing_status") or "-"
+                    ),
                     amendment_review_recommended=amendment_relevant,
                     amendment_reason=reason,
                     taxable_private_disposals_eur=taxable_private,
@@ -1483,7 +1683,9 @@ class TaxYearService:
                     derivative_pnl_eur=derivative_pnl,
                     tax_free_private_disposals_eur=tax_free,
                     lines=lines,
-                    ascii_table=self._year_correction_map_ascii_table(year, lines, reason),
+                    ascii_table=self._year_correction_map_ascii_table(
+                        year, lines, reason
+                    ),
                     methodology=(
                         "Schnelle read-only Korrekturkarte aus dem BMF-Filing-Readiness-"
                         "Snapshot und Payment-Overview. Fuer Detailbelege den Jahres-"
@@ -1495,8 +1697,12 @@ class TaxYearService:
         return TaxYearsCorrectionMap(
             generated_at=datetime.now(timezone.utc).isoformat(),
             years=maps,
-            amendment_review_years=[entry.year for entry in maps if entry.amendment_review_recommended],
-            archive_only_years=[entry.year for entry in maps if not entry.amendment_review_recommended],
+            amendment_review_years=[
+                entry.year for entry in maps if entry.amendment_review_recommended
+            ],
+            archive_only_years=[
+                entry.year for entry in maps if not entry.amendment_review_recommended
+            ],
             blocked_years=[
                 entry.year
                 for entry in maps
@@ -1639,7 +1845,9 @@ class TaxYearService:
         amendment_relevant = False
         blocked = False
         for line in summary.lines:
-            action_category, risk_level, note = self._correction_action_for_filing_line(line, summary)
+            action_category, risk_level, note = self._correction_action_for_filing_line(
+                line, summary
+            )
             if action_category in {"eintragen", "korrigieren_pruefen"}:
                 amendment_relevant = True
             if risk_level == "blocked":
@@ -1693,7 +1901,9 @@ class TaxYearService:
         line: TaxYearFilingSummaryLine,
         summary: TaxYearFilingSummary,
     ) -> tuple[
-        Literal["eintragen", "korrigieren_pruefen", "beilegen", "archivieren", "pruefen"],
+        Literal[
+            "eintragen", "korrigieren_pruefen", "beilegen", "archivieren", "pruefen"
+        ],
         Literal["info", "review", "blocked"],
         str,
     ]:
@@ -1718,7 +1928,9 @@ class TaxYearService:
             )
         if line.topic == "appendix":
             risk: Literal["info", "review", "blocked"] = (
-                "review" if summary.bmf_closure_appendix_manual_evidence_required_count else "info"
+                "review"
+                if summary.bmf_closure_appendix_manual_evidence_required_count
+                else "info"
             )
             return (
                 "beilegen",
@@ -1754,7 +1966,9 @@ class TaxYearService:
                     str(year),
                     item.action_category,
                     item.label,
-                    self._fmt_eur(item.amount_eur or Decimal("0")) if item.amount_eur is not None else "-",
+                    self._fmt_eur(item.amount_eur or Decimal("0"))
+                    if item.amount_eur is not None
+                    else "-",
                     item.declaration_target[:64],
                 ]
             )
@@ -1834,14 +2048,32 @@ class TaxYearService:
                 continue
             year = int(item.get("year"))
             payment_row = payment_rows.get(year)
-            blocking_codes = item.get("blocking_gap_codes") if isinstance(item.get("blocking_gap_codes"), list) else []
-            review_codes = item.get("review_gap_codes") if isinstance(item.get("review_gap_codes"), list) else []
+            blocking_codes = (
+                item.get("blocking_gap_codes")
+                if isinstance(item.get("blocking_gap_codes"), list)
+                else []
+            )
+            review_codes = (
+                item.get("review_gap_codes")
+                if isinstance(item.get("review_gap_codes"), list)
+                else []
+            )
             appendix_items_count = int(item.get("appendix_items_count") or 0)
-            appendix_manual_count = int(item.get("appendix_manual_evidence_required_count") or 0)
+            appendix_manual_count = int(
+                item.get("appendix_manual_evidence_required_count") or 0
+            )
             derivative_pnl = Decimal(str(item.get("derivative_pnl_eur") or "0"))
-            taxable_private = Decimal(str(item.get("taxable_private_disposals_eur") or "0"))
-            rewards_income = Decimal(str(item.get("rewards_mining_staking_income_eur") or "0"))
-            tax_free = payment_row.tax_free_private_disposals_eur if payment_row is not None else Decimal("0")
+            taxable_private = Decimal(
+                str(item.get("taxable_private_disposals_eur") or "0")
+            )
+            rewards_income = Decimal(
+                str(item.get("rewards_mining_staking_income_eur") or "0")
+            )
+            tax_free = (
+                payment_row.tax_free_private_disposals_eur
+                if payment_row is not None
+                else Decimal("0")
+            )
             if payment_row is not None and any(
                 (
                     payment_row.private_disposals_gain_loss_eur,
@@ -1859,7 +2091,10 @@ class TaxYearService:
                 action_status = "blocked"
             elif item.get("bmf_ready") is True and not review_codes:
                 action_status = "ready"
-            elif item.get("can_file_with_conservative_appendix") is True or item.get("filing_status") == "conservative_appendix":
+            elif (
+                item.get("can_file_with_conservative_appendix") is True
+                or item.get("filing_status") == "conservative_appendix"
+            ):
                 action_status = "conservative_ready"
             else:
                 action_status = "review"
@@ -1867,15 +2102,21 @@ class TaxYearService:
                 payment_row=payment_row,
                 appendix_items_count=appendix_items_count,
                 derivative_pnl=derivative_pnl,
-                review_codes_count=0 if action_status == "conservative_ready" else len(review_codes),
+                review_codes_count=0
+                if action_status == "conservative_ready"
+                else len(review_codes),
                 blocking_codes_count=len(blocking_codes),
             )
-            next_action = self._filing_matrix_snapshot_next_action(counts, action_status)
+            next_action = self._filing_matrix_snapshot_next_action(
+                counts, action_status
+            )
             if action_status != "conservative_ready" and item.get("next_action"):
                 next_action = str(item.get("next_action"))
             row = TaxYearFilingMatrixRow(
                 year=year,
-                status_label=str(item.get("status_label") or item.get("filing_status") or "-"),
+                status_label=str(
+                    item.get("status_label") or item.get("filing_status") or "-"
+                ),
                 export_ready=not bool(blocking_codes),
                 action_status=action_status,
                 next_action=next_action,
@@ -1884,15 +2125,20 @@ class TaxYearService:
                 derivative_pnl_eur=derivative_pnl,
                 tax_free_private_disposals_eur=tax_free,
                 checklist_counts=counts,
-                bmf_closure_appendix_status=str(item.get("appendix_status") or "") or None,
+                bmf_closure_appendix_status=str(item.get("appendix_status") or "")
+                or None,
                 bmf_closure_appendix_items_count=appendix_items_count,
                 bmf_closure_appendix_manual_evidence_required_count=appendix_manual_count,
                 warnings_count=len(review_codes),
                 review_decisions_count=0,
-                filing_summary_endpoint=str(item.get("filing_summary_endpoint") or f"/api/v1/tax-years/{year}/filing-summary"),
+                filing_summary_endpoint=str(
+                    item.get("filing_summary_endpoint")
+                    or f"/api/v1/tax-years/{year}/filing-summary"
+                ),
                 filing_checklist_csv_endpoint=f"/api/v1/export/tax-years/{year}/filing-checklist.csv",
                 evidence_package_endpoint=str(
-                    item.get("evidence_package_endpoint") or f"/api/v1/export/tax-years/{year}/evidence-package.zip"
+                    item.get("evidence_package_endpoint")
+                    or f"/api/v1/export/tax-years/{year}/evidence-package.zip"
                 ),
                 display_line=(
                     f"{year} | {action_status} | SO {self._fmt_eur(taxable_private)} | "
@@ -1905,7 +2151,9 @@ class TaxYearService:
             generated_at=datetime.now(timezone.utc).isoformat(),
             rows=rows,
             ready_years=[row.year for row in rows if row.action_status == "ready"],
-            conservative_ready_years=[row.year for row in rows if row.action_status == "conservative_ready"],
+            conservative_ready_years=[
+                row.year for row in rows if row.action_status == "conservative_ready"
+            ],
             review_years=[row.year for row in rows if row.action_status == "review"],
             blocked_years=[row.year for row in rows if row.action_status == "blocked"],
             ascii_table=self._filing_matrix_ascii_table(rows),
@@ -1962,8 +2210,10 @@ class TaxYearService:
 
     def _bmf_filing_readiness_snapshot_path(self) -> Path | None:
         candidates = [
-            self.store.path.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
-            self.store.path.parent.parent / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            self.store.path.parent
+            / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
+            self.store.path.parent.parent
+            / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -1976,7 +2226,10 @@ class TaxYearService:
     ) -> TaxYearFilingActionStatus:
         if not summary.export_ready:
             return "blocked"
-        if summary.can_file_with_conservative_appendix and not summary.bmf_closure_appendix_manual_evidence_required_count:
+        if (
+            summary.can_file_with_conservative_appendix
+            and not summary.bmf_closure_appendix_manual_evidence_required_count
+        ):
             return "conservative_ready"
         if counts.get("pruefen", 0) or summary.warnings:
             return "review"
@@ -2013,7 +2266,17 @@ class TaxYearService:
         )
 
     def _filing_matrix_ascii_table(self, rows: list[TaxYearFilingMatrixRow]) -> str:
-        table_rows = [["Jahr", "Status", "Anlage SO", "Rewards", "Beilegen", "Pruefen", "Naechster Schritt"]]
+        table_rows = [
+            [
+                "Jahr",
+                "Status",
+                "Anlage SO",
+                "Rewards",
+                "Beilegen",
+                "Pruefen",
+                "Naechster Schritt",
+            ]
+        ]
         for row in rows:
             table_rows.append(
                 [
@@ -2026,31 +2289,54 @@ class TaxYearService:
                     row.next_action,
                 ]
             )
-        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+        widths = [
+            max(len(str(row[index])) for row in table_rows)
+            for index in range(len(table_rows[0]))
+        ]
         sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
 
         def fmt(row: list[str]) -> str:
-            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+            return (
+                "| "
+                + " | ".join(
+                    value.ljust(widths[index]) for index, value in enumerate(row)
+                )
+                + " |"
+            )
 
-        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+        return "\n".join(
+            [sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep]
+        )
 
-    def _filing_ascii_table(self, year: int, lines: list[TaxYearFilingSummaryLine]) -> str:
+    def _filing_ascii_table(
+        self, year: int, lines: list[TaxYearFilingSummaryLine]
+    ) -> str:
         rows = [["Jahr", "Bereich", "Betrag", "Steuerliche Behandlung", "Ziel"]]
         for line in lines:
             rows.append(
                 [
                     str(year),
                     line.label,
-                    self._fmt_eur(line.amount_eur) if line.amount_eur is not None else "-",
+                    self._fmt_eur(line.amount_eur)
+                    if line.amount_eur is not None
+                    else "-",
                     line.tax_treatment,
                     line.declaration_target,
                 ]
             )
-        widths = [max(len(str(row[index])) for row in rows) for index in range(len(rows[0]))]
+        widths = [
+            max(len(str(row[index])) for row in rows) for index in range(len(rows[0]))
+        ]
         sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
 
         def fmt(row: list[str]) -> str:
-            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+            return (
+                "| "
+                + " | ".join(
+                    value.ljust(widths[index]) for index, value in enumerate(row)
+                )
+                + " |"
+            )
 
         return "\n".join([sep, fmt(rows[0]), sep, *(fmt(row) for row in rows[1:]), sep])
 
@@ -2092,15 +2378,28 @@ class TaxYearService:
                     "0",
                 ]
             )
-        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+        widths = [
+            max(len(str(row[index])) for row in table_rows)
+            for index in range(len(table_rows[0]))
+        ]
         sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
 
         def fmt(row: list[str]) -> str:
-            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+            return (
+                "| "
+                + " | ".join(
+                    value.ljust(widths[index]) for index, value in enumerate(row)
+                )
+                + " |"
+            )
 
-        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+        return "\n".join(
+            [sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep]
+        )
 
-    def _gain_loss_reality_ascii_table(self, rows: list[TaxYearGainLossRealityAssetRow]) -> str:
+    def _gain_loss_reality_ascii_table(
+        self, rows: list[TaxYearGainLossRealityAssetRow]
+    ) -> str:
         table_rows = [
             [
                 "Asset",
@@ -2125,17 +2424,49 @@ class TaxYearService:
                 ]
             )
         if len(table_rows) == 1:
-            table_rows.append(["-", self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0"))])
-        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+            table_rows.append(
+                [
+                    "-",
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                ]
+            )
+        widths = [
+            max(len(str(row[index])) for row in table_rows)
+            for index in range(len(table_rows[0]))
+        ]
         sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
 
         def fmt(row: list[str]) -> str:
-            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+            return (
+                "| "
+                + " | ".join(
+                    value.ljust(widths[index]) for index, value in enumerate(row)
+                )
+                + " |"
+            )
 
-        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+        return "\n".join(
+            [sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep]
+        )
 
     def _gain_evidence_ascii_table(self, rows: list[TaxYearGainEvidenceLine]) -> str:
-        table_rows = [["Risiko", "Asset", "G/V", "Kosten", "Erloes", "Erwerb Roh", "Verkauf Roh", "Bewertung"]]
+        table_rows = [
+            [
+                "Risiko",
+                "Asset",
+                "G/V",
+                "Kosten",
+                "Erloes",
+                "Erwerb Roh",
+                "Verkauf Roh",
+                "Bewertung",
+            ]
+        ]
         for row in rows:
             table_rows.append(
                 [
@@ -2150,17 +2481,41 @@ class TaxYearService:
                 ]
             )
         if len(table_rows) == 1:
-            table_rows.append(["-", "-", self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), "-", "-", "-"])
-        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+            table_rows.append(
+                [
+                    "-",
+                    "-",
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    "-",
+                    "-",
+                    "-",
+                ]
+            )
+        widths = [
+            max(len(str(row[index])) for row in table_rows)
+            for index in range(len(table_rows[0]))
+        ]
         sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
 
         def fmt(row: list[str]) -> str:
-            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+            return (
+                "| "
+                + " | ".join(
+                    value.ljust(widths[index]) for index, value in enumerate(row)
+                )
+                + " |"
+            )
 
-        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+        return "\n".join(
+            [sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep]
+        )
 
     @staticmethod
-    def _gain_evidence_valuation_path(acquisition_quote_asset: str | None, disposal_quote_asset: str | None) -> str:
+    def _gain_evidence_valuation_path(
+        acquisition_quote_asset: str | None, disposal_quote_asset: str | None
+    ) -> str:
         parts: list[str] = []
         if acquisition_quote_asset:
             parts.append(f"acq_quote={acquisition_quote_asset.upper()}")
@@ -2209,8 +2564,14 @@ class TaxYearService:
             }
         expected_value = price_quantity * price_point.price_eur
         delta_eur = actual_value - expected_value
-        delta_pct = abs(delta_eur) / expected_value * Decimal("100") if expected_value else None
-        normalized_event_time = event_time if event_time.tzinfo is not None else event_time.replace(tzinfo=timezone.utc)
+        delta_pct = (
+            abs(delta_eur) / expected_value * Decimal("100") if expected_value else None
+        )
+        normalized_event_time = (
+            event_time
+            if event_time.tzinfo is not None
+            else event_time.replace(tzinfo=timezone.utc)
+        )
         normalized_price_time = (
             price_point.priced_at
             if price_point.priced_at.tzinfo is not None
@@ -2221,7 +2582,9 @@ class TaxYearService:
             "price_eur": price_point.price_eur,
             "price_source": price_point.source,
             "priced_at": price_point.priced_at.isoformat(),
-            "price_age_days": max((normalized_event_time.date() - normalized_price_time.date()).days, 0),
+            "price_age_days": max(
+                (normalized_event_time.date() - normalized_price_time.date()).days, 0
+            ),
             "expected_value": expected_value,
             "delta_eur": delta_eur,
             "delta_pct": delta_pct,
@@ -2253,33 +2616,59 @@ class TaxYearService:
             reasons.append("acquisition_price_missing")
         if not disposal_price_source:
             reasons.append("disposal_price_missing")
-        quote_assets = {str(item).upper() for item in (acquisition_quote_asset, disposal_quote_asset) if item}
+        quote_assets = {
+            str(item).upper()
+            for item in (acquisition_quote_asset, disposal_quote_asset)
+            if item
+        }
         if quote_assets and not quote_assets.issubset({"EUR"}):
             reasons.append("non_eur_quote_or_stablecoin_valuation")
         if abs(gain_loss_ratio_pct) >= Decimal("50"):
             reasons.append("large_gain_loss_ratio")
-        if acquisition_source and disposal_source and acquisition_source != disposal_source:
+        if (
+            acquisition_source
+            and disposal_source
+            and acquisition_source != disposal_source
+        ):
             reasons.append("cross_source_fifo")
-        if acquisition_price_delta_pct is not None and acquisition_price_delta_pct > Decimal("0.5"):
+        if (
+            acquisition_price_delta_pct is not None
+            and acquisition_price_delta_pct > Decimal("0.5")
+        ):
             reasons.append("acquisition_price_delta_review")
-        if disposal_price_delta_pct is not None and disposal_price_delta_pct > Decimal("0.5"):
+        if disposal_price_delta_pct is not None and disposal_price_delta_pct > Decimal(
+            "0.5"
+        ):
             reasons.append("disposal_price_delta_review")
         if acquisition_price_age_days is not None and acquisition_price_age_days > 7:
             reasons.append("acquisition_stale_price")
         if disposal_price_age_days is not None and disposal_price_age_days > 7:
             reasons.append("disposal_stale_price")
-        if acquisition_price_source and HistoricalPriceLookup.is_derived_source(acquisition_price_source):
+        if acquisition_price_source and HistoricalPriceLookup.is_derived_source(
+            acquisition_price_source
+        ):
             reasons.append("acquisition_derived_price")
-        if disposal_price_source and HistoricalPriceLookup.is_derived_source(disposal_price_source):
+        if disposal_price_source and HistoricalPriceLookup.is_derived_source(
+            disposal_price_source
+        ):
             reasons.append("disposal_derived_price")
         return reasons or ["evidence_path_present"]
 
     @staticmethod
     def _gain_evidence_risk(reasons: list[str]) -> Literal["ok", "review", "high"]:
-        high = {"acquisition_raw_missing", "disposal_raw_missing", "acquisition_price_missing", "disposal_price_missing"}
+        high = {
+            "acquisition_raw_missing",
+            "disposal_raw_missing",
+            "acquisition_price_missing",
+            "disposal_price_missing",
+        }
         if any(reason in high for reason in reasons):
             return "high"
-        review = {"non_eur_quote_or_stablecoin_valuation", "large_gain_loss_ratio", "cross_source_fifo"}
+        review = {
+            "non_eur_quote_or_stablecoin_valuation",
+            "large_gain_loss_ratio",
+            "cross_source_fifo",
+        }
         if any(reason in review for reason in reasons):
             return "review"
         return "ok"
@@ -2299,9 +2688,9 @@ class TaxYearService:
         disposal_price: dict[str, object],
         reasons: list[str],
     ) -> tuple[Decimal, Decimal, str, str, str]:
-        absolute_delta = abs(self._decimal_or_zero(acquisition_price.get("delta_eur"))) + abs(
-            self._decimal_or_zero(disposal_price.get("delta_eur"))
-        )
+        absolute_delta = abs(
+            self._decimal_or_zero(acquisition_price.get("delta_eur"))
+        ) + abs(self._decimal_or_zero(disposal_price.get("delta_eur")))
         max_delta_pct = max(
             self._decimal_or_zero(acquisition_price.get("delta_pct")),
             self._decimal_or_zero(disposal_price.get("delta_pct")),
@@ -2316,11 +2705,17 @@ class TaxYearService:
         token_quotes = non_eur_quotes - STABLECOIN_LIKE_ASSETS
         price_sources = {
             str(source)
-            for source in (acquisition_price.get("price_source"), disposal_price.get("price_source"))
+            for source in (
+                acquisition_price.get("price_source"),
+                disposal_price.get("price_source"),
+            )
             if source
         }
 
-        if "acquisition_price_missing" in reasons or "disposal_price_missing" in reasons:
+        if (
+            "acquisition_price_missing" in reasons
+            or "disposal_price_missing" in reasons
+        ):
             return (
                 absolute_delta,
                 max_delta_pct,
@@ -2352,7 +2747,11 @@ class TaxYearService:
                 "Die Bewertung nutzt ein Token-Quote-Bein aus einem Swap oder DEX-Route statt direktem EUR.",
                 "On-chain Swap-Route mit Token-Transfers, Quote-Mint und Gegenwert aus Solscan/Helius/Jupiter abgleichen.",
             )
-        if acquisition_source and disposal_source and acquisition_source != disposal_source:
+        if (
+            acquisition_source
+            and disposal_source
+            and acquisition_source != disposal_source
+        ):
             return (
                 absolute_delta,
                 max_delta_pct,
@@ -2360,7 +2759,9 @@ class TaxYearService:
                 "Die FIFO-Kette verbindet unterschiedliche Quellen; Preisdelta kann aus Transfer-/Exchange-Kontext stammen.",
                 "Transferneutralitaet und Besitzkette zwischen den Quellen dokumentieren, danach FIFO-Vererbung bestaetigen.",
             )
-        if any(HistoricalPriceLookup.is_derived_source(source) for source in price_sources):
+        if any(
+            HistoricalPriceLookup.is_derived_source(source) for source in price_sources
+        ):
             return (
                 absolute_delta,
                 max_delta_pct,
@@ -2403,11 +2804,16 @@ class TaxYearService:
             item = grouped[line.delta_classification]
             item["lines_count"] = int(item["lines_count"]) + 1
             item["gain_loss_eur"] = item["gain_loss_eur"] + line.gain_loss_eur  # type: ignore[operator]
-            item["absolute_delta_eur"] = item["absolute_delta_eur"] + line.absolute_price_delta_eur  # type: ignore[operator]
+            item["absolute_delta_eur"] = (
+                item["absolute_delta_eur"] + line.absolute_price_delta_eur
+            )  # type: ignore[operator]
             item["open_delta_eur"] = item["open_delta_eur"] + line.open_price_delta_eur  # type: ignore[operator]
             item["max_delta_pct"] = max(item["max_delta_pct"], line.max_price_delta_pct)  # type: ignore[arg-type]
             item["assets"].add(line.asset.upper())  # type: ignore[union-attr]
-            for quote_asset in (line.acquisition_quote_asset, line.disposal_quote_asset):
+            for quote_asset in (
+                line.acquisition_quote_asset,
+                line.disposal_quote_asset,
+            ):
                 if quote_asset:
                     item["quote_assets"].add(quote_asset.upper())  # type: ignore[union-attr]
             for source in (line.acquisition_source, line.disposal_source):
@@ -2436,7 +2842,9 @@ class TaxYearService:
             )
             for classification, item in grouped.items()
         ]
-        groups.sort(key=lambda group: (group.risk_level != "high", -group.absolute_delta_eur))
+        groups.sort(
+            key=lambda group: (group.risk_level != "high", -group.absolute_delta_eur)
+        )
         return groups
 
     @staticmethod
@@ -2478,8 +2886,12 @@ class TaxYearService:
         return "acquisition" if acq > disp else "disposal"
 
     @staticmethod
-    def _gain_evidence_root_cause(acquisition_diagnosis: str, disposal_diagnosis: str) -> str:
-        diagnoses = [item for item in (acquisition_diagnosis, disposal_diagnosis) if item != "ok"]
+    def _gain_evidence_root_cause(
+        acquisition_diagnosis: str, disposal_diagnosis: str
+    ) -> str:
+        diagnoses = [
+            item for item in (acquisition_diagnosis, disposal_diagnosis) if item != "ok"
+        ]
         if not diagnoses:
             return "no_material_delta"
         if "quote_allocation_or_split_line" in diagnoses:
@@ -2553,7 +2965,9 @@ class TaxYearService:
                 event_split_count=disposal_counts.get(line.disposal_event_id, 0),
             )
             if diagnosis == "quote_allocation_or_split_line":
-                split_delta_by_event[line.disposal_event_id] += line.absolute_price_delta_eur
+                split_delta_by_event[line.disposal_event_id] += (
+                    line.absolute_price_delta_eur
+                )
                 split_count_by_event[line.disposal_event_id] += 1
         return split_delta_by_event, split_count_by_event
 
@@ -2583,11 +2997,6 @@ class TaxYearService:
             limit=max(1, min(limit, 500)),
             include_split_delta=False,
         )
-        acquisition_event_level_by_id = self._gain_evidence_acquisition_event_delta_lines_by_id(
-            year,
-            limit=max(1, min(limit, 500)),
-        )
-
         rows: list[TaxYearGainEvidencePriceDeltaLine] = []
         root_counts: dict[str, int] = defaultdict(int)
         dominant_counts = {"acquisition": 0, "disposal": 0, "both": 0, "none": 0}
@@ -2600,7 +3009,9 @@ class TaxYearService:
             disposal_delta = line.disposal_proceeds_delta_eur or Decimal("0")
             acquisition_delta_pct = line.acquisition_cost_delta_pct or Decimal("0")
             disposal_delta_pct = line.disposal_proceeds_delta_pct or Decimal("0")
-            acquisition_split_count = acquisition_counts.get(line.acquisition_event_id or "", 0)
+            acquisition_split_count = acquisition_counts.get(
+                line.acquisition_event_id or "", 0
+            )
             disposal_split_count = disposal_counts.get(line.disposal_event_id or "", 0)
             acquisition_diagnosis = self._gain_evidence_side_diagnosis(
                 delta_eur=acquisition_delta,
@@ -2618,16 +3029,18 @@ class TaxYearService:
                 price_source=line.disposal_price_source,
                 event_split_count=disposal_split_count,
             )
-            dominant_side = self._gain_evidence_dominant_side(acquisition_delta, disposal_delta)
-            root_cause = self._gain_evidence_root_cause(acquisition_diagnosis, disposal_diagnosis)
+            dominant_side = self._gain_evidence_dominant_side(
+                acquisition_delta, disposal_delta
+            )
+            root_cause = self._gain_evidence_root_cause(
+                acquisition_diagnosis, disposal_diagnosis
+            )
             explanation, action = self._gain_evidence_root_cause_text(root_cause)
             event_level = event_level_by_id.get(line.disposal_event_id or "")
             if event_level and event_level.status == "event_level_ok":
                 event_level_reconciled_count += 1
                 if root_cause == "quote_allocation_or_split_line":
-                    explanation = (
-                        "Event-Level ist plausibel; dieses Delta ist ein FIFO-Teilzeilen-/Quote-Allocation-Artefakt."
-                    )
+                    explanation = "Event-Level ist plausibel; dieses Delta ist ein FIFO-Teilzeilen-/Quote-Allocation-Artefakt."
                     action = "Nicht als echten zusaetzlichen Gewinn werten; Event-Level-Beleg archivieren."
             elif event_level and event_level.status == "event_level_review":
                 event_level_review_count += 1
@@ -2664,9 +3077,15 @@ class TaxYearService:
                     disposal_event_split_count=disposal_split_count,
                     disposal_side_diagnosis=disposal_diagnosis,
                     event_level_status=event_level.status if event_level else None,
-                    event_level_delta_eur=event_level.event_delta_eur if event_level else None,
-                    event_level_delta_pct=event_level.event_delta_pct if event_level else None,
-                    event_level_explanation=event_level.explanation if event_level else None,
+                    event_level_delta_eur=event_level.event_delta_eur
+                    if event_level
+                    else None,
+                    event_level_delta_pct=event_level.event_delta_pct
+                    if event_level
+                    else None,
+                    event_level_explanation=event_level.explanation
+                    if event_level
+                    else None,
                     root_cause=root_cause,
                     explanation=explanation,
                     recommended_action=action,
@@ -2680,9 +3099,15 @@ class TaxYearService:
             classification_filter=classification,
             lines_count=len(rows),
             gain_loss_eur=sum((row.gain_loss_eur for row in rows), Decimal("0")),
-            absolute_delta_eur=sum((row.absolute_delta_eur for row in rows), Decimal("0")),
-            acquisition_delta_eur=sum((abs(row.acquisition_delta_eur) for row in rows), Decimal("0")),
-            disposal_delta_eur=sum((abs(row.disposal_delta_eur) for row in rows), Decimal("0")),
+            absolute_delta_eur=sum(
+                (row.absolute_delta_eur for row in rows), Decimal("0")
+            ),
+            acquisition_delta_eur=sum(
+                (abs(row.acquisition_delta_eur) for row in rows), Decimal("0")
+            ),
+            disposal_delta_eur=sum(
+                (abs(row.disposal_delta_eur) for row in rows), Decimal("0")
+            ),
             dominant_acquisition_count=dominant_counts["acquisition"],
             dominant_disposal_count=dominant_counts["disposal"],
             dominant_both_count=dominant_counts["both"],
@@ -2740,7 +3165,7 @@ class TaxYearService:
     ) -> dict[str, TaxYearGainEvidenceEventDeltaLine]:
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     de.event_id,
                     min(l.disposed_at) as disposed_at,
@@ -2756,7 +3181,7 @@ class TaxYearService:
                     coalesce(sum(l.disposal_proceeds_eur), 0) as actual_proceeds_eur
                 from tax_lines l
                 join canonical_events de on de.event_id = l.source_event_id
-                where date_part('year', l.disposed_at)::integer = ?
+                where {reporting_year_sql("l.disposed_at")} = ?
                   and l.holding_days <= 365
                   and de.event_id is not null
                   and de.quote_asset is not null
@@ -2769,12 +3194,17 @@ class TaxYearService:
             ).fetchall()
 
         if include_split_delta:
-            split_delta_by_event, split_count_by_event = self._gain_evidence_split_delta_by_disposal_event(
-                year,
-                limit=limit,
+            split_delta_by_event, split_count_by_event = (
+                self._gain_evidence_split_delta_by_disposal_event(
+                    year,
+                    limit=limit,
+                )
             )
         else:
-            split_delta_by_event, split_count_by_event = defaultdict(Decimal), defaultdict(int)
+            split_delta_by_event, split_count_by_event = (
+                defaultdict(Decimal),
+                defaultdict(int),
+            )
 
         price_lookup = HistoricalPriceLookup(self.store)
         lines: list[TaxYearGainEvidenceEventDeltaLine] = []
@@ -2794,8 +3224,14 @@ class TaxYearService:
         ) in rows:
             event_asset_key = str(event_asset or "").upper()
             quote_asset_key = str(quote_asset or "").upper()
-            asset_set = {asset.strip().upper() for asset in str(assets or "").split(",") if asset}
-            if event_asset_key in asset_set and event_quantity is not None and event_quantity < 0:
+            asset_set = {
+                asset.strip().upper() for asset in str(assets or "").split(",") if asset
+            }
+            if (
+                event_asset_key in asset_set
+                and event_quantity is not None
+                and event_quantity < 0
+            ):
                 total_disposed_quantity = abs(event_quantity)
             elif quote_asset_key in asset_set and quote_quantity is not None:
                 total_disposed_quantity = abs(quote_quantity)
@@ -2803,7 +3239,8 @@ class TaxYearService:
                 total_disposed_quantity = taxable_disposed_quantity or None
             taxable_fraction = (
                 taxable_disposed_quantity / total_disposed_quantity
-                if total_disposed_quantity and taxable_disposed_quantity <= total_disposed_quantity
+                if total_disposed_quantity
+                and taxable_disposed_quantity <= total_disposed_quantity
                 else Decimal("1")
             )
             price = self._gain_evidence_price_check(
@@ -2816,12 +3253,25 @@ class TaxYearService:
                 actual_value=actual_proceeds_eur or Decimal("0"),
             )
             event_total_expected = price["expected_value"]
-            expected = event_total_expected * taxable_fraction if isinstance(event_total_expected, Decimal) else None
-            delta = (actual_proceeds_eur or Decimal("0")) - expected if expected is not None else None
+            expected = (
+                event_total_expected * taxable_fraction
+                if isinstance(event_total_expected, Decimal)
+                else None
+            )
+            delta = (
+                (actual_proceeds_eur or Decimal("0")) - expected
+                if expected is not None
+                else None
+            )
             delta_pct = abs(delta) / expected * Decimal("100") if expected else None
             if price["price_source"] is None:
-                status: Literal["event_level_ok", "event_level_review", "missing_price_evidence"] = "missing_price_evidence"
-            elif delta is not None and (abs(delta) < Decimal("0.01") or (delta_pct is not None and delta_pct <= Decimal("0.5"))):
+                status: Literal[
+                    "event_level_ok", "event_level_review", "missing_price_evidence"
+                ] = "missing_price_evidence"
+            elif delta is not None and (
+                abs(delta) < Decimal("0.01")
+                or (delta_pct is not None and delta_pct <= Decimal("0.5"))
+            ):
                 status = "event_level_ok"
             else:
                 status = "event_level_review"
@@ -2874,7 +3324,7 @@ class TaxYearService:
     ) -> dict[str, TaxYearGainEvidenceAcquisitionEventDeltaLine]:
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     ae.event_id,
                     min(lot.acquired_at) as acquired_at,
@@ -2891,7 +3341,7 @@ class TaxYearService:
                 from tax_lines l
                 join tax_lots lot on lot.lot_id = l.lot_id
                 join canonical_events ae on ae.event_id = lot.source_event_id
-                where date_part('year', l.disposed_at)::integer = ?
+                where {reporting_year_sql("l.disposed_at")} = ?
                   and l.holding_days <= 365
                   and ae.event_id is not null
                   and ae.quote_asset is not null
@@ -2919,14 +3369,21 @@ class TaxYearService:
             actual_cost_eur,
         ) in rows:
             event_asset_key = str(event_asset or "").upper()
-            asset_set = {asset.strip().upper() for asset in str(assets or "").split(",") if asset}
-            if event_asset_key in asset_set and event_quantity is not None and event_quantity > 0:
+            asset_set = {
+                asset.strip().upper() for asset in str(assets or "").split(",") if asset
+            }
+            if (
+                event_asset_key in asset_set
+                and event_quantity is not None
+                and event_quantity > 0
+            ):
                 total_acquired_quantity = abs(event_quantity)
             else:
                 total_acquired_quantity = taxable_consumed_quantity or None
             taxable_fraction = (
                 taxable_consumed_quantity / total_acquired_quantity
-                if total_acquired_quantity and taxable_consumed_quantity <= total_acquired_quantity
+                if total_acquired_quantity
+                and taxable_consumed_quantity <= total_acquired_quantity
                 else Decimal("1")
             )
             price = self._gain_evidence_price_check(
@@ -2939,12 +3396,25 @@ class TaxYearService:
                 actual_value=actual_cost_eur or Decimal("0"),
             )
             event_total_expected = price["expected_value"]
-            expected = event_total_expected * taxable_fraction if isinstance(event_total_expected, Decimal) else None
-            delta = (actual_cost_eur or Decimal("0")) - expected if expected is not None else None
+            expected = (
+                event_total_expected * taxable_fraction
+                if isinstance(event_total_expected, Decimal)
+                else None
+            )
+            delta = (
+                (actual_cost_eur or Decimal("0")) - expected
+                if expected is not None
+                else None
+            )
             delta_pct = abs(delta) / expected * Decimal("100") if expected else None
             if price["price_source"] is None:
-                status: Literal["event_level_ok", "event_level_review", "missing_price_evidence"] = "missing_price_evidence"
-            elif delta is not None and (abs(delta) < Decimal("0.01") or (delta_pct is not None and delta_pct <= Decimal("0.5"))):
+                status: Literal[
+                    "event_level_ok", "event_level_review", "missing_price_evidence"
+                ] = "missing_price_evidence"
+            elif delta is not None and (
+                abs(delta) < Decimal("0.01")
+                or (delta_pct is not None and delta_pct <= Decimal("0.5"))
+            ):
                 status = "event_level_ok"
             else:
                 status = "event_level_review"
@@ -2995,7 +3465,11 @@ class TaxYearService:
         *,
         limit: int = 200,
     ) -> TaxYearGainEvidenceAcquisitionEventDeltaReview:
-        lines = list(self._gain_evidence_acquisition_event_delta_lines_by_id(year, limit=limit).values())
+        lines = list(
+            self._gain_evidence_acquisition_event_delta_lines_by_id(
+                year, limit=limit
+            ).values()
+        )
         lines.sort(
             key=lambda line: (
                 line.status != "event_level_review",
@@ -3003,15 +3477,23 @@ class TaxYearService:
                 -line.actual_cost_eur,
             )
         )
-        expected_total = sum((line.expected_cost_eur or Decimal("0") for line in lines), Decimal("0"))
+        expected_total = sum(
+            (line.expected_cost_eur or Decimal("0") for line in lines), Decimal("0")
+        )
         actual_total = sum((line.actual_cost_eur for line in lines), Decimal("0"))
         return TaxYearGainEvidenceAcquisitionEventDeltaReview(
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
             events_count=len(lines),
-            event_level_ok_count=sum(1 for line in lines if line.status == "event_level_ok"),
-            event_level_review_count=sum(1 for line in lines if line.status == "event_level_review"),
-            missing_price_count=sum(1 for line in lines if line.status == "missing_price_evidence"),
+            event_level_ok_count=sum(
+                1 for line in lines if line.status == "event_level_ok"
+            ),
+            event_level_review_count=sum(
+                1 for line in lines if line.status == "event_level_review"
+            ),
+            missing_price_count=sum(
+                1 for line in lines if line.status == "missing_price_evidence"
+            ),
             tax_line_count=sum(line.tax_line_count for line in lines),
             actual_cost_eur=actual_total,
             expected_cost_eur=expected_total,
@@ -3048,20 +3530,30 @@ class TaxYearService:
                 -abs(line.event_delta_eur or Decimal("0")),
             )
         )
-        expected_total = sum((line.expected_proceeds_eur or Decimal("0") for line in lines), Decimal("0"))
+        expected_total = sum(
+            (line.expected_proceeds_eur or Decimal("0") for line in lines), Decimal("0")
+        )
         actual_total = sum((line.actual_proceeds_eur for line in lines), Decimal("0"))
         return TaxYearGainEvidenceEventDeltaReview(
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
             events_count=len(lines),
-            event_level_ok_count=sum(1 for line in lines if line.status == "event_level_ok"),
-            event_level_review_count=sum(1 for line in lines if line.status == "event_level_review"),
-            missing_price_count=sum(1 for line in lines if line.status == "missing_price_evidence"),
+            event_level_ok_count=sum(
+                1 for line in lines if line.status == "event_level_ok"
+            ),
+            event_level_review_count=sum(
+                1 for line in lines if line.status == "event_level_review"
+            ),
+            missing_price_count=sum(
+                1 for line in lines if line.status == "missing_price_evidence"
+            ),
             tax_line_count=sum(line.tax_line_count for line in lines),
             actual_proceeds_eur=actual_total,
             expected_proceeds_eur=expected_total,
             event_delta_eur=actual_total - expected_total,
-            split_line_absolute_delta_eur=sum((line.split_line_absolute_delta_eur for line in lines), Decimal("0")),
+            split_line_absolute_delta_eur=sum(
+                (line.split_line_absolute_delta_eur for line in lines), Decimal("0")
+            ),
             lines=lines,
             caveats=[
                 "Read-only Event-Level-Plausibilisierung: keine Tax-Line-, Lot- oder FIFO-Aenderung.",
@@ -3101,14 +3593,36 @@ class TaxYearService:
                 ]
             )
         if len(table_rows) == 1:
-            table_rows.append(["-", "-", "-", "-", self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), self._fmt_eur(Decimal("0")), "-"])
-        widths = [max(len(str(row[index])) for row in table_rows) for index in range(len(table_rows[0]))]
+            table_rows.append(
+                [
+                    "-",
+                    "-",
+                    "-",
+                    "-",
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    self._fmt_eur(Decimal("0")),
+                    "-",
+                ]
+            )
+        widths = [
+            max(len(str(row[index])) for row in table_rows)
+            for index in range(len(table_rows[0]))
+        ]
         sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
 
         def fmt(row: list[str]) -> str:
-            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+            return (
+                "| "
+                + " | ".join(
+                    value.ljust(widths[index]) for index, value in enumerate(row)
+                )
+                + " |"
+            )
 
-        return "\n".join([sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep])
+        return "\n".join(
+            [sep, fmt(table_rows[0]), sep, *(fmt(row) for row in table_rows[1:]), sep]
+        )
 
     def _gain_loss_reality_summary(
         self,
@@ -3171,22 +3685,31 @@ class TaxYearService:
         return items
 
     @staticmethod
-    def _filing_checklist_category(line: TaxYearFilingSummaryLine) -> Literal[
-        "eintragen", "beilegen", "archivieren", "pruefen"
-    ]:
-        if line.topic in {"private_disposal", "income"} and line.amount_eur not in (None, Decimal("0")):
+    def _filing_checklist_category(
+        line: TaxYearFilingSummaryLine,
+    ) -> Literal["eintragen", "beilegen", "archivieren", "pruefen"]:
+        if line.topic in {"private_disposal", "income"} and line.amount_eur not in (
+            None,
+            Decimal("0"),
+        ):
             return "eintragen"
         if line.topic == "derivative":
             return "pruefen"
         if line.topic == "appendix":
-            return "beilegen" if "konservativ belegbar" in line.tax_treatment else "pruefen"
+            return (
+                "beilegen"
+                if "konservativ belegbar" in line.tax_treatment
+                else "pruefen"
+            )
         if line.topic == "review":
             return "pruefen"
         if line.topic == "evidence":
             return "archivieren"
         return "archivieren"
 
-    def _filing_checklist_action(self, line: TaxYearFilingSummaryLine, category: str) -> str:
+    def _filing_checklist_action(
+        self, line: TaxYearFilingSummaryLine, category: str
+    ) -> str:
         if category == "eintragen":
             return (
                 f"Betrag {self._fmt_eur(line.amount_eur or Decimal('0'))} "
@@ -3199,7 +3722,9 @@ class TaxYearService:
         return "Nachweis im Jahrespaket archivieren und bei Rueckfragen vorlegen."
 
     @staticmethod
-    def _filing_checklist_done_when(line: TaxYearFilingSummaryLine, category: str) -> str:
+    def _filing_checklist_done_when(
+        line: TaxYearFilingSummaryLine, category: str
+    ) -> str:
         if category == "eintragen":
             return "Der Betrag ist in der Steuererklaerung erfasst und der Beleg ist abgelegt."
         if category == "beilegen":
@@ -3218,20 +3743,32 @@ class TaxYearService:
                     str(year),
                     item.category,
                     item.label,
-                    self._fmt_eur(item.amount_eur) if item.amount_eur is not None else "-",
+                    self._fmt_eur(item.amount_eur)
+                    if item.amount_eur is not None
+                    else "-",
                     item.done_when,
                 ]
             )
-        widths = [max(len(str(row[index])) for row in rows) for index in range(len(rows[0]))]
+        widths = [
+            max(len(str(row[index])) for row in rows) for index in range(len(rows[0]))
+        ]
         sep = "+-" + "-+-".join("-" * width for width in widths) + "-+"
 
         def fmt(row: list[str]) -> str:
-            return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
+            return (
+                "| "
+                + " | ".join(
+                    value.ljust(widths[index]) for index, value in enumerate(row)
+                )
+                + " |"
+            )
 
         return "\n".join([sep, fmt(rows[0]), sep, *(fmt(row) for row in rows[1:]), sep])
 
     @staticmethod
-    def _evidence_item_status(count: int, *, review: bool = False, blocked: bool = False) -> str:
+    def _evidence_item_status(
+        count: int, *, review: bool = False, blocked: bool = False
+    ) -> str:
         if blocked:
             return "blocked"
         if review:
@@ -3258,7 +3795,11 @@ class TaxYearService:
         years: list[int] | None = None,
         assets: tuple[str, ...] = HELIUM_REWARD_ASSETS,
     ) -> TaxRewardTradingSeparationReport:
-        selected_years = years if years is not None else [year for year in self._available_years() if 2021 <= year <= 2025]
+        selected_years = (
+            years
+            if years is not None
+            else [year for year in self._available_years() if 2021 <= year <= 2025]
+        )
         asset_keys = tuple(asset.upper() for asset in assets)
         rows: list[TaxRewardTradingSeparationRow] = []
         for year in selected_years:
@@ -3291,17 +3832,30 @@ class TaxYearService:
                 bucket["event_types"].add(item.event_type)  # type: ignore[union-attr]
                 bucket["sources"].update(item.sources)  # type: ignore[union-attr]
 
-            lines_by_asset: dict[str, list[object]] = {asset: [] for asset in asset_keys}
+            lines_by_asset: dict[str, list[object]] = {
+                asset: [] for asset in asset_keys
+            }
             for line in self._tax_lines():
                 asset = str(getattr(line, "asset", "") or "").upper()
-                if asset in lines_by_asset and getattr(line, "disposed_at").year == year:
+                if (
+                    asset in lines_by_asset
+                    and reporting_tax_year(getattr(line, "disposed_at")) == year
+                ):
                     lines_by_asset[asset].append(line)
 
             for asset in asset_keys:
                 reward = income_by_asset[asset]
                 tax_lines = lines_by_asset[asset]
-                taxable_lines = [line for line in tax_lines if self._is_taxable_private_disposal(line)]
-                tax_free_lines = [line for line in tax_lines if not self._is_taxable_private_disposal(line)]
+                taxable_lines = [
+                    line
+                    for line in tax_lines
+                    if self._is_taxable_private_disposal(line)
+                ]
+                tax_free_lines = [
+                    line
+                    for line in tax_lines
+                    if not self._is_taxable_private_disposal(line)
+                ]
                 if not int(reward["events"]) and not tax_lines:
                     continue
                 rows.append(
@@ -3313,23 +3867,39 @@ class TaxYearService:
                         reward_events_count=int(reward["events"]),
                         reward_event_types=sorted(reward["event_types"]),  # type: ignore[arg-type]
                         reward_sources=sorted(reward["sources"]),  # type: ignore[arg-type]
-                        trade_taxable_gain_loss_eur=sum((line.gain_loss_eur for line in taxable_lines), Decimal("0")),
-                        trade_taxable_proceeds_eur=sum((line.disposal_proceeds_eur for line in taxable_lines), Decimal("0")),
+                        trade_taxable_gain_loss_eur=sum(
+                            (line.gain_loss_eur for line in taxable_lines), Decimal("0")
+                        ),
+                        trade_taxable_proceeds_eur=sum(
+                            (line.disposal_proceeds_eur for line in taxable_lines),
+                            Decimal("0"),
+                        ),
                         trade_taxable_acquisition_cost_eur=sum(
-                            (line.acquisition_cost_eur for line in taxable_lines), Decimal("0")
+                            (line.acquisition_cost_eur for line in taxable_lines),
+                            Decimal("0"),
                         ),
                         trade_taxable_lines_count=len(taxable_lines),
-                        trade_tax_free_gain_loss_eur=sum((line.gain_loss_eur for line in tax_free_lines), Decimal("0")),
-                        trade_tax_free_proceeds_eur=sum((line.disposal_proceeds_eur for line in tax_free_lines), Decimal("0")),
+                        trade_tax_free_gain_loss_eur=sum(
+                            (line.gain_loss_eur for line in tax_free_lines),
+                            Decimal("0"),
+                        ),
+                        trade_tax_free_proceeds_eur=sum(
+                            (line.disposal_proceeds_eur for line in tax_free_lines),
+                            Decimal("0"),
+                        ),
                         trade_tax_free_acquisition_cost_eur=sum(
-                            (line.acquisition_cost_eur for line in tax_free_lines), Decimal("0")
+                            (line.acquisition_cost_eur for line in tax_free_lines),
+                            Decimal("0"),
                         ),
                         trade_tax_free_lines_count=len(tax_free_lines),
-                        total_trade_gain_loss_eur=sum((line.gain_loss_eur for line in tax_lines), Decimal("0")),
+                        total_trade_gain_loss_eur=sum(
+                            (line.gain_loss_eur for line in tax_lines), Decimal("0")
+                        ),
                         tax_note=(
                             "Reward/Mining ist der Einnahmevorgang zum Zuflusswert. "
-                            "Der spaetere Handel wird separat als private FIFO-Veraeusserung ausgewiesen; "
-                            "bei Haltedauer ueber 365 Tagen nur nachrichtlich steuerfrei."
+                            "Die vorhandenen Handelszeilen folgen der aktuell aktiven FIFO-Methode. "
+                            "Bei gewerblichem Reward-Ursprung ist vor einer privaten Einordnung zu "
+                            "pruefen, ob der Token Betriebsvermoegen blieb oder belegt entnommen wurde."
                         ),
                         income_guide_endpoint=f"/api/v1/tax-years/{year}/income-guide",
                         asset_fifo_drilldown_endpoint=f"/api/v1/tax-years/{year}/asset-fifo-drilldown?asset={asset}",
@@ -3340,26 +3910,35 @@ class TaxYearService:
             generated_at=datetime.now(timezone.utc).isoformat(),
             years=selected_years,
             assets=list(asset_keys),
-            total_reward_income_eur=sum((row.reward_income_eur for row in rows), Decimal("0")),
-            total_trade_taxable_gain_loss_eur=sum((row.trade_taxable_gain_loss_eur for row in rows), Decimal("0")),
-            total_trade_tax_free_gain_loss_eur=sum((row.trade_tax_free_gain_loss_eur for row in rows), Decimal("0")),
+            total_reward_income_eur=sum(
+                (row.reward_income_eur for row in rows), Decimal("0")
+            ),
+            total_trade_taxable_gain_loss_eur=sum(
+                (row.trade_taxable_gain_loss_eur for row in rows), Decimal("0")
+            ),
+            total_trade_tax_free_gain_loss_eur=sum(
+                (row.trade_tax_free_gain_loss_eur for row in rows), Decimal("0")
+            ),
             rows=rows,
             ascii_table=self._reward_trading_separation_ascii_table(rows),
             methodology=(
-                "Read-only BMF-nahe Trennung fuer HNT/IOT/MOBILE. Helium-Reward-/Mining-Zufluesse "
-                "werden als eigener Einnahmeblock zum Zuflusswert gezeigt. Spaetere Verkaeufe, Swaps "
-                "oder Quote-Bein-Verwertungen bleiben getrennte FIFO-Veraeusserungen nach Haltefrist. "
-                "Der Report schreibt keine Lots, Tax-Lines oder Preise und ersetzt keine steuerliche Beratung."
+                "Read-only Trennung fuer HNT/IOT/MOBILE. Helium-Reward-/Mining-Zufluesse werden als "
+                "eigener Einnahmeblock zum Zuflusswert gezeigt. Die Handelswerte spiegeln die aktuell "
+                "aktive FIFO-Berechnung wider, sind bei gewerblichem Reward-Ursprung aber erst nach "
+                "Pruefung der betrieblichen Zugehoerigkeit oder einer dokumentierten Entnahme privat "
+                "einzuordnen. Der Report schreibt keine Lots, Tax-Lines oder Preise."
             ),
         )
 
-    def income_asset_breakdown_from_lots(self, year: int) -> list[TaxIncomeAssetBreakdown]:
+    def income_asset_breakdown_from_lots(
+        self, year: int
+    ) -> list[TaxIncomeAssetBreakdown]:
         cached = self._income_asset_breakdown_from_lots_cache.get(year)
         if cached is not None:
             return [item.model_copy(deep=True) for item in cached]
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 with lot_values as (
                     select
                         source_event_id,
@@ -3380,9 +3959,10 @@ class TaxYearService:
                     coalesce(l.value_eur, 0) as value_eur,
                     case when l.source_event_id is null then false else true end as has_lot
                 from canonical_events e
+                left join raw_objects raw on raw.raw_object_id = e.raw_object_id
                 left join lot_values l on l.source_event_id = e.event_id
                 where e.event_type in ('income', 'reward', 'staking', 'mining')
-                  and date_part('year', e.event_time) = ?
+                  and {event_reporting_year_sql("e", "raw")} = ?
                 order by e.event_time, e.event_id
                 """,
                 [year],
@@ -3390,7 +3970,7 @@ class TaxYearService:
         tx_context = self._income_tx_context()
         grouped: dict[str, TaxIncomeAssetBreakdown] = {}
         for (
-            _event_id,
+            event_id,
             _event_time,
             event_type,
             source,
@@ -3402,6 +3982,8 @@ class TaxYearService:
             value_eur,
             has_lot,
         ) in rows:
+            if str(event_id) in self._moonpay_onramp_event_ids():
+                continue
             classification = self._income_classification(
                 event_type=event_type,
                 source=source,
@@ -3430,7 +4012,9 @@ class TaxYearService:
                     item.income_eur += value_eur or Decimal("0")
                 else:
                     item.missing_value_count += 1
-        assets = sorted(grouped.values(), key=lambda item: abs(item.income_eur), reverse=True)
+        assets = sorted(
+            grouped.values(), key=lambda item: abs(item.income_eur), reverse=True
+        )
         for item in assets:
             item.sources = sorted(item.sources)
         self._income_asset_breakdown_from_lots_cache[year] = [
@@ -3439,20 +4023,34 @@ class TaxYearService:
         return assets
 
     def driver_report(self, year: int, *, limit: int = 50) -> TaxYearDriverReport:
-        lines = [line for line in self._tax_lines() if line.disposed_at.year == year]
+        lines = [
+            line
+            for line in self._tax_lines()
+            if reporting_tax_year(line.disposed_at) == year
+        ]
         taxable = [line for line in lines if self._is_taxable_private_disposal(line)]
-        tax_free = [line for line in lines if not self._is_taxable_private_disposal(line)]
+        tax_free = [
+            line for line in lines if not self._is_taxable_private_disposal(line)
+        ]
         taxable.sort(key=lambda item: abs(item.gain_loss_eur), reverse=True)
         tax_free.sort(key=lambda item: abs(item.gain_loss_eur), reverse=True)
         return TaxYearDriverReport(
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
-            taxable_gain_loss_eur=sum((line.gain_loss_eur for line in taxable), Decimal("0")),
-            tax_free_gain_loss_eur=sum((line.gain_loss_eur for line in tax_free), Decimal("0")),
+            taxable_gain_loss_eur=sum(
+                (line.gain_loss_eur for line in taxable), Decimal("0")
+            ),
+            tax_free_gain_loss_eur=sum(
+                (line.gain_loss_eur for line in tax_free), Decimal("0")
+            ),
             top_taxable_assets=self._asset_breakdown(year)[:20],
             top_tax_free_assets=self._asset_breakdown_for_lines(tax_free)[:20],
-            top_taxable_lines=[self._driver_line(line, taxable=True) for line in taxable[:limit]],
-            top_tax_free_lines=[self._driver_line(line, taxable=False) for line in tax_free[:limit]],
+            top_taxable_lines=[
+                self._driver_line(line, taxable=True) for line in taxable[:limit]
+            ],
+            top_tax_free_lines=[
+                self._driver_line(line, taxable=False) for line in tax_free[:limit]
+            ],
             methodology=(
                 "Read-only Plausibilitaetsbericht aus bestehenden Tax-Lines. "
                 "Top-Zeilen sind nach absolutem Gewinn/Verlust sortiert; "
@@ -3460,10 +4058,18 @@ class TaxYearService:
             ),
         )
 
-    def gain_loss_reality_check(self, year: int, *, limit: int = 40) -> TaxYearGainLossRealityCheck:
-        lines = [line for line in self._tax_lines() if line.disposed_at.year == year]
+    def gain_loss_reality_check(
+        self, year: int, *, limit: int = 40
+    ) -> TaxYearGainLossRealityCheck:
+        lines = [
+            line
+            for line in self._tax_lines()
+            if reporting_tax_year(line.disposed_at) == year
+        ]
         taxable = [line for line in lines if self._is_taxable_private_disposal(line)]
-        tax_free = [line for line in lines if not self._is_taxable_private_disposal(line)]
+        tax_free = [
+            line for line in lines if not self._is_taxable_private_disposal(line)
+        ]
         grouped: dict[str, dict[str, object]] = defaultdict(
             lambda: {
                 "taxable_gain": Decimal("0"),
@@ -3485,7 +4091,9 @@ class TaxYearService:
         for line in taxable:
             item = grouped[line.asset.upper()]
             item["taxable_gain"] = item["taxable_gain"] + line.gain_loss_eur  # type: ignore[operator]
-            item["taxable_proceeds"] = item["taxable_proceeds"] + line.disposal_proceeds_eur  # type: ignore[operator]
+            item["taxable_proceeds"] = (
+                item["taxable_proceeds"] + line.disposal_proceeds_eur
+            )  # type: ignore[operator]
             item["taxable_cost"] = item["taxable_cost"] + line.acquisition_cost_eur  # type: ignore[operator]
             item["taxable_lines"] = int(item["taxable_lines"]) + 1
         for line in tax_free:
@@ -3493,18 +4101,26 @@ class TaxYearService:
             item["tax_free_gain"] = item["tax_free_gain"] + line.gain_loss_eur  # type: ignore[operator]
             item["tax_free_lines"] = int(item["tax_free_lines"]) + 1
 
-        holdings = TaxService(self.store).holding_period_report(min_value_eur=Decimal("0"))
+        holdings = TaxService(self.store).holding_period_report(
+            min_value_eur=Decimal("0")
+        )
         for lot in holdings.lots:
             item = grouped[lot.asset.upper()]
             item["open_quantity"] = item["open_quantity"] + lot.quantity_remaining  # type: ignore[operator]
             item["open_value"] = item["open_value"] + lot.current_value_eur  # type: ignore[operator]
             item["open_cost"] = item["open_cost"] + lot.cost_basis_eur_remaining  # type: ignore[operator]
-            item["open_unrealized"] = item["open_unrealized"] + lot.unrealized_gain_loss_eur  # type: ignore[operator]
+            item["open_unrealized"] = (
+                item["open_unrealized"] + lot.unrealized_gain_loss_eur
+            )  # type: ignore[operator]
             item["open_lots"] = int(item["open_lots"]) + 1
             if lot.bucket == "tax_free_now":
-                item["open_tax_free_now_value"] = item["open_tax_free_now_value"] + lot.current_value_eur  # type: ignore[operator]
+                item["open_tax_free_now_value"] = (
+                    item["open_tax_free_now_value"] + lot.current_value_eur
+                )  # type: ignore[operator]
             else:
-                item["open_not_yet_tax_free_value"] = item["open_not_yet_tax_free_value"] + lot.current_value_eur  # type: ignore[operator]
+                item["open_not_yet_tax_free_value"] = (
+                    item["open_not_yet_tax_free_value"] + lot.current_value_eur
+                )  # type: ignore[operator]
             item["price_sources"].add(lot.price_source)  # type: ignore[union-attr]
 
         rows: list[TaxYearGainLossRealityAssetRow] = []
@@ -3536,7 +4152,9 @@ class TaxYearService:
                     potential_loss_not_realized_eur=(
                         open_unrealized if open_unrealized < 0 else Decimal("0")  # type: ignore[operator]
                     ),
-                    current_price_source=", ".join(price_sources[:3]) if price_sources else None,
+                    current_price_source=", ".join(price_sources[:3])
+                    if price_sources
+                    else None,
                     note=self._gain_loss_reality_note(
                         taxable_gain=taxable_gain,  # type: ignore[arg-type]
                         open_value=open_value,  # type: ignore[arg-type]
@@ -3555,12 +4173,22 @@ class TaxYearService:
         )
         rows = rows[: max(1, min(limit, 200))]
         taxable_gain_total = sum((line.gain_loss_eur for line in taxable), Decimal("0"))
-        tax_free_gain_total = sum((line.gain_loss_eur for line in tax_free), Decimal("0"))
-        gross_proceeds = sum((line.disposal_proceeds_eur for line in lines), Decimal("0"))
-        open_value_total = sum((row.open_current_value_eur for row in rows), Decimal("0"))
+        tax_free_gain_total = sum(
+            (line.gain_loss_eur for line in tax_free), Decimal("0")
+        )
+        gross_proceeds = sum(
+            (line.disposal_proceeds_eur for line in lines), Decimal("0")
+        )
+        open_value_total = sum(
+            (row.open_current_value_eur for row in rows), Decimal("0")
+        )
         open_cost_total = sum((row.open_cost_basis_eur for row in rows), Decimal("0"))
-        open_unrealized_total = sum((row.open_unrealized_gain_loss_eur for row in rows), Decimal("0"))
-        potential_loss_total = sum((row.potential_loss_not_realized_eur for row in rows), Decimal("0"))
+        open_unrealized_total = sum(
+            (row.open_unrealized_gain_loss_eur for row in rows), Decimal("0")
+        )
+        potential_loss_total = sum(
+            (row.potential_loss_not_realized_eur for row in rows), Decimal("0")
+        )
         return TaxYearGainLossRealityCheck(
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
@@ -3595,10 +4223,12 @@ class TaxYearService:
             ),
         )
 
-    def gain_evidence_review(self, year: int, *, limit: int = 80) -> TaxYearGainEvidenceReview:
+    def gain_evidence_review(
+        self, year: int, *, limit: int = 80
+    ) -> TaxYearGainEvidenceReview:
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     l.tax_line_id,
                     l.asset,
@@ -3628,7 +4258,7 @@ class TaxYearService:
                 join tax_lots lot on lot.lot_id = l.lot_id
                 left join canonical_events ae on ae.event_id = lot.source_event_id
                 left join canonical_events de on de.event_id = l.source_event_id
-                where date_part('year', l.disposed_at)::integer = ?
+                where {reporting_year_sql("l.disposed_at")} = ?
                   and l.holding_days <= 365
                 order by abs(l.gain_loss_eur) desc, l.disposed_at, l.tax_line_id
                 limit ?
@@ -3642,14 +4272,18 @@ class TaxYearService:
             limit=max(1, min(limit, 500)),
             include_split_delta=False,
         )
-        acquisition_event_level_by_id = self._gain_evidence_acquisition_event_delta_lines_by_id(
-            year,
-            limit=max(1, min(limit, 500)),
+        acquisition_event_level_by_id = (
+            self._gain_evidence_acquisition_event_delta_lines_by_id(
+                year,
+                limit=max(1, min(limit, 500)),
+            )
         )
         for row in rows:
             gain_loss = row[8] or Decimal("0")
             proceeds = row[7] or Decimal("0")
-            ratio = (gain_loss / proceeds * Decimal("100")) if proceeds else Decimal("0")
+            ratio = (
+                (gain_loss / proceeds * Decimal("100")) if proceeds else Decimal("0")
+            )
             acquired_at = row[2]
             disposed_at = row[3]
             acquisition_price = self._gain_evidence_price_check(
@@ -3703,46 +4337,55 @@ class TaxYearService:
                 reasons=reasons,
             )
             event_level = event_level_by_id.get(row[17] or "")
-            event_level_reconciled = bool(event_level and event_level.status == "event_level_ok")
+            event_level_reconciled = bool(
+                event_level and event_level.status == "event_level_ok"
+            )
             acquisition_event_level = acquisition_event_level_by_id.get(row[10] or "")
             acquisition_event_level_reconciled = bool(
-                acquisition_event_level and acquisition_event_level.status == "event_level_ok"
+                acquisition_event_level
+                and acquisition_event_level.status == "event_level_ok"
             )
-            acquisition_delta_eur = self._decimal_or_zero(acquisition_price["delta_eur"])
+            acquisition_delta_eur = self._decimal_or_zero(
+                acquisition_price["delta_eur"]
+            )
             disposal_delta_eur = self._decimal_or_zero(disposal_price["delta_eur"])
             open_price_delta_eur = (
-                Decimal("0") if acquisition_event_level_reconciled else abs(acquisition_delta_eur)
-            ) + (
-                Decimal("0") if event_level_reconciled else abs(disposal_delta_eur)
-            )
+                Decimal("0")
+                if acquisition_event_level_reconciled
+                else abs(acquisition_delta_eur)
+            ) + (Decimal("0") if event_level_reconciled else abs(disposal_delta_eur))
             event_level_note = None
             acquisition_event_level_note = None
-            if acquisition_event_level_reconciled and abs(acquisition_delta_eur) > Decimal("0.01"):
-                acquisition_event_level_note = (
-                    "Erwerbsseiten-Delta ist Acquisition-Event-Level abgeglichen; es ist als FIFO-Split-/Quote-Allocation-Artefakt zu behandeln."
-                )
+            if acquisition_event_level_reconciled and abs(
+                acquisition_delta_eur
+            ) > Decimal("0.01"):
+                acquisition_event_level_note = "Erwerbsseiten-Delta ist Acquisition-Event-Level abgeglichen; es ist als FIFO-Split-/Quote-Allocation-Artefakt zu behandeln."
                 if "acquisition_price_delta_review" in reasons:
-                    reasons = [reason for reason in reasons if reason != "acquisition_price_delta_review"]
+                    reasons = [
+                        reason
+                        for reason in reasons
+                        if reason != "acquisition_price_delta_review"
+                    ]
                 if "acquisition_event_level_reconciled" not in reasons:
                     reasons.append("acquisition_event_level_reconciled")
             if event_level_reconciled and abs(disposal_delta_eur) > Decimal("0.01"):
-                event_level_note = (
-                    "Verkaufsseiten-Delta ist Event-Level abgeglichen; es ist als Handelsvolumen-/FIFO-Split-Artefakt zu behandeln."
-                )
+                event_level_note = "Verkaufsseiten-Delta ist Event-Level abgeglichen; es ist als Handelsvolumen-/FIFO-Split-Artefakt zu behandeln."
                 if "disposal_price_delta_review" in reasons:
-                    reasons = [reason for reason in reasons if reason != "disposal_price_delta_review"]
+                    reasons = [
+                        reason
+                        for reason in reasons
+                        if reason != "disposal_price_delta_review"
+                    ]
                 if "event_level_reconciled" not in reasons:
                     reasons.append("event_level_reconciled")
-                delta_explanation = (
-                    "Das Verkaufsseiten-Delta ist auf Event-Level plausibel; offen bleibt nur ein moegliches Erwerbsseiten-Delta."
-                )
-                delta_recommended_action = (
-                    "Event-Level-Beleg archivieren und nur offene Erwerbs-/Rohbelegthemen weiter pruefen."
-                )
-            if acquisition_event_level_reconciled and event_level_reconciled and open_price_delta_eur == Decimal("0"):
-                delta_explanation = (
-                    "Erwerbs- und Verkaufsseiten-Deltas sind auf Event-Level plausibel; das Brutto-Delta ist ein FIFO-Split-/Quote-Allocation-Artefakt."
-                )
+                delta_explanation = "Das Verkaufsseiten-Delta ist auf Event-Level plausibel; offen bleibt nur ein moegliches Erwerbsseiten-Delta."
+                delta_recommended_action = "Event-Level-Beleg archivieren und nur offene Erwerbs-/Rohbelegthemen weiter pruefen."
+            if (
+                acquisition_event_level_reconciled
+                and event_level_reconciled
+                and open_price_delta_eur == Decimal("0")
+            ):
+                delta_explanation = "Erwerbs- und Verkaufsseiten-Deltas sind auf Event-Level plausibel; das Brutto-Delta ist ein FIFO-Split-/Quote-Allocation-Artefakt."
                 delta_recommended_action = "Event-Level-Belege archivieren; kein offenes Preisdelta in dieser Zeile."
             risk = self._gain_evidence_risk(reasons)
             lines.append(
@@ -3795,16 +4438,26 @@ class TaxYearService:
                     delta_explanation=delta_explanation,
                     delta_recommended_action=delta_recommended_action,
                     event_level_status=event_level.status if event_level else None,
-                    event_level_delta_eur=event_level.event_delta_eur if event_level else None,
-                    event_level_delta_pct=event_level.event_delta_pct if event_level else None,
+                    event_level_delta_eur=event_level.event_delta_eur
+                    if event_level
+                    else None,
+                    event_level_delta_pct=event_level.event_delta_pct
+                    if event_level
+                    else None,
                     event_level_reconciled=event_level_reconciled,
                     event_level_note=event_level_note,
-                    acquisition_event_level_status=acquisition_event_level.status if acquisition_event_level else None,
+                    acquisition_event_level_status=acquisition_event_level.status
+                    if acquisition_event_level
+                    else None,
                     acquisition_event_level_delta_eur=(
-                        acquisition_event_level.event_delta_eur if acquisition_event_level else None
+                        acquisition_event_level.event_delta_eur
+                        if acquisition_event_level
+                        else None
                     ),
                     acquisition_event_level_delta_pct=(
-                        acquisition_event_level.event_delta_pct if acquisition_event_level else None
+                        acquisition_event_level.event_delta_pct
+                        if acquisition_event_level
+                        else None
                     ),
                     acquisition_event_level_reconciled=acquisition_event_level_reconciled,
                     acquisition_event_level_note=acquisition_event_level_note,
@@ -3815,7 +4468,12 @@ class TaxYearService:
                 )
             )
         taxable_total = sum(
-            (line.gain_loss_eur for line in self._tax_lines() if line.disposed_at.year == year and self._is_taxable_private_disposal(line)),
+            (
+                line.gain_loss_eur
+                for line in self._tax_lines()
+                if reporting_tax_year(line.disposed_at) == year
+                and self._is_taxable_private_disposal(line)
+            ),
             Decimal("0"),
         )
         delta_groups = self._gain_evidence_delta_groups(year, lines)
@@ -3823,18 +4481,28 @@ class TaxYearService:
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
             taxable_gain_loss_eur=taxable_total,
-            reviewed_gain_loss_eur=sum((line.gain_loss_eur for line in lines), Decimal("0")),
+            reviewed_gain_loss_eur=sum(
+                (line.gain_loss_eur for line in lines), Decimal("0")
+            ),
             reviewed_lines_count=len(lines),
             high_risk_lines_count=sum(1 for line in lines if line.risk_level == "high"),
             review_lines_count=sum(1 for line in lines if line.risk_level == "review"),
             ok_lines_count=sum(1 for line in lines if line.risk_level == "ok"),
-            price_delta_lines_count=sum(1 for line in lines if line.delta_classification != "no_material_delta"),
-            event_level_reconciled_lines_count=sum(1 for line in lines if line.event_level_reconciled),
+            price_delta_lines_count=sum(
+                1 for line in lines if line.delta_classification != "no_material_delta"
+            ),
+            event_level_reconciled_lines_count=sum(
+                1 for line in lines if line.event_level_reconciled
+            ),
             acquisition_event_level_reconciled_lines_count=sum(
                 1 for line in lines if line.acquisition_event_level_reconciled
             ),
-            material_price_delta_eur=sum((line.absolute_price_delta_eur for line in lines), Decimal("0")),
-            open_price_delta_eur=sum((line.open_price_delta_eur for line in lines), Decimal("0")),
+            material_price_delta_eur=sum(
+                (line.absolute_price_delta_eur for line in lines), Decimal("0")
+            ),
+            open_price_delta_eur=sum(
+                (line.open_price_delta_eur for line in lines), Decimal("0")
+            ),
             delta_groups=delta_groups,
             lines=lines,
             caveats=[
@@ -3860,7 +4528,9 @@ class TaxYearService:
         min_value_eur: Decimal = Decimal("1"),
         limit: int = 100,
     ) -> TaxLossRealizationPlanner:
-        holdings = TaxService(self.store).holding_period_report(min_value_eur=min_value_eur)
+        holdings = TaxService(self.store).holding_period_report(
+            min_value_eur=min_value_eur
+        )
         rows: list[TaxLossRealizationLot] = []
         for lot in holdings.lots:
             unrealized = lot.unrealized_gain_loss_eur
@@ -3916,18 +4586,37 @@ class TaxYearService:
             "loss_window_expired": 1,
             "not_a_loss": 2,
         }
-        rows.sort(key=lambda row: (status_order[row.status], row.unrealized_gain_loss_eur, row.tax_free_at, row.asset))
+        rows.sort(
+            key=lambda row: (
+                status_order[row.status],
+                row.unrealized_gain_loss_eur,
+                row.tax_free_at,
+                row.asset,
+            )
+        )
         rows = rows[: max(1, min(limit, 500))]
         tax_relevant_loss = sum(
-            (row.unrealized_gain_loss_eur for row in rows if row.status == "tax_relevant_loss_if_sold_now"),
+            (
+                row.unrealized_gain_loss_eur
+                for row in rows
+                if row.status == "tax_relevant_loss_if_sold_now"
+            ),
             Decimal("0"),
         )
         expired_loss = sum(
-            (row.unrealized_gain_loss_eur for row in rows if row.status == "loss_window_expired"),
+            (
+                row.unrealized_gain_loss_eur
+                for row in rows
+                if row.status == "loss_window_expired"
+            ),
             Decimal("0"),
         )
         unrealized_gain = sum(
-            (row.unrealized_gain_loss_eur for row in rows if row.unrealized_gain_loss_eur > 0),
+            (
+                row.unrealized_gain_loss_eur
+                for row in rows
+                if row.unrealized_gain_loss_eur > 0
+            ),
             Decimal("0"),
         )
         return TaxLossRealizationPlanner(
@@ -3938,8 +4627,12 @@ class TaxYearService:
             tax_relevant_loss_if_sold_now_eur=tax_relevant_loss,
             expired_loss_not_tax_relevant_eur=expired_loss,
             unrealized_gain_eur=unrealized_gain,
-            tax_relevant_lots_count=sum(1 for row in rows if row.status == "tax_relevant_loss_if_sold_now"),
-            expired_loss_lots_count=sum(1 for row in rows if row.status == "loss_window_expired"),
+            tax_relevant_lots_count=sum(
+                1 for row in rows if row.status == "tax_relevant_loss_if_sold_now"
+            ),
+            expired_loss_lots_count=sum(
+                1 for row in rows if row.status == "loss_window_expired"
+            ),
             rows=rows,
             caveats=[
                 "Read-only Planung: Es wird kein Verkauf ausgeloest und keine Steuerzeile geschrieben.",
@@ -3967,7 +4660,7 @@ class TaxYearService:
             asset_key = "UNKNOWN"
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     l.tax_line_id,
                     l.asset,
@@ -4026,7 +4719,7 @@ class TaxYearService:
                 left join raw_import_batches ab on ab.batch_id = ar.batch_id
                 left join raw_objects dr on dr.raw_object_id = de.raw_object_id
                 left join raw_import_batches db on db.batch_id = dr.batch_id
-                where date_part('year', l.disposed_at)::integer = ?
+                where {reporting_year_sql("l.disposed_at")} = ?
                   and upper(l.asset) = ?
                 order by l.disposed_at, l.tax_line_id
                 limit ?
@@ -4070,8 +4763,12 @@ class TaxYearService:
         tax_free_lines = [line for line in lines if not line.taxable]
         caveats: list[str] = []
         if not lines:
-            caveats.append("Fuer dieses Asset gibt es im ausgewaehlten Jahr keine Tax-Lines.")
-        if any(line.acquisition_raw is None or line.disposal_raw is None for line in lines):
+            caveats.append(
+                "Fuer dieses Asset gibt es im ausgewaehlten Jahr keine Tax-Lines."
+            )
+        if any(
+            line.acquisition_raw is None or line.disposal_raw is None for line in lines
+        ):
             caveats.append(
                 "Mindestens eine Tax-Line hat keinen vollstaendigen Rohdatenbeleg fuer Erwerb oder Veraeusserung."
             )
@@ -4086,11 +4783,19 @@ class TaxYearService:
             lines_count=len(lines),
             taxable_lines_count=len(taxable_lines),
             tax_free_lines_count=len(tax_free_lines),
-            acquisition_cost_eur=sum((line.acquisition_cost_eur for line in lines), Decimal("0")),
-            disposal_proceeds_eur=sum((line.disposal_proceeds_eur for line in lines), Decimal("0")),
+            acquisition_cost_eur=sum(
+                (line.acquisition_cost_eur for line in lines), Decimal("0")
+            ),
+            disposal_proceeds_eur=sum(
+                (line.disposal_proceeds_eur for line in lines), Decimal("0")
+            ),
             gain_loss_eur=sum((line.gain_loss_eur for line in lines), Decimal("0")),
-            taxable_gain_loss_eur=sum((line.gain_loss_eur for line in taxable_lines), Decimal("0")),
-            tax_free_gain_loss_eur=sum((line.gain_loss_eur for line in tax_free_lines), Decimal("0")),
+            taxable_gain_loss_eur=sum(
+                (line.gain_loss_eur for line in taxable_lines), Decimal("0")
+            ),
+            tax_free_gain_loss_eur=sum(
+                (line.gain_loss_eur for line in tax_free_lines), Decimal("0")
+            ),
             quote_asset_occurrences=dict(sorted(quote_counts.items())),
             lines=lines,
             caveats=caveats,
@@ -4111,10 +4816,10 @@ class TaxYearService:
     ) -> TaxYearAssetFifoPlausibilityReport:
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 with linked as (
                     select
-                        date_part('year', l.disposed_at)::integer as year,
+                        {reporting_year_sql("l.disposed_at")} as year,
                         upper(l.asset) as tax_asset,
                         upper(coalesce(de.asset, '')) as disposal_asset,
                         upper(coalesce(de.quote_asset, '')) as disposal_quote_asset,
@@ -4127,7 +4832,7 @@ class TaxYearService:
                     join tax_lots lot on lot.lot_id = l.lot_id
                     left join canonical_events de on de.event_id = l.source_event_id
                     left join canonical_events ae on ae.event_id = lot.source_event_id
-                    where date_part('year', l.disposed_at)::integer = ?
+                    where {reporting_year_sql("l.disposed_at")} = ?
                 ),
                 assets as (
                     select distinct asset from (
@@ -4246,7 +4951,9 @@ class TaxYearService:
                     linked_gain_loss_eur=linked_gain,
                     linked_disposal_proceeds_eur=row[6] or Decimal("0"),
                     total_related_gain_loss_eur=direct_gain + linked_gain,
-                    hidden_quote_gain_loss_eur=linked_gain if direct_lines else Decimal("0"),
+                    hidden_quote_gain_loss_eur=linked_gain
+                    if direct_lines
+                    else Decimal("0"),
                     quote_assets=quote_assets,
                     reasons=reasons,
                     drilldown_endpoint=f"/api/v1/tax-years/{year}/asset-fifo-drilldown?asset={asset}",
@@ -4256,8 +4963,12 @@ class TaxYearService:
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
             assets_count=len(report_rows),
-            high_risk_assets_count=sum(1 for row in report_rows if row.risk_level == "high"),
-            review_assets_count=sum(1 for row in report_rows if row.risk_level == "review"),
+            high_risk_assets_count=sum(
+                1 for row in report_rows if row.risk_level == "high"
+            ),
+            review_assets_count=sum(
+                1 for row in report_rows if row.risk_level == "review"
+            ),
             ok_assets_count=sum(1 for row in report_rows if row.risk_level == "ok"),
             min_abs_gain_eur=min_abs_gain_eur,
             rows=report_rows,
@@ -4286,11 +4997,13 @@ class TaxYearService:
         for item in plausibility.rows:
             raw_counts = self._asset_fifo_related_raw_counts(year, item.asset)
             role_counts = self._asset_fifo_related_role_counts(year, item.asset)
-            action, tax_impact, conclusion, next_step = self._asset_fifo_correction_decision(
-                item,
-                role_counts=role_counts,
-                related_missing_raw_evidence_count=raw_counts["missing"],
-                min_abs_gain_eur=min_abs_gain_eur,
+            action, tax_impact, conclusion, next_step = (
+                self._asset_fifo_correction_decision(
+                    item,
+                    role_counts=role_counts,
+                    related_missing_raw_evidence_count=raw_counts["missing"],
+                    min_abs_gain_eur=min_abs_gain_eur,
+                )
             )
             rows.append(
                 TaxYearAssetFifoCorrectionReviewRow(
@@ -4317,12 +5030,18 @@ class TaxYearService:
             generated_at=datetime.now(timezone.utc).isoformat(),
             rows_count=len(rows),
             possible_recalculation_assets_count=sum(
-                1 for row in rows if row.tax_sum_impact == "possible_recalculation_after_review"
+                1
+                for row in rows
+                if row.tax_sum_impact == "possible_recalculation_after_review"
             ),
             attribution_review_assets_count=sum(
-                1 for row in rows if row.tax_sum_impact == "already_in_existing_tax_lines"
+                1
+                for row in rows
+                if row.tax_sum_impact == "already_in_existing_tax_lines"
             ),
-            no_action_assets_count=sum(1 for row in rows if row.tax_sum_impact == "none_expected"),
+            no_action_assets_count=sum(
+                1 for row in rows if row.tax_sum_impact == "none_expected"
+            ),
             rows=rows,
             methodology=(
                 "Read-only Korrektur-/Belegreview auf Basis des All-Asset-FIFO-"
@@ -4335,19 +5054,39 @@ class TaxYearService:
         )
 
     def turnover_audit(self, year: int, *, limit: int = 20) -> TaxYearTurnoverAudit:
-        lines = [line for line in self._tax_lines() if line.disposed_at.year == year]
+        lines = [
+            line
+            for line in self._tax_lines()
+            if reporting_tax_year(line.disposed_at) == year
+        ]
         taxable = [line for line in lines if self._is_taxable_private_disposal(line)]
-        tax_free = [line for line in lines if not self._is_taxable_private_disposal(line)]
-        gross_proceeds = sum((line.disposal_proceeds_eur for line in lines), Decimal("0"))
+        tax_free = [
+            line for line in lines if not self._is_taxable_private_disposal(line)
+        ]
+        gross_proceeds = sum(
+            (line.disposal_proceeds_eur for line in lines), Decimal("0")
+        )
         taxable_gain = sum((line.gain_loss_eur for line in taxable), Decimal("0"))
         tax_free_gain = sum((line.gain_loss_eur for line in tax_free), Decimal("0"))
-        taxable_proceeds = sum((line.disposal_proceeds_eur for line in taxable), Decimal("0"))
-        tax_free_proceeds = sum((line.disposal_proceeds_eur for line in tax_free), Decimal("0"))
-        stablecoin_lines = [line for line in lines if self._is_stablecoin_like(line.asset)]
-        stablecoin_proceeds = sum((line.disposal_proceeds_eur for line in stablecoin_lines), Decimal("0"))
-        stablecoin_gain = sum((line.gain_loss_eur for line in stablecoin_lines), Decimal("0"))
+        taxable_proceeds = sum(
+            (line.disposal_proceeds_eur for line in taxable), Decimal("0")
+        )
+        tax_free_proceeds = sum(
+            (line.disposal_proceeds_eur for line in tax_free), Decimal("0")
+        )
+        stablecoin_lines = [
+            line for line in lines if self._is_stablecoin_like(line.asset)
+        ]
+        stablecoin_proceeds = sum(
+            (line.disposal_proceeds_eur for line in stablecoin_lines), Decimal("0")
+        )
+        stablecoin_gain = sum(
+            (line.gain_loss_eur for line in stablecoin_lines), Decimal("0")
+        )
         external = self.external_inflow_report(year, limit=0)
-        review_unmatched_value = external.review_value_eur + external.unmatched_value_eur
+        review_unmatched_value = (
+            external.review_value_eur + external.unmatched_value_eur
+        )
         caveats: list[str] = [
             (
                 "Handels-/Swap-Volumen ist die EUR-Bewertung von Verkaeufen und "
@@ -4361,8 +5100,14 @@ class TaxYearService:
                 "Gewinn/Verlust nahe null liegt; relevant fuer die Steuer ist die "
                 "FIFO-Differenz aus Erloes minus Anschaffungskosten."
             )
-            stablecoin_gain_ratio = abs(stablecoin_gain) / stablecoin_proceeds if stablecoin_proceeds else Decimal("0")
-            if abs(stablecoin_gain) >= Decimal("100") and stablecoin_gain_ratio >= Decimal("0.01"):
+            stablecoin_gain_ratio = (
+                abs(stablecoin_gain) / stablecoin_proceeds
+                if stablecoin_proceeds
+                else Decimal("0")
+            )
+            if abs(stablecoin_gain) >= Decimal(
+                "100"
+            ) and stablecoin_gain_ratio >= Decimal("0.01"):
                 caveats.append(
                     "Stablecoin-FIFO-Ergebnis ist materiell. Das ist ein Plausibilitaetsrisiko "
                     "und sollte gegen echte Stablecoin-Anschaffungen, FX-Umrechnung, "
@@ -4400,16 +5145,22 @@ class TaxYearService:
                 external_value=review_unmatched_value,
             ),
             caveats=caveats,
-            top_assets_by_proceeds=self._turnover_assets(lines, sort_by="proceeds")[:limit],
+            top_assets_by_proceeds=self._turnover_assets(lines, sort_by="proceeds")[
+                :limit
+            ],
             top_assets_by_gain=self._turnover_assets(lines, sort_by="gain")[:limit],
             top_sources_by_proceeds=self._turnover_sources(year, limit=limit),
             top_taxable_lines_by_gain=[
                 self._driver_line(line, taxable=True)
-                for line in sorted(taxable, key=lambda item: abs(item.gain_loss_eur), reverse=True)[:limit]
+                for line in sorted(
+                    taxable, key=lambda item: abs(item.gain_loss_eur), reverse=True
+                )[:limit]
             ],
             top_lines_by_proceeds=[
                 self._driver_line(line, taxable=self._is_taxable_private_disposal(line))
-                for line in sorted(lines, key=lambda item: item.disposal_proceeds_eur, reverse=True)[:limit]
+                for line in sorted(
+                    lines, key=lambda item: item.disposal_proceeds_eur, reverse=True
+                )[:limit]
             ],
             methodology=(
                 "Read-only Jahresumsatz-Audit aus bestehenden Tax-Lines und Canonical Events. "
@@ -4419,7 +5170,9 @@ class TaxYearService:
             ),
         )
 
-    def turnover_audit_summary(self, *, limit: int = 20) -> TaxYearsTurnoverAuditSummary:
+    def turnover_audit_summary(
+        self, *, limit: int = 20
+    ) -> TaxYearsTurnoverAuditSummary:
         rows = [
             self._turnover_summary_row(self.turnover_audit(year, limit=limit))
             for year in self._available_years()
@@ -4452,12 +5205,16 @@ class TaxYearService:
             key = (row_year, row.asset.upper())
             item = asset_groups.setdefault(
                 key,
-                TaxSolanaProgramIncomeAssetSummary(year=row_year, asset=row.asset.upper()),
+                TaxSolanaProgramIncomeAssetSummary(
+                    year=row_year, asset=row.asset.upper()
+                ),
             )
             item.events_count += 1
             item.quantity += row.quantity
             item.value_eur += row.value_eur or Decimal("0")
-        asset_summaries = sorted(asset_groups.values(), key=lambda item: abs(item.value_eur), reverse=True)
+        asset_summaries = sorted(
+            asset_groups.values(), key=lambda item: abs(item.value_eur), reverse=True
+        )
         year_groups: dict[int, TaxSolanaProgramIncomeYearSummary] = {}
         for item in asset_summaries:
             summary = year_groups.setdefault(
@@ -4476,7 +5233,9 @@ class TaxYearService:
             total_value_eur=total_value,
             years=sorted(year_groups.values(), key=lambda item: item.year),
             assets=asset_summaries[:limit],
-            rows=sorted(rows, key=lambda item: abs(item.value_eur or Decimal("0")), reverse=True)[:limit],
+            rows=sorted(
+                rows, key=lambda item: abs(item.value_eur or Decimal("0")), reverse=True
+            )[:limit],
             methodology=(
                 "Read-only Drilldown fuer Solana-income-Events mit weiterem "
                 "Programm-/Transfer-/Unknown-Kontext im selben tx_id. Diese Events "
@@ -4505,12 +5264,13 @@ class TaxYearService:
         ]
         program_rows.extend(self._helium_solana_trade_context_rows(year=year))
         reward_report = self.reward_trading_separation(
-            years=[year] if year is not None else [item for item in self._available_years() if 2021 <= item <= 2026],
+            years=[year]
+            if year is not None
+            else [item for item in self._available_years() if 2021 <= item <= 2026],
             assets=HELIUM_REWARD_ASSETS,
         )
         reward_by_year_asset = {
-            (row.year, row.asset.upper()): row
-            for row in reward_report.rows
+            (row.year, row.asset.upper()): row for row in reward_report.rows
         }
         trade_by_year_asset = self._helium_trade_tax_line_summary_by_year_asset()
 
@@ -4547,7 +5307,9 @@ class TaxYearService:
                 )
             )
 
-        for key in set(asset_groups) | set(reward_by_year_asset) | set(trade_by_year_asset):
+        for key in (
+            set(asset_groups) | set(reward_by_year_asset) | set(trade_by_year_asset)
+        ):
             row_year, asset = key
             if year is not None and row_year != year:
                 continue
@@ -4561,17 +5323,28 @@ class TaxYearService:
                 asset_item.reward_quantity = reward.reward_quantity
                 asset_item.reward_events_count = reward.reward_events_count
             trade = trade_by_year_asset.get(key, {})
-            asset_item.taxable_trade_gain_loss_eur = trade.get("taxable_gain_loss_eur", Decimal("0"))
-            asset_item.tax_free_trade_gain_loss_eur = trade.get("tax_free_gain_loss_eur", Decimal("0"))
-            asset_item.total_trade_gain_loss_eur = (
-                asset_item.taxable_trade_gain_loss_eur + asset_item.tax_free_trade_gain_loss_eur
+            asset_item.taxable_trade_gain_loss_eur = trade.get(
+                "taxable_gain_loss_eur", Decimal("0")
             )
-            asset_item.taxable_trade_lines_count = int(trade.get("taxable_lines_count", 0))
-            asset_item.tax_free_trade_lines_count = int(trade.get("tax_free_lines_count", 0))
+            asset_item.tax_free_trade_gain_loss_eur = trade.get(
+                "tax_free_gain_loss_eur", Decimal("0")
+            )
+            asset_item.total_trade_gain_loss_eur = (
+                asset_item.taxable_trade_gain_loss_eur
+                + asset_item.tax_free_trade_gain_loss_eur
+            )
+            asset_item.taxable_trade_lines_count = int(
+                trade.get("taxable_lines_count", 0)
+            )
+            asset_item.tax_free_trade_lines_count = int(
+                trade.get("tax_free_lines_count", 0)
+            )
 
         year_groups: dict[int, TaxHeliumSwapContextYearSummary] = {}
         for item in asset_groups.values():
-            summary = year_groups.setdefault(item.year, TaxHeliumSwapContextYearSummary(year=item.year))
+            summary = year_groups.setdefault(
+                item.year, TaxHeliumSwapContextYearSummary(year=item.year)
+            )
             summary.swap_context_events_count += item.swap_context_events_count
             summary.swap_context_value_eur += item.swap_context_value_eur
             summary.taxable_trade_gain_loss_eur += item.taxable_trade_gain_loss_eur
@@ -4588,16 +5361,32 @@ class TaxYearService:
                 item.asset,
             ),
         )
-        row_items.sort(key=lambda item: (item.year, -abs(item.value_eur or Decimal("0")), item.event_time))
+        row_items.sort(
+            key=lambda item: (
+                item.year,
+                -abs(item.value_eur or Decimal("0")),
+                item.event_time,
+            )
+        )
         return TaxHeliumSwapContextReview(
             generated_at=datetime.now(timezone.utc).isoformat(),
             year=year,
             events_count=len(program_rows),
-            total_context_value_eur=sum((row.value_eur or Decimal("0") for row in row_items), Decimal("0")),
-            total_taxable_trade_gain_loss_eur=sum((item.taxable_trade_gain_loss_eur for item in assets), Decimal("0")),
-            total_tax_free_trade_gain_loss_eur=sum((item.tax_free_trade_gain_loss_eur for item in assets), Decimal("0")),
-            total_trade_gain_loss_eur=sum((item.total_trade_gain_loss_eur for item in assets), Decimal("0")),
-            total_reward_income_eur=sum((item.reward_income_eur for item in assets), Decimal("0")),
+            total_context_value_eur=sum(
+                (row.value_eur or Decimal("0") for row in row_items), Decimal("0")
+            ),
+            total_taxable_trade_gain_loss_eur=sum(
+                (item.taxable_trade_gain_loss_eur for item in assets), Decimal("0")
+            ),
+            total_tax_free_trade_gain_loss_eur=sum(
+                (item.tax_free_trade_gain_loss_eur for item in assets), Decimal("0")
+            ),
+            total_trade_gain_loss_eur=sum(
+                (item.total_trade_gain_loss_eur for item in assets), Decimal("0")
+            ),
+            total_reward_income_eur=sum(
+                (item.reward_income_eur for item in assets), Decimal("0")
+            ),
             years=sorted(year_groups.values(), key=lambda item: item.year),
             assets=assets[:limit],
             rows=row_items[:limit],
@@ -4650,8 +5439,12 @@ class TaxYearService:
                     if normalized:
                         assets.add(normalized)
             item["events_count"] = int(item["events_count"]) + 1
-            item["positive_events_count"] = int(item["positive_events_count"]) + row.tx_positive_count
-            item["negative_events_count"] = int(item["negative_events_count"]) + row.tx_negative_count
+            item["positive_events_count"] = (
+                int(item["positive_events_count"]) + row.tx_positive_count
+            )
+            item["negative_events_count"] = (
+                int(item["negative_events_count"]) + row.tx_negative_count
+            )
             value = row.value_eur or Decimal("0")
             item["context_value_eur"] = item["context_value_eur"] + value  # type: ignore[operator]
             item["max_event_value_eur"] = max(  # type: ignore[assignment]
@@ -4667,12 +5460,22 @@ class TaxYearService:
         for tx_id, item in grouped.items():
             raw = raw_by_tx.get(tx_id, {})
             raw_count = int(raw.get("raw_evidence_count", 0) or 0)
-            raw_filenames = [str(value) for value in raw.get("raw_filenames", []) if str(value or "").strip()]
-            raw_sources = [str(value) for value in raw.get("raw_sources", []) if str(value or "").strip()]
+            raw_filenames = [
+                str(value)
+                for value in raw.get("raw_filenames", [])
+                if str(value or "").strip()
+            ]
+            raw_sources = [
+                str(value)
+                for value in raw.get("raw_sources", [])
+                if str(value or "").strip()
+            ]
             assets = item.get("assets", set())
             review_reasons = item.get("review_reasons", set())
             row_year = int(item["year"])
-            main_asset = self._primary_helium_asset_from_set(assets if isinstance(assets, set) else set())
+            main_asset = self._primary_helium_asset_from_set(
+                assets if isinstance(assets, set) else set()
+            )
             rows.append(
                 TaxHeliumSwapEvidenceRow(
                     tx_id=tx_id,
@@ -4688,21 +5491,37 @@ class TaxYearService:
                     raw_evidence_count=raw_count,
                     raw_filenames=raw_filenames,
                     raw_sources=raw_sources,
-                    evidence_status="raw_evidence_ready" if raw_count else "missing_raw_evidence",
-                    review_reason=", ".join(sorted(review_reasons)) if isinstance(review_reasons, set) else "",
+                    evidence_status="raw_evidence_ready"
+                    if raw_count
+                    else "missing_raw_evidence",
+                    review_reason=", ".join(sorted(review_reasons))
+                    if isinstance(review_reasons, set)
+                    else "",
                     context_endpoint=f"/api/v1/tax-years/{row_year}/helium-swap-context",
                     fifo_drilldown_endpoint=f"/api/v1/tax-years/{row_year}/asset-fifo-drilldown?asset={main_asset}",
                 )
             )
-        rows.sort(key=lambda item: (item.evidence_status != "missing_raw_evidence", -abs(item.max_event_value_eur), item.tx_id))
+        rows.sort(
+            key=lambda item: (
+                item.evidence_status != "missing_raw_evidence",
+                -abs(item.max_event_value_eur),
+                item.tx_id,
+            )
+        )
         limited_rows = rows[:limit]
         return TaxHeliumSwapEvidenceReview(
             generated_at=datetime.now(timezone.utc).isoformat(),
             year=year,
             tx_count=len(rows),
-            raw_evidence_ready_count=sum(1 for row in rows if row.raw_evidence_count > 0),
-            raw_evidence_missing_count=sum(1 for row in rows if row.raw_evidence_count == 0),
-            total_context_value_eur=sum((row.context_value_eur for row in rows), Decimal("0")),
+            raw_evidence_ready_count=sum(
+                1 for row in rows if row.raw_evidence_count > 0
+            ),
+            raw_evidence_missing_count=sum(
+                1 for row in rows if row.raw_evidence_count == 0
+            ),
+            total_context_value_eur=sum(
+                (row.context_value_eur for row in rows), Decimal("0")
+            ),
             rows=limited_rows,
             methodology=(
                 "Read-only Top-TxID-Belegmatrix fuer HNT/IOT/MOBILE-Swap-/Trading-Kontexte. "
@@ -4723,10 +5542,15 @@ class TaxYearService:
         total_proceeds = sum((row.disposal_proceeds_eur for row in rows), Decimal("0"))
         total_cost = sum((row.acquisition_cost_eur for row in rows), Decimal("0"))
         total_gain = sum((row.gain_loss_eur for row in rows), Decimal("0"))
-        taxable_gain = sum((row.gain_loss_eur for row in rows if row.taxable), Decimal("0"))
+        taxable_gain = sum(
+            (row.gain_loss_eur for row in rows if row.taxable), Decimal("0")
+        )
         tax_free_gain = total_gain - taxable_gain
         asset_groups: dict[tuple[int, str], TaxStablecoinFifoAssetSummary] = {}
-        source_groups: dict[tuple[int, str, str, str, str | None, str | None, str | None], TaxStablecoinFifoSourceSummary] = {}
+        source_groups: dict[
+            tuple[int, str, str, str, str | None, str | None, str | None],
+            TaxStablecoinFifoSourceSummary,
+        ] = {}
         for row in rows:
             asset_key = (row.year, row.asset.upper())
             asset_item = asset_groups.setdefault(
@@ -4781,9 +5605,19 @@ class TaxYearService:
             gain_loss_eur=total_gain,
             taxable_gain_loss_eur=taxable_gain,
             tax_free_gain_loss_eur=tax_free_gain,
-            assets=sorted(asset_groups.values(), key=lambda item: abs(item.gain_loss_eur), reverse=True),
-            sources=sorted(source_groups.values(), key=lambda item: abs(item.gain_loss_eur), reverse=True)[:limit],
-            rows=sorted(rows, key=lambda item: abs(item.gain_loss_eur), reverse=True)[:limit],
+            assets=sorted(
+                asset_groups.values(),
+                key=lambda item: abs(item.gain_loss_eur),
+                reverse=True,
+            ),
+            sources=sorted(
+                source_groups.values(),
+                key=lambda item: abs(item.gain_loss_eur),
+                reverse=True,
+            )[:limit],
+            rows=sorted(rows, key=lambda item: abs(item.gain_loss_eur), reverse=True)[
+                :limit
+            ],
             methodology=(
                 "Read-only Stablecoin-FIFO-Drilldown aus bestehenden tax_lines, "
                 "tax_lots und canonical_events. Zeigt, welche Stablecoin-Lots und "
@@ -4821,10 +5655,16 @@ class TaxYearService:
             item.stable_disposal_proceeds_eur += row.stable_disposal_proceeds_eur
 
         stable_tax_lines_count = sum(row.stable_tax_lines_count for row in rows)
-        stable_proceeds = sum((row.stable_disposal_proceeds_eur for row in rows), Decimal("0"))
+        stable_proceeds = sum(
+            (row.stable_disposal_proceeds_eur for row in rows), Decimal("0")
+        )
         stable_gain = sum((row.stable_gain_loss_eur for row in rows), Decimal("0"))
         expected_count = sum(1 for row in rows if row.expected_tax_line)
-        missing_expected_count = sum(1 for row in rows if row.expected_tax_line and row.stable_tax_lines_count == 0)
+        missing_expected_count = sum(
+            1
+            for row in rows
+            if row.expected_tax_line and row.stable_tax_lines_count == 0
+        )
         ordered_rows = sorted(
             rows,
             key=lambda item: (
@@ -4841,12 +5681,23 @@ class TaxYearService:
             events_count=len(rows),
             expected_tax_line_events_count=expected_count,
             missing_expected_tax_line_events_count=missing_expected_count,
-            same_stable_pair_events_count=sum(1 for row in rows if row.stable_role == "same_stable_asset_and_quote"),
-            stable_to_stable_events_count=sum(1 for row in rows if row.stable_role in {"stable_to_stable", "same_stable_asset_and_quote"}),
+            same_stable_pair_events_count=sum(
+                1 for row in rows if row.stable_role == "same_stable_asset_and_quote"
+            ),
+            stable_to_stable_events_count=sum(
+                1
+                for row in rows
+                if row.stable_role
+                in {"stable_to_stable", "same_stable_asset_and_quote"}
+            ),
             stable_tax_lines_count=stable_tax_lines_count,
             stable_disposal_proceeds_eur=stable_proceeds,
             stable_gain_loss_eur=stable_gain,
-            summaries=sorted(summaries.values(), key=lambda item: abs(item.stable_gain_loss_eur), reverse=True)[:limit],
+            summaries=sorted(
+                summaries.values(),
+                key=lambda item: abs(item.stable_gain_loss_eur),
+                reverse=True,
+            )[:limit],
             rows=ordered_rows[:limit],
             methodology=(
                 "Read-only Stablecoin-Quote-Bein-Pruefung aus canonical_events und "
@@ -4870,23 +5721,30 @@ class TaxYearService:
             and row.tx_id
             and (
                 row.expected_tax_line
-                or row.stable_role in {"stable_to_stable", "same_stable_asset_and_quote"}
+                or row.stable_role
+                in {"stable_to_stable", "same_stable_asset_and_quote"}
                 or abs(row.stable_gain_loss_eur) >= Decimal("100")
             )
         ]
-        tx_context = self._stablecoin_solana_tx_context({str(row.tx_id) for row in quote_rows if row.tx_id})
+        tx_context = self._stablecoin_solana_tx_context(
+            {str(row.tx_id) for row in quote_rows if row.tx_id}
+        )
         token_status = self._jupiter_token_status_by_symbol()
         rows: list[TaxSolanaStablecoinSwapContextRow] = []
         for row in quote_rows:
             context = tx_context.get(str(row.tx_id), {})
-            classification, confidence, recommended_action = self._solana_stablecoin_swap_classification(
-                quote_row=row,
-                tx_assets=str(context.get("tx_assets") or ""),
-                tx_total_count=int(context.get("tx_total_count") or 0),
-                raw_evidence_count=int(context.get("raw_evidence_count") or 0),
+            classification, confidence, recommended_action = (
+                self._solana_stablecoin_swap_classification(
+                    quote_row=row,
+                    tx_assets=str(context.get("tx_assets") or ""),
+                    tx_total_count=int(context.get("tx_total_count") or 0),
+                    raw_evidence_count=int(context.get("raw_evidence_count") or 0),
+                )
             )
             jupiter_asset_status = token_status.get(row.asset.upper(), "unknown")
-            jupiter_quote_status = token_status.get(str(row.quote_asset or "").upper(), "unknown")
+            jupiter_quote_status = token_status.get(
+                str(row.quote_asset or "").upper(), "unknown"
+            )
             rows.append(
                 TaxSolanaStablecoinSwapContextRow(
                     event_id=row.event_id,
@@ -4925,12 +5783,16 @@ class TaxYearService:
                 )
             )
 
-        asset_groups: dict[tuple[int, str, str | None], TaxSolanaStablecoinSwapAssetSummary] = {}
+        asset_groups: dict[
+            tuple[int, str, str | None], TaxSolanaStablecoinSwapAssetSummary
+        ] = {}
         for row in rows:
             key = (row.year, row.asset, row.quote_asset)
             item = asset_groups.setdefault(
                 key,
-                TaxSolanaStablecoinSwapAssetSummary(year=row.year, asset=row.asset, quote_asset=row.quote_asset),
+                TaxSolanaStablecoinSwapAssetSummary(
+                    year=row.year, asset=row.asset, quote_asset=row.quote_asset
+                ),
             )
             item.events_count += 1
             item.stable_tax_lines_count += row.stable_tax_lines_count
@@ -4951,9 +5813,18 @@ class TaxYearService:
             generated_at=datetime.now(timezone.utc).isoformat(),
             year=year,
             events_count=len(rows),
-            material_events_count=sum(1 for row in rows if abs(row.stable_gain_loss_eur) >= Decimal("100")),
-            stable_to_stable_events_count=sum(1 for row in rows if row.stable_role in {"stable_to_stable", "same_stable_asset_and_quote"}),
-            missing_raw_evidence_count=sum(1 for row in rows if row.raw_evidence_count == 0),
+            material_events_count=sum(
+                1 for row in rows if abs(row.stable_gain_loss_eur) >= Decimal("100")
+            ),
+            stable_to_stable_events_count=sum(
+                1
+                for row in rows
+                if row.stable_role
+                in {"stable_to_stable", "same_stable_asset_and_quote"}
+            ),
+            missing_raw_evidence_count=sum(
+                1 for row in rows if row.raw_evidence_count == 0
+            ),
             verified_or_known_token_events_count=sum(
                 1
                 for row in rows
@@ -4961,9 +5832,17 @@ class TaxYearService:
                 or row.jupiter_quote_status in {"verified", "unverified_plausible"}
             ),
             stable_tax_lines_count=sum(row.stable_tax_lines_count for row in rows),
-            stable_disposal_proceeds_eur=sum((row.stable_disposal_proceeds_eur for row in rows), Decimal("0")),
-            stable_gain_loss_eur=sum((row.stable_gain_loss_eur for row in rows), Decimal("0")),
-            assets=sorted(asset_groups.values(), key=lambda item: abs(item.stable_gain_loss_eur), reverse=True)[:limit],
+            stable_disposal_proceeds_eur=sum(
+                (row.stable_disposal_proceeds_eur for row in rows), Decimal("0")
+            ),
+            stable_gain_loss_eur=sum(
+                (row.stable_gain_loss_eur for row in rows), Decimal("0")
+            ),
+            assets=sorted(
+                asset_groups.values(),
+                key=lambda item: abs(item.stable_gain_loss_eur),
+                reverse=True,
+            )[:limit],
             rows=rows[:limit],
             methodology=(
                 "Read-only Solana-Stablecoin-Swap-Kontext aus bestehenden "
@@ -4982,7 +5861,9 @@ class TaxYearService:
     ) -> TaxSolanaStablecoinFxReview:
         swap_rows = [
             row
-            for row in self.solana_stablecoin_swap_context_review(year=year, limit=10_000).rows
+            for row in self.solana_stablecoin_swap_context_review(
+                year=year, limit=10_000
+            ).rows
             if row.expected_tax_effect == "stable_quote_disposal"
             and row.quote_asset
             and row.quote_quantity is not None
@@ -5008,9 +5889,15 @@ class TaxYearService:
                 selected_price = price_point.price_eur
                 selected_source = price_point.source
                 selected_priced_at = price_point.priced_at.isoformat()
-                price_age_days = max((event_time.date() - price_point.priced_at.date()).days, 0)
+                price_age_days = max(
+                    (event_time.date() - price_point.priced_at.date()).days, 0
+                )
                 if implied_price is not None and selected_price > 0:
-                    price_delta_pct = abs(implied_price - selected_price) / selected_price * Decimal("100")
+                    price_delta_pct = (
+                        abs(implied_price - selected_price)
+                        / selected_price
+                        * Decimal("100")
+                    )
             fx_basis_status = self._stablecoin_fx_basis_status(selected_source)
             review_reason, recommended_action = self._stablecoin_fx_review_reason(
                 price_point_source=selected_source,
@@ -5043,7 +5930,9 @@ class TaxYearService:
                 )
             )
 
-        asset_groups: dict[tuple[int, str, str | None], TaxSolanaStablecoinFxAssetSummary] = {}
+        asset_groups: dict[
+            tuple[int, str, str | None], TaxSolanaStablecoinFxAssetSummary
+        ] = {}
         for row in rows:
             key = (row.year, row.stable_asset.upper(), row.selected_price_source)
             item = asset_groups.setdefault(
@@ -5060,8 +5949,12 @@ class TaxYearService:
             item.stable_quantity += row.stable_quantity
             item.stable_disposal_proceeds_eur += row.stable_disposal_proceeds_eur
             item.stable_gain_loss_eur += row.stable_gain_loss_eur
-            item.max_price_age_days = max(item.max_price_age_days, row.price_age_days or 0)
-            item.max_abs_price_delta_pct = max(item.max_abs_price_delta_pct, row.price_delta_pct or Decimal("0"))
+            item.max_price_age_days = max(
+                item.max_price_age_days, row.price_age_days or 0
+            )
+            item.max_abs_price_delta_pct = max(
+                item.max_abs_price_delta_pct, row.price_delta_pct or Decimal("0")
+            )
 
         rows.sort(
             key=lambda item: (
@@ -5076,15 +5969,33 @@ class TaxYearService:
             generated_at=datetime.now(timezone.utc).isoformat(),
             year=year,
             events_count=len(rows),
-            material_events_count=sum(1 for row in rows if abs(row.stable_gain_loss_eur) >= Decimal("100")),
-            missing_price_count=sum(1 for row in rows if row.selected_price_eur is None),
+            material_events_count=sum(
+                1 for row in rows if abs(row.stable_gain_loss_eur) >= Decimal("100")
+            ),
+            missing_price_count=sum(
+                1 for row in rows if row.selected_price_eur is None
+            ),
             stale_price_count=sum(1 for row in rows if (row.price_age_days or 0) > 7),
-            derived_price_count=sum(1 for row in rows if row.fx_basis_status == "derived_event_quote_review"),
-            fx_backed_price_count=sum(1 for row in rows if row.fx_basis_status == "fx_backed"),
-            market_price_count=sum(1 for row in rows if row.fx_basis_status == "market_price_review"),
-            stable_disposal_proceeds_eur=sum((row.stable_disposal_proceeds_eur for row in rows), Decimal("0")),
-            stable_gain_loss_eur=sum((row.stable_gain_loss_eur for row in rows), Decimal("0")),
-            assets=sorted(asset_groups.values(), key=lambda item: abs(item.stable_gain_loss_eur), reverse=True)[:limit],
+            derived_price_count=sum(
+                1 for row in rows if row.fx_basis_status == "derived_event_quote_review"
+            ),
+            fx_backed_price_count=sum(
+                1 for row in rows if row.fx_basis_status == "fx_backed"
+            ),
+            market_price_count=sum(
+                1 for row in rows if row.fx_basis_status == "market_price_review"
+            ),
+            stable_disposal_proceeds_eur=sum(
+                (row.stable_disposal_proceeds_eur for row in rows), Decimal("0")
+            ),
+            stable_gain_loss_eur=sum(
+                (row.stable_gain_loss_eur for row in rows), Decimal("0")
+            ),
+            assets=sorted(
+                asset_groups.values(),
+                key=lambda item: abs(item.stable_gain_loss_eur),
+                reverse=True,
+            )[:limit],
             rows=rows[:limit],
             methodology=(
                 "Read-only Preis-/FX-Review fuer Solana-Stablecoin-Quote-Beine. "
@@ -5116,18 +6027,29 @@ class TaxYearService:
             target_cex="binance",
             network="SOL",
         )
-        cex_anchor_feasibility = wallet_fifo_service.cex_exchange_outflow_anchor_feasibility(
-            year,
-            source_exchange="bitget",
-            target_cex="binance",
-            network="SOL",
+        cex_anchor_feasibility = (
+            wallet_fifo_service.cex_exchange_outflow_anchor_feasibility(
+                year,
+                source_exchange="bitget",
+                target_cex="binance",
+                network="SOL",
+            )
         )
-        hnt = next((item for item in self._asset_breakdown(year) if item.asset.upper() == "HNT"), None)
+        hnt = next(
+            (
+                item
+                for item in self._asset_breakdown(year)
+                if item.asset.upper() == "HNT"
+            ),
+            None,
+        )
         hnt_line_count = hnt.tax_line_count if hnt is not None else 0
         hnt_gain_loss = hnt.gain_loss_eur if hnt is not None else Decimal("0")
         tax_line_total = status.tax_lines_count + status.tax_free_lines_count
         review_decisions = self._review_decisions_for_year(year)
-        stablecoin_fx_tax_impact = PriceQualityService(self.store).stablecoin_fx_tax_impact_latest(
+        stablecoin_fx_tax_impact = PriceQualityService(
+            self.store
+        ).stablecoin_fx_tax_impact_latest(
             asset="USDT",
             year=year,
         )
@@ -5140,7 +6062,9 @@ class TaxYearService:
                 file_format="csv",
                 record_count=tax_line_total,
                 amount_eur=status.realized_gain_loss_eur,
-                status=self._evidence_item_status(tax_line_total, blocked=status.export_blocked),
+                status=self._evidence_item_status(
+                    tax_line_total, blocked=status.export_blocked
+                ),
                 required=bool(tax_line_total or status.export_blocked),
                 note=(
                     "Belegt steuerpflichtige Veraeusserungen, Anschaffungskosten, "
@@ -5154,7 +6078,9 @@ class TaxYearService:
                 endpoint="/api/v1/export/tax-payment-overview.json",
                 file_format="json",
                 record_count=len(guide.entries),
-                amount_eur=status.realized_gain_loss_eur + status.rewards_income_eur + status.derivative_pnl_eur,
+                amount_eur=status.realized_gain_loss_eur
+                + status.rewards_income_eur
+                + status.derivative_pnl_eur,
                 status="available",
                 required=True,
                 note="Lesbare Jahresuebersicht mit ASCII-Tabelle und Aufgaben: eintragen, nur Beleg, pruefen.",
@@ -5182,25 +6108,34 @@ class TaxYearService:
                 file_format="csv",
                 record_count=status.derivative_lines_count,
                 amount_eur=status.derivative_pnl_eur,
-                status=self._evidence_item_status(status.derivative_lines_count, review=bool(status.derivative_lines_count)),
+                status=self._evidence_item_status(
+                    status.derivative_lines_count,
+                    review=bool(status.derivative_lines_count),
+                ),
                 required=bool(status.derivative_lines_count),
                 note="Separater Derivate-Beleg; wird nicht in den Krypto-FIFO-Saldo gemischt.",
             ),
             TaxYearEvidenceItem(
                 evidence_id="tax-external-inflows",
-                category="pruefen" if external.review_count or external.unmatched_count else "beleg",
+                category="pruefen"
+                if external.review_count or external.unmatched_count
+                else "beleg",
                 label="Externe Solana-Zufluesse",
                 endpoint="/api/v1/export/tax-external-inflows.csv",
                 file_format="csv",
                 record_count=external.inflows_count,
                 amount_eur=external.review_value_eur + external.unmatched_value_eur,
-                status="review" if external.review_count or external.unmatched_count else self._evidence_item_status(external.inflows_count),
+                status="review"
+                if external.review_count or external.unmatched_count
+                else self._evidence_item_status(external.inflows_count),
                 required=bool(external.review_count or external.unmatched_count),
                 note="Belegt, welche Solana-Zufluesse Transfer-, Airdrop- oder Importklassifizierungspruefung brauchen.",
             ),
             TaxYearEvidenceItem(
                 evidence_id="tax-solana-stablecoin-swap-evidence",
-                category="beleg" if solana_swaps.missing_raw_evidence_count == 0 else "pruefen",
+                category="beleg"
+                if solana_swaps.missing_raw_evidence_count == 0
+                else "pruefen",
                 label="Solana Stablecoin Swap Signaturen",
                 endpoint="/api/v1/export/tax-solana-stablecoin-swap-evidence.csv",
                 file_format="csv",
@@ -5253,7 +6188,8 @@ class TaxYearService:
                 evidence_id="tax-helium-swap-evidence-review",
                 category=(
                     "beleg"
-                    if helium_swap_evidence.tx_count and helium_swap_evidence.raw_evidence_missing_count == 0
+                    if helium_swap_evidence.tx_count
+                    and helium_swap_evidence.raw_evidence_missing_count == 0
                     else "pruefen"
                 ),
                 label="Helium Swap-TxID Belegmatrix",
@@ -5263,7 +6199,8 @@ class TaxYearService:
                 amount_eur=helium_swap_evidence.total_context_value_eur,
                 status=(
                     "available"
-                    if helium_swap_evidence.tx_count and helium_swap_evidence.raw_evidence_missing_count == 0
+                    if helium_swap_evidence.tx_count
+                    and helium_swap_evidence.raw_evidence_missing_count == 0
                     else self._evidence_item_status(helium_swap_evidence.tx_count)
                 ),
                 required=bool(helium_swap_evidence.tx_count),
@@ -5278,7 +6215,8 @@ class TaxYearService:
                     "beleg"
                     if helium_swap_alchemy["expected_count"]
                     and helium_swap_alchemy["missing_count"] == 0
-                    and helium_swap_alchemy["confirmed_count"] == helium_swap_alchemy["expected_count"]
+                    and helium_swap_alchemy["confirmed_count"]
+                    == helium_swap_alchemy["expected_count"]
                     else "pruefen"
                 ),
                 label="Helium Swap Alchemy Onchain-Audit",
@@ -5290,7 +6228,8 @@ class TaxYearService:
                     "available"
                     if helium_swap_alchemy["expected_count"]
                     and helium_swap_alchemy["missing_count"] == 0
-                    and helium_swap_alchemy["confirmed_count"] == helium_swap_alchemy["expected_count"]
+                    and helium_swap_alchemy["confirmed_count"]
+                    == helium_swap_alchemy["expected_count"]
                     else "review"
                     if helium_swap_alchemy["expected_count"]
                     else "empty"
@@ -5304,7 +6243,9 @@ class TaxYearService:
             ),
             TaxYearEvidenceItem(
                 evidence_id="bmf-closure-appendix",
-                category="pruefen" if bmf_closure.manual_evidence_required_count else "beleg",
+                category="pruefen"
+                if bmf_closure.manual_evidence_required_count
+                else "beleg",
                 label="BMF Abschlussbeilage Herkunft",
                 endpoint=f"/api/v1/tax-years/{year}/bmf-closure-appendix",
                 file_format="json",
@@ -5349,7 +6290,9 @@ class TaxYearService:
             ),
             TaxYearEvidenceItem(
                 evidence_id="cex-exchange-outflow-anchor-feasibility",
-                category="beleg" if cex_anchor_feasibility.anchor_missing_count == 0 else "pruefen",
+                category="beleg"
+                if cex_anchor_feasibility.anchor_missing_count == 0
+                else "pruefen",
                 label="CEX FIFO-Anker-Vorpruefung",
                 endpoint=f"/api/v1/tax-years/{year}/cex-exchange-outflow-anchor-feasibility?source_exchange=bitget&target_cex=binance&network=SOL",
                 file_format="json",
@@ -5358,7 +6301,9 @@ class TaxYearService:
                 status=(
                     "review"
                     if cex_anchor_feasibility.anchor_missing_count
-                    else self._evidence_item_status(cex_anchor_feasibility.decisions_count)
+                    else self._evidence_item_status(
+                        cex_anchor_feasibility.decisions_count
+                    )
                 ),
                 required=bool(cex_anchor_feasibility.decisions_count),
                 note=(
@@ -5408,7 +6353,9 @@ class TaxYearService:
                     "review"
                     if stablecoin_fx_tax_impact.artifact_found
                     and stablecoin_fx_tax_impact.existing_decisions_count == 0
-                    else self._evidence_item_status(stablecoin_fx_tax_impact.replacement_rows_count)
+                    else self._evidence_item_status(
+                        stablecoin_fx_tax_impact.replacement_rows_count
+                    )
                 ),
                 required=stablecoin_fx_tax_impact.artifact_found,
                 note=(
@@ -5441,14 +6388,18 @@ class TaxYearService:
             ),
         )
 
-    def bmf_closure_appendix(self, year: int, *, limit: int = 500) -> TaxYearBmfClosureAppendix:
+    def bmf_closure_appendix(
+        self, year: int, *, limit: int = 500
+    ) -> TaxYearBmfClosureAppendix:
         from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 
         cache_key = (year, limit)
         cached = self._bmf_closure_appendix_cache.get(cache_key)
         if cached is not None:
             return cached.model_copy(deep=True)
-        closure = WalletFifoPreviewService(self.store).provenance_closure_report(year=year, limit=limit)
+        closure = WalletFifoPreviewService(self.store).provenance_closure_report(
+            year=year, limit=limit
+        )
         items: list[TaxYearBmfClosureAppendixItem] = []
         for item in closure.items:
             recommended_tax_treatment = (
@@ -5471,6 +6422,7 @@ class TaxYearService:
                 "documented_binance_btt_bttc_redenomination",
                 "documented_manual_cex_deposit_history",
                 "documented_exchange_deposit_history",
+                "documented_service_mediated_jupiter_swap_tax_mapping_ready",
                 "external_or_unknown_origin_documented",
                 "unverified_cex_deposit_sender",
             }
@@ -5608,6 +6560,36 @@ class TaxYearService:
                     "Sender-Wallet ist nicht in der Owned-Wallet-Registry belegt."
                 )
                 manual_evidence_required = False
+                conservative_treatment_available = True
+            elif (
+                item.closure_status
+                == "documented_service_mediated_jupiter_swap_tax_mapping_ready"
+            ):
+                recommended_tax_treatment = (
+                    "Als servicevermittelten Krypto-zu-Krypto-Tausch behandeln; "
+                    "Input-Veraeusserung, Output-Anschaffung und direkt bezahlte "
+                    "Servicekosten sind explizit in Global- und Wallet-FIFO abgebildet."
+                )
+                filing_disclosure = (
+                    "SHA-gebundene Mapping-Konfiguration, Alchemy-Routenbeleg, "
+                    "Binance-Deposit-History und erzeugte Steuerzeilen gemeinsam beilegen."
+                )
+                manual_evidence_required = False
+            elif (
+                item.closure_status
+                == "documented_service_mediated_jupiter_swap_tax_mapping_review"
+            ):
+                recommended_tax_treatment = (
+                    "Als servicevermittelten Krypto-zu-Krypto-Tausch behandeln; keine "
+                    "steuerneutrale Eigenwallet-Umbuchung und keine externe Schenkung behaupten."
+                )
+                filing_disclosure = (
+                    "Alchemy-Routenbeleg und Binance-Deposit-History beilegen. Die "
+                    "Input-Veraeusserung, Output-Anschaffung und Servicekosten muessen "
+                    "vor der finalen Abgabe explizit in der Steuer-FIFO abgebildet werden."
+                )
+                manual_evidence_required = True
+                conservative_treatment_available = False
             elif item.closure_status == "tax_neutral_candidate_review_required":
                 recommended_tax_treatment = (
                     "Potentiell steuerneutraler Transfer; erst nach fachlicher "
@@ -5623,7 +6605,9 @@ class TaxYearService:
                     "Nicht abschliessen; Solana-Provenance-Batch erneut erzeugen "
                     "oder Rohbelege nachziehen."
                 )
-                filing_disclosure = "Offenen technischen Nachweis als Blocker im Belegpaket fuehren."
+                filing_disclosure = (
+                    "Offenen technischen Nachweis als Blocker im Belegpaket fuehren."
+                )
                 conservative_treatment_available = False
 
             items.append(
@@ -5648,9 +6632,13 @@ class TaxYearService:
             )
 
         manual_count = sum(1 for item in items if item.manual_evidence_required)
-        conservative_count = sum(1 for item in items if item.conservative_treatment_available)
+        conservative_count = sum(
+            1 for item in items if item.conservative_treatment_available
+        )
         tax_neutral_candidates = sum(
-            1 for item in items if item.closure_status == "tax_neutral_candidate_review_required"
+            1
+            for item in items
+            if item.closure_status == "tax_neutral_candidate_review_required"
         )
         if not items:
             status = "ready"
@@ -5686,7 +6674,9 @@ class TaxYearService:
         self._bmf_closure_appendix_cache[cache_key] = report.model_copy(deep=True)
         return report
 
-    def external_inflow_report(self, year: int, *, limit: int = 200) -> TaxExternalInflowReport:
+    def external_inflow_report(
+        self, year: int, *, limit: int = 200
+    ) -> TaxExternalInflowReport:
         cache_key = (year, limit)
         cached = self._external_inflow_report_cache.get(cache_key)
         if cached is not None:
@@ -5704,7 +6694,9 @@ class TaxYearService:
         unmatched_count = 0
 
         assets = sorted({row[4].upper() for row in inflows})
-        lookup = self._income_price_lookup([asset for asset in assets if asset != "EUR"])
+        lookup = self._income_price_lookup(
+            [asset for asset in assets if asset != "EUR"]
+        )
         for row in inflows:
             (
                 event_id,
@@ -5718,7 +6710,11 @@ class TaxYearService:
                 tx_id,
             ) = row
             price_eur = None
-            if quantity > 0 and not (quote_asset and str(quote_asset).upper() == "EUR") and asset.upper() != "EUR":
+            if (
+                quantity > 0
+                and not (quote_asset and str(quote_asset).upper() == "EUR")
+                and asset.upper() != "EUR"
+            ):
                 price = self._income_price_at(asset, event_time, lookup)
                 if price is not None:
                     price_eur = price[0]
@@ -5741,7 +6737,11 @@ class TaxYearService:
                 outgoing=outgoing.get(asset.upper(), []),
             )
             if best is not None:
-                status = "matched_transfer_candidate" if best["score"] >= 65 else "review_transfer_candidate"
+                status = (
+                    "matched_transfer_candidate"
+                    if best["score"] >= 65
+                    else "review_transfer_candidate"
+                )
                 if status == "matched_transfer_candidate":
                     matched_count += 1
                     if value_eur is not None:
@@ -5789,11 +6789,19 @@ class TaxYearService:
                     value_eur=value_eur,
                     tx_id=tx_id,
                     status="unmatched_external_inflow",
-                    warnings=["Keine plausible vorherige Gegenbuchung im Ledger gefunden."],
+                    warnings=[
+                        "Keine plausible vorherige Gegenbuchung im Ledger gefunden."
+                    ],
                 )
             )
 
-        rows.sort(key=lambda item: (item.status, -abs(item.value_eur or Decimal("0")), item.event_time))
+        rows.sort(
+            key=lambda item: (
+                item.status,
+                -abs(item.value_eur or Decimal("0")),
+                item.event_time,
+            )
+        )
         report = TaxExternalInflowReport(
             year=year,
             generated_at=datetime.now(timezone.utc).isoformat(),
@@ -5824,15 +6832,11 @@ class TaxYearService:
         tax = self._tax_totals_by_year().get(year, {})
         income = self._income_totals_by_year().get(year, {})
         derivatives = self._derivatives_by_year().get(year, {})
-        missing = [
-            item
-            for item in self._missing_prices()
-            if item.year == year
-        ]
+        missing = [item for item in self._missing_prices() if item.year == year]
         unmatched = [
             item
             for item in self._unmatched_disposals()
-            if item.event_time.year == year
+            if reporting_tax_year(item.event_time) == year
         ]
         closed_years = self._closed_tax_years()
         is_closed = year in closed_years
@@ -5905,7 +6909,9 @@ class TaxYearService:
             tax_lines_count=int(tax.get("tax_lines_count", 0) or 0),
             tax_free_gain_loss_eur=tax.get("tax_free_gain_loss", Decimal("0")),
             tax_free_disposal_proceeds_eur=tax.get("tax_free_proceeds", Decimal("0")),
-            tax_free_acquisition_cost_eur=tax.get("tax_free_acquisition_cost", Decimal("0")),
+            tax_free_acquisition_cost_eur=tax.get(
+                "tax_free_acquisition_cost", Decimal("0")
+            ),
             tax_free_lines_count=int(tax.get("tax_free_lines_count", 0) or 0),
             rewards_income_eur=income.get("income_eur", Decimal("0")),
             rewards_events_count=int(income.get("events", 0) or 0),
@@ -5924,14 +6930,14 @@ class TaxYearService:
     def _available_years(self) -> list[int]:
         years = set(self.DEFAULT_YEARS)
         for line in self._tax_lines():
-            years.add(line.disposed_at.year)
-            years.add(line.acquired_at.year)
+            years.add(reporting_tax_year(line.disposed_at))
+            years.add(reporting_tax_year(line.acquired_at))
         for item in self._unmatched_disposals():
-            years.add(item.event_time.year)
+            years.add(reporting_tax_year(item.event_time))
         for item in self._missing_prices():
             years.add(item.year)
         for line in self._derivative_lines():
-            years.add(line.event_time.year)
+            years.add(reporting_tax_year(line.event_time))
         return sorted(years)
 
     def _tax_totals_by_year(self) -> dict[int, dict[str, Decimal | int]]:
@@ -5950,16 +6956,24 @@ class TaxYearService:
             }
         )
         for line in self._tax_lines():
-            item = totals[line.disposed_at.year]
+            item = totals[reporting_tax_year(line.disposed_at)]
             if self._is_taxable_private_disposal(line):
                 item["gain_loss"] = item["gain_loss"] + line.gain_loss_eur  # type: ignore[operator]
                 item["proceeds"] = item["proceeds"] + line.disposal_proceeds_eur  # type: ignore[operator]
-                item["acquisition_cost"] = item["acquisition_cost"] + line.acquisition_cost_eur  # type: ignore[operator]
+                item["acquisition_cost"] = (
+                    item["acquisition_cost"] + line.acquisition_cost_eur
+                )  # type: ignore[operator]
                 item["tax_lines_count"] = int(item["tax_lines_count"]) + 1
             else:
-                item["tax_free_gain_loss"] = item["tax_free_gain_loss"] + line.gain_loss_eur  # type: ignore[operator]
-                item["tax_free_proceeds"] = item["tax_free_proceeds"] + line.disposal_proceeds_eur  # type: ignore[operator]
-                item["tax_free_acquisition_cost"] = item["tax_free_acquisition_cost"] + line.acquisition_cost_eur  # type: ignore[operator]
+                item["tax_free_gain_loss"] = (
+                    item["tax_free_gain_loss"] + line.gain_loss_eur
+                )  # type: ignore[operator]
+                item["tax_free_proceeds"] = (
+                    item["tax_free_proceeds"] + line.disposal_proceeds_eur
+                )  # type: ignore[operator]
+                item["tax_free_acquisition_cost"] = (
+                    item["tax_free_acquisition_cost"] + line.acquisition_cost_eur
+                )  # type: ignore[operator]
                 item["tax_free_lines_count"] = int(item["tax_free_lines_count"]) + 1
         self._tax_totals_cache = totals
         return totals
@@ -5971,14 +6985,18 @@ class TaxYearService:
         for line in self._tax_lines():
             if not self._is_taxable_private_disposal(line):
                 continue
-            grouped = grouped_by_year[line.disposed_at.year]
-            item = grouped.setdefault(line.asset, TaxYearAssetBreakdown(asset=line.asset))
+            grouped = grouped_by_year[reporting_tax_year(line.disposed_at)]
+            item = grouped.setdefault(
+                line.asset, TaxYearAssetBreakdown(asset=line.asset)
+            )
             item.gain_loss_eur += line.gain_loss_eur
             item.proceeds_eur += line.disposal_proceeds_eur
             item.acquisition_cost_eur += line.acquisition_cost_eur
             item.tax_line_count += 1
         self._asset_breakdown_cache = {
-            item_year: sorted(items.values(), key=lambda item: abs(item.gain_loss_eur), reverse=True)
+            item_year: sorted(
+                items.values(), key=lambda item: abs(item.gain_loss_eur), reverse=True
+            )
             for item_year, items in grouped_by_year.items()
         }
         return self._asset_breakdown_cache.get(year, [])
@@ -6008,7 +7026,35 @@ class TaxYearService:
         # klassifiziert hat. Solana-RPC setzt das nur bei belegten Helium
         # Reward-Instructions wie SetCurrentRewardsWrapperV1 und
         # DistributeCompressionRewardsV0.
-        return event_type in {"reward", "mining"} and asset.upper() in {"HNT", "IOT", "MOBILE"}
+        return event_type in {"reward", "mining"} and asset.upper() in {
+            "HNT",
+            "IOT",
+            "MOBILE",
+        }
+
+    def _event_reporting_year(self, event_id: str, event_time: datetime) -> int:
+        if self._source_period_event_years_cache is None:
+            with self.store.connect() as con:
+                rows = con.execute(
+                    """
+                    select event.event_id, date_part('year', event.event_time)::integer
+                    from canonical_events event
+                    join raw_objects raw on raw.raw_object_id = event.raw_object_id
+                    where lower(event.source) = 'helium'
+                      and lower(event.event_type) = 'mining'
+                      and json_extract_string(
+                          raw.payload_json,
+                          '$."Period Start (UTC)"'
+                      ) is not null
+                    """
+                ).fetchall()
+            self._source_period_event_years_cache = {
+                str(source_event_id): int(year) for source_event_id, year in rows
+            }
+        return self._source_period_event_years_cache.get(
+            event_id,
+            reporting_tax_year(event_time),
+        )
 
     def _income_totals_by_year(self) -> dict[int, dict[str, Decimal | int]]:
         if self._income_totals_cache is not None:
@@ -6018,12 +7064,13 @@ class TaxYearService:
         )
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
-                    date_part('year', e.event_time)::integer as year,
+                    {event_reporting_year_sql("e", "raw")} as year,
                     count(*)::integer as events,
                     coalesce(sum(l.cost_basis_eur_total), 0) as income_eur
                 from canonical_events e
+                left join raw_objects raw on raw.raw_object_id = e.raw_object_id
                 left join tax_lots l on l.source_event_id = e.event_id
                 where e.event_type in ('reward', 'mining')
                   and upper(e.asset) in ('HNT', 'IOT', 'MOBILE')
@@ -6063,7 +7110,13 @@ class TaxYearService:
         tx_context = self._income_tx_context()
         reward_tx_ids = self._taxable_reward_tx_ids_by_asset()
         income_price_lookup = self._income_price_lookup(
-            sorted({str(row[5]).upper() for row in rows if row[6] > 0 and str(row[5]).upper() != "EUR"})
+            sorted(
+                {
+                    str(row[5]).upper()
+                    for row in rows
+                    if row[6] > 0 and str(row[5]).upper() != "EUR"
+                }
+            )
         )
         for row in rows:
             (
@@ -6089,11 +7142,15 @@ class TaxYearService:
             price_eur = None
             price_source = None
             priced_at = None
-            if quantity > 0 and not (quote_asset and str(quote_asset).upper() == "EUR") and asset.upper() != "EUR":
+            if (
+                quantity > 0
+                and not (quote_asset and str(quote_asset).upper() == "EUR")
+                and asset.upper() != "EUR"
+            ):
                 price = self._income_price_at(asset, event_time, income_price_lookup)
                 if price is not None:
                     price_eur, price_source, priced_at = price
-            year = event_time.year
+            year = self._event_reporting_year(str(event_id), event_time)
             value_eur = self._income_row_value(
                 asset=asset,
                 quantity=quantity,
@@ -6101,7 +7158,12 @@ class TaxYearService:
                 quote_quantity=quote_quantity,
                 price_eur=price_eur,
             )
-            if quantity > 0 and quote_asset and str(quote_asset).upper() == "EUR" and quote_quantity is not None:
+            if (
+                quantity > 0
+                and quote_asset
+                and str(quote_asset).upper() == "EUR"
+                and quote_quantity is not None
+            ):
                 price_source = "event_quote:EUR"
                 priced_at = event_time
             elif quantity > 0 and asset.upper() == "EUR":
@@ -6181,7 +7243,9 @@ class TaxYearService:
                         quantity=quantity,
                         income_eur=value_eur,
                         price_source=price_source,
-                        priced_at=priced_at.isoformat() if priced_at is not None else None,
+                        priced_at=priced_at.isoformat()
+                        if priced_at is not None
+                        else None,
                         valuation_status=status,
                         classification=classification,
                     )
@@ -6206,7 +7270,9 @@ class TaxYearService:
                 missing_value_count=int(bucket["missing"]),
                 ignored_non_positive_count=int(bucket["ignored"]),
                 classification_counts=dict(sorted(bucket["classifications"].items())),  # type: ignore[union-attr]
-                assets=sorted(assets, key=lambda item: abs(item.income_eur), reverse=True),
+                assets=sorted(
+                    assets, key=lambda item: abs(item.income_eur), reverse=True
+                ),
                 missing_assets=sorted(bucket["missing_assets"]),  # type: ignore[arg-type]
                 events=bucket["previews"],  # type: ignore[arg-type]
                 methodology=(
@@ -6253,7 +7319,11 @@ class TaxYearService:
                 return "solana_external_inflow_or_airdrop_review"
             return "solana_program_or_swap_income_review"
         if event_type == "income" and source == "binance" and quote_asset is None:
-            if abs(quantity) < Decimal("1") and asset.upper() not in {"USDT", "USDC", "EUR"}:
+            if abs(quantity) < Decimal("1") and asset.upper() not in {
+                "USDT",
+                "USDC",
+                "EUR",
+            }:
                 return "binance_dust_or_rounding_review"
             return "binance_distribution_or_transfer_review"
         if event_type == "income" and account and "earn" in account.lower():
@@ -6271,7 +7341,11 @@ class TaxYearService:
     ) -> Decimal | None:
         if quantity <= 0:
             return None
-        if quote_asset and str(quote_asset).upper() == "EUR" and quote_quantity is not None:
+        if (
+            quote_asset
+            and str(quote_asset).upper() == "EUR"
+            and quote_quantity is not None
+        ):
             return abs(quote_quantity)
         if asset.upper() == "EUR":
             return quantity
@@ -6279,10 +7353,12 @@ class TaxYearService:
             return None
         return quantity * price_eur
 
-    def _income_event_rows(self, *, event_types: tuple[str, ...]) -> list[tuple[object, ...]]:
+    def _income_event_rows(
+        self, *, event_types: tuple[str, ...]
+    ) -> list[tuple[object, ...]]:
         placeholders = ",".join(["?"] * len(event_types))
         with self.store.connect() as con:
-            return con.execute(
+            rows = con.execute(
                 f"""
                 select
                     e.event_id,
@@ -6301,6 +7377,17 @@ class TaxYearService:
                 """,
                 list(event_types),
             ).fetchall()
+        moonpay_event_ids = self._moonpay_onramp_event_ids()
+        return [row for row in rows if str(row[0]) not in moonpay_event_ids]
+
+    def _moonpay_onramp_event_ids(self) -> set[str]:
+        if self._moonpay_onramp_event_ids_cache is None:
+            self._moonpay_onramp_event_ids_cache = {
+                item.event_id
+                for item in MoonpayReceiptService(self.store).report().items
+                if item.strict_ready
+            }
+        return set(self._moonpay_onramp_event_ids_cache)
 
     def _taxable_reward_tx_ids_by_asset(self) -> dict[str, set[str]]:
         with self.store.connect() as con:
@@ -6338,7 +7425,7 @@ class TaxYearService:
         reward_tx_ids = self._taxable_reward_tx_ids_by_asset()
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     event_id,
                     event_time,
@@ -6354,14 +7441,18 @@ class TaxYearService:
                   and event_type = 'income'
                   and quantity > 0
                   and quote_asset is null
-                  and date_part('year', event_time)::integer = ?
+                  and {reporting_year_sql("event_time")} = ?
                 order by event_time, event_id
                 """,
                 [year],
             ).fetchall()
         return [
-            row for row in rows
-            if self._is_strict_external_solana_income_context(tx_context.get(row[8] or ""))
+            row
+            for row in rows
+            if str(row[0]) not in self._moonpay_onramp_event_ids()
+            if self._is_strict_external_solana_income_context(
+                tx_context.get(row[8] or "")
+            )
             and not self._is_duplicate_review_income_for_reward_tx(
                 event_type="income",
                 asset=str(row[4]),
@@ -6378,9 +7469,10 @@ class TaxYearService:
             counts: dict[int, int] = defaultdict(int)
             with self.store.connect() as con:
                 rows = con.execute(
-                    """
+                    f"""
                     select
-                        date_part('year', event_time)::integer as year,
+                        event_id,
+                        {reporting_year_sql("event_time")} as year,
                         asset,
                         quantity,
                         tx_id
@@ -6392,16 +7484,18 @@ class TaxYearService:
                     order by event_time, event_id
                     """
                 ).fetchall()
-            for item_year, asset, quantity, tx_id in rows:
-                if (
-                    self._is_strict_external_solana_income_context(tx_context.get(tx_id or ""))
-                    and not self._is_duplicate_review_income_for_reward_tx(
-                        event_type="income",
-                        asset=str(asset),
-                        quantity=quantity,
-                        tx_id=tx_id,
-                        reward_tx_ids=reward_tx_ids,
-                    )
+            moonpay_event_ids = self._moonpay_onramp_event_ids()
+            for event_id, item_year, asset, quantity, tx_id in rows:
+                if str(event_id) in moonpay_event_ids:
+                    continue
+                if self._is_strict_external_solana_income_context(
+                    tx_context.get(tx_id or "")
+                ) and not self._is_duplicate_review_income_for_reward_tx(
+                    event_type="income",
+                    asset=str(asset),
+                    quantity=quantity,
+                    tx_id=tx_id,
+                    reward_tx_ids=reward_tx_ids,
                 ):
                     counts[int(item_year)] += 1
             self._external_solana_inflow_counts_cache = dict(counts)
@@ -6486,7 +7580,9 @@ class TaxYearService:
                 reasons.append("Unterschiedliche Konten")
             elif candidate["account"] and account and candidate["account"] == account:
                 score -= 20
-                warnings.append("Gleiche Quelle/Wallet; eher interne Solana-Bewegung als externer Transferbeleg")
+                warnings.append(
+                    "Gleiche Quelle/Wallet; eher interne Solana-Bewegung als externer Transferbeleg"
+                )
             if tx_id and candidate["tx_id"]:
                 if tx_id == candidate["tx_id"]:
                     score += 30
@@ -6506,7 +7602,9 @@ class TaxYearService:
         return best
 
     @staticmethod
-    def _external_inflow_amount_tolerance(amount_out: Decimal, amount_in: Decimal) -> Decimal:
+    def _external_inflow_amount_tolerance(
+        amount_out: Decimal, amount_in: Decimal
+    ) -> Decimal:
         base = max(amount_out, amount_in)
         return max(base * Decimal("0.0005"), Decimal("0.00000001"))
 
@@ -6538,7 +7636,9 @@ class TaxYearService:
         }
 
     @staticmethod
-    def _is_strict_external_solana_income_context(context: dict[str, object] | None) -> bool:
+    def _is_strict_external_solana_income_context(
+        context: dict[str, object] | None,
+    ) -> bool:
         if not context:
             return True
         return (
@@ -6551,7 +7651,9 @@ class TaxYearService:
     def _income_price_lookup(
         self,
         assets: list[str],
-    ) -> dict[str, tuple[list[datetime], list[tuple[datetime, Decimal, str, Decimal, str]]]]:
+    ) -> dict[
+        str, tuple[list[datetime], list[tuple[datetime, Decimal, str, Decimal, str]]]
+    ]:
         if not assets:
             return {}
         placeholders = ",".join(["?"] * len(assets))
@@ -6566,17 +7668,25 @@ class TaxYearService:
                 """,
                 assets,
             ).fetchall()
-        grouped: dict[str, list[tuple[datetime, Decimal, str, Decimal, str]]] = defaultdict(list)
+        grouped: dict[str, list[tuple[datetime, Decimal, str, Decimal, str]]] = (
+            defaultdict(list)
+        )
         for asset, priced_at, price_eur, source, confidence, price_id in rows:
             grouped[asset].append((priced_at, price_eur, source, confidence, price_id))
-        return {asset: ([item[0] for item in items], items) for asset, items in grouped.items()}
+        return {
+            asset: ([item[0] for item in items], items)
+            for asset, items in grouped.items()
+        }
 
     @classmethod
     def _income_price_at(
         cls,
         asset: str,
         event_time: datetime,
-        lookup: dict[str, tuple[list[datetime], list[tuple[datetime, Decimal, str, Decimal, str]]]],
+        lookup: dict[
+            str,
+            tuple[list[datetime], list[tuple[datetime, Decimal, str, Decimal, str]]],
+        ],
     ) -> tuple[Decimal, str, datetime] | None:
         entry = lookup.get(asset.upper())
         if entry is None:
@@ -6587,16 +7697,21 @@ class TaxYearService:
             return None
         candidates = items[: index + 1]
         same_day_primary = [
-            item for item in candidates
+            item
+            for item in candidates
             if item[0].date() == event_time.date()
             and not cls._is_derived_price_source(item[2])
         ]
-        selected = max(same_day_primary or candidates, key=cls._income_price_selection_key)
+        selected = max(
+            same_day_primary or candidates, key=cls._income_price_selection_key
+        )
         priced_at, price_eur, source, _confidence, _price_id = selected
         return price_eur, source, priced_at
 
     @staticmethod
-    def _income_price_selection_key(item: tuple[datetime, Decimal, str, Decimal, str]) -> tuple[datetime, int, Decimal, str]:
+    def _income_price_selection_key(
+        item: tuple[datetime, Decimal, str, Decimal, str],
+    ) -> tuple[datetime, int, Decimal, str]:
         priced_at, _price_eur, source, confidence, price_id = item
         return (
             priced_at,
@@ -6613,12 +7728,16 @@ class TaxYearService:
     def _asset_breakdown_for_lines(lines: list[object]) -> list[TaxYearAssetBreakdown]:
         grouped: dict[str, TaxYearAssetBreakdown] = {}
         for line in lines:
-            item = grouped.setdefault(line.asset, TaxYearAssetBreakdown(asset=line.asset))
+            item = grouped.setdefault(
+                line.asset, TaxYearAssetBreakdown(asset=line.asset)
+            )
             item.gain_loss_eur += line.gain_loss_eur
             item.proceeds_eur += line.disposal_proceeds_eur
             item.acquisition_cost_eur += line.acquisition_cost_eur
             item.tax_line_count += 1
-        return sorted(grouped.values(), key=lambda item: abs(item.gain_loss_eur), reverse=True)
+        return sorted(
+            grouped.values(), key=lambda item: abs(item.gain_loss_eur), reverse=True
+        )
 
     def _turnover_assets(
         self,
@@ -6644,13 +7763,21 @@ class TaxYearService:
             else:
                 item.tax_free_gain_loss_eur += line.gain_loss_eur
         if sort_by == "proceeds":
-            return sorted(grouped.values(), key=lambda item: abs(item.gross_disposal_proceeds_eur), reverse=True)
-        return sorted(grouped.values(), key=lambda item: abs(item.gain_loss_eur), reverse=True)
+            return sorted(
+                grouped.values(),
+                key=lambda item: abs(item.gross_disposal_proceeds_eur),
+                reverse=True,
+            )
+        return sorted(
+            grouped.values(), key=lambda item: abs(item.gain_loss_eur), reverse=True
+        )
 
-    def _turnover_sources(self, year: int, *, limit: int) -> list[TaxYearTurnoverSourceBreakdown]:
+    def _turnover_sources(
+        self, year: int, *, limit: int
+    ) -> list[TaxYearTurnoverSourceBreakdown]:
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
                     coalesce(e.source, 'unknown') as source,
                     coalesce(e.event_type, 'unknown') as event_type,
@@ -6662,7 +7789,7 @@ class TaxYearService:
                     coalesce(sum(l.gain_loss_eur), 0) as gain_loss_eur
                 from tax_lines l
                 left join canonical_events e on e.event_id = l.source_event_id
-                where date_part('year', l.disposed_at)::integer = ?
+                where {reporting_year_sql("l.disposed_at")} = ?
                 group by source, event_type, l.asset, e.quote_asset
                 order by abs(coalesce(sum(l.disposal_proceeds_eur), 0)) desc
                 limit ?
@@ -6705,24 +7832,39 @@ class TaxYearService:
         )
 
     @staticmethod
-    def _turnover_summary_row(audit: TaxYearTurnoverAudit) -> TaxYearTurnoverAuditSummaryRow:
+    def _turnover_summary_row(
+        audit: TaxYearTurnoverAudit,
+    ) -> TaxYearTurnoverAuditSummaryRow:
         stablecoin_ratio = (
-            abs(audit.stablecoin_gain_loss_eur) / audit.stablecoin_gross_disposal_proceeds_eur * Decimal("100")
+            abs(audit.stablecoin_gain_loss_eur)
+            / audit.stablecoin_gross_disposal_proceeds_eur
+            * Decimal("100")
             if audit.stablecoin_gross_disposal_proceeds_eur
             else Decimal("0")
         )
         reasons: list[str] = []
         if audit.stablecoin_gross_disposal_proceeds_eur:
             reasons.append("stablecoin_turnover_present")
-        if abs(audit.stablecoin_gain_loss_eur) >= Decimal("100") and stablecoin_ratio >= Decimal("1"):
+        if abs(audit.stablecoin_gain_loss_eur) >= Decimal(
+            "100"
+        ) and stablecoin_ratio >= Decimal("1"):
             reasons.append("material_stablecoin_fifo_gain_or_loss")
-        if audit.external_inflows_review_count or audit.external_inflows_unmatched_count:
+        if (
+            audit.external_inflows_review_count
+            or audit.external_inflows_unmatched_count
+        ):
             reasons.append("external_solana_inflows_need_evidence")
         if audit.external_inflows_review_unmatched_value_eur >= Decimal("1000"):
             reasons.append("material_external_inflow_value")
-        if audit.gross_disposal_proceeds_eur and abs(audit.combined_gain_loss_eur) > audit.gross_disposal_proceeds_eur:
+        if (
+            audit.gross_disposal_proceeds_eur
+            and abs(audit.combined_gain_loss_eur) > audit.gross_disposal_proceeds_eur
+        ):
             reasons.append("gain_exceeds_gross_turnover")
-        if "material_stablecoin_fifo_gain_or_loss" in reasons or "material_external_inflow_value" in reasons:
+        if (
+            "material_stablecoin_fifo_gain_or_loss" in reasons
+            or "material_external_inflow_value" in reasons
+        ):
             risk_level = "high"
         elif reasons:
             risk_level = "review"
@@ -6753,10 +7895,18 @@ class TaxYearService:
     ) -> list[TaxSolanaProgramIncomeRow]:
         rows = self._income_event_rows(event_types=("income",))
         tx_context = self._income_tx_context()
-        assets = sorted({str(row[5]).upper() for row in rows if row[6] > 0 and str(row[5]).upper() != "EUR"})
+        assets = sorted(
+            {
+                str(row[5]).upper()
+                for row in rows
+                if row[6] > 0 and str(row[5]).upper() != "EUR"
+            }
+        )
         price_lookup = self._income_price_lookup(assets)
         results: list[TaxSolanaProgramIncomeRow] = []
-        accepted_classifications = classifications or {"solana_program_or_swap_income_review"}
+        accepted_classifications = classifications or {
+            "solana_program_or_swap_income_review"
+        }
         for (
             event_id,
             event_time,
@@ -6769,7 +7919,10 @@ class TaxYearService:
             quote_quantity,
             tx_id,
         ) in rows:
-            if year is not None and event_time.year != year:
+            if (
+                year is not None
+                and self._event_reporting_year(str(event_id), event_time) != year
+            ):
                 continue
             classification = self._income_classification(
                 event_type=event_type,
@@ -6840,10 +7993,18 @@ class TaxYearService:
             return "helium_asset_received_in_multi_leg_solana_program_context"
         return "helium_asset_program_context_not_reward"
 
-    def _helium_solana_trade_context_rows(self, year: int | None) -> list[TaxSolanaProgramIncomeRow]:
+    def _helium_solana_trade_context_rows(
+        self, year: int | None
+    ) -> list[TaxSolanaProgramIncomeRow]:
         rows = self._income_event_rows(event_types=("trade",))
         tx_context = self._income_tx_context()
-        assets = sorted({str(row[5]).upper() for row in rows if row[6] > 0 and str(row[5]).upper() != "EUR"})
+        assets = sorted(
+            {
+                str(row[5]).upper()
+                for row in rows
+                if row[6] > 0 and str(row[5]).upper() != "EUR"
+            }
+        )
         price_lookup = self._income_price_lookup(assets)
         results: list[TaxSolanaProgramIncomeRow] = []
         for (
@@ -6858,10 +8019,17 @@ class TaxYearService:
             quote_quantity,
             tx_id,
         ) in rows:
-            if year is not None and event_time.year != year:
+            if (
+                year is not None
+                and self._event_reporting_year(str(event_id), event_time) != year
+            ):
                 continue
             asset_key = str(asset).upper()
-            if source != "solana_rpc" or asset_key not in HELIUM_REWARD_ASSETS or quantity <= 0:
+            if (
+                source != "solana_rpc"
+                or asset_key not in HELIUM_REWARD_ASSETS
+                or quantity <= 0
+            ):
                 continue
             price_eur = None
             if asset_key != "EUR":
@@ -6905,7 +8073,9 @@ class TaxYearService:
                 return asset
         return "HNT"
 
-    def _raw_evidence_summary_by_tx(self, tx_ids: set[str]) -> dict[str, dict[str, object]]:
+    def _raw_evidence_summary_by_tx(
+        self, tx_ids: set[str]
+    ) -> dict[str, dict[str, object]]:
         if not tx_ids:
             return {}
         with self.store.connect() as con:
@@ -6948,9 +8118,15 @@ class TaxYearService:
                 raw_sources.add(str(source))
         return {
             tx_id: {
-                "raw_evidence_count": len(item["raw_object_ids"]) if isinstance(item["raw_object_ids"], set) else 0,
-                "raw_filenames": sorted(item["raw_filenames"]) if isinstance(item["raw_filenames"], set) else [],
-                "raw_sources": sorted(item["raw_sources"]) if isinstance(item["raw_sources"], set) else [],
+                "raw_evidence_count": len(item["raw_object_ids"])
+                if isinstance(item["raw_object_ids"], set)
+                else 0,
+                "raw_filenames": sorted(item["raw_filenames"])
+                if isinstance(item["raw_filenames"], set)
+                else [],
+                "raw_sources": sorted(item["raw_sources"])
+                if isinstance(item["raw_sources"], set)
+                else [],
             }
             for tx_id, item in result.items()
         }
@@ -6965,7 +8141,9 @@ class TaxYearService:
             return "read-only-sqlite-evidence"
         return basename
 
-    def _helium_swap_alchemy_audit_match_summary(self, expected_tx_ids: set[str]) -> dict[str, int | str]:
+    def _helium_swap_alchemy_audit_match_summary(
+        self, expected_tx_ids: set[str]
+    ) -> dict[str, int | str]:
         if not expected_tx_ids:
             return {
                 "status": "empty",
@@ -6983,7 +8161,9 @@ class TaxYearService:
                 "missing_count": len(expected_tx_ids),
             }
         try:
-            payload = json.loads(HELIUM_SWAP_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8"))
+            payload = json.loads(
+                HELIUM_SWAP_ALCHEMY_AUDIT_PATH.read_text(encoding="utf-8")
+            )
         except Exception:
             return {
                 "status": "invalid_artifact",
@@ -7011,7 +8191,9 @@ class TaxYearService:
             "missing_count": len(missing),
         }
 
-    def _helium_trade_tax_line_summary_by_year_asset(self) -> dict[tuple[int, str], dict[str, Decimal | int]]:
+    def _helium_trade_tax_line_summary_by_year_asset(
+        self,
+    ) -> dict[tuple[int, str], dict[str, Decimal | int]]:
         result: dict[tuple[int, str], dict[str, Decimal | int]] = {}
         for line in self._tax_lines():
             asset = str(getattr(line, "asset", "") or "").upper()
@@ -7029,10 +8211,14 @@ class TaxYearService:
                 },
             )
             if self._is_taxable_private_disposal(line):
-                item["taxable_gain_loss_eur"] = item["taxable_gain_loss_eur"] + line.gain_loss_eur  # type: ignore[operator]
+                item["taxable_gain_loss_eur"] = (
+                    item["taxable_gain_loss_eur"] + line.gain_loss_eur
+                )  # type: ignore[operator]
                 item["taxable_lines_count"] = int(item["taxable_lines_count"]) + 1
             else:
-                item["tax_free_gain_loss_eur"] = item["tax_free_gain_loss_eur"] + line.gain_loss_eur  # type: ignore[operator]
+                item["tax_free_gain_loss_eur"] = (
+                    item["tax_free_gain_loss_eur"] + line.gain_loss_eur
+                )  # type: ignore[operator]
                 item["tax_free_lines_count"] = int(item["tax_free_lines_count"]) + 1
         return result
 
@@ -7040,14 +8226,14 @@ class TaxYearService:
         params: list[object] = [list(STABLECOIN_LIKE_ASSETS)]
         year_filter = ""
         if year is not None:
-            year_filter = "and date_part('year', l.disposed_at)::integer = ?"
+            year_filter = f"and {reporting_year_sql('l.disposed_at')} = ?"
             params.append(year)
         with self.store.connect() as con:
             rows = con.execute(
                 f"""
                 select
                     l.tax_line_id,
-                    date_part('year', l.disposed_at)::integer as year,
+                    {reporting_year_sql("l.disposed_at")} as year,
                     l.asset,
                     l.quantity,
                     lot.acquired_at,
@@ -7178,11 +8364,13 @@ class TaxYearService:
             return "stablecoin_lot_cross_source"
         return "stablecoin_fifo_line_review"
 
-    def _stablecoin_quote_leg_rows(self, year: int | None) -> list[TaxStablecoinQuoteLegRow]:
+    def _stablecoin_quote_leg_rows(
+        self, year: int | None
+    ) -> list[TaxStablecoinQuoteLegRow]:
         params: list[object] = [list(STABLECOIN_LIKE_ASSETS) for _ in range(13)]
         year_filter = ""
         if year is not None:
-            year_filter = "and date_part('year', e.event_time)::integer = ?"
+            year_filter = f"and {reporting_year_sql('e.event_time')} = ?"
             params.append(year)
         with self.store.connect() as con:
             rows = con.execute(
@@ -7190,7 +8378,7 @@ class TaxYearService:
                 with stable_events as (
                     select
                         e.event_id,
-                        date_part('year', e.event_time)::integer as year,
+                        {reporting_year_sql("e.event_time")} as year,
                         e.event_time,
                         e.source,
                         e.account,
@@ -7285,9 +8473,11 @@ class TaxYearService:
         for row in rows:
             quantity = row[7] or Decimal("0")
             role = row[15]
-            expected_tax_effect, expected_tax_line = self._stablecoin_quote_expected_effect(
-                stable_role=role,
-                quantity=quantity,
+            expected_tax_effect, expected_tax_line = (
+                self._stablecoin_quote_expected_effect(
+                    stable_role=role,
+                    quantity=quantity,
+                )
             )
             stable_tax_lines_count = int(row[17] or 0)
             result.append(
@@ -7325,15 +8515,25 @@ class TaxYearService:
         return result
 
     @staticmethod
-    def _stablecoin_quote_expected_effect(*, stable_role: str, quantity: Decimal) -> tuple[str, bool]:
+    def _stablecoin_quote_expected_effect(
+        *, stable_role: str, quantity: Decimal
+    ) -> tuple[str, bool]:
         if stable_role == "same_stable_asset_and_quote":
             return "same_stable_asset_and_quote_review", quantity < 0
         if stable_role == "stable_to_stable":
             return "stable_to_stable_quote_leg_review", quantity > 0
         if stable_role == "stable_quote":
-            return ("stable_quote_disposal", True) if quantity > 0 else ("stable_quote_lot_acquisition", False)
+            return (
+                ("stable_quote_disposal", True)
+                if quantity > 0
+                else ("stable_quote_lot_acquisition", False)
+            )
         if stable_role == "stable_asset":
-            return ("stable_asset_disposal", True) if quantity < 0 else ("stable_lot_acquisition", False)
+            return (
+                ("stable_asset_disposal", True)
+                if quantity < 0
+                else ("stable_lot_acquisition", False)
+            )
         return "not_stablecoin_relevant", False
 
     @staticmethod
@@ -7352,7 +8552,9 @@ class TaxYearService:
             return "material_stablecoin_quote_leg_gain_loss"
         return "stablecoin_quote_leg_ok"
 
-    def _stablecoin_solana_tx_context(self, tx_ids: set[str]) -> dict[str, dict[str, object]]:
+    def _stablecoin_solana_tx_context(
+        self, tx_ids: set[str]
+    ) -> dict[str, dict[str, object]]:
         if not tx_ids:
             return {}
         with self.store.connect() as con:
@@ -7378,7 +8580,9 @@ class TaxYearService:
             ).fetchall()
         result: dict[str, dict[str, object]] = {}
         for row in rows:
-            filenames = [item.strip() for item in str(row[8] or "").split("|") if item.strip()]
+            filenames = [
+                item.strip() for item in str(row[8] or "").split("|") if item.strip()
+            ]
             result[str(row[0])] = {
                 "tx_total_count": int(row[1] or 0),
                 "tx_positive_count": int(row[2] or 0),
@@ -7424,7 +8628,12 @@ class TaxYearService:
                 "medium" if raw_evidence_count else "low",
                 "Stablecoin-zu-Stablecoin-Transaktion gegen Solscan/Jupiter pruefen und als Swap, Transfer oder Conversion dokumentieren.",
             )
-        if quote_row.expected_tax_effect == "stable_quote_disposal" and has_stable and has_non_stable and tx_total_count >= 1:
+        if (
+            quote_row.expected_tax_effect == "stable_quote_disposal"
+            and has_stable
+            and has_non_stable
+            and tx_total_count >= 1
+        ):
             return (
                 "solana_swap_stablecoin_quote_disposal",
                 "high" if raw_evidence_count else "medium",
@@ -7469,7 +8678,12 @@ class TaxYearService:
             return "fx_backed"
         if HistoricalPriceLookup.is_derived_source(price_source):
             return "derived_event_quote_review"
-        if "coingecko" in normalized or "market" in normalized or "manual" in normalized or "unit" in normalized:
+        if (
+            "coingecko" in normalized
+            or "market" in normalized
+            or "manual" in normalized
+            or "unit" in normalized
+        ):
             return "market_price_review"
         return "price_source_review"
 
@@ -7501,7 +8715,11 @@ class TaxYearService:
                 "stablecoin_price_delta_review",
                 "Implied Stablecoin-Preis weicht vom ausgewaehlten Preispunkt ab; Tax-Line-Proceeds und Preisquelle pruefen.",
             )
-        if abs(gain_loss_eur) >= Decimal("100") and "usd_eur" not in price_point_source.lower() and "fx" not in price_point_source.lower():
+        if (
+            abs(gain_loss_eur) >= Decimal("100")
+            and "usd_eur" not in price_point_source.lower()
+            and "fx" not in price_point_source.lower()
+        ):
             return (
                 "material_stablecoin_market_price_review",
                 "Materielle Stablecoin-Zeile nutzt Markt-/Manuellpreis; fuer Finanzamt USD/EUR-FX oder Preisbeleg archivieren.",
@@ -7574,7 +8792,11 @@ class TaxYearService:
         reasons: list[str] = []
         if abs(linked_gain) >= min_abs_gain_eur:
             reasons.append("material_linked_quote_gain_or_loss")
-        if direct_lines and abs(direct_gain) < min_abs_gain_eur and abs(linked_gain) >= min_abs_gain_eur:
+        if (
+            direct_lines
+            and abs(direct_gain) < min_abs_gain_eur
+            and abs(linked_gain) >= min_abs_gain_eur
+        ):
             reasons.append("direct_asset_near_zero_but_quote_effect_material")
         if direct_lines == 0 and linked_lines:
             reasons.append("asset_only_seen_in_related_quote_or_counter_events")
@@ -7585,7 +8807,9 @@ class TaxYearService:
         return reasons or ["no_material_plausibility_signal"]
 
     @staticmethod
-    def _asset_fifo_plausibility_risk(reasons: list[str]) -> Literal["ok", "review", "high"]:
+    def _asset_fifo_plausibility_risk(
+        reasons: list[str],
+    ) -> Literal["ok", "review", "high"]:
         high_reasons = {
             "direct_asset_near_zero_but_quote_effect_material",
             "asset_only_seen_in_related_quote_or_counter_events",
@@ -7599,7 +8823,7 @@ class TaxYearService:
     def _asset_fifo_related_raw_counts(self, year: int, asset: str) -> dict[str, int]:
         with self.store.connect() as con:
             row = con.execute(
-                """
+                f"""
                 select
                     sum(
                         case
@@ -7617,7 +8841,7 @@ class TaxYearService:
                 join tax_lots lot on lot.lot_id = l.lot_id
                 left join canonical_events de on de.event_id = l.source_event_id
                 left join canonical_events ae on ae.event_id = lot.source_event_id
-                where date_part('year', l.disposed_at)::integer = ?
+                where {reporting_year_sql("l.disposed_at")} = ?
                   and (
                       upper(l.asset) = ?
                       or upper(coalesce(de.asset, '')) = ?
@@ -7636,7 +8860,7 @@ class TaxYearService:
     def _asset_fifo_related_role_counts(self, year: int, asset: str) -> dict[str, int]:
         with self.store.connect() as con:
             row = con.execute(
-                """
+                f"""
                 select
                     sum(case when upper(l.asset) = ? then 1 else 0 end)::integer as direct_tax_asset,
                     sum(
@@ -7657,7 +8881,7 @@ class TaxYearService:
                 join tax_lots lot on lot.lot_id = l.lot_id
                 left join canonical_events de on de.event_id = l.source_event_id
                 left join canonical_events ae on ae.event_id = lot.source_event_id
-                where date_part('year', l.disposed_at)::integer = ?
+                where {reporting_year_sql("l.disposed_at")} = ?
                   and (
                       upper(l.asset) = ?
                       or upper(coalesce(de.asset, '')) = ?
@@ -7666,7 +8890,19 @@ class TaxYearService:
                       or upper(coalesce(ae.quote_asset, '')) = ?
                   )
                 """,
-                [asset, asset, asset, asset, asset, year, asset, asset, asset, asset, asset],
+                [
+                    asset,
+                    asset,
+                    asset,
+                    asset,
+                    asset,
+                    year,
+                    asset,
+                    asset,
+                    asset,
+                    asset,
+                    asset,
+                ],
             ).fetchone()
         return {
             "direct_tax_asset": int((row[0] if row else 0) or 0),
@@ -7715,8 +8951,14 @@ class TaxYearService:
                 "Kein materielles Korrektursignal im gewaehlten Schwellwert.",
                 "Keine Aktion noetig.",
             )
-        current_disposal_roles = role_counts.get("direct_tax_asset", 0) + role_counts.get("disposal_asset", 0) + role_counts.get("disposal_quote_asset", 0)
-        cost_basis_roles = role_counts.get("acquisition_asset", 0) + role_counts.get("acquisition_quote_asset", 0)
+        current_disposal_roles = (
+            role_counts.get("direct_tax_asset", 0)
+            + role_counts.get("disposal_asset", 0)
+            + role_counts.get("disposal_quote_asset", 0)
+        )
+        cost_basis_roles = role_counts.get("acquisition_asset", 0) + role_counts.get(
+            "acquisition_quote_asset", 0
+        )
         if (
             "asset_only_seen_in_related_quote_or_counter_events" in row.reasons
             and current_disposal_roles == 0
@@ -7753,7 +8995,10 @@ class TaxYearService:
                 ),
                 "Quote-/Gegenbein-Zeilen mit dem Asset-Drilldown belegen und im Jahresbericht erklaeren.",
             )
-        if abs(row.direct_gain_loss_eur) >= min_abs_gain_eur or abs(row.linked_gain_loss_eur) >= min_abs_gain_eur:
+        if (
+            abs(row.direct_gain_loss_eur) >= min_abs_gain_eur
+            or abs(row.linked_gain_loss_eur) >= min_abs_gain_eur
+        ):
             return (
                 "keep_tax_sum_review_presentation",
                 "already_in_existing_tax_lines",
@@ -7775,9 +9020,9 @@ class TaxYearService:
             return self._fees_cache
         with self.store.connect() as con:
             rows = con.execute(
-                """
+                f"""
                 select
-                    date_part('year', event_time)::integer as year,
+                    {reporting_year_sql("event_time")} as year,
                     sum(
                         case
                             when event_type = 'fee'
@@ -7800,7 +9045,7 @@ class TaxYearService:
             lambda: {"pnl": Decimal("0"), "lines": 0, "missing_price_count": 0}
         )
         for line in self._derivative_lines():
-            item = totals[line.event_time.year]
+            item = totals[reporting_tax_year(line.event_time)]
             item["pnl"] = item["pnl"] + line.value_eur  # type: ignore[operator]
             item["lines"] = int(item["lines"]) + 1
             if line.price_source is None:
@@ -7820,7 +9065,9 @@ class TaxYearService:
 
     def _missing_prices(self) -> list[object]:
         if self._missing_prices_cache is None:
-            self._missing_prices_cache = PriceCoverageService(self.store).report().missing
+            self._missing_prices_cache = (
+                PriceCoverageService(self.store).report().missing
+            )
         return self._missing_prices_cache
 
     def _derivative_lines(self) -> list[object]:

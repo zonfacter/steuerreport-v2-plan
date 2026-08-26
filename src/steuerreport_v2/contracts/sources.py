@@ -37,6 +37,9 @@ class SourceReconciliationStatus(BaseModel):
     severity: str
     ledger_value_eur: Decimal
     live_value_eur: Decimal | None = None
+    live_nonledger_accrual_value_eur: Decimal = Decimal("0")
+    reconciliation_live_value_eur: Decimal | None = None
+    raw_delta_value_eur: Decimal | None = None
     delta_value_eur: Decimal | None = None
     last_live_at: datetime | None = None
     live_anchor_source: str | None = None
@@ -61,6 +64,9 @@ class SourceStatus(BaseModel):
     live_freshness: str = "missing"
     ledger_value_eur: Decimal
     live_value_eur: Decimal | None = None
+    live_nonledger_accrual_value_eur: Decimal = Decimal("0")
+    reconciliation_live_value_eur: Decimal | None = None
+    raw_delta_value_eur: Decimal | None = None
     delta_value_eur: Decimal | None = None
     live_anchor_source: str | None = None
     display_warning: str | None = None
@@ -107,6 +113,15 @@ class SourceOverview(BaseModel):
     methodology: str
 
 
+class SourceConnectorAttempt(BaseModel):
+    connector_id: str
+    attempted_at: datetime
+    status: str
+    snapshots_count: int = 0
+    source: str | None = None
+    message: str | None = None
+
+
 class SourceConnectorDiagnostic(BaseModel):
     source_id: str
     label: str
@@ -122,6 +137,7 @@ class SourceConnectorDiagnostic(BaseModel):
     last_snapshot_age_days: int | None = None
     last_snapshot_assets: int = 0
     last_snapshot_value_eur: Decimal | None = None
+    last_attempt: SourceConnectorAttempt | None = None
     message: str
     next_action: str
 
@@ -132,6 +148,7 @@ class SourceConnectorDiagnosticsReport(BaseModel):
     missing_credentials: int = 0
     stale_snapshots: int = 0
     missing_snapshots: int = 0
+    failed_latest_attempts: int = 0
     methodology: str
 
 
@@ -165,6 +182,12 @@ class SourceReconciliationAssetRow(BaseModel):
     ledger_value_eur: Decimal
     live_quantity: Decimal | None = None
     live_value_eur: Decimal | None = None
+    live_nonledger_accrual_quantity: Decimal = Decimal("0")
+    live_nonledger_accrual_value_eur: Decimal = Decimal("0")
+    reconciliation_live_quantity: Decimal | None = None
+    reconciliation_live_value_eur: Decimal | None = None
+    raw_delta_quantity: Decimal | None = None
+    raw_delta_value_eur: Decimal | None = None
     delta_quantity: Decimal | None = None
     delta_value_eur: Decimal | None = None
     price_eur: Decimal | None = None
@@ -211,6 +234,12 @@ class BinanceEvidenceAssetReport(BaseModel):
     ledger_value_eur: Decimal
     live_quantity: Decimal | None = None
     live_value_eur: Decimal | None = None
+    live_nonledger_accrual_quantity: Decimal = Decimal("0")
+    live_nonledger_accrual_value_eur: Decimal = Decimal("0")
+    reconciliation_live_quantity: Decimal | None = None
+    reconciliation_live_value_eur: Decimal | None = None
+    raw_delta_quantity: Decimal | None = None
+    raw_delta_value_eur: Decimal | None = None
     delta_quantity: Decimal | None = None
     delta_value_eur: Decimal | None = None
     live_components: list[SourceLiveComponent] = Field(default_factory=list)
@@ -238,6 +267,9 @@ class BinanceReconciliationEvidenceReport(BaseModel):
     assets: list[str]
     ledger_value_eur: Decimal
     live_value_eur: Decimal | None = None
+    live_nonledger_accrual_value_eur: Decimal = Decimal("0")
+    reconciliation_live_value_eur: Decimal | None = None
+    raw_delta_value_eur: Decimal | None = None
     delta_value_eur: Decimal | None = None
     last_live_at: datetime | None = None
     import_batches: list[BinanceEvidenceImportBatch] = Field(default_factory=list)
@@ -280,6 +312,9 @@ class SourceReconciliationBreakdown(BaseModel):
     source_type: str
     ledger_value_eur: Decimal
     live_value_eur: Decimal | None = None
+    live_nonledger_accrual_value_eur: Decimal = Decimal("0")
+    reconciliation_live_value_eur: Decimal | None = None
+    raw_delta_value_eur: Decimal | None = None
     delta_value_eur: Decimal | None = None
     last_live_at: datetime | None = None
     live_anchor_source: str | None = None
