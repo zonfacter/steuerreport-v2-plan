@@ -18,6 +18,7 @@ ROW_RE = re.compile(
     r"^\| `(?P<method>GET|POST|PUT|PATCH|DELETE)` \| `(?P<path>[^`]+)` \| "
     r"(?P<purpose>.*?) \| (?P<effect>.*?) \| `app\.py:\d+` `[^`]+` \|$"
 )
+STAND_RE = re.compile(r"^Stand: (?P<date>\d{4}-\d{2}-\d{2})$")
 
 
 @dataclass(frozen=True)
@@ -160,6 +161,16 @@ def existing_metadata(path: Path) -> dict[tuple[str, str], tuple[str, str]]:
     return result
 
 
+def existing_reference_date(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    for line in path.read_text(encoding="utf-8").splitlines()[:10]:
+        match = STAND_RE.match(line)
+        if match:
+            return match["date"]
+    return None
+
+
 def section_for(path: str) -> str:
     for title, prefixes in SECTIONS:
         if any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes):
@@ -186,13 +197,15 @@ def default_effect(route: Route) -> str:
 
 
 def render(
-    routes: list[Route], metadata: dict[tuple[str, str], tuple[str, str]]
+    routes: list[Route],
+    metadata: dict[tuple[str, str], tuple[str, str]],
+    reference_date: str,
 ) -> str:
     counts = Counter(route.method for route in routes)
     lines = [
         "# Vollstaendige API Endpoint Referenz",
         "",
-        f"Stand: {date.today().isoformat()}",
+        f"Stand: {reference_date}",
         "",
         "Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt aus "
         "`src/steuerreport_v2/api/app.py` erzeugt. Sie inventarisiert jede statisch "
@@ -254,7 +267,15 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     output = args.output.resolve()
-    rendered = render(parse_routes(APP_PATH), existing_metadata(output))
+    if args.check:
+        reference_date = existing_reference_date(output) or date.today().isoformat()
+    else:
+        reference_date = date.today().isoformat()
+    rendered = render(
+        parse_routes(APP_PATH),
+        existing_metadata(output),
+        reference_date,
+    )
     if args.check:
         if not output.is_file() or output.read_text(encoding="utf-8") != rendered:
             print(f"outdated:{output}")

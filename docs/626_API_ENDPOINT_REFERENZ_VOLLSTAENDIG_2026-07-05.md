@@ -1,6 +1,6 @@
 # Vollstaendige API Endpoint Referenz
 
-Stand: 2026-08-26
+Stand: 2026-08-27
 
 Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt aus `src/steuerreport_v2/api/app.py` erzeugt. Sie inventarisiert jede statisch deklarierte FastAPI-Route. Fachliche Request-/Response- und Sicherheitsdetails stehen in `docs/API_CONTRACTS_V2.md` und zur Laufzeit in `/docs` bzw. `/openapi.json`.
 
