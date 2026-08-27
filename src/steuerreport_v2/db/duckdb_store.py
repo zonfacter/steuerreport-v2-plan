@@ -426,6 +426,42 @@ class DuckDbStore:
         )
         con.execute(
             """
+            create table if not exists connector_connections (
+                connection_id varchar primary key,
+                connector_id varchar not null,
+                external_identifier varchar not null,
+                display_label varchar not null,
+                source_id varchar,
+                status varchar not null,
+                metadata_json varchar not null,
+                created_at timestamp not null,
+                verified_at timestamp,
+                revoked_at timestamp,
+                last_sync_at timestamp,
+                unique (connector_id, external_identifier)
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists wallet_ownership_challenges (
+                challenge_id varchar primary key,
+                connector_id varchar not null,
+                wallet_address varchar not null,
+                wallet_provider varchar not null,
+                display_label varchar not null,
+                message varchar not null,
+                nonce_hash varchar not null,
+                issued_at timestamp not null,
+                expires_at timestamp not null,
+                status varchar not null,
+                verified_at timestamp,
+                signature varchar
+            )
+            """
+        )
+        con.execute(
+            """
             create table if not exists ai_tasks (
                 task_id varchar primary key,
                 task_type varchar not null,

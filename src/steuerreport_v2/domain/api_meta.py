@@ -9,6 +9,8 @@ from steuerreport_v2.contracts.api_meta import ApiCapabilities, MobileApiEndpoin
 RECOMMENDED_MOBILE_ENDPOINTS = [
     MobileApiEndpoint(method="GET", path="/api/v1/cockpit/summary", purpose="Cockpit-Startansicht"),
     MobileApiEndpoint(method="GET", path="/api/v1/product/readiness", purpose="Abgabe- und Systemstatus"),
+    MobileApiEndpoint(method="GET", path="/api/v1/connectors/catalog", purpose="Connector- und Sicherheitsstatus"),
+    MobileApiEndpoint(method="GET", path="/api/v1/connectors/connections", purpose="Gepruefte Verbindungen"),
     MobileApiEndpoint(method="GET", path="/api/v1/sources/overview", purpose="Quellen und Wallets"),
     MobileApiEndpoint(method="GET", path="/api/v1/portfolio/snapshot", purpose="Aktueller Portfolio-Snapshot"),
     MobileApiEndpoint(method="GET", path="/api/v1/portfolio/as-of", purpose="Historischer Stichtagsbestand"),
@@ -30,7 +32,8 @@ class ApiCapabilitiesService:
             recommended_read_endpoints=RECOMMENDED_MOBILE_ENDPOINTS,
             methodology=(
                 "Read-only Einstieg fuer Web-, Android- und iOS-Clients. Decimal-Werte bleiben Strings; "
-                "Steuer- und Stichtagslogik verbleibt serverseitig. Die API besitzt derzeit keine eigene "
-                "Authentifizierung und darf ohne vorgeschaltetes TLS/Auth-Gateway nicht im Internet exponiert werden."
+                "Steuer- und Stichtagslogik verbleibt serverseitig. Wallet-Eigentumsnachweise "
+                "verwenden einen lokalen Setup-Bearer; die API besitzt aber noch keine allgemeine "
+                "Benutzeranmeldung und darf ohne vorgeschaltetes TLS/Auth-Gateway nicht im Internet exponiert werden."
             ),
         )

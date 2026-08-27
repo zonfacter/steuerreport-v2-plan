@@ -27,7 +27,7 @@ OPENAPI_TAGS = [
 TAG_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Administration", ("/api/v1/admin",)),
     ("Cockpit", ("/api/v1/cockpit", "/api/v1/product")),
-    ("Sources", ("/api/v1/sources",)),
+    ("Sources", ("/api/v1/sources", "/api/v1/connectors")),
     ("Import", ("/api/v1/import", "/api/v1/raw")),
     ("Portfolio", ("/api/v1/portfolio",)),
     ("Prices", ("/api/v1/prices",)),
@@ -47,6 +47,8 @@ MOBILE_RECOMMENDED_READ_PATHS = {
     "/api/v1/meta/capabilities",
     "/api/v1/cockpit/summary",
     "/api/v1/product/readiness",
+    "/api/v1/connectors/catalog",
+    "/api/v1/connectors/connections",
     "/api/v1/sources/overview",
     "/api/v1/sources/{source_id}",
     "/api/v1/sources/registry/runs/latest",

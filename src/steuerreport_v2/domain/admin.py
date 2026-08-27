@@ -18,7 +18,12 @@ from steuerreport_v2.contracts.admin import (
     V1CexCredentialTakeoverResult,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.secrets import redact_setting, upsert_secret
+from steuerreport_v2.domain.secrets import (
+    is_secret_key,
+    redact_setting,
+    secret_value_from_json,
+    upsert_secret,
+)
 from steuerreport_v2.domain.sources import SourceService
 
 
@@ -30,7 +35,12 @@ class AdminService:
         self.store = store
 
     def upsert_setting(self, setting: AdminSettingWrite) -> AdminSetting:
-        json.loads(setting.value_json)
+        parsed_value = json.loads(setting.value_json)
+        if is_secret_key(setting.key):
+            if not isinstance(parsed_value, str):
+                raise ValueError("secret_setting_must_be_json_string")
+            value = secret_value_from_json(setting.value_json)
+            return redact_setting(upsert_secret(self.store, setting.key, value))
         return redact_setting(self.store.upsert_admin_setting(setting))
 
     def list_settings(self) -> list[AdminSetting]:

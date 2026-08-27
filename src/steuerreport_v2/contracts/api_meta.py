@@ -26,6 +26,6 @@ class ApiCapabilities(BaseModel):
     ui_currency_format: str = "de-DE, EUR, two fractional digits"
     authentication_mode: str = "none_lan_only"
     internet_exposure_safe: bool = False
-    mobile_api_status: str = "experimental_read_surface"
+    mobile_api_status: str = "experimental_read_and_wallet_ownership_setup"
     recommended_read_endpoints: list[MobileApiEndpoint]
     methodology: str

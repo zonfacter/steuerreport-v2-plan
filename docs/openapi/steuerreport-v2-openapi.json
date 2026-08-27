@@ -228,7 +228,7 @@
             "type": "string"
           },
           "mobile_api_status": {
-            "default": "experimental_read_surface",
+            "default": "experimental_read_and_wallet_ownership_setup",
             "title": "Mobile Api Status",
             "type": "string"
           },
@@ -2034,6 +2034,50 @@
           }
         },
         "title": "ApiResponse[CoinbaseValuationDecisionResult]",
+        "type": "object"
+      },
+      "ApiResponse_ConnectorCatalogReport_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorCatalogReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ConnectorCatalogReport]",
         "type": "object"
       },
       "ApiResponse_CrossCexTransferEvidenceReport_": {
@@ -11408,6 +11452,94 @@
         "title": "ApiResponse[WalletMonthlyPreflightReport]",
         "type": "object"
       },
+      "ApiResponse_WalletOwnershipChallenge_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WalletOwnershipChallenge"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[WalletOwnershipChallenge]",
+        "type": "object"
+      },
+      "ApiResponse_WalletOwnershipVerificationResult_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WalletOwnershipVerificationResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[WalletOwnershipVerificationResult]",
+        "type": "object"
+      },
       "ApiResponse_dict_": {
         "properties": {
           "data": {
@@ -11738,6 +11870,54 @@
           }
         },
         "title": "ApiResponse[list[CanonicalEvent]]",
+        "type": "object"
+      },
+      "ApiResponse_list_ConnectorConnection__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectorConnection"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[list[ConnectorConnection]]",
         "type": "object"
       },
       "ApiResponse_list_DerivativeLine__": {
@@ -22736,6 +22916,387 @@
           "origin_report"
         ],
         "title": "CoinbaseValuationDecisionResult",
+        "type": "object"
+      },
+      "ConnectorCatalogEntry": {
+        "properties": {
+          "auth_method": {
+            "enum": [
+              "wallet_signature",
+              "api_key",
+              "oauth_partner",
+              "oauth_redirect",
+              "file_import",
+              "server_api_key",
+              "device_capture",
+              "bank_reconciliation"
+            ],
+            "title": "Auth Method",
+            "type": "string"
+          },
+          "availability": {
+            "enum": [
+              "available",
+              "server_admin_only",
+              "planned",
+              "partner_access_required",
+              "evidence_only"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "category": {
+            "enum": [
+              "wallet",
+              "exchange",
+              "data_provider",
+              "bank",
+              "payment_provider",
+              "document",
+              "payment_reference"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "connection_status": {
+            "default": "not_configured",
+            "enum": [
+              "configured",
+              "not_configured",
+              "ownership_verified_pending_registry",
+              "registered",
+              "revoked"
+            ],
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "limitation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limitation"
+          },
+          "mobile_platforms": {
+            "items": {
+              "enum": [
+                "android",
+                "ios",
+                "web"
+              ],
+              "type": "string"
+            },
+            "title": "Mobile Platforms",
+            "type": "array"
+          },
+          "required_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Fields",
+            "type": "array"
+          },
+          "safety_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Safety Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "connector_id",
+          "label",
+          "category",
+          "auth_method",
+          "availability"
+        ],
+        "title": "ConnectorCatalogEntry",
+        "type": "object"
+      },
+      "ConnectorCatalogReport": {
+        "properties": {
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorConnection"
+            },
+            "title": "Connections",
+            "type": "array"
+          },
+          "connectors": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorCatalogEntry"
+            },
+            "title": "Connectors",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "security": {
+            "$ref": "#/components/schemas/ConnectorSecurityStatus"
+          }
+        },
+        "required": [
+          "generated_at",
+          "security",
+          "connectors",
+          "methodology"
+        ],
+        "title": "ConnectorCatalogReport",
+        "type": "object"
+      },
+      "ConnectorConnection": {
+        "properties": {
+          "connection_id": {
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_label": {
+            "title": "Display Label",
+            "type": "string"
+          },
+          "external_identifier": {
+            "title": "External Identifier",
+            "type": "string"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "status": {
+            "enum": [
+              "configured",
+              "not_configured",
+              "ownership_verified_pending_registry",
+              "registered",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tax_activation": {
+            "default": "review_required",
+            "enum": [
+              "review_required",
+              "registry_active"
+            ],
+            "title": "Tax Activation",
+            "type": "string"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "connection_id",
+          "connector_id",
+          "external_identifier",
+          "display_label",
+          "status",
+          "created_at"
+        ],
+        "title": "ConnectorConnection",
+        "type": "object"
+      },
+      "ConnectorSecurityStatus": {
+        "properties": {
+          "auth_mode": {
+            "default": "disabled",
+            "enum": [
+              "disabled",
+              "setup_token",
+              "oidc"
+            ],
+            "title": "Auth Mode",
+            "type": "string"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "connector_writes_enabled": {
+            "default": false,
+            "title": "Connector Writes Enabled",
+            "type": "boolean"
+          },
+          "internet_ready": {
+            "default": false,
+            "title": "Internet Ready",
+            "type": "boolean"
+          },
+          "owner_scope": {
+            "default": "single_user_local",
+            "enum": [
+              "single_user_local",
+              "multi_tenant"
+            ],
+            "title": "Owner Scope",
+            "type": "string"
+          },
+          "public_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Base Url"
+          },
+          "vault": {
+            "$ref": "#/components/schemas/ConnectorVaultStatus"
+          }
+        },
+        "required": [
+          "vault"
+        ],
+        "title": "ConnectorSecurityStatus",
+        "type": "object"
+      },
+      "ConnectorVaultStatus": {
+        "properties": {
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "encrypted_secrets": {
+            "default": 0,
+            "title": "Encrypted Secrets",
+            "type": "integer"
+          },
+          "key_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Id"
+          },
+          "plaintext_secrets": {
+            "default": 0,
+            "title": "Plaintext Secrets",
+            "type": "integer"
+          },
+          "require_encrypted_secrets": {
+            "default": false,
+            "title": "Require Encrypted Secrets",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "encrypted",
+              "migration_required",
+              "not_configured",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unreadable_secrets": {
+            "default": 0,
+            "title": "Unreadable Secrets",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ConnectorVaultStatus",
         "type": "object"
       },
       "CrossCexTransferDecisionLayer": {
@@ -71505,6 +72066,148 @@
         ],
         "title": "WalletMonthlyPreflightReport",
         "type": "object"
+      },
+      "WalletOwnershipChallenge": {
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "connector_id": {
+            "const": "solana-wallet",
+            "default": "solana-wallet",
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "issued_at": {
+            "format": "date-time",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "signature_encoding": {
+            "const": "base58",
+            "default": "base58",
+            "title": "Signature Encoding",
+            "type": "string"
+          },
+          "status": {
+            "const": "pending",
+            "default": "pending",
+            "title": "Status",
+            "type": "string"
+          },
+          "wallet_address": {
+            "title": "Wallet Address",
+            "type": "string"
+          },
+          "wallet_provider": {
+            "title": "Wallet Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "wallet_address",
+          "wallet_provider",
+          "message",
+          "issued_at",
+          "expires_at"
+        ],
+        "title": "WalletOwnershipChallenge",
+        "type": "object"
+      },
+      "WalletOwnershipChallengeRequest": {
+        "properties": {
+          "display_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Label"
+          },
+          "wallet_address": {
+            "title": "Wallet Address",
+            "type": "string"
+          },
+          "wallet_provider": {
+            "default": "other",
+            "enum": [
+              "phantom",
+              "jupiter",
+              "solflare",
+              "other"
+            ],
+            "title": "Wallet Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wallet_address"
+        ],
+        "title": "WalletOwnershipChallengeRequest",
+        "type": "object"
+      },
+      "WalletOwnershipVerificationRequest": {
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "signature"
+        ],
+        "title": "WalletOwnershipVerificationRequest",
+        "type": "object"
+      },
+      "WalletOwnershipVerificationResult": {
+        "properties": {
+          "connection": {
+            "$ref": "#/components/schemas/ConnectorConnection"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "registry_match": {
+            "default": false,
+            "title": "Registry Match",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "ownership_verified_pending_registry",
+              "registered"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "connection",
+          "message"
+        ],
+        "title": "WalletOwnershipVerificationResult",
+        "type": "object"
       }
     }
   },
@@ -72189,6 +72892,182 @@
         "x-data-effect": "read-only",
         "x-long-running": false,
         "x-mobile-surface": "recommended-read"
+      }
+    },
+    "/api/v1/connectors/catalog": {
+      "get": {
+        "description": "Connector catalog. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "connector_catalog_api_v1_connectors_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConnectorCatalogReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Connector Catalog",
+        "tags": [
+          "Sources"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "recommended-read"
+      }
+    },
+    "/api/v1/connectors/connections": {
+      "get": {
+        "description": "Connector connections. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "connector_connections_api_v1_connectors_connections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_ConnectorConnection__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Connector Connections",
+        "tags": [
+          "Sources"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "recommended-read"
+      }
+    },
+    "/api/v1/connectors/wallet/challenges": {
+      "post": {
+        "description": "Create wallet ownership challenge. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "create_wallet_ownership_challenge_api_v1_connectors_wallet_challenges_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WalletOwnershipChallengeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_WalletOwnershipChallenge_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Wallet Ownership Challenge",
+        "tags": [
+          "Sources"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/connectors/wallet/verifications": {
+      "post": {
+        "description": "Verify wallet ownership challenge. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "verify_wallet_ownership_challenge_api_v1_connectors_wallet_verifications_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WalletOwnershipVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_WalletOwnershipVerificationResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Wallet Ownership Challenge",
+        "tags": [
+          "Sources"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
       }
     },
     "/api/v1/contracts/event-types": {
@@ -89002,8 +89881,8 @@
       "name": "Parity"
     }
   ],
-  "x-api-lifecycle": "experimental-mobile-read-surface",
+  "x-api-lifecycle": "experimental-mobile-read-and-wallet-ownership-setup",
   "x-decimal-transport": "string",
-  "x-production-security": "No built-in authentication. Keep the API in a trusted LAN or place TLS and authentication in front of it.",
+  "x-production-security": "Wallet ownership writes require a local setup bearer, but the API has no global user authentication. Keep it in a trusted LAN/VPN or place TLS and authentication in front of it.",
   "x-tax-day-timezone": "Europe/Berlin"
 }

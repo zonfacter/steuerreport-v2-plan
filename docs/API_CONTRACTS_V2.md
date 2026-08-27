@@ -49,13 +49,43 @@ Verbindliche Transportregeln:
 
 ## Sicherheitsgrenze
 
-Die V2-API besitzt aktuell keine integrierte Benutzeranmeldung und verwendet
-offenes CORS fuer das lokale Web-Frontend. Sie ist deshalb nur im
-vertrauenswuerdigen LAN sicher. Vor Internetzugriff oder App-Store-Verteilung
-sind mindestens TLS, Authentifizierung/Autorisierung, restriktives CORS,
-Rate-Limits und getrennte Benutzer-/Datenbereiche vorzuschalten. Schreibende
-Admin-, Import-, Decision-, Refresh- und Rebuild-Endpunkte sind bis dahin keine
-oeffentliche Mobile-Oberflaeche.
+Die V2-API besitzt aktuell keine allgemeine Benutzeranmeldung und verwendet
+offenes CORS fuer das lokale Web-Frontend. Nur der Solana-Wallet-
+Eigentumsnachweis ist mit einem separaten lokalen Setup-Bearer geschuetzt. Die
+API ist deshalb weiterhin nur im vertrauenswuerdigen LAN oder VPN sicher. Vor
+Internetzugriff oder App-Store-Verteilung sind mindestens TLS,
+Authentifizierung/Autorisierung, restriktives CORS, Rate-Limits und getrennte
+Benutzer-/Datenbereiche vorzuschalten. Schreibende Admin-, Import-, Decision-,
+Refresh- und Rebuild-Endpunkte sind bis dahin keine oeffentliche Mobile-
+Oberflaeche.
+
+## Connector-Katalog und Wallet-Eigentum
+
+`GET /api/v1/connectors/catalog`
+
+Liefert den serverseitigen Connector-Katalog fuer Wallets, CEX, Datenanbieter,
+Bank-/Zahlungsabgleich und Dokumente. Die Antwort nennt Auth-Modell,
+Verfuegbarkeit, Faehigkeiten, letzten Abruf, Secret-Vault-Status und bekannte
+Verbindungen, aber niemals API-Keys oder Setup-Token.
+
+`GET /api/v1/connectors/connections`
+
+Liefert signierte Wallet-Verbindungen einschliesslich vollstaendiger Adresse
+fuer den Drilldown. Clients muessen Wallets in Listen kuerzen und die
+vollstaendige Adresse nur im Detail anzeigen.
+
+`POST /api/v1/connectors/wallet/challenges`
+
+Erzeugt eine einmalige, fuenf Minuten gueltige Solana-`signMessage`-Challenge.
+Die Route verlangt `Authorization: Bearer <setup-token>`.
+
+`POST /api/v1/connectors/wallet/verifications`
+
+Prueft eine Base58-kodierte Ed25519-Signatur. Eine neue Wallet erhaelt nur
+`ownership_verified_pending_registry` und `review_required`. Erst ein bereits
+vorhandener expliziter Eintrag in `configs/source_registry.json` fuehrt zu
+`registered` und `registry_active`. Die Challenge-Pipeline schreibt keine
+Canonical Events, Ledgerzeilen, FIFO-Lots oder Steuerwerte.
 
 ## Health
 

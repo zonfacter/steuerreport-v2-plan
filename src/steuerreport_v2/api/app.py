@@ -87,6 +87,14 @@ from steuerreport_v2.contracts.business_inventory import (
 )
 from steuerreport_v2.contracts.common import ApiMessage, ApiResponse
 from steuerreport_v2.contracts.cockpit import CockpitSummary
+from steuerreport_v2.contracts.connectors import (
+    ConnectorCatalogReport,
+    ConnectorConnection,
+    WalletOwnershipChallenge,
+    WalletOwnershipChallengeRequest,
+    WalletOwnershipVerificationRequest,
+    WalletOwnershipVerificationResult,
+)
 from steuerreport_v2.contracts.coverage import ImportCoverageSummary
 from steuerreport_v2.contracts.derivatives import (
     DerivativeLine,
@@ -446,6 +454,7 @@ from steuerreport_v2.domain.blockpit_solana_preflight import (
     BlockpitSolanaPreflightService,
 )
 from steuerreport_v2.domain.cockpit import CockpitService
+from steuerreport_v2.domain.connectors import ConnectorAccessPolicy, ConnectorService
 from steuerreport_v2.domain.cross_cex_evidence import (
     CrossCexTransferEvidenceService,
 )
@@ -672,6 +681,21 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         with response_cache_guard:
             response_cache.clear()
 
+    def authorize_connector_write(authorization: str | None) -> None:
+        try:
+            ConnectorAccessPolicy().authorize(authorization)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc),
+            ) from exc
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail=str(exc),
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+
     @app.get("/health")
     @app.get("/api/v1/health")
     def health() -> ApiResponse[dict]:
@@ -711,6 +735,59 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             )
         )
 
+    @app.get("/api/v1/connectors/catalog")
+    def connector_catalog() -> ApiResponse[ConnectorCatalogReport]:
+        return ApiResponse(data=ConnectorService(db).catalog())
+
+    @app.get("/api/v1/connectors/connections")
+    def connector_connections() -> ApiResponse[list[ConnectorConnection]]:
+        return ApiResponse(data=ConnectorService(db).connections())
+
+    @app.post("/api/v1/connectors/wallet/challenges")
+    def create_wallet_ownership_challenge(
+        payload: WalletOwnershipChallengeRequest,
+        authorization: str | None = Header(default=None),
+    ) -> ApiResponse[WalletOwnershipChallenge]:
+        authorize_connector_write(authorization)
+        try:
+            challenge = ConnectorService(db).create_wallet_challenge(payload)
+        except (ValueError, RuntimeError) as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code=str(exc),
+                        message="Die Solana-Wallet-Adresse ist ungueltig.",
+                        field="wallet_address",
+                    )
+                ],
+            )
+        return ApiResponse(data=challenge)
+
+    @app.post("/api/v1/connectors/wallet/verifications")
+    def verify_wallet_ownership_challenge(
+        payload: WalletOwnershipVerificationRequest,
+        authorization: str | None = Header(default=None),
+    ) -> ApiResponse[WalletOwnershipVerificationResult]:
+        authorize_connector_write(authorization)
+        try:
+            result = ConnectorService(db).verify_wallet_challenge(
+                payload.challenge_id,
+                payload.signature,
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code=str(exc),
+                        message="Der Wallet-Eigentumsnachweis konnte nicht bestaetigt werden.",
+                        field="signature",
+                    )
+                ],
+            )
+        return ApiResponse(data=result)
+
     @app.get("/api/v1/admin/settings")
     def list_admin_settings() -> ApiResponse[list[AdminSetting]]:
         return ApiResponse(data=AdminService(db).list_settings())
@@ -719,7 +796,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def update_admin_setting(payload: AdminSettingWrite) -> ApiResponse[AdminSetting]:
         try:
             return ApiResponse(data=AdminService(db).upsert_setting(payload))
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             return ApiResponse(
                 status="error",
                 errors=[
@@ -755,7 +832,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     ) -> ApiResponse[CexCredentialWriteResult]:
         try:
             result = AdminService(db).save_cex_credentials(payload)
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             return ApiResponse(
                 status="error",
                 errors=[
@@ -784,7 +861,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def save_jupiter_api_key(payload: ApiKeyWrite) -> ApiResponse[ApiKeyWriteResult]:
         try:
             result = AdminService(db).save_jupiter_api_key(payload)
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             return ApiResponse(
                 status="error",
                 errors=[

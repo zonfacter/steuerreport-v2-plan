@@ -9,9 +9,11 @@ iOS-App. Der Server bleibt die einzige Instanz fuer Steuerlogik, FIFO,
 Stichtagsbewertung, Quellenregeln und Belegerzeugung. Ein Mobile-Client stellt
 diese Ergebnisse dar und darf sie nicht lokal nachberechnen.
 
-Der aktuelle Status lautet `experimental_read_surface`:
+Der aktuelle Status lautet `experimental_read_and_wallet_ownership_setup`:
 
 - Die empfohlenen Lese-Endpunkte sind fuer einen ersten Mobile-Client geeignet.
+- Der Connector-Katalog und ein signierter Solana-Wallet-Eigentumsnachweis
+  sind als erste schmale Setup-Oberflaeche vorhanden.
 - Das API-Schema ist versioniert und maschinenlesbar eingecheckt.
 - Schreibende Endpunkte bleiben Expert-/Admin-Oberflaeche.
 - Die API ist ohne vorgeschaltetes TLS/Auth-Gateway nicht internetfaehig.
@@ -119,6 +121,8 @@ Geldbetraege, Kurse und Tokenmengen werden im JSON als Strings transportiert:
 | `GET /api/v1/meta/capabilities` | Version und Client-Faehigkeiten | App-Start |
 | `GET /api/v1/cockpit/summary` | Startseite | 30 Sekunden |
 | `GET /api/v1/product/readiness` | Abgabe-/Systemstatus | 60 Sekunden |
+| `GET /api/v1/connectors/catalog` | Connector-, Vault- und Sicherheitsstatus | 60 Sekunden |
+| `GET /api/v1/connectors/connections` | Signierte Wallet-Verbindungen | 60 Sekunden |
 | `GET /api/v1/sources/overview` | Eigene Quellen, Live- und Ledgerstatus | 60 Sekunden |
 | `GET /api/v1/sources/{source_id}` | Quellen-Drilldown | 60 Sekunden |
 | `GET /api/v1/portfolio/snapshot` | Aktueller Bestand | 30 Sekunden |
@@ -136,6 +140,56 @@ Geldbetraege, Kurse und Tokenmengen werden im JSON als Strings transportiert:
 Der Capabilities-Endpoint enthaelt die kleinere, vom Server empfohlene
 Startmenge. OpenAPI kennzeichnet diese Operationen mit
 `x-mobile-surface=recommended-read`.
+
+## Solana-Wallet-Eigentumsnachweis
+
+Der erste schreibende Mobile-Flow ist bewusst eng begrenzt:
+
+1. `POST /api/v1/connectors/wallet/challenges` erzeugt eine fuenf Minuten
+   gueltige, einmalige Nachricht.
+2. Phantom, Jupiter Wallet oder Solflare signiert exakt diese Nachricht mit
+   `signMessage`. Es wird keine Transaktion erzeugt.
+3. `POST /api/v1/connectors/wallet/verifications` prueft Ed25519-Public-Key,
+   Signatur, Ablaufzeit und Replay-Status.
+4. Eine bereits registrierte eigene Wallet erhaelt `registry_active`.
+5. Eine neue Wallet bleibt `ownership_verified_pending_registry` und
+   `review_required`. Sie veraendert weder Canonical Events noch Ledger,
+   Portfolio, FIFO oder Steuerdaten.
+
+Beide POST-Endpunkte verlangen:
+
+```text
+Authorization: Bearer <connector-setup-token>
+```
+
+Der Token liegt nur in der root-geschuetzten Datei aus
+`STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE`. Er ist ein lokaler
+Einrichtungsnachweis und kein Ersatz fuer OIDC bei Internetbetrieb.
+
+Seed Phrase, Private Key und Wallet-Passwort werden weder abgefragt noch
+gespeichert. Die API akzeptiert ausschliesslich Adresse und Signatur.
+
+## Verschluesselter V2-Secret-Vault
+
+`secret.*`-Werte koennen als AES-256-GCM-Envelope in DuckDB gespeichert
+werden. Der 32-Byte-Master-Key bleibt ausserhalb von Repository und Datenbank:
+
+```text
+STEUERREPORT_V2_SECRET_VAULT_KEY_FILE=/etc/steuerreport-v2/secret-vault.key
+STEUERREPORT_V2_REQUIRE_ENCRYPTED_SECRETS=true
+```
+
+Jedes Envelope ist per Associated Data an seinen Setting-Key gebunden. Der
+Katalog gibt nur Key-ID, Zaehler und Status aus, niemals Secret-Werte.
+Migration bestehender V2-Secrets:
+
+```bash
+PYTHONPATH=src python3 scripts/migrate_secret_vault_v2.py
+PYTHONPATH=src python3 scripts/migrate_secret_vault_v2.py --apply
+```
+
+Ohne `--apply` werden nur Zaehler ausgegeben. Die Apply-Migration laeuft in
+einer DuckDB-Transaktion und prueft jedes Envelope vor dem Commit.
 
 ## OpenAPI-Erweiterungen
 
@@ -269,6 +323,10 @@ gepinnte Schema-Revision getestet. Decimal-String-Decoding muss nach der
 Generierung explizit verifiziert werden.
 
 ## Sicherheitsarchitektur vor App-Store-Betrieb
+
+Die API besitzt noch keine allgemeine Benutzeranmeldung. Nur die beiden
+Wallet-Eigentumsnachweis-Routen verlangen den separaten Setup-Bearer. Dieser
+enge Schutz aendert nichts an der LAN-/VPN-Grenze fuer die Gesamt-API.
 
 Mindestens erforderlich:
 

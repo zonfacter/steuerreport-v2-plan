@@ -37,7 +37,7 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Import und Preflight", ("/api/v1/import",)),
     ("Raw und Canonical Events", ("/api/v1/raw", "/api/v1/events")),
     ("Ledger", ("/api/v1/ledger",)),
-    ("Quellen und Connectoren", ("/api/v1/sources",)),
+    ("Quellen und Connectoren", ("/api/v1/sources", "/api/v1/connectors")),
     ("Portfolio", ("/api/v1/portfolio",)),
     ("Preise", ("/api/v1/prices",)),
     ("Flows und Transfers", ("/api/v1/flows", "/api/v1/transfers")),

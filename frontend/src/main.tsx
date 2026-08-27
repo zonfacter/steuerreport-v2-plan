@@ -14,6 +14,7 @@ import {
   FileJson,
   GitBranch,
   LayoutDashboard,
+  LockKeyhole,
   Menu,
   PackageCheck,
   ReceiptText,
@@ -21,6 +22,8 @@ import {
   Route,
   Scale,
   Settings,
+  ShieldCheck,
+  Smartphone,
   Trash2,
   Upload,
   WalletCards,
@@ -489,6 +492,54 @@ type Snapshot = {
     setup_required_sources: number;
     review_items_count: number;
     blocking_items_count: number;
+    methodology: string;
+  };
+  connectorCatalog?: {
+    generated_at: string;
+    security: {
+      auth_mode: "disabled" | "setup_token" | "oidc";
+      connector_writes_enabled: boolean;
+      internet_ready: boolean;
+      public_base_url?: string | null;
+      owner_scope: "single_user_local" | "multi_tenant";
+      vault: {
+        configured: boolean;
+        require_encrypted_secrets: boolean;
+        key_id?: string | null;
+        encrypted_secrets: number;
+        plaintext_secrets: number;
+        unreadable_secrets: number;
+        status: "encrypted" | "migration_required" | "not_configured" | "error";
+      };
+      blockers: string[];
+    };
+    connectors: Array<{
+      connector_id: string;
+      label: string;
+      category: string;
+      auth_method: string;
+      availability: string;
+      connection_status: string;
+      mobile_platforms: string[];
+      capabilities: string[];
+      required_fields: string[];
+      safety_notes: string[];
+      limitation?: string | null;
+      last_sync_at?: string | null;
+    }>;
+    connections: Array<{
+      connection_id: string;
+      connector_id: string;
+      external_identifier: string;
+      display_label: string;
+      source_id?: string | null;
+      status: string;
+      created_at: string;
+      verified_at?: string | null;
+      revoked_at?: string | null;
+      last_sync_at?: string | null;
+      tax_activation: "review_required" | "registry_active";
+    }>;
     methodology: string;
   };
   sourcesOverview?: {
@@ -3207,6 +3258,7 @@ function App() {
         health: { key: "health", label: "Health", load: () => getApi<Record<string, unknown>>("/api/v1/health") },
         cockpit: { key: "cockpit", label: "Cockpit", load: () => getApi<Snapshot["cockpit"]>("/api/v1/cockpit/summary") },
         productReadiness: { key: "productReadiness", label: "Produkt-Readiness", load: () => getApi<Snapshot["productReadiness"]>("/api/v1/product/readiness") },
+        connectorCatalog: { key: "connectorCatalog", label: "Connector-Katalog", load: () => getApi<Snapshot["connectorCatalog"]>("/api/v1/connectors/catalog") },
         sourcesOverview: { key: "sourcesOverview", label: "Quellen", load: () => getApi<Snapshot["sourcesOverview"]>("/api/v1/sources/overview") },
         sourceConnectorDiagnostics: { key: "sourceConnectorDiagnostics", label: "Connector-Diagnose", load: () => getApi<Snapshot["sourceConnectorDiagnostics"]>("/api/v1/sources/connector-diagnostics") },
         sourceRegistry: { key: "sourceRegistry", label: "Quellenregistry", load: () => getApi<Snapshot["sourceRegistry"]>("/api/v1/sources/registry/runs/latest") },
@@ -3561,6 +3613,7 @@ function App() {
         ],
         sources: [
           "health",
+          "connectorCatalog",
           "sourcesOverview",
           "sourceConnectorDiagnostics",
           "sourceRegistry",
@@ -5838,6 +5891,7 @@ function Content({
     return (
         <SourcesPage
           overview={snapshot.sourcesOverview}
+          connectorCatalog={snapshot.connectorCatalog}
           connectorDiagnostics={snapshot.sourceConnectorDiagnostics}
           sourceRegistry={snapshot.sourceRegistry}
           detail={snapshot.sourceDetail}
@@ -6429,6 +6483,7 @@ function ToolSafetyPanel({
 
 function SourcesPage({
   overview,
+  connectorCatalog,
   connectorDiagnostics,
   sourceRegistry,
   detail,
@@ -6447,6 +6502,7 @@ function SourcesPage({
   onSourceViewModeChange
 }: {
   overview: Snapshot["sourcesOverview"];
+  connectorCatalog: Snapshot["connectorCatalog"];
   connectorDiagnostics: Snapshot["sourceConnectorDiagnostics"];
   sourceRegistry: Snapshot["sourceRegistry"];
   detail: Snapshot["sourceDetail"];
@@ -6516,6 +6572,7 @@ function SourcesPage({
           {health.missing_live_sources > 0 ? ` · ${health.missing_live_sources} Live-Anker fehlen` : ""}
         </div>
       ) : null}
+      <MobileConnectorCatalog catalog={connectorCatalog} />
       <section className="sourceRegistryBand">
         <div className="sourceRegistryHeader">
           <div>
@@ -6872,6 +6929,171 @@ function SourcesPage({
         </>
       ) : null}
     </Stack>
+  );
+}
+
+function MobileConnectorCatalog({
+  catalog
+}: {
+  catalog: Snapshot["connectorCatalog"];
+}) {
+  const connectors = catalog?.connectors ?? [];
+  const connections = catalog?.connections ?? [];
+  const security = catalog?.security;
+  const connected = connectors.filter((item) =>
+    ["configured", "registered"].includes(item.connection_status)
+  ).length;
+  const pending = connectors.filter(
+    (item) => item.connection_status === "ownership_verified_pending_registry"
+  ).length;
+  const mobileReady = connectors.filter((item) =>
+    item.mobile_platforms.some((platform) => platform === "android" || platform === "ios")
+  ).length;
+  const securityTone = !security
+    ? "loading"
+    : security.vault.status === "error" || security.vault.status === "migration_required"
+      ? "blocked"
+      : security.auth_mode === "setup_token" && security.vault.status === "encrypted"
+        ? "ok"
+        : "warning";
+  const securityLabel = !security
+    ? "wird geladen"
+    : securityTone === "ok"
+      ? "lokal abgesichert"
+      : security.vault.status === "migration_required"
+        ? "Vault-Migration offen"
+        : security.vault.status === "error"
+          ? "Vault nicht lesbar"
+          : "Server-Setup offen";
+  const authLabels: Record<string, string> = {
+    wallet_signature: "Wallet-Signatur",
+    api_key: "Read-only API-Key",
+    oauth_partner: "Partner-OAuth",
+    oauth_redirect: "OAuth-Weiterleitung",
+    file_import: "Dateiimport",
+    server_api_key: "Server API-Key",
+    device_capture: "Geraete-Scan",
+    bank_reconciliation: "Bankabgleich"
+  };
+  const availabilityLabels: Record<string, string> = {
+    available: "verfuegbar",
+    server_admin_only: "Server-Setup",
+    planned: "geplant",
+    partner_access_required: "Partnerzugang nötig",
+    evidence_only: "nur Nachweis"
+  };
+  const connectionLabels: Record<string, string> = {
+    configured: "konfiguriert",
+    not_configured: "nicht eingerichtet",
+    ownership_verified_pending_registry: "Eigentum geprüft, Registry offen",
+    registered: "Registry aktiv",
+    revoked: "widerrufen"
+  };
+  const connectionTone = (status: string) => {
+    if (["configured", "registered"].includes(status)) return "ok";
+    if (status === "ownership_verified_pending_registry") return "warning";
+    if (status === "revoked") return "blocked";
+    return "loading";
+  };
+
+  return (
+    <section className={`mobileConnectorBand ${securityTone}`}>
+      <div className="mobileConnectorHeader">
+        <div>
+          <span className="heroKicker">Connector-Zentrale</span>
+          <h3>Web, Android und iPhone</h3>
+          <p>Wallets, Boersen, Datenanbieter, Zahlungsbelege und Dokumente in einem Statusmodell.</p>
+        </div>
+        <div className="mobileConnectorSecurity">
+          <ShieldCheck size={20} />
+          <span className={`statusPill ${securityTone}`}>{securityLabel}</span>
+        </div>
+      </div>
+      <div className="mobileConnectorMetrics">
+        <Metric title="Connectoren" value={catalog ? String(connectors.length) : "Wird geladen"} />
+        <Metric title="Eingerichtet" value={catalog ? String(connected) : "Wird geladen"} />
+        <Metric title="Registry-Review" value={catalog ? String(pending) : "Wird geladen"} />
+        <Metric title="Mobil vorgesehen" value={catalog ? String(mobileReady) : "Wird geladen"} />
+        <Metric
+          title="Secret-Vault"
+          value={security ? security.vault.status : "Wird geladen"}
+        />
+        <Metric
+          title="Betriebsmodus"
+          value={security?.internet_ready ? "Internet" : "LAN / VPN"}
+        />
+      </div>
+      {security?.blockers.length ? (
+        <div className="mobileConnectorBlockers">
+          {security.blockers.map((blocker) => (
+            <span key={blocker}>{blocker.replaceAll("_", " ")}</span>
+          ))}
+        </div>
+      ) : null}
+      <div className="mobileConnectorGrid">
+        {connectors.map((connector) => (
+          <article key={connector.connector_id} className="mobileConnectorItem">
+            <div className="mobileConnectorItemHeader">
+              <div className="mobileConnectorIdentity">
+                {connector.category === "wallet" ? (
+                  <Smartphone size={18} />
+                ) : connector.category === "exchange" ? (
+                  <WalletCards size={18} />
+                ) : (
+                  <Database size={18} />
+                )}
+                <strong>{connector.label}</strong>
+              </div>
+              <span className={`statusPill ${connectionTone(connector.connection_status)}`}>
+                {connectionLabels[connector.connection_status] ?? connector.connection_status}
+              </span>
+            </div>
+            <div className="mobileConnectorFacts">
+              <span>{authLabels[connector.auth_method] ?? connector.auth_method}</span>
+              <span>{availabilityLabels[connector.availability] ?? connector.availability}</span>
+              <span>{connector.mobile_platforms.join(" · ") || "Server"}</span>
+              <span>
+                {connector.last_sync_at ? `Stand ${formatDateTime(connector.last_sync_at)}` : "Noch kein Abruf"}
+              </span>
+            </div>
+            <p>{connector.capabilities.join(" · ")}</p>
+            {connector.limitation ? <small>{connector.limitation}</small> : null}
+            {connector.safety_notes.length ? (
+              <div className="mobileConnectorSafety">
+                <LockKeyhole size={14} />
+                <span>{connector.safety_notes.join(" ")}</span>
+              </div>
+            ) : null}
+          </article>
+        ))}
+      </div>
+      {connections.length ? (
+        <div className="mobileConnectorConnections">
+          <strong>Signierte Wallet-Verbindungen</strong>
+          {connections.map((connection) => (
+            <div key={connection.connection_id} className="mobileConnectorConnectionRow">
+              <span>{connection.display_label}</span>
+              <code title={connection.external_identifier}>
+                {shortAccount(connection.external_identifier)}
+              </code>
+              <span className={`statusPill ${connectionTone(connection.status)}`}>
+                {connection.tax_activation === "registry_active" ? "steuerlich aktiv" : "Review erforderlich"}
+              </span>
+              <details>
+                <summary>Vollstaendige Adresse</summary>
+                <code>{connection.external_identifier}</code>
+              </details>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {catalog?.methodology ? (
+        <details className="cockpitDetails">
+          <summary>Aktivierungsregel</summary>
+          <p>{catalog.methodology}</p>
+        </details>
+      ) : null}
+    </section>
   );
 }
 

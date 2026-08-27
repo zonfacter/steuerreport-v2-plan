@@ -1110,6 +1110,176 @@ p {
   overflow-wrap: anywhere;
 }
 
+.mobileConnectorBand {
+  border-bottom: 1px solid #d8d6cf;
+  border-top: 1px solid #d8d6cf;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px 0;
+}
+
+.mobileConnectorBand.ok {
+  border-top-color: #78b592;
+}
+
+.mobileConnectorBand.warning {
+  border-top-color: #d2ab43;
+}
+
+.mobileConnectorBand.blocked {
+  border-top-color: #c97865;
+}
+
+.mobileConnectorHeader {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.mobileConnectorHeader h3 {
+  color: #17201b;
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 3px 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.mobileConnectorHeader p {
+  color: #4d5a52;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.mobileConnectorSecurity {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mobileConnectorMetrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.mobileConnectorBlockers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.mobileConnectorBlockers span {
+  background: #fff7e1;
+  border: 1px solid #e2c56c;
+  border-radius: 6px;
+  color: #6c5318;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+}
+
+.mobileConnectorGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.mobileConnectorItem {
+  background: #ffffff;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.mobileConnectorItemHeader {
+  align-items: start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.mobileConnectorIdentity {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mobileConnectorIdentity strong,
+.mobileConnectorItem p,
+.mobileConnectorItem small,
+.mobileConnectorSafety span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mobileConnectorItem p,
+.mobileConnectorItem small {
+  color: #58655d;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.mobileConnectorFacts {
+  color: #677169;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  gap: 6px 10px;
+}
+
+.mobileConnectorSafety {
+  align-items: start;
+  background: #f4f7f4;
+  border-left: 3px solid #6d9b7f;
+  color: #365245;
+  display: grid;
+  font-size: 12px;
+  gap: 7px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  padding: 7px 8px;
+}
+
+.mobileConnectorConnections {
+  border-top: 1px solid #ece8e0;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  padding-top: 10px;
+}
+
+.mobileConnectorConnectionRow {
+  align-items: center;
+  border-bottom: 1px solid #ece8e0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(140px, 1fr) minmax(150px, auto) auto minmax(150px, auto);
+  min-width: 0;
+  padding: 9px 0;
+}
+
+.mobileConnectorConnectionRow > span,
+.mobileConnectorConnectionRow code,
+.mobileConnectorConnectionRow details {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mobileConnectorConnectionRow details code {
+  display: block;
+  margin-top: 6px;
+  max-width: 100%;
+  white-space: normal;
+}
+
 .sourceRegistryBand {
   border-bottom: 1px solid #d8d6cf;
   border-top: 1px solid #d8d6cf;
@@ -5572,6 +5742,9 @@ th {
   .sourceHeroStats,
   .sourceRegistryHeader,
   .sourceRegistryMetrics,
+  .mobileConnectorHeader,
+  .mobileConnectorMetrics,
+  .mobileConnectorConnectionRow,
   .sourceCommandHeader,
   .sourceCommandMetrics,
   .sourceCommandGrid,
