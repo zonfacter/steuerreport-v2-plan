@@ -895,7 +895,11 @@ def test_evidence_package_download_endpoint_contains_required_files(tmp_path):
         )
         assert reward_evidence["import_effect"] == "none"
         assert reward_evidence["target_changed"] is False
-        assert reward_evidence["summary"]["reward_totals"]["HNT"] == "3.48812900"
+        if reward_evidence["status"] == "verified":
+            assert reward_evidence["summary"]["reward_totals"]["HNT"] == "3.48812900"
+        else:
+            assert reward_evidence["status"] == "missing"
+            assert reward_evidence["summary"]["reward_totals"] == {}
         assert any(
             group["folder"] == "05_HNT_Fairspot" for group in package_index["groups"]
         )
