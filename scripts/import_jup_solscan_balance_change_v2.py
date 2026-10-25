@@ -262,7 +262,7 @@ def _solscan_api_key() -> str:
         value = os.environ.get(env_key, "").strip()
         if value:
             return value
-    return PortfolioService(DuckDbStore(DEFAULT_DB))._solscan_api_key()
+    return PortfolioService(DuckDbStore(os.environ.get("STEUERREPORT_V2_DB") or DEFAULT_DB))._solscan_api_key()
 
 
 def _default_cache_path(wallet: str) -> Path:

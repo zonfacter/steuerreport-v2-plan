@@ -10,7 +10,7 @@ module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(module)
 
 
-AUDIT = Path("/workspace/steuerreport-v2-plan/var/native.json")
+AUDIT = module.PROJECT_ROOT / "var/native.json"
 
 
 def _payload():

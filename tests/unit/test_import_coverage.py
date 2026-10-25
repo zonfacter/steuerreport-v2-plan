@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import os
 import pytest
 
 from steuerreport_v2.api.app import create_app
@@ -72,8 +73,8 @@ def test_import_coverage_respects_time_budget(tmp_path):
 
 
 @pytest.mark.skipif(
-    not USERTRANSFER_ROOT.is_dir(),
-    reason="requires the private local usertransfer evidence tree",
+    os.environ.get("STEUERREPORT_TEST_PRIVATE_EVIDENCE") != "1" or not USERTRANSFER_ROOT.is_dir(),
+    reason="requires explicit opt-in and the private local usertransfer evidence tree",
 )
 def test_import_policy_classifies_known_usertransfer_tree():
     summary = ImportPolicyService().audit(str(USERTRANSFER_ROOT))

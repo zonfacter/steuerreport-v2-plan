@@ -69,7 +69,7 @@ def _payload():
 def test_build_backfill_rows_keeps_reward_trade_and_transfer_semantics(tmp_path):
     rows, findings = module.build_backfill_rows(
         _payload(),
-        audit_path=Path("/workspace/steuerreport-v2-plan/var/evidence.json"),
+        audit_path=module.PROJECT_ROOT / "var/evidence.json",
     )
 
     assert findings == []
@@ -84,7 +84,7 @@ def test_verify_rows_matches_all_normalized_asset_effects(tmp_path):
     payload = _payload()
     rows, findings = module.build_backfill_rows(
         payload,
-        audit_path=Path("/workspace/steuerreport-v2-plan/var/evidence.json"),
+        audit_path=module.PROJECT_ROOT / "var/evidence.json",
     )
 
     verification = module.verify_rows(payload, rows, tmp_path)
@@ -113,7 +113,7 @@ def test_build_backfill_rows_deduplicates_multi_asset_signature(tmp_path):
 
     rows, findings = module.build_backfill_rows(
         payload,
-        audit_path=Path("/workspace/steuerreport-v2-plan/var/evidence.json"),
+        audit_path=module.PROJECT_ROOT / "var/evidence.json",
     )
 
     assert findings == []
@@ -139,7 +139,7 @@ def test_partial_token_backfill_subtracts_existing_native_effect(tmp_path):
     existing = {"partial": {"SOL": Decimal("0.002982412")}}
     rows, findings = module.build_backfill_rows(
         payload,
-        audit_path=Path("/workspace/steuerreport-v2-plan/var/evidence.json"),
+        audit_path=module.PROJECT_ROOT / "var/evidence.json",
         existing_effects_by_tx=existing,
         existing_fees_by_tx={"partial": Decimal("0.000024308")},
     )
