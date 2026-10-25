@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc6. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc7. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc6
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc7
 docker compose -f compose.ghcr.yml up -d
 ```
 

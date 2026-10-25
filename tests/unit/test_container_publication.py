@@ -5,8 +5,11 @@ import json
 from pathlib import Path
 import subprocess
 import urllib.error
+import tomllib
 
 import pytest
+
+from steuerreport_v2 import __version__
 
 
 def load_script(name):
@@ -15,6 +18,19 @@ def load_script(name):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_release_versions_match_runtime_package_frontend_and_container_defaults():
+    root = Path(__file__).resolve().parents[2]
+    version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
+    assert __version__ == version
+    frontend_version = version.replace("rc", "-rc.")
+    assert json.loads((root / "frontend/package.json").read_text())["version"] == frontend_version
+    lock = json.loads((root / "frontend/package-lock.json").read_text())
+    assert lock["version"] == lock["packages"][""]["version"] == frontend_version
+    for name in ("compose.yml", "compose.ghcr.yml"):
+        assert "steuerreport-v2:" + version in (root / name).read_text()
+    assert "default: v" + version in (root / ".github/workflows/publish-image.yml").read_text()
 
 
 @pytest.fixture
