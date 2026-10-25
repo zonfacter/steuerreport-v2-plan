@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import configured_import_path
+
 import csv
 import json
 from collections import defaultdict
@@ -29,14 +31,10 @@ from steuerreport_v2.domain.wallet_monthly_preflight import (
     DEFAULT_WALLET_MONTHLY_FILE,
     WalletMonthlyPreflightService,
 )
-from steuerreport_v2.paths import PROJECT_ROOT, USERTRANSFER_ROOT, resolve_project_path
+from steuerreport_v2.paths import PROJECT_ROOT, resolve_project_path
 
 
-DEFAULT_BLOCKPIT_SOLANA_FILE = (
-    USERTRANSFER_ROOT
-    / "blockpit"
-    / "blockpit 09052026 Transactions.csv"
-)
+DEFAULT_BLOCKPIT_SOLANA_FILE = configured_import_path("blockpit_reference_file", "blockpit/transactions.csv")
 DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
 DEFAULT_ALLOWED_ASSETS = {
     "ADA",
@@ -385,7 +383,7 @@ class BlockpitSolanaPreflightService:
         max_year: int | None = 2024,
         account: str = "Solana",
         price_config_path: str = str(DEFAULT_PRICE_CONFIG),
-        v1_fx_db_path: str = "/root/.local/share/steuerreport/steuerreport.db",
+        v1_fx_db_path: str = str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db")),
         provider: str = "auto",
         assets_filter: list[str] | None = None,
         max_requests: int = 25,

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import argparse
 import json
 from datetime import datetime, timezone
@@ -14,7 +16,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_CLOSURE = PROJECT_ROOT / "var" / "all_transaction_evidence_closures" / "latest_all_transaction_evidence_closure.json"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "all_transaction_open_detail_reviews"

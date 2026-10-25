@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -18,10 +22,10 @@ from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/solana_native_evidence_backfills"
-DEFAULT_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
+DEFAULT_WALLET = private_value('primary_solana_wallet')
 DEFAULT_AUDIT = (
     PROJECT_ROOT
     / "var/solana_native_balance_coverage"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timezone
 from decimal import Decimal
@@ -56,7 +58,7 @@ class _CryptoResult:
 
 
 class BmfEventPriceRemediationService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/bmf_event_price_remediation"
     FRANKFURTER_URL = "https://api.frankfurter.dev/v2/rates"

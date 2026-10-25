@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import configured_import_path
+
 import re
 from pathlib import Path
 
@@ -19,7 +21,7 @@ class ParserPreflightService:
 
     def inspect(
         self,
-        root_path: str = "/workspace/steuerreport/usertransfer",
+        root_path: str = str(configured_import_path("import_root")),
         limit: int = 20,
     ) -> ParserPreflightReport:
         audit = ImportPolicyService().audit(root_path)

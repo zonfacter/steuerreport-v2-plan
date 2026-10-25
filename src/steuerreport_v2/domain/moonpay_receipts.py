@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from steuerreport_v2.private_settings import private_value
+from steuerreport_v2.paths import configured_import_path
 
 import base64
 import binascii
@@ -66,14 +69,12 @@ class _SparkasseDebit:
 
 
 class MoonpayReceiptService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB_PATH = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/moonpay_receipts"
     DEFAULT_MANIFEST_PATH = DEFAULT_ARTIFACT_ROOT / "manifest.json"
-    DEFAULT_TRADE_HISTORY_PATH = Path(
-        "/workspace/steuerreport/usertransfer/MoonPay_trade-history.csv"
-    )
-    DEFAULT_BANK_CAMT_ROOT = Path("/workspace/steuerreport/usertransfer/Sparkasse")
+    DEFAULT_TRADE_HISTORY_PATH = configured_import_path("moonpay_history_file", "MoonPay_trade-history.csv")
+    DEFAULT_BANK_CAMT_ROOT = configured_import_path("bank_camt_root", "bank/camt")
     DEFAULT_PROVENANCE_DIR = PROJECT_ROOT / "var/solana_provenance_batches"
     DEFAULT_ALCHEMY_AUDIT_PATH = (
         PROJECT_ROOT / "var/solana_tx_alchemy_audits/latest_all_tx_alchemy_audit.json"

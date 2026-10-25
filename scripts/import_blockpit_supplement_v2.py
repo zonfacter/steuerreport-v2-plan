@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import argparse
 import csv
 import hashlib
@@ -18,7 +20,7 @@ from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_BLOCKPIT = (
     Path("/workspace/steuerreport/usertransfer")

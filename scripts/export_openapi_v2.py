@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -13,6 +14,19 @@ DEFAULT_OUTPUT = ROOT / "docs/openapi/steuerreport-v2-openapi.json"
 
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+
+# Documentation must never depend on (or publish) operator profiles or paths.
+for name in list(os.environ):
+    if name.startswith("STEUERREPORT_"):
+        del os.environ[name]
+os.environ.update({
+    "STEUERREPORT_V2_ROOT": "/opt/steuerreport",
+    "STEUERREPORT_V2_DB": ":memory:",
+    "STEUERREPORT_USERTRANSFER_ROOT": "/var/lib/steuerreport/imports",
+    "STEUERREPORT_STATE_DIR": "/var/lib/steuerreport",
+    "STEUERREPORT_PRIVATE_PROFILE": "",
+    "STEUERREPORT_PRIVATE_CONFIG_DIR": "/var/lib/steuerreport/configs",
+})
 
 from steuerreport_v2.api.app import create_app  # noqa: E402
 from steuerreport_v2.db.duckdb_store import DuckDbStore  # noqa: E402

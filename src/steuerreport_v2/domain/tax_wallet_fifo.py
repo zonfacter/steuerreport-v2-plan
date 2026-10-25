@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from steuerreport_v2.private_settings import private_alias, private_config_path, private_template, private_value
 
 from collections.abc import Iterable
@@ -260,16 +262,16 @@ class WalletFifoPreviewService:
             "exchange_internal_cross_pool_pair_missing",
         }
     )
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
-    DEFAULT_SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
+    PROJECT_ROOT = SOFTWARE_ROOT
+    DEFAULT_SOLANA_RPC_URL = private_value("solana_rpc_url") or "https://api.mainnet-beta.solana.com"
     DEFAULT_SOLANA_PROVENANCE_BATCH_DIR = Path(
-        "/workspace/steuerreport-v2-plan/var/solana_provenance_batches"
+        str(PROJECT_ROOT / "var/solana_provenance_batches")
     )
     DEFAULT_SOLANA_PROGRAM_SETTLEMENT_EVIDENCE_DIR = Path(
-        "/workspace/steuerreport-v2-plan/var/solana_program_settlement_evidence"
+        str(PROJECT_ROOT / "var/solana_program_settlement_evidence")
     )
     DEFAULT_SOLANA_SERVICE_SWAP_EVIDENCE_DIR = Path(
-        "/workspace/steuerreport-v2-plan/var/solana_service_swap_evidence"
+        str(PROJECT_ROOT / "var/solana_service_swap_evidence")
     )
     MAIN_HELIUM_LEGACY_WALLET = private_value('legacy_helium_wallet', '')
     FAIRSPOT_STAKING_WALLET = private_value('staking_route_wallet', '')
@@ -294,7 +296,7 @@ class WalletFifoPreviewService:
     ] = {}
     _PREVIEW_DISK_CACHE_DIRNAME = ".steuerreport_v2_cache/wallet_fifo_preview"
     DEFAULT_CEX_SENDER_OWNERSHIP_DIR = Path(
-        "/workspace/steuerreport-v2-plan/var/cex_deposit_sender_ownership"
+        str(PROJECT_ROOT / "var/cex_deposit_sender_ownership")
     )
     DEFAULT_SOURCE_REGISTRY_CONFIG = private_config_path('source_registry.json')
     KNOWN_OWN_SOLANA_WALLETS = {

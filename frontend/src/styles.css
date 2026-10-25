@@ -5173,6 +5173,29 @@ p {
   flex: 0 0 auto;
 }
 
+.installationSettings {
+  min-width: 0;
+  padding: 20px 0;
+  scroll-margin-top: 160px;
+}
+
+.installationSettings h2 { font-size: 20px; }
+.installationSettings h3 { font-size: 16px; }
+.installationSettings fieldset { border: 0; padding: 16px 0; margin: 0; min-width: 0; }
+.installationSettings legend { font-weight: 600; padding: 0; }
+.installationSettings label { display: grid; gap: 6px; min-width: 0; }
+.installationSettings input, .installationSettings select, .installationSettings textarea {
+  width: 100%; min-width: 0; box-sizing: border-box;
+}
+.installationSettings textarea { resize: vertical; font-family: monospace; }
+.installationSettings button { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; white-space: normal; }
+.installationSection { border-top: 1px solid #d6dce2; padding: 20px 0; margin-top: 20px; }
+.installationSection summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.installationSection form { display: grid; gap: 16px; margin-top: 16px; }
+.installationActions { display: flex; gap: 12px; flex-wrap: wrap; }
+.installationMessage { padding: 12px; background: #eef5ef; overflow-wrap: anywhere; }
+.installationMessage.error { background: #fff0f0; color: #8b2424; }
+
 .formGrid {
   display: grid;
   gap: 12px;

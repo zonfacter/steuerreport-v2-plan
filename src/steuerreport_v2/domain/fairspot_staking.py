@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from steuerreport_v2.private_settings import private_config_path
 
 import csv
@@ -19,7 +21,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 
 
 class FairspotStakingReconciliationService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_CONFIG_PATH = private_config_path('fairspot_hnt_staking_reconciliation.json')
     DEFAULT_INDEPENDENT_SOURCE_PATH = (
         PROJECT_ROOT

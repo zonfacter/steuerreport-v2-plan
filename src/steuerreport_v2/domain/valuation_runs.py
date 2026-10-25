@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
@@ -42,7 +44,7 @@ from steuerreport_v2.domain.wallet_fifo_acceptance import (
 
 
 class DivorceValuationRunService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/valuation_runs"
 

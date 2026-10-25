@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -21,7 +25,7 @@ from steuerreport_v2.domain.source_registry import SourceRegistryService
 from steuerreport_v2.domain.tax_time import reporting_year_sql
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 SCRIPT_ROOT = PROJECT_ROOT / "scripts"
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/jup_deterministic_evidence_closure"
@@ -32,8 +36,8 @@ NATIVE_AUDIT_SCRIPT = SCRIPT_ROOT / "audit_solana_native_balance_coverage_v2.py"
 NATIVE_BACKFILL_SCRIPT = SCRIPT_ROOT / "backfill_solana_native_balance_evidence_v2.py"
 TOKEN_AUDIT_SCRIPT = SCRIPT_ROOT / "audit_solana_token_account_coverage_v2.py"
 
-MAIN_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
-JUP_WALLET = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
+MAIN_WALLET = private_value('primary_solana_wallet')
+JUP_WALLET = private_value('secondary_solana_wallet')
 SPCXX_MINT = "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8"
 SPCXX_TX_ID = (
     "2XWdreG6W3FEvfQLhEXc1FzYnVQVdbcJVhtdPvSrMu66mALxdc87mYig4kxz2xgYCqgtWGJHiRY9umt8m58QBzLG"

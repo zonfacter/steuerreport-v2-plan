@@ -42,10 +42,10 @@ class NormalizationReport:
 class RawNormalizer:
     HELIUM_MAIN_LEGACY_WALLET = private_value('legacy_helium_wallet', '')
     HELIUM_FAIRSPOT_STAKING_WALLET = private_value('staking_route_wallet', '')
-    HELIUM_VSR_POSITION_RECEIPTS = {
-        "5MFEM7LYTSGP2X3TVJXHXLENXSLRW6DQR3PSPJXVUETF": "MOBILE",
-        "7RPAXCSA3BIKAUOQTJ3DDSMKBLHEFQNBACPAUNBGC3KQ": "IOT",
-    }
+    HELIUM_VSR_POSITION_RECEIPTS = {key: asset for key, asset in {
+        private_value("helium_mobile_position_receipt"): "MOBILE",
+        private_value("helium_iot_position_receipt"): "IOT",
+    }.items() if key}
     BITGET_INTERNAL_BLOCKPIT_LABELS = {
         "auto-balancing in",
         "auto-balancing out",

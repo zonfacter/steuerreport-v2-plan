@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from steuerreport_v2.private_settings import private_config_path
 
 from collections import defaultdict
@@ -25,7 +27,7 @@ from steuerreport_v2.domain.sources import SourceService
 
 
 class SourceRegistryService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_CONFIG_PATH = private_config_path('source_registry.json')
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/source_registry"

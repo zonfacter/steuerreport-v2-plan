@@ -12,13 +12,10 @@ from steuerreport_v2.contracts.wallet_monthly import (
     WalletMonthlyPeriodTotal,
     WalletMonthlyPreflightReport,
 )
-from steuerreport_v2.paths import USERTRANSFER_ROOT
+from steuerreport_v2.paths import configured_import_path
 
 
-DEFAULT_WALLET_MONTHLY_FILE = (
-    USERTRANSFER_ROOT
-    / private_template('Wallet.{primary_solana_wallet}-month.csv')
-)
+DEFAULT_WALLET_MONTHLY_FILE = configured_import_path("wallet_monthly_file", private_template('Wallet.{primary_solana_wallet}-month.csv'))
 DEFAULT_WALLET = private_value('primary_solana_wallet', '')
 
 

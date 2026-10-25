@@ -25,7 +25,7 @@ from steuerreport_v2.domain.review import ReviewService  # noqa: E402
 
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
-DEFAULT_BACKUP_DIR = Path("/workspace/backups/steuerreport-v2-plan/database")
+DEFAULT_BACKUP_DIR = Path(str(PROJECT_ROOT / "var/backups/database"))
 DEFAULT_ARTIFACT_DIR = PROJECT_ROOT / "var/price_source_identity"
 DEFAULT_API_BASE = "http://127.0.0.1:8010"
 

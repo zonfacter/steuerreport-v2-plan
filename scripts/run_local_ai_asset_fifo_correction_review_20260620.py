@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 import csv
 import io
@@ -20,8 +22,8 @@ from steuerreport_v2.domain.tax_years import TaxYearService
 ROOT = Path(__file__).resolve().parents[1]
 OUT_ROOT = ROOT / "var" / "local_ai_prework" / "asset_fifo_correction_review_20260620"
 DB_PATH = ROOT / "data" / "steuerreport_v2.duckdb"
-LLM_BASE = os.environ.get("LOCAL_LLM_BASE", "http://192.168.2.155:11435/v1")
-LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL", "qwen3.6-35b-a3b-iq4xs-xt7900")
+LLM_BASE = os.environ.get("LOCAL_LLM_BASE") or private_value("local_llm_base") or "http://127.0.0.1:11435/v1"
+LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL") or private_value("local_llm_model") or "local-model"
 DEFAULT_YEARS = [2024, 2025]
 
 

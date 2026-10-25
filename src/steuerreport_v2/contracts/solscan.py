@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import configured_import_path
+
 from steuerreport_v2.private_settings import private_value
 
 from decimal import Decimal
@@ -77,13 +79,13 @@ class SolscanTokenPreflightReport(BaseModel):
 
 
 class SolanaRpcProbeRequest(BaseModel):
-    file_path: str = "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv"
-    blockpit_file_path: str = "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv"
+    file_path: str = str(configured_import_path("solscan_export_file", "solscan/export.csv"))
+    blockpit_file_path: str = str(configured_import_path("blockpit_reference_file", "blockpit/transactions.csv"))
     wallet: str = private_value('primary_solana_wallet', '')
     asset: str = "IOT"
     token_address: str = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns"
     max_year: int | None = 2024
-    rpc_url: str = "https://api.mainnet-beta.solana.com"
+    rpc_url: str = private_value("solana_rpc_url") or "https://api.mainnet-beta.solana.com"
     signatures: list[str] = Field(default_factory=list)
     max_requests: int = 5
     timeout_seconds: int = 20

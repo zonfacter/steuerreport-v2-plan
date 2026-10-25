@@ -25,20 +25,11 @@ from steuerreport_v2.contracts.solscan import (
     SolscanTokenMovementSummary,
     SolscanTokenPreflightReport,
 )
-from steuerreport_v2.paths import PROJECT_ROOT, USERTRANSFER_ROOT
+from steuerreport_v2.paths import PROJECT_ROOT, configured_import_path
 
 
-DEFAULT_SOLSCAN_FILE = (
-    USERTRANSFER_ROOT
-    / "legacy_daten"
-    / "Steuer-2022"
-    / "export-solscan.csv"
-)
-DEFAULT_BLOCKPIT_SOLANA_FILE = (
-    USERTRANSFER_ROOT
-    / "blockpit"
-    / "blockpit 09052026 Transactions.csv"
-)
+DEFAULT_SOLSCAN_FILE = configured_import_path("solscan_export_file", "solscan/export.csv")
+DEFAULT_BLOCKPIT_SOLANA_FILE = configured_import_path("blockpit_reference_file", "blockpit/transactions.csv")
 DEFAULT_SOLANA_WALLET = private_value('primary_solana_wallet', '')
 DEFAULT_IOT_TOKEN_ADDRESS = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns"
 DEFAULT_RPC_EVIDENCE_ARTIFACT = (
@@ -390,7 +381,7 @@ class SolscanPreflightService:
                 status="failed",
                 expected_quantity=expected.quantity,
                 label=expected.label,
-                reason=str(exc),
+                reason=type(exc).__name__,
             )
         if response.status_code == 429:
             return SolanaRpcSignatureProbe(
@@ -415,7 +406,7 @@ class SolscanPreflightService:
                 status="failed",
                 expected_quantity=expected.quantity,
                 label=expected.label,
-                reason=str(data["error"]),
+                reason="rpc_remote_error",
             )
         result = data.get("result")
         if not result:

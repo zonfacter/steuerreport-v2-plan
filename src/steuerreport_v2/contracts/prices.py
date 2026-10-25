@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import configured_import_path
+
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
@@ -64,7 +66,7 @@ class PriceCsvImportResult(BaseModel):
 
 
 class V1FxCacheImportRequest(BaseModel):
-    db_path: str = "/root/.local/share/steuerreport/steuerreport.db"
+    db_path: str = str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db"))
     confidence: Decimal = Decimal("1.0")
 
 
@@ -97,7 +99,7 @@ class V1FxCacheImportResult(BaseModel):
 
 class ExternalPriceBackfillRequest(BaseModel):
     config_path: str = "configs/crypto_price_sources.json"
-    v1_fx_db_path: str = "/root/.local/share/steuerreport/steuerreport.db"
+    v1_fx_db_path: str = str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db"))
     provider: str = "auto"
     assets: list[str] = Field(default_factory=list)
     max_requests: int = 25
@@ -222,7 +224,7 @@ class AsOfPriceGateBackfillRequest(BaseModel):
     as_of_date: date | None = None
     materiality_threshold_eur: Decimal = Field(default=Decimal("1"), ge=0)
     config_path: str = "configs/crypto_price_sources.json"
-    v1_fx_db_path: str = "/root/.local/share/steuerreport/steuerreport.db"
+    v1_fx_db_path: str = str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db"))
     provider: str = "defillama"
     assets: list[str] = Field(default_factory=list)
     max_requests: int = Field(default=25, ge=0, le=100)

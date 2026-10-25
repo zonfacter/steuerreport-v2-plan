@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 import base64
 import json
@@ -30,7 +32,7 @@ DEFAULT_WALLET_MONTH = Path(
     "/workspace/steuerreport/usertransfer/Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv"
 )
 DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs" / "crypto_price_sources.json"
-DEFAULT_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
+DEFAULT_WALLET = private_value('primary_solana_wallet')
 PRICE_ASSETS = ["IOT", "CWIF", "USDC"]
 
 sys.path.insert(0, str(SCRIPT_DIR))

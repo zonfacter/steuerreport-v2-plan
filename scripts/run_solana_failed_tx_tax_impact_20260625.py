@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import argparse
 import json
 from datetime import datetime, timezone
@@ -11,7 +13,7 @@ from typing import Any
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_AUDIT = PROJECT_ROOT / "var" / "solana_tx_alchemy_audits" / "latest_solana_rpc_tx_alchemy_audit.json"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "solana_failed_tx_tax_impacts"

@@ -24,7 +24,7 @@ from steuerreport_v2.domain.sources import SourceService  # noqa: E402
 
 
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
-DEFAULT_BACKUP_DIR = Path("/workspace/backups/steuerreport-v2-plan/database")
+DEFAULT_BACKUP_DIR = Path(str(PROJECT_ROOT / "var/backups/database"))
 DEFAULT_ARTIFACT_DIR = PROJECT_ROOT / "var/binance_simple_earn_history"
 
 

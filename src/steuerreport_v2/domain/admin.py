@@ -25,10 +25,11 @@ from steuerreport_v2.domain.secrets import (
     upsert_secret,
 )
 from steuerreport_v2.domain.sources import SourceService
+from steuerreport_v2.private_settings import private_value
 
 
 class AdminService:
-    V1_ADMIN_BASE_URL = "http://127.0.0.1:8000"
+    V1_ADMIN_BASE_URL = private_value("v1_connector_base_url")
     CEX_CONNECTORS = {"binance", "bitget", "pionex", "coinbase"}
 
     def __init__(self, store: DuckDbStore) -> None:

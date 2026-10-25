@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT
+
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import json
@@ -64,10 +66,10 @@ class TaxMethodologyService:
     EXCHANGE_SEQUENCING_GAP_WINDOW = timedelta(minutes=5)
     EXCHANGE_SEQUENCING_POOLS = {"binance", "bitget", "pionex"}
     DEFAULT_BMF_FILING_READINESS_DIR = Path(
-        "/workspace/steuerreport-v2-plan/var/bmf_filing_readiness"
+        str(PROJECT_ROOT / "var/bmf_filing_readiness")
     )
     DEFAULT_BMF_CLOSURE_BACKLOG_DIR = Path(
-        "/workspace/steuerreport-v2-plan/var/bmf_closure_backlog"
+        str(PROJECT_ROOT / "var/bmf_closure_backlog")
     )
     PRIOR_FILING_DECLARED_AMOUNTS_SETTING = "tax.prior_filing.declared_amounts"
     PRIOR_FILING_DELTA_TOLERANCE_EUR = Decimal("0.01")
@@ -2109,7 +2111,7 @@ class TaxMethodologyService:
         return candidates[-1]
 
     def _can_use_default_bmf_snapshot(self) -> bool:
-        default_db = Path("/workspace/steuerreport-v2-plan/data/steuerreport_v2.duckdb")
+        default_db = Path(str(PROJECT_ROOT / "data/steuerreport_v2.duckdb"))
         try:
             return self.store.path.resolve() == default_db.resolve()
         except FileNotFoundError:

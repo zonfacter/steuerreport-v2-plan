@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from steuerreport_v2.private_settings import private_alias, private_config_path, private_template, private_value
 
 from datetime import date, datetime, time, timedelta, timezone
@@ -72,7 +74,7 @@ from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 
 class PortfolioService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     SOURCE_REGISTRY_CONFIG_PATH = private_config_path('source_registry.json')
     DEFAULT_SEPARATION_CUTOFF = datetime(2025, 6, 13, tzinfo=timezone.utc)
     SEPARATION_LABEL = "Virtuelle Wallet: Neubestand ab 13.06.2025"
@@ -89,8 +91,9 @@ class PortfolioService:
     FAIRSPOT_STAKING_WALLET = private_value('staking_route_wallet', '')
     KNOWN_JUP_WALLET = private_value('secondary_solana_wallet', '')
     PRIMARY_SOLANA_WALLET = private_value('primary_solana_wallet', '')
-    SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
+    SOLANA_RPC_URL = private_value("solana_rpc_url") or "https://api.mainnet-beta.solana.com"
     SOLANA_RPC_URLS = [
+        SOLANA_RPC_URL,
         "https://api.mainnet-beta.solana.com",
         "https://solana-rpc.publicnode.com",
         "https://solana.publicnode.dev",
@@ -112,25 +115,14 @@ class PortfolioService:
         "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
         "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
     )
-    EXPECTED_ZERO_SOURCES = {"Bitget", "Pionex"}
+    EXPECTED_ZERO_SOURCES = {item.strip() for item in private_value("expected_zero_sources").split(",") if item.strip()}
     EXPECTED_ZERO_BLOCKER_VALUE_EUR = Decimal("10")
     EXPECTED_ZERO_DUST_INFO_VALUE_EUR = Decimal("1")
     EXPECTED_ZERO_LIVE_DUST_QUANTITY = Decimal("0.000001")
     MIN_POSITION_QUANTITY = Decimal("0.000000000001")
     NON_VALUED_LIVE_RECEIPT_ASSETS = {"LDJUP"}
-    V1_CONNECTOR_BASE_URL = os.environ.get("STEUERREPORT_V1_CONNECTOR_BASE_URL", "")
-    V1_RECONCILIATION_EVIDENCE = {
-        "Bitget": (
-            "Historischer V1-Referenzbeleg: docs/88_BITGET_2025_API_DEEP_PROBE_2026-05-09.md; "
-            "V1 All-Token-Abgleich als Altbeleg: docs/200_ALL_TOKEN_CURRENT_BALANCE_RECONCILIATION_2026-05-10.md"
-        ),
-        "Pionex": (
-            "Historischer V1-Referenzbeleg: docs/200_ALL_TOKEN_CURRENT_BALANCE_RECONCILIATION_2026-05-10.md; "
-            "Pionex Gap-Analyse: docs/146_PIONEX_USDT_PLATFORM_GAP_CURRENT_2026-05-09.md und "
-            "docs/167_PIONEX_USDT_FINAL_BLOCKER_AUDIT_2026-05-09.md"
-        ),
-        ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')): "Nutzerhinweis 2026-05-25: aktuelle Jup-Wallet, in V2 noch nicht importiert.",
-    }
+    V1_CONNECTOR_BASE_URL = private_value("v1_connector_base_url")
+    V1_RECONCILIATION_EVIDENCE: dict[str, str] = {}
     PRICE_FRESH_DAYS = 3
     PRICE_STALE_DAYS = 14
     CEX_LIVE_CONNECTORS = {"binance", "bitget", "pionex", "coinbase"}
@@ -3252,6 +3244,8 @@ class PortfolioService:
         assets: set[str],
     ) -> tuple[str, str]:
         normalized = account.strip()
+        if not normalized:
+            return "Unassigned", "account"
         lower = normalized.lower()
         if lower in {"spot", "funding", "binance"} or "binance" in lower:
             return "Binance", "exchange"
@@ -3289,12 +3283,12 @@ class PortfolioService:
         return "ledger_current"
 
     def _source_note(self, source_group: str, account: str | None) -> str | None:
-        if source_group == "Bitget":
+        if source_group == "Bitget" and source_group in self.EXPECTED_ZERO_SOURCES:
             return (
                 "Ledger-Restbestand aus Importdaten; Nutzerhinweis: aktueller Bitget-"
                 "Bestand sollte per API 0 sein. Gegenbuchung/Reconciliation pruefen."
             )
-        if source_group == "Pionex":
+        if source_group == "Pionex" and source_group in self.EXPECTED_ZERO_SOURCES:
             return (
                 "Ledger-Restbestand aus Importdaten; Nutzerhinweis: aktueller Pionex-"
                 "Bestand sollte 0 sein. Historische Exportluecke oder fehlende "

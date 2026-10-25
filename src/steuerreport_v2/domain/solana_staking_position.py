@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from steuerreport_v2.private_settings import private_config_path
 
 import csv
@@ -21,7 +23,7 @@ from steuerreport_v2.domain.valuation import PriceCoverageService
 
 
 class SolanaStakingPositionReconciliationService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_CONFIG_PATH = (
         private_config_path('solana_staking_position_reconciliations.json')
     )

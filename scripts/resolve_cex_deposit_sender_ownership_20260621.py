@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -153,14 +155,14 @@ def load_registry(path: Path | None, service: WalletFifoPreviewService) -> Addre
     owned_private_wallets = {
         address: label
         for address, label in {
-            "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu": "Jup Wallet",
-            "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP": "Solana Main Wallet",
+            private_value('secondary_solana_wallet'): "Jup Wallet",
+            private_value('primary_solana_wallet'): "Solana Main Wallet",
             **{wallet: "Known own Solana wallet" for wallet in service.KNOWN_OWN_SOLANA_WALLETS},
         }.items()
     }
     owned_cex_deposit_addresses: dict[str, str] = {}
     known_infrastructure_wallets = {
-        "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr": "Binance Solana Hot Wallet",
+        private_value('configured_identifier_95'): "Binance Solana Hot Wallet",
     }
     service_programs = {
         "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4": "Jupiter Aggregator",

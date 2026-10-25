@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from datetime import datetime
 import json
 from pathlib import Path
@@ -20,9 +22,9 @@ from steuerreport_v2.domain.admin import AdminService
 
 
 class AiService:
-    YEAR_PACKAGE_QA_ROOT = Path(__file__).resolve().parents[3] / "var" / "local_ai_prework" / "year_package_qa_20260614"
-    ASSET_FIFO_CORRECTION_ROOT = Path(__file__).resolve().parents[3] / "var" / "local_ai_prework" / "asset_fifo_correction_review_20260620"
-    WALLET_FIFO_PROVENANCE_ROOT = Path(__file__).resolve().parents[3] / "var" / "local_ai_prework" / "wallet_fifo_provenance_review_20260620"
+    YEAR_PACKAGE_QA_ROOT = SOFTWARE_ROOT / "var" / "local_ai_prework" / "year_package_qa_20260614"
+    ASSET_FIFO_CORRECTION_ROOT = SOFTWARE_ROOT / "var" / "local_ai_prework" / "asset_fifo_correction_review_20260620"
+    WALLET_FIFO_PROVENANCE_ROOT = SOFTWARE_ROOT / "var" / "local_ai_prework" / "wallet_fifo_provenance_review_20260620"
     YEAR_PACKAGE_QA_ARTIFACTS = {
         "summary": ("summary.md", "text/markdown; charset=utf-8"),
         "review": ("local_ai_review.md", "text/markdown; charset=utf-8"),

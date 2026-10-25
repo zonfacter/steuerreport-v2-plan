@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import argparse
 import json
 import time
@@ -15,7 +17,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "solana_tx_alchemy_audits"
 FAILED_STATUSES = {"alchemy_failed", "alchemy_not_found", "alchemy_http_error"}

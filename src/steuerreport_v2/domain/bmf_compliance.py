@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
@@ -43,8 +45,8 @@ class BmfComplianceMatrixService:
         "BMF_Schreiben/Steuerarten/Einkommensteuer/"
         "2025-03-06-einzelfragen-kryptowerte-bmf-schreiben.pdf"
     )
-    DEFAULT_DB = Path("/workspace/steuerreport-v2-plan/data/steuerreport_v2.duckdb")
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
+    DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     WALLET_FIFO_LATEST = PROJECT_ROOT / "var/wallet_fifo_runs/latest_wallet_fifo_run.json"
     WALLET_FIFO_MIGRATION_LATEST = (
         PROJECT_ROOT

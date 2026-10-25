@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(
 USERTRANSFER_ROOT = Path(
     os.environ.get(
         "STEUERREPORT_USERTRANSFER_ROOT",
-        PROJECT_ROOT.parent / "steuerreport" / "usertransfer",
+        PROJECT_ROOT / "imports",
     )
 ).expanduser().resolve()
 
@@ -25,5 +25,15 @@ def resolve_project_path(path: str | Path) -> Path:
 
 
 def resolve_usertransfer_path(path: str | Path) -> Path:
+    # Late import avoids a cycle: private_settings also uses PROJECT_ROOT.
+    from steuerreport_v2.private_settings import private_value
+
     candidate = Path(path).expanduser()
-    return candidate if candidate.is_absolute() else USERTRANSFER_ROOT / candidate
+    root = Path(private_value("import_root") or USERTRANSFER_ROOT).expanduser()
+    return candidate if candidate.is_absolute() else root / candidate
+
+
+def configured_import_path(key: str, fallback: str = "") -> Path:
+    from steuerreport_v2.private_settings import private_value
+
+    return resolve_usertransfer_path(private_value(key) or fallback)

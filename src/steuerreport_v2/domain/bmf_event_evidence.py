@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -70,7 +72,7 @@ class _EventRecord:
 
 
 class BmfFifoEventEvidenceService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/bmf_event_evidence"
     STALE_PRICE_HOURS = Decimal("24")

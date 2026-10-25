@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import csv
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -24,19 +26,15 @@ from steuerreport_v2.contracts.bitget_strategy_fifo import (
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax_time import reporting_tax_year
+from steuerreport_v2.paths import configured_import_path
 
 
 class BitgetStrategyFifoGapService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/wallet_fifo_runs"
-    DEFAULT_BLOCKPIT_REFERENCE_PATH = Path(
-        "/workspace/steuerreport/usertransfer/blockpit/"
-        "blockpit 09052026 Transactions.csv"
-    )
-    DEFAULT_SUPPORT_PACKAGE_ROOT = Path(
-        "/workspace/steuerreport/usertransfer/bitget/support"
-    )
+    DEFAULT_BLOCKPIT_REFERENCE_PATH = configured_import_path("blockpit_reference_file", "blockpit/transactions.csv")
+    DEFAULT_SUPPORT_PACKAGE_ROOT = configured_import_path("bitget_support_root", "bitget/support")
     SUPPORT_FILES = {
         "Deposit-Withdrawal History.csv": ("transfer_evidence", False, False),
         "Spot Financial Record.csv": ("spot_balance_ledger", True, False),

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { InstallationSettings } from "./InstallationSettings";
 import {
   AlertTriangle,
   Archive,
@@ -3112,7 +3113,7 @@ const navItems: Array<{
   { id: "ai", label: "Lokale KI", description: "Jahrespaket-QA und KI-Aufgaben", group: "expert", icon: <Bot size={18} /> }
 ];
 
-const API_BASE = import.meta.env.VITE_API_BASE || `${window.location.protocol}//${window.location.hostname}:8010`;
+const API_BASE = import.meta.env.VITE_API_BASE || window.location.origin;
 const API_TIMEOUT_MS = 60_000;
 
 function sectionFromLocation(): Section {
@@ -6451,6 +6452,7 @@ function Content({
   if (active === "admin") {
     return (
       <Stack>
+        <InstallationSettings />
         <ToolSafetyPanel
           title="Administration"
           tone="warning"
@@ -20176,7 +20178,7 @@ function V1FxCacheImportForm({
 }: {
   onImportV1FxCache: (dbPath: string, confidence: string) => void;
 }) {
-  const [dbPath, setDbPath] = useState("/root/.local/share/steuerreport/steuerreport.db");
+  const [dbPath, setDbPath] = useState("");
   const [confidence, setConfidence] = useState("1.0");
   return (
     <div className="panel formPanel">

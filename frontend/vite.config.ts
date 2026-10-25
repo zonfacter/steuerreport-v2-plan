@@ -24,12 +24,8 @@ export default defineConfig({
   },
   server: {
     port: 5174,
-    allowedHosts: ["ai-control.home.local"],
     proxy: {
       "/api": "http://127.0.0.1:8010"
     }
-  },
-  preview: {
-    allowedHosts: ["ai-control.home.local"]
   }
 });

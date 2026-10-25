@@ -1,4 +1,7 @@
 {
+  "helium_mobile_position_receipt": "5MFEM7LYTSGP2X3TVJXHXLENXSLRW6DQR3PSPJXVUETF",
+  "helium_iot_position_receipt": "7RPAXCSA3BIKAUOQTJ3DDSMKBLHEFQNBACPAUNBGC3KQ",
+  "expected_zero_sources": "Bitget,Pionex",
   "configured_identifier_01": "0080000001",
   "configured_identifier_02": "0080000002",
   "configured_identifier_03": "0080000003",

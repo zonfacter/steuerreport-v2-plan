@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 import csv
 from datetime import datetime, timezone
@@ -15,7 +19,7 @@ from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_SOURCE_CSV = Path(
     "/workspace/steuerreport/usertransfer/2025 Transaktionen Blockpit.csv"
 )
@@ -34,35 +38,35 @@ KNOWN_TRANSFER_EVIDENCE = {
     ("29.01.2025 05:56:22", "Deposit", "USDT", "5009.09824537"): {
         "tx_id": "0xafe24daadbd2adbae1636acfffa8f45e4b8c740013509c9394c9ce0efaec6260",
         "exchange_reference": "1268375403930660876",
-        "address": "0x6b007cb6d125f4aaa77b3154c6e4a8316e84bffc",
+        "address": private_value('configured_identifier_04'),
         "network": "BSC",
         "evidence": "binance_withdrawal_api+bitget_tax_api+blockpit",
     },
     ("09.03.2025 19:00:22", "Withdrawal", "HNT", "859.9208492"): {
         "tx_id": "2aXZm773QRWKY3pQGLqQbgVm6JKAg7FZ2L3mLMBK6kBFYQPjbuk2DavdxEuN2BYTnDQx4YhAz6HxyfTZT2ya29PR",
         "exchange_reference": "1282705829779644421",
-        "address": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
+        "address": private_value('primary_solana_wallet'),
         "network": "SOL",
         "evidence": "bitget_tax_api+blockpit+alchemy_onchain",
     },
     ("04.04.2025 17:09:22", "Deposit", "HNT", "16.16462275"): {
         "tx_id": "493kaSDxGNSg68id3pT3EYMMLrYFHCsuDPacbyBtmxqE9eQdDJCRqoai2r6qSc1ZGHBV2Lco9bVTVNEFQdgTtYRt",
         "exchange_reference": "1292099980770058240",
-        "address": "4txxDLNGsGF1HyaW957fdhpnGbPxeuyEhA2V6x284kTN",
+        "address": private_value('configured_identifier_79'),
         "network": "SOL",
         "evidence": "bitget_tax_api+blockpit+alchemy_onchain",
     },
     ("15.06.2025 07:30:36", "Withdrawal", "JUP", "4680.175116"): {
         "tx_id": "7uGkDCMh3HLNuoGWDicgjHr2qxRYHc2npkKbZQnm9xuBYX4FbUB5dS7dGfkW9pNoW34rofKgG6cbNKcVK7froQd",
         "exchange_reference": "1318045704815505408",
-        "address": "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW",
+        "address": private_value('configured_identifier_100'),
         "network": "SOL",
         "evidence": "bitget_withdrawal_api+blockpit+alchemy_onchain",
     },
     ("15.06.2025 07:45:46", "Withdrawal", "SOL", "7.0700475"): {
         "tx_id": "at5BgXG6YqAdQDXhMe3hygE7Z1Kh74GTtGBmZACerbsR8SgjCqhYGGtN4bVp4f9WSawDPxfop9wguuVPnUHscpw",
         "exchange_reference": "1318049559880003584",
-        "address": "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW",
+        "address": private_value('configured_identifier_100'),
         "network": "SOL",
         "evidence": "bitget_withdrawal_api+blockpit+alchemy_onchain",
     },

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import argparse
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -17,7 +19,7 @@ from steuerreport_v2.domain.tax_time import reporting_tax_year
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/solana_service_swap_evidence"
 DEFAULT_WALLET = WalletFifoPreviewService.PRIMARY_SOLANA_WALLET

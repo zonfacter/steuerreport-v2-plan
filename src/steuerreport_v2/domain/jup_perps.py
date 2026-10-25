@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from steuerreport_v2.private_settings import private_template
+from steuerreport_v2.paths import configured_import_path
 
 import csv
 import re
@@ -18,12 +19,8 @@ from steuerreport_v2.contracts.jup_perps import (
 )
 
 
-DEFAULT_JUP_PERPS_FILE = (
-    Path("/workspace/steuerreport/usertransfer")
-    / "jup"
-    / private_template('{primary_solana_wallet}.csv')
-)
-DEFAULT_V1_FX_DB = Path("/root/.local/share/steuerreport/steuerreport.db")
+DEFAULT_JUP_PERPS_FILE = configured_import_path("jup_perps_file", "jup/" + private_template('{primary_solana_wallet}.csv'))
+DEFAULT_V1_FX_DB = Path(str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db")))
 
 
 @dataclass

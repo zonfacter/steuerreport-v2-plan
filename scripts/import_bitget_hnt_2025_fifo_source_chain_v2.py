@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
+from steuerreport_v2.paths import configured_import_path
+
 import argparse
 from dataclasses import dataclass
 from decimal import Decimal
@@ -15,14 +21,14 @@ from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
-DEFAULT_V1_DB = Path("/root/.local/share/steuerreport/steuerreport.db")
+PROJECT_ROOT = SOFTWARE_ROOT
+DEFAULT_V1_DB = Path(str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db")))
 DEFAULT_V2_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 SOURCE = "bitget"
 FILENAME = "bitget-hnt-2025-withdrawal-fifo-source-chain.csv"
 BLOCKPIT_SOURCE = "bulk:blockpit:2025 Transaktionen Blockpit.csv"
-MAIN_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
-BITGET_HNT_DEPOSIT_ADDRESS = "4txxDLNGsGF1HyaW957fdhpnGbPxeuyEhA2V6x284kTN"
+MAIN_WALLET = private_value('primary_solana_wallet')
+BITGET_HNT_DEPOSIT_ADDRESS = private_value('configured_identifier_79')
 BITGET_WITHDRAWAL_ONCHAIN_TX = (
     "2aXZm773QRWKY3pQGLqQbgVm6JKAg7FZ2L3mLMBK6kBFYQPjbuk2DavdxEuN2BYTnDQx4YhAz6HxyfTZT2ya29PR"
 )

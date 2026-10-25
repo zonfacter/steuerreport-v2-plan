@@ -2,6 +2,7 @@
 data/
 var/
 artifacts/
+imports/
 *.duckdb
 *.duckdb.wal
 *.sqlite

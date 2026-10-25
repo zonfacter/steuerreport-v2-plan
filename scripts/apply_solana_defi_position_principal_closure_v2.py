@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -17,12 +21,12 @@ from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.domain.tax_time import event_reporting_year_sql, reporting_year_sql
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/solana_defi_position_principal_closure"
 
-MAIN_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
-JUP_WALLET = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
+MAIN_WALLET = private_value('primary_solana_wallet')
+JUP_WALLET = private_value('secondary_solana_wallet')
 HNT_LOCK_TX = (
     "3Vyyy5cn8Y71z3bMHtCPryMFXuCdXdr3MGgbDYaZk8BvrsTq4SHA23bFA2giqB7fLwMDJvDUB1iyEtLPW8dh7kSc"
 )

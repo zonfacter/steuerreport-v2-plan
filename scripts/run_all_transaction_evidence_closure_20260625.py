@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import argparse
 import json
 from collections import Counter
@@ -12,7 +14,7 @@ from typing import Any
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_MATRIX = PROJECT_ROOT / "var" / "all_transaction_evidence_matrices" / "latest_all_transaction_evidence_matrix.json"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "all_transaction_evidence_closures"

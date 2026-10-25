@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import argparse
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -13,7 +15,7 @@ from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_PACKAGE = PROJECT_ROOT / "configs/solana_evidence_prices_20260710.json"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/evidence_price_imports"

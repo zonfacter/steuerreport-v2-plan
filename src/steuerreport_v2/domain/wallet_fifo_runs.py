@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import csv
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -46,7 +48,7 @@ from steuerreport_v2.domain.tax_time import reporting_tax_year
 
 
 class WalletFifoParallelRunService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/wallet_fifo_runs"
     ACQUISITION_COST_EVIDENCE_REVIEW_STATUSES = {

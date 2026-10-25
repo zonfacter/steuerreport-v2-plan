@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 import json
 import shutil
@@ -17,7 +21,7 @@ from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_V1_DB = Path("/workspace/steuerreport/var/ai_readonly/steuerreport_ai_readonly.tmp.sqlite")
 DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs" / "crypto_price_sources.json"
@@ -26,7 +30,7 @@ DEFAULT_OWNERSHIP_AUDIT = (
     / "var/solana_v1_ownership_scope"
     / "latest_6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP_v1_ownership_scope.json"
 )
-DEFAULT_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
+DEFAULT_WALLET = private_value('primary_solana_wallet')
 SOURCE = "solana_rpc"
 
 

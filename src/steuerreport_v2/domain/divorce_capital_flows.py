@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
@@ -20,7 +22,7 @@ from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 
 
 class DivorceCapitalFlowService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     ALCHEMY_AUDIT_PATH = (
         PROJECT_ROOT / "var/solana_tx_alchemy_audits/latest_all_tx_alchemy_audit.json"
     )

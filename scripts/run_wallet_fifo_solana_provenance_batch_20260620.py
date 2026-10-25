@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import argparse
 import json
 import time
@@ -14,7 +16,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "solana_provenance_batches"
 DEFAULT_POOL_ID = "solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"

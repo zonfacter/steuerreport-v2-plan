@@ -15,12 +15,12 @@ from steuerreport_v2.contracts.pionex_reconciliation import (
     PionexHntReconciliationReport,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.paths import USERTRANSFER_ROOT
+from steuerreport_v2.paths import configured_import_path
 
 
 class PionexHntReconciliationService:
     DEFAULT_CONFIG_PATH = private_config_path('pionex_hnt_reconciliation.json')
-    DEFAULT_SOURCE_DIR = USERTRANSFER_ROOT / "pionex"
+    DEFAULT_SOURCE_DIR = configured_import_path("import_root") / "pionex"
     EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
     def __init__(

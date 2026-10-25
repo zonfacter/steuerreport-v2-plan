@@ -3540,6 +3540,50 @@
         "title": "ApiResponse[InheritanceDocumentUploadResult]",
         "type": "object"
       },
+      "ApiResponse_InstallationSettings_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[InstallationSettings]",
+        "type": "object"
+      },
       "ApiResponse_JupPerpsPreview_": {
         "properties": {
           "data": {
@@ -5914,6 +5958,50 @@
           }
         },
         "title": "ApiResponse[PriceWriteResult]",
+        "type": "object"
+      },
+      "ApiResponse_PrivateConfigDocument_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrivateConfigDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[PrivateConfigDocument]",
         "type": "object"
       },
       "ApiResponse_ProductReadinessReport_": {
@@ -12034,6 +12122,54 @@
         "title": "ApiResponse[dict]",
         "type": "object"
       },
+      "ApiResponse_dict_str__bool__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[dict[str, bool]]",
+        "type": "object"
+      },
       "ApiResponse_dict_str__object__": {
         "properties": {
           "data": {
@@ -13226,7 +13362,7 @@
             "type": "integer"
           },
           "v1_fx_db_path": {
-            "default": "/root/.local/share/steuerreport/steuerreport.db",
+            "default": "/var/lib/steuerreport/imports/reference/legacy-prices.db",
             "title": "V1 Fx Db Path",
             "type": "string"
           }
@@ -18820,7 +18956,7 @@
             "type": "boolean"
           },
           "file_path": {
-            "default": "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
+            "default": "/var/lib/steuerreport/imports/blockpit/transactions.csv",
             "title": "File Path",
             "type": "string"
           },
@@ -18847,7 +18983,7 @@
             "title": "Max Year"
           },
           "price_config_path": {
-            "default": "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json",
+            "default": "/opt/steuerreport/configs/crypto_price_sources.json",
             "title": "Price Config Path",
             "type": "string"
           },
@@ -18862,7 +18998,7 @@
             "type": "integer"
           },
           "v1_fx_db_path": {
-            "default": "/root/.local/share/steuerreport/steuerreport.db",
+            "default": "/var/lib/steuerreport/imports/reference/legacy-prices.db",
             "title": "V1 Fx Db Path",
             "type": "string"
           }
@@ -29259,7 +29395,7 @@
             "type": "integer"
           },
           "v1_fx_db_path": {
-            "default": "/root/.local/share/steuerreport/steuerreport.db",
+            "default": "/var/lib/steuerreport/imports/reference/legacy-prices.db",
             "title": "V1 Fx Db Path",
             "type": "string"
           }
@@ -31807,6 +31943,127 @@
           "connector"
         ],
         "title": "InheritanceDocumentUploadResult",
+        "type": "object"
+      },
+      "InstallationField": {
+        "properties": {
+          "editable": {
+            "title": "Editable",
+            "type": "boolean"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "account",
+              "path",
+              "url",
+              "text"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "environment",
+              "profile",
+              "empty"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "group",
+          "kind",
+          "value",
+          "source",
+          "editable"
+        ],
+        "title": "InstallationField",
+        "type": "object"
+      },
+      "InstallationSettings": {
+        "properties": {
+          "encrypted_secrets_available": {
+            "title": "Encrypted Secrets Available",
+            "type": "boolean"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "profile_writable": {
+            "title": "Profile Writable",
+            "type": "boolean"
+          },
+          "providers": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Providers",
+            "type": "object"
+          },
+          "restart_required": {
+            "title": "Restart Required",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fields",
+          "revision",
+          "restart_required",
+          "profile_writable",
+          "encrypted_secrets_available",
+          "providers"
+        ],
+        "title": "InstallationSettings",
+        "type": "object"
+      },
+      "InstallationSettingsWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 100,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "revision",
+          "values"
+        ],
+        "title": "InstallationSettingsWrite",
         "type": "object"
       },
       "JupPerpsAssetSummary": {
@@ -42414,6 +42671,49 @@
         "title": "PriceWriteResult",
         "type": "object"
       },
+      "PrivateConfigDocument": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "content",
+          "revision"
+        ],
+        "title": "PrivateConfigDocument",
+        "type": "object"
+      },
+      "PrivateConfigWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 1000000,
+            "title": "Content",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "content"
+        ],
+        "title": "PrivateConfigWrite",
+        "type": "object"
+      },
       "ProductReadinessCheck": {
         "properties": {
           "action_path": {
@@ -42673,6 +42973,22 @@
           "action_path"
         ],
         "title": "ProductReadinessSource",
+        "type": "object"
+      },
+      "ProviderSecretWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "ProviderSecretWrite",
         "type": "object"
       },
       "RawObject": {
@@ -44601,7 +44917,7 @@
             "type": "string"
           },
           "blockpit_file_path": {
-            "default": "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
+            "default": "/var/lib/steuerreport/imports/blockpit/transactions.csv",
             "title": "Blockpit File Path",
             "type": "string"
           },
@@ -44619,7 +44935,7 @@
             "title": "Delay Seconds"
           },
           "file_path": {
-            "default": "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv",
+            "default": "/var/lib/steuerreport/imports/solscan/export.csv",
             "title": "File Path",
             "type": "string"
           },
@@ -63837,7 +64153,7 @@
             "title": "Confidence"
           },
           "db_path": {
-            "default": "/root/.local/share/steuerreport/steuerreport.db",
+            "default": "/var/lib/steuerreport/imports/reference/legacy-prices.db",
             "title": "Db Path",
             "type": "string"
           }
@@ -75462,7 +75778,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc2"
+    "version": "0.2.0rc3"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -75607,6 +75923,274 @@
           "Administration"
         ],
         "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/installation": {
+      "get": {
+        "description": "Read installation. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "read_installation_api_v1_admin_installation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_InstallationSettings_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Installation",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "put": {
+        "description": "Write installation. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "write_installation_api_v1_admin_installation_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationSettingsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_InstallationSettings_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Installation",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/installation/configs/{filename}": {
+      "get": {
+        "description": "Read installation config. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "read_installation_config_api_v1_admin_installation_configs__filename__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "title": "Filename",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PrivateConfigDocument_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Installation Config",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "put": {
+        "description": "Write installation config. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "write_installation_config_api_v1_admin_installation_configs__filename__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "title": "Filename",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrivateConfigWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PrivateConfigDocument_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Installation Config",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/installation/providers/{provider}": {
+      "delete": {
+        "description": "Delete installation provider. Der Aufruf loescht den im Pfad bezeichneten lokalen Datensatz. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "delete_installation_provider_api_v1_admin_installation_providers__provider__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_str__bool__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Installation Provider",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "delete",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "put": {
+        "description": "Write installation provider. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "write_installation_provider_api_v1_admin_installation_providers__provider__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderSecretWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_str__bool__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Installation Provider",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }
@@ -81014,7 +81598,7 @@
             "name": "file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
+              "default": "/var/lib/steuerreport/imports/blockpit/transactions.csv",
               "title": "File Path",
               "type": "string"
             }
@@ -81054,7 +81638,7 @@
             "name": "price_config_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json",
+              "default": "/opt/steuerreport/configs/crypto_price_sources.json",
               "title": "Price Config Path",
               "type": "string"
             }
@@ -81146,7 +81730,7 @@
             "name": "root_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer",
+              "default": "/var/lib/steuerreport/imports",
               "title": "Root Path",
               "type": "string"
             }
@@ -81401,7 +81985,7 @@
             "name": "file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/jup/.csv",
+              "default": "/var/lib/steuerreport/imports/jup/perps.csv",
               "title": "File Path",
               "type": "string"
             }
@@ -81411,7 +81995,7 @@
             "name": "v1_fx_db_path",
             "required": false,
             "schema": {
-              "default": "/root/.local/share/steuerreport/steuerreport.db",
+              "default": "/var/lib/steuerreport/imports/reference/legacy-prices.db",
               "title": "V1 Fx Db Path",
               "type": "string"
             }
@@ -81468,7 +82052,7 @@
             "name": "root_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer",
+              "default": "/var/lib/steuerreport/imports",
               "title": "Root Path",
               "type": "string"
             }
@@ -81525,7 +82109,7 @@
             "name": "root_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer",
+              "default": "/var/lib/steuerreport/imports",
               "title": "Root Path",
               "type": "string"
             }
@@ -81597,7 +82181,7 @@
             "name": "file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv",
+              "default": "/var/lib/steuerreport/imports/solscan/export.csv",
               "title": "File Path",
               "type": "string"
             }
@@ -81607,7 +82191,7 @@
             "name": "blockpit_file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
+              "default": "/var/lib/steuerreport/imports/blockpit/transactions.csv",
               "title": "Blockpit File Path",
               "type": "string"
             }
@@ -81792,7 +82376,7 @@
             "name": "file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv",
+              "default": "/var/lib/steuerreport/imports/solscan/export.csv",
               "title": "File Path",
               "type": "string"
             }
@@ -81802,7 +82386,7 @@
             "name": "blockpit_file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
+              "default": "/var/lib/steuerreport/imports/blockpit/transactions.csv",
               "title": "Blockpit File Path",
               "type": "string"
             }
@@ -81889,7 +82473,7 @@
             "name": "file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/Wallet.-month.csv",
+              "default": "/var/lib/steuerreport/imports/wallet-month.csv",
               "title": "File Path",
               "type": "string"
             }

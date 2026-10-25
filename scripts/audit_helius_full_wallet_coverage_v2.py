@@ -7,6 +7,10 @@ must be visible in an audit, but they are never treated as taxable movements.
 
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -22,10 +26,10 @@ import duckdb
 import httpx
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_OUTPUT = PROJECT_ROOT / "var/staging_audits/helius_full_wallet_coverage_2026-09-27.json"
-DEFAULT_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
+DEFAULT_WALLET = private_value('primary_solana_wallet')
 RPC_URL = "https://mainnet.helius-rpc.com/"
 
 

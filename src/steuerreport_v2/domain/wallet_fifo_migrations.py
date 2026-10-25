@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, localcontext
@@ -40,7 +42,7 @@ from steuerreport_v2.domain.wallet_fifo_runs import WalletFifoParallelRunService
 
 
 class WalletFifoMigrationRehearsalService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/wallet_fifo_migrations"
     APPROVAL = "approved_for_controlled_migration"
@@ -566,10 +568,10 @@ class WalletFifoMigrationRehearsalService:
 
 
 class WalletFifoMigrationApplyService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_BACKUP_ROOT = Path(
-        "/workspace/backups/steuerreport-v2-plan/database"
+        str(PROJECT_ROOT / "var/backups/database")
     )
     CONFIRMATION_PHRASE = "WALLET_DEPOT_FIFO_V1_AKTIVIEREN"
     BACKUP_HEADROOM_BYTES = 64 * 1024 * 1024

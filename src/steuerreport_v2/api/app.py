@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from steuerreport_v2.private_settings import private_config_path, private_template, private_value
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.paths import configured_import_path, PROJECT_ROOT
+
+from steuerreport_v2.private_settings import private_config_path, private_value
+from steuerreport_v2.contracts.installation import InstallationSettings, InstallationSettingsWrite, PrivateConfigDocument, PrivateConfigWrite, ProviderSecretWrite
+from steuerreport_v2.domain.installation import InstallationSettingsError, InstallationSettingsService
 
 import csv
 import gzip
@@ -8,18 +14,22 @@ import hashlib
 import html
 import io
 import json
+import os
 from pathlib import Path
 from threading import RLock
 from time import monotonic
 from uuid import uuid4
+from urllib.parse import urlsplit, urlencode
 from urllib.parse import quote
 import zipfile
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.routing import APIRoute
 
 from steuerreport_v2 import __version__
@@ -569,43 +579,43 @@ from steuerreport_v2.importers.wiso_reference_importer import WisoReferenceImpor
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 HELIUM_SWAP_ALCHEMY_AUDIT_PATH = (
-    Path("/workspace/steuerreport-v2-plan")
+    Path(PROJECT_ROOT)
     / "var"
     / "helium_swap_alchemy_audits"
     / "latest_all_years_helium_swap_alchemy_audit.json"
 )
 SOLANA_TX_ALCHEMY_AUDIT_PATH = (
-    Path("/workspace/steuerreport-v2-plan")
+    Path(PROJECT_ROOT)
     / "var"
     / "solana_tx_alchemy_audits"
     / "latest_solana_rpc_tx_alchemy_audit.json"
 )
 SOLANA_FAILED_TX_TAX_IMPACT_PATH = (
-    Path("/workspace/steuerreport-v2-plan")
+    Path(PROJECT_ROOT)
     / "var"
     / "solana_failed_tx_tax_impacts"
     / "latest_solana_failed_tx_tax_impact.json"
 )
 ALL_TRANSACTION_EVIDENCE_MATRIX_PATH = (
-    Path("/workspace/steuerreport-v2-plan")
+    Path(PROJECT_ROOT)
     / "var"
     / "all_transaction_evidence_matrices"
     / "latest_all_transaction_evidence_matrix.json"
 )
 ALL_TRANSACTION_EVIDENCE_CLOSURE_PATH = (
-    Path("/workspace/steuerreport-v2-plan")
+    Path(PROJECT_ROOT)
     / "var"
     / "all_transaction_evidence_closures"
     / "latest_all_transaction_evidence_closure.json"
 )
 ALL_TRANSACTION_OPEN_DETAIL_REVIEW_PATH = (
-    Path("/workspace/steuerreport-v2-plan")
+    Path(PROJECT_ROOT)
     / "var"
     / "all_transaction_open_detail_reviews"
     / "latest_all_transaction_open_detail_review.json"
 )
 ALL_TRANSACTION_DECISION_CANDIDATES_PATH = (
-    Path("/workspace/steuerreport-v2-plan")
+    Path(PROJECT_ROOT)
     / "var"
     / "all_transaction_decision_candidates"
     / "latest_all_transaction_decision_candidates.json"
@@ -680,14 +690,71 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         openapi_tags=OPENAPI_TAGS,
         servers=[{"url": "/", "description": "Aktueller Steuerreport-V2-API-Host"}],
     )
+    cors_origins = [value.strip() for value in os.environ.get("STEUERREPORT_CORS_ORIGINS", "").split(",") if value.strip()]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=[value.strip() for value in os.environ.get("STEUERREPORT_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1],testserver").split(",") if value.strip()],
+    )
+
+    @app.middleware("http")
+    async def reject_untrusted_browser_origin(request: Request, call_next):
+        origin = request.headers.get("origin")
+        if origin and origin != str(request.base_url).rstrip("/") and origin not in cors_origins:
+            return Response(status_code=403)
+        return await call_next(request)
     db = store or DuckDbStore()
+    installation = InstallationSettingsService(db)
+
+    @app.get("/api/v1/admin/installation")
+    def read_installation() -> ApiResponse[InstallationSettings]:
+        try:
+            return ApiResponse(data=installation.read())
+        except InstallationSettingsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+
+    @app.put("/api/v1/admin/installation")
+    def write_installation(payload: InstallationSettingsWrite) -> ApiResponse[InstallationSettings]:
+        try:
+            return ApiResponse(data=installation.write(payload))
+        except InstallationSettingsError as exc:
+            raise HTTPException(status_code=409 if "conflict" in str(exc) else 400, detail=str(exc)) from None
+
+    @app.put("/api/v1/admin/installation/providers/{provider}")
+    def write_installation_provider(provider: str, payload: ProviderSecretWrite) -> ApiResponse[dict[str, bool]]:
+        try:
+            installation.save_provider(provider, payload.api_key)
+        except InstallationSettingsError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        return ApiResponse(data={"configured": True})
+
+    @app.delete("/api/v1/admin/installation/providers/{provider}")
+    def delete_installation_provider(provider: str) -> ApiResponse[dict[str, bool]]:
+        try:
+            installation.delete_provider(provider)
+        except InstallationSettingsError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        return ApiResponse(data={"configured": False})
+
+    @app.get("/api/v1/admin/installation/configs/{filename}")
+    def read_installation_config(filename: str) -> ApiResponse[PrivateConfigDocument]:
+        try:
+            return ApiResponse(data=installation.read_config(filename))
+        except InstallationSettingsError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @app.put("/api/v1/admin/installation/configs/{filename}")
+    def write_installation_config(filename: str, payload: PrivateConfigWrite) -> ApiResponse[PrivateConfigDocument]:
+        try:
+            return ApiResponse(data=installation.write_config(filename, payload))
+        except InstallationSettingsError as exc:
+            raise HTTPException(status_code=409 if "conflict" in str(exc) else 400, detail=str(exc)) from None
     response_cache: dict[str, tuple[float, object]] = {}
     response_cache_locks: dict[str, RLock] = {}
     response_cache_guard = RLock()
@@ -1302,7 +1369,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/import/coverage")
     def import_coverage(
-        root_path: str = "/workspace/steuerreport/usertransfer",
+        root_path: str = str(configured_import_path("import_root")),
         limit: int = 80,
         max_seconds: float = 8.0,
     ) -> ApiResponse[ImportCoverageSummary]:
@@ -1316,13 +1383,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/import/policy/audit")
     def import_policy_audit(
-        root_path: str = "/workspace/steuerreport/usertransfer",
+        root_path: str = str(configured_import_path("import_root")),
     ) -> ApiResponse[ImportPolicyAudit]:
         return ApiResponse(data=ImportPolicyService(db).audit(root_path))
 
     @app.get("/api/v1/import/parser-preflight")
     def parser_preflight(
-        root_path: str = "/workspace/steuerreport/usertransfer",
+        root_path: str = str(configured_import_path("import_root")),
         limit: int = 20,
     ) -> ApiResponse[ParserPreflightReport]:
         return ApiResponse(
@@ -1334,11 +1401,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/import/blockpit-solana/preflight")
     def blockpit_solana_preflight(
-        file_path: str = "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
+        file_path: str = str(configured_import_path("blockpit_reference_file", "blockpit/transactions.csv")),
         integration: str = "Solana",
         max_year: int = 2024,
         account: str = "Solana",
-        price_config_path: str = "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json",
+        price_config_path: str = str(PROJECT_ROOT / "configs/crypto_price_sources.json"),
     ) -> ApiResponse[BlockpitSolanaPreflightReport]:
         return ApiResponse(
             data=BlockpitSolanaPreflightService(db).inspect(
@@ -1373,8 +1440,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/import/solscan/token-preflight")
     def solscan_token_preflight(
-        file_path: str = "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv",
-        blockpit_file_path: str = "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
+        file_path: str = str(configured_import_path("solscan_export_file", "solscan/export.csv")),
+        blockpit_file_path: str = str(configured_import_path("blockpit_reference_file", "blockpit/transactions.csv")),
         wallet: str = private_value('primary_solana_wallet', ''),
         asset: str = "IOT",
         token_address: str = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns",
@@ -1395,14 +1462,22 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def solscan_rpc_probe(
         payload: SolanaRpcProbeRequest,
     ) -> ApiResponse[SolanaRpcProbeResult]:
+        from steuerreport_v2.domain.secrets import resolve_secret_value
+
+        endpoint = urlsplit(payload.rpc_url)
+        # Never send a saved provider secret to an arbitrary caller-supplied host.
+        if endpoint.scheme == "https" and endpoint.hostname in {"mainnet.helius-rpc.com", "devnet.helius-rpc.com"} and not endpoint.query and not endpoint.username and not endpoint.password and endpoint.port in {None, 443}:
+            key = resolve_secret_value(db, "secret.helius.api_key")
+            if key:
+                payload = payload.model_copy(update={"rpc_url": payload.rpc_url.rstrip("/") + "/?" + urlencode({"api-key": key})})
         return ApiResponse(
             data=SolscanPreflightService().probe_missing_signatures_rpc(payload)
         )
 
     @app.get("/api/v1/import/solscan/evidence-trace")
     def solscan_evidence_trace(
-        file_path: str = "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv",
-        blockpit_file_path: str = "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
+        file_path: str = str(configured_import_path("solscan_export_file", "solscan/export.csv")),
+        blockpit_file_path: str = str(configured_import_path("blockpit_reference_file", "blockpit/transactions.csv")),
         wallet: str = private_value('primary_solana_wallet', ''),
         asset: str = "IOT",
         token_address: str = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns",
@@ -1433,7 +1508,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/import/wallet-monthly/preflight")
     def wallet_monthly_preflight(
-        file_path: str = private_template('/workspace/steuerreport/usertransfer/Wallet.{primary_solana_wallet}-month.csv'),
+        file_path: str = str(configured_import_path("wallet_monthly_file", "wallet-month.csv")),
         wallet: str = private_value('primary_solana_wallet', ''),
         asset: str = "IOT",
         cutoff_at: str = "2024-02-23T21:01:15",
@@ -1451,8 +1526,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/import/jup-perps/preview")
     def jup_perps_preview(
-        file_path: str = private_template('/workspace/steuerreport/usertransfer/jup/{primary_solana_wallet}.csv'),
-        v1_fx_db_path: str = "/root/.local/share/steuerreport/steuerreport.db",
+        file_path: str = str(configured_import_path("jup_perps_file", "jup/perps.csv")),
+        v1_fx_db_path: str = str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db")),
         sample_limit: int = 20,
     ) -> ApiResponse[JupPerpsPreview]:
         return ApiResponse(
@@ -8043,7 +8118,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/export/tax-years/{year}/evidence-package.zip")
     def download_tax_year_evidence_package_zip(year: int) -> Response:
-        project_root = Path(__file__).resolve().parents[3]
+        project_root = SOFTWARE_ROOT
         cache_inputs = [
             db.path,
             Path(__file__),
@@ -8069,8 +8144,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             project_root / "configs/pionex_hnt_api_probe_2022.json",
             private_config_path('fairspot_hnt_staking_reconciliation.json'),
             private_config_path('solana_staking_position_reconciliations.json'),
-            Path("/workspace/steuerreport/usertransfer/pionex/raw-trading-details.csv"),
-            Path("/workspace/steuerreport/usertransfer/pionex/trading.csv"),
+            Path(str(configured_import_path("import_root", "") / "pionex/raw-trading-details.csv")),
+            Path(str(configured_import_path("import_root", "") / "pionex/trading.csv")),
             project_root / "var/wallet_fifo_runs/latest_wallet_fifo_run.json",
             project_root
             / "var/cross_cex_transfer_evidence/latest_cross_cex_transfer_evidence.json",
@@ -9518,6 +9593,9 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         )
 
     configure_openapi_routes(app)
+    static_root = SOFTWARE_ROOT / "frontend/dist"
+    if (static_root / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=static_root, html=True), name="frontend")
     return app
 
 

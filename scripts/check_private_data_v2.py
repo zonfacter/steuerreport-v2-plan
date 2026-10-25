@@ -11,10 +11,16 @@ ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}|(?<![1-9A-HJ-NP-Za-km-z])[1-9A-HJ-NP-Za
 
 def violations(root: Path) -> list[str]:
     findings = []
-    for path in (root / "src/steuerreport_v2").rglob("*.py"):
+    paths = list((root / "src/steuerreport_v2").rglob("*.py"))
+    paths.extend((root / "scripts").rglob("*.py"))
+    paths.extend((root / "frontend/src").rglob("*.tsx"))
+    paths.extend((root / "frontend/src").rglob("*.ts"))
+    for path in paths:
         text = path.read_text()
-        for match in re.finditer(r"\bDE\d{20}\b|Konto_\d{6,12}", text):
+        for match in re.finditer(r"\bDE\d{20}\b|Konto_\d{6,12}|UID-\d{6,}", text):
             findings.append(f"{path.relative_to(root)}:{text[:match.start()].count(chr(10)) + 1}:bank_identifier")
+        if path.suffix != ".py":
+            continue
         tree = ast.parse(text)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Assign):

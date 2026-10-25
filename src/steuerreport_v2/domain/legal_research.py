@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 import hashlib
@@ -73,7 +75,7 @@ class _BfhResultParser(HTMLParser):
 
 
 class LegalResearchService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs/legal_research_sources.json"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/legal_research_freshness"
     ALLOWED_HOSTS = {

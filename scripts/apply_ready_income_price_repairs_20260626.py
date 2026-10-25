@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import configured_import_path
+
 import argparse
 import importlib.util
 import json
@@ -24,7 +26,7 @@ REPAIR_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_hnt_legacy_reward_price_rep
 PREVIEW_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_all_income_price_repair_preview_20260626.py"
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_PREVIEW = PROJECT_ROOT / "var" / "income_price_repair_previews" / "latest_all_income_price_repair_preview.json"
-DEFAULT_V1_FX_DB = Path("/root/.local/share/steuerreport/steuerreport.db")
+DEFAULT_V1_FX_DB = Path(str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db")))
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "income_price_repair_executes"
 DEFAULT_PRICE_CACHE_DIR = PROJECT_ROOT / "var" / "external_price_history_cache"
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 import csv
 import json
@@ -18,8 +20,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PACKAGE = ROOT / "var" / "local_ai_prework" / "packages" / "full_fifo_audit_20260526"
 PACKAGE = ROOT / "var" / "local_ai_prework" / "packages" / "overnight_fifo_findings_20260526"
-LLM_BASE = os.environ.get("LOCAL_LLM_BASE", "http://192.168.2.203:11435/v1")
-LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL", "qwen3.6-35b-a3b-iq4xs")
+LLM_BASE = os.environ.get("LOCAL_LLM_BASE") or private_value("local_llm_base") or "http://127.0.0.1:11435/v1"
+LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL") or private_value("local_llm_model") or "local-model"
 
 
 def main() -> int:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT
+
 from collections import defaultdict
 from datetime import datetime, timezone
 import json
@@ -33,7 +35,7 @@ from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.tax_time import reporting_tax_year, reporting_year_sql
 
 MetricKey = tuple[str, str, str, int | None, str | None, str | None]
-DEFAULT_PRICE_CONFIG = Path("/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json")
+DEFAULT_PRICE_CONFIG = Path(str(PROJECT_ROOT / "configs/crypto_price_sources.json"))
 HNT_CURRENT_PORTFOLIO_ACCOUNTS = {
     PortfolioService.KNOWN_JUP_WALLET,
     PortfolioService.PRIMARY_SOLANA_WALLET,

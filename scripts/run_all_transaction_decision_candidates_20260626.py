@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 import json
 from collections import Counter
@@ -10,16 +14,16 @@ from pathlib import Path
 from typing import Any
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 DEFAULT_DETAIL = PROJECT_ROOT / "var" / "all_transaction_open_detail_reviews" / "latest_all_transaction_open_detail_review.json"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "all_transaction_decision_candidates"
-BINANCE_DEPOSIT_ADDRESS = "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW"
+BINANCE_DEPOSIT_ADDRESS = private_value('configured_identifier_100')
 OWN_SOLANA_WALLETS = {
-    "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP": "Main Solana Wallet",
-    "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu": "JUP Wallet",
+    private_value('primary_solana_wallet'): "Main Solana Wallet",
+    private_value('secondary_solana_wallet'): "JUP Wallet",
 }
 KNOWN_INFRASTRUCTURE = {
-    "CySAjqmKLQCT729gypchz3zbYSSNh85rXx8Tk9e7PC7P": "Bitget Exchange",
+    private_value('configured_identifier_97'): "Bitget Exchange",
     "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9": "Binance Hot Wallet",
 }
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import configured_import_path
+
 import json
 import os
 import re
@@ -26,7 +28,7 @@ from steuerreport_v2.domain.secrets import resolve_secret_value
 
 class JupiterTokenService:
     SEARCH_URL = "https://api.jup.ag/tokens/v2/search"
-    V1_DB_PATH = Path("/root/.local/share/steuerreport/steuerreport.db")
+    V1_DB_PATH = Path(str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db")))
     SOLANA_MINT_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
     MINT_KEY_HINTS = {
         "mint",

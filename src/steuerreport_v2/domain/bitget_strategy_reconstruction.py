@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 import csv
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
@@ -35,7 +37,7 @@ from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 
 
 class BitgetStrategyBasisReconstructionService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/wallet_fifo_runs"
     DEFAULT_BACKFILL_ARTIFACT_ROOT = (

@@ -70,7 +70,12 @@ def test_unconfigured_application_does_not_treat_empty_accounts_as_owned():
             "assert not S.KNOWN_OWN_SOLANA_WALLETS; "
             "assert not S.KNOWN_OWN_CEX_DEPOSIT_ADDRESSES; "
             "assert not S.HISTORICAL_STAKING_WALLETS; "
-            "assert not M.KNOWN_RECEIVER_WALLETS"
+            "assert not M.KNOWN_RECEIVER_WALLETS; "
+            "from steuerreport_v2.domain.portfolio import PortfolioService as P; "
+            "assert not P.EXPECTED_ZERO_SOURCES; "
+            "assert P(None)._source_group_for_account('', set()) == ('Unassigned', 'account'); "
+            "from steuerreport_v2.importers.raw_normalizer import RawNormalizer as R; "
+            "assert not R.HELIUM_VSR_POSITION_RECEIPTS"
         )], env=environment, capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr

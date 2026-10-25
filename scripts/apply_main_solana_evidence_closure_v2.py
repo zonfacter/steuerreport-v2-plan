@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.private_settings import private_value
+
 import argparse
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -17,7 +21,7 @@ from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.review import ReviewService
 
 
-PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
+PROJECT_ROOT = SOFTWARE_ROOT
 SCRIPT_ROOT = PROJECT_ROOT / "scripts"
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/main_solana_evidence_closure"
@@ -35,7 +39,7 @@ SHARK_TOKEN_AUDIT = (
     / "token_account_coverage_20260710T212451Z_6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP.json"
 )
 OPENING_BATCH_ID = "bb73e499-058e-47cb-85ca-ea623a33dae8"
-WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
+WALLET = private_value('primary_solana_wallet')
 EXPECTED_BALANCES = {
     "CWIF": Decimal("11310642.83"),
     "HNT": Decimal("75.175403"),

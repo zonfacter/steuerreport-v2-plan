@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from steuerreport_v2.paths import configured_import_path
+
 import argparse
 import json
 import sqlite3
@@ -17,7 +19,7 @@ from steuerreport_v2.contracts.prices import PricePointCreate  # noqa: E402
 from steuerreport_v2.db.duckdb_store import DuckDbStore  # noqa: E402
 
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
-DEFAULT_V1_DB = Path("/root/.local/share/steuerreport/steuerreport.db")
+DEFAULT_V1_DB = Path(str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db")))
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "stablecoin_fx_anchor_apply"
 STABLECOINS = ("USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "EURC", "EURS")
 SOURCE_PREFIX = "stablecoin_fx_anchor:v1_fx_cache"

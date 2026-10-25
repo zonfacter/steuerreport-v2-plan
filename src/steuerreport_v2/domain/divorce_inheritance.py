@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
+from steuerreport_v2.paths import configured_import_path
+
 from collections import defaultdict
 import csv
 from dataclasses import dataclass
@@ -82,17 +86,17 @@ class _ExternalValuation:
 
 
 class DivorceInheritanceOriginService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB_PATH = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
-    DEFAULT_BANK_CAMT_ROOT = Path("/workspace/steuerreport/usertransfer/Sparkasse")
+    DEFAULT_BANK_CAMT_ROOT = Path(str(configured_import_path("bank_camt_root", "bank/camt")))
     DEFAULT_SPARKASSE_STATEMENT_DISCOVERY_ROOT = Path(
-        "/workspace/steuerreport/usertransfer"
+        str(configured_import_path("bank_statement_root"))
     )
     DEFAULT_TRADE_REPUBLIC_DOCUMENT_ROOT = Path(
-        "/workspace/steuerreport/usertransfer/TradeRepublic"
+        str(configured_import_path("trade_republic_root", "TradeRepublic"))
     )
     DEFAULT_INHERITANCE_DOCUMENT_ROOT = Path(
-        "/workspace/steuerreport/usertransfer/Inheritance"
+        str(configured_import_path("inheritance_root", "origin-evidence"))
     )
     DEFAULT_SEPARATION_DATE = date(2025, 6, 13)
     DEFAULT_END_ASSET_DATE = date(2026, 7, 24)

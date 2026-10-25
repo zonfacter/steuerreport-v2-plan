@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import configured_import_path, PROJECT_ROOT
+
 from datetime import date
 from decimal import Decimal
 
@@ -91,12 +93,12 @@ class BlockpitSolanaPreflightReport(BaseModel):
 
 
 class BlockpitSolanaPriceProbeRequest(BaseModel):
-    file_path: str = "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv"
+    file_path: str = str(configured_import_path("blockpit_reference_file", "blockpit/transactions.csv"))
     integration: str = "Solana"
     max_year: int | None = 2024
     account: str = "Solana"
-    price_config_path: str = "/workspace/steuerreport-v2-plan/configs/crypto_price_sources.json"
-    v1_fx_db_path: str = "/root/.local/share/steuerreport/steuerreport.db"
+    price_config_path: str = str(PROJECT_ROOT / "configs/crypto_price_sources.json")
+    v1_fx_db_path: str = str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db"))
     provider: str = "auto"
     assets: list[str] = Field(default_factory=list)
     max_requests: int = 25

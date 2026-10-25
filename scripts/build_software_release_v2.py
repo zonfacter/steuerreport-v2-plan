@@ -18,13 +18,14 @@ CASE_MODULES = {
     "lawyer_disclosure", "legal_email_archive", "legal_tax_documents",
     "property_documents",
 }
-ROOT_FILES = {".env.example", ".gitignore", "AGENTS.md", "README.md", "pyproject.toml"}
+ROOT_FILES = {".env.example", ".gitignore", ".dockerignore", "Dockerfile", "compose.yml", "requirements-runtime.lock", "AGENTS.md", "README.md", "pyproject.toml"}
 DOCUMENTS = {
     "docs/007_MOBILE_APP_API_INTEGRATION_2026-08-26.md",
     "docs/API_CONTRACTS_V2.md",
     "docs/626_API_ENDPOINT_REFERENZ_VOLLSTAENDIG_2026-07-05.md",
     "docs/openapi/steuerreport-v2-openapi.json",
     "docs/750_PRIVACY_CLEAN_SOFTWARE_2026-10-25.md",
+    "docs/751_INSTALLATION_SETTINGS_DOCKER_RC3_2026-10-25.md",
 }
 GENERIC_CONFIGS = {
     "configs/binance_small_assets_price_evidence_20260710.json",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 import gzip
@@ -32,7 +34,7 @@ from steuerreport_v2.domain.source_registry import SourceRegistryService
 
 
 class DivorceServiceRouteEvidenceService:
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/divorce_service_route_evidence"
     DEFAULT_RPC_URL = "https://api.mainnet-beta.solana.com"
     JUPITER_PERPS_PROGRAM_ID = "PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu"

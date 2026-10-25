@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -40,7 +42,7 @@ class _Totals:
 
 class CryptoSwapFifoParallelPreviewService:
     MATERIAL_DELTA_EUR = Decimal("0.01")
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
     DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "var/swap_valuation_parallel"
 

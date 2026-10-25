@@ -1,4 +1,9 @@
-# Datenschutzbereinigte Softwarefassung 0.2.0rc2
+# Datenschutzbereinigte Softwarefassung 0.2.0rc3
+
+Die Settingsseite und der leere Docker-Erststart sind in
+[Installation und Docker](751_INSTALLATION_SETTINGS_DOCKER_RC3_2026-10-25.md)
+beschrieben. Die Neupruefung schliesst zusaetzlich Exchange-UIDs in alten
+Importpfaden ein.
 
 Persoenliche Wallets, Exchange-Einzahlungsadressen und Bankkennungen sind
 private Betriebsdaten. Sie gehoeren weder als Defaults noch als Testdaten
