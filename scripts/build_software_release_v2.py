@@ -94,7 +94,9 @@ def stage(output: Path) -> None:
     manifest = {
         "version": metadata["project"]["version"],
         "base_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT).decode().strip(),
-        "includes_local_changes": True,
+        "includes_local_changes": bool(subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=all"], cwd=ROOT
+        ).strip()),
         "scope": "software_only; local case modules and private evidence excluded",
         "source_tree_sha256": sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode()),
         "files": files,
