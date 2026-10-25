@@ -509,20 +509,24 @@ class MoonpayReceiptService:
     def _candidate_events(
         self,
     ) -> tuple[list[tuple[CanonicalEvent, dict[str, object]]], list[str]]:
+        receiver_wallets = sorted(self.KNOWN_RECEIVER_WALLETS)
+        if not receiver_wallets:
+            return [], []
+        receiver_placeholders = ", ".join("?" for _ in receiver_wallets)
         classifications: dict[str, dict[str, object]] = {}
         errors: list[str] = []
         with self.store.connect() as con:
             candidate_rows = con.execute(
-                """
+                f"""
                 select distinct tx_id
                 from canonical_events
                 where lower(source) = 'solana_rpc'
                   and upper(asset) in ('SOL', 'USDC')
                   and quantity > 0
                   and tx_id is not null
-                  and coalesce(account, wallet, '') in (?, ?)
+                  and coalesce(account, wallet, '') in ({receiver_placeholders})
                 """,
-                sorted(self.KNOWN_RECEIVER_WALLETS),
+                receiver_wallets,
             ).fetchall()
         candidate_signatures = {str(row[0]) for row in candidate_rows if row[0]}
         if not candidate_signatures:

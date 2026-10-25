@@ -206,3 +206,15 @@ def test_moonpay_sparkasse_camt_matches_gross_debits_without_other_bank_rows(
     assert all(item.decision_layer.bank_debit_bound for item in report.items)
     assert all(item.decision_layer.gross_payment_reconciled for item in report.items)
     assert all(item.bank_reference for item in report.items)
+def test_candidate_events_without_configured_receivers(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "unconfigured.duckdb")
+    monkeypatch.setattr(MoonpayReceiptService, "KNOWN_RECEIVER_WALLETS", frozenset())
+    assert MoonpayReceiptService(store)._candidate_events() == ([], [])
+
+
+def test_candidate_events_with_a_single_configured_receiver(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "single-receiver.duckdb")
+    monkeypatch.setattr(MoonpayReceiptService, "KNOWN_RECEIVER_WALLETS", frozenset({"fixture-receiver"}))
+    assert MoonpayReceiptService(store)._candidate_events() == ([], [])
+
+
