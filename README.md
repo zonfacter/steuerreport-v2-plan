@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc7. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc8. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc7
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc8
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -112,6 +112,30 @@ sind beliebige Solscan-Exporte oder rohe RPC-JSON-Dateien nicht pauschal abgedec
 Technische Versionsvergleiche und Legacy-Cache-Aktionen sind keine
 Benutzernavigation mehr. Bestehende Referenzdaten und fachliche Exportgates
 werden dadurch nicht geloescht oder umgangen.
+
+## KI-Einrichtung
+
+Unter `Einrichtung > KI-Einrichtung` beziehungsweise `KI-Assistent` werden
+lokale OpenAI-kompatible Server, **OpenRouter** und andere kompatible Cloud-APIs
+konfiguriert. OpenRouter verwendet `https://openrouter.ai/api/v1`.
+API-Keys werden nur verschluesselt im bestehenden Vault gespeichert und nicht
+zurueckgegeben. Anbieter-/Adresswechsel erfordern das Ersetzen oder explizite
+Entfernen des bisherigen Keys. Keine persoenlichen Endpunkte oder Modelle
+sind vorbelegt. Aenderungen werden ohne Container-Neustart wirksam.
+
+Cloud-Zugriffe bleiben standardmaessig deaktiviert. Modelle werden nur per
+ausdruecklicher Aktion abgefragt. `Verbindung testen` sendet einen neutralen
+Testtext mit begrenzter Antwortlaenge; auch dieser kann beim Anbieter Kosten
+ausloesen. Eine echte Cloud-Aufgabe braucht zusaetzlich eine ausdrueckliche
+Textfreigabe. Die Ausfuehrung nutzt ausschliesslich den eingegebenen Text,
+keinen automatischen Zugriff auf Datenbank, Dateien oder Korrekturwerkzeuge.
+Ergebnisse sind Review-Hinweise, keine steuerlichen Entscheidungen.
+
+`POST /api/v1/ai/tasks` bleibt mit bestehenden Clients kompatibel und legt
+Aufgaben an. Die explizite Ausfuehrung erfolgt ueber
+`POST /api/v1/ai/tasks/{task_id}/execute`. Erfolgreiche Aufgaben werden nicht
+erneut gesendet; Fehler werden nicht automatisch wiederholt. Die Anleitung
+steht im [Benutzerleitfaden](frontend/public/benutzerleitfaden.html#ki).
 
 ## Eigenstaendiger Betrieb
 

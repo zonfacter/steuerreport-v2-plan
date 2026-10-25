@@ -104,6 +104,10 @@ from pathlib import Path
 def get(path):
     return json.load(urllib.request.urlopen("http://127.0.0.1:8010"+path))["data"]
 health=get("/api/v1/health")
+ai=get("/api/v1/ai/provider")
+assert ai["config"]["provider"] == "local"
+assert not ai["config"]["base_url"] and not ai["config"]["model"]
+assert not ai["external_enabled"] and not ai["api_key_present"] and not ai["configured"]
 settings=get("/api/v1/admin/installation")
 assert all(not row["value"] for row in settings["fields"])
 assert not any(settings["providers"].values())

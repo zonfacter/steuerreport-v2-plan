@@ -26,6 +26,9 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import Response
@@ -463,6 +466,8 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.admin import AdminService
 from steuerreport_v2.domain.api_meta import ApiCapabilitiesService
 from steuerreport_v2.domain.ai import AiService
+from steuerreport_v2.domain.ai_provider import AiProviderError, AiProviderService
+from steuerreport_v2.contracts.ai import AiModel, AiProbeResult, AiProviderStatus, AiProviderWrite, AiTaskExecute
 from steuerreport_v2.domain.as_of_price_gate import AsOfPriceGateService
 from steuerreport_v2.domain.audit import AuditService
 from steuerreport_v2.domain.binance_earn import BinanceEarnHistoryService
@@ -9475,6 +9480,38 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 "X-Steuerreport-Integrity": snapshot.integrity_status,
             },
         )
+
+    @app.exception_handler(RequestValidationError)
+    async def safe_ai_validation(request: Request, exc: RequestValidationError):
+        if request.url.path.startswith("/api/v1/ai/"):
+            return JSONResponse(status_code=422, content={"detail": "ai_request_invalid"})
+        return await request_validation_exception_handler(request, exc)
+
+    @app.exception_handler(AiProviderError)
+    async def safe_ai_error(_request: Request, exc: AiProviderError):
+        code = str(exc)
+        status = 404 if code == "ai_task_not_found" else 409 if code in {"ai_config_revision_conflict", "ai_task_not_queued"} else 400
+        return JSONResponse(status_code=status, content={"detail": code})
+
+    @app.get("/api/v1/ai/provider")
+    def ai_provider_status() -> ApiResponse[AiProviderStatus]:
+        return ApiResponse(data=AiProviderService(db).status())
+
+    @app.put("/api/v1/ai/provider")
+    def save_ai_provider(payload: AiProviderWrite) -> ApiResponse[AiProviderStatus]:
+        return ApiResponse(data=AiProviderService(db).save(payload))
+
+    @app.post("/api/v1/ai/provider/models")
+    def ai_provider_models() -> ApiResponse[list[AiModel]]:
+        return ApiResponse(data=AiProviderService(db).models())
+
+    @app.post("/api/v1/ai/provider/test")
+    def test_ai_provider() -> ApiResponse[AiProbeResult]:
+        return ApiResponse(data=AiProviderService(db).probe())
+
+    @app.post("/api/v1/ai/tasks/{task_id}/execute")
+    def execute_ai_task(task_id: str, payload: AiTaskExecute) -> ApiResponse[AiTask]:
+        return ApiResponse(data=AiProviderService(db).execute(task_id, payload))
 
     @app.post("/api/v1/ai/tasks")
     def create_ai_task(payload: AiTaskCreate) -> ApiResponse[AiTask]:

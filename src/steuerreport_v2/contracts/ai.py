@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
-AiTaskStatus = Literal["queued", "done", "failed"]
+AiTaskStatus = Literal["queued", "running", "done", "failed"]
 
 
 class AiTaskCreate(BaseModel):
-    task_type: str
-    prompt: str
+    task_type: str = Field(min_length=1, max_length=64)
+    prompt: str = Field(min_length=1, max_length=32000)
     allow_external: bool = False
 
 
@@ -28,6 +28,54 @@ class AiTask(BaseModel):
 class AiTaskDeleteResult(BaseModel):
     task_id: str
     deleted: bool
+
+
+class AiProviderConfig(BaseModel):
+    provider: Literal["local", "openrouter", "cloud"] = "local"
+    base_url: str = Field(default="", max_length=2048)
+    model: str = Field(default="", max_length=256)
+    max_tokens: int = Field(default=2048, ge=16, le=16384)
+    probe_max_tokens: int = Field(default=128, ge=16, le=2048)
+    timeout_seconds: int = Field(default=90, ge=5, le=240)
+    token_parameter: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
+    thinking: Literal["server_default", "llamacpp_off", "ollama_off"] = "server_default"
+
+
+class AiProviderWrite(AiProviderConfig):
+    revision: str
+    api_key: SecretStr | None = None
+    clear_api_key: bool = False
+    local_enabled: bool = True
+    external_enabled: bool = False
+
+
+class AiProviderStatus(BaseModel):
+    config: AiProviderConfig
+    revision: str
+    local_enabled: bool
+    external_enabled: bool
+    api_key_present: bool
+    api_key_readable: bool
+    encrypted_secrets_available: bool
+    configured: bool
+    source: Literal["settings", "legacy_profile", "empty"]
+
+
+class AiModel(BaseModel):
+    id: str
+    name: str
+
+
+class AiProbeResult(BaseModel):
+    status: Literal["ok"] = "ok"
+    model: str
+    answer: str
+    truncated: bool = False
+
+
+class AiTaskExecute(BaseModel):
+    confirm_external: bool = False
+    provider_revision: str | None = None
 
 
 class LocalAiYearPackageQaYear(BaseModel):

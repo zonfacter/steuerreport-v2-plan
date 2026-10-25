@@ -90,6 +90,281 @@
         "title": "AdminStatus",
         "type": "object"
       },
+      "AiModel": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "AiModel",
+        "type": "object"
+      },
+      "AiProbeResult": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model",
+          "answer"
+        ],
+        "title": "AiProbeResult",
+        "type": "object"
+      },
+      "AiProviderConfig": {
+        "properties": {
+          "base_url": {
+            "default": "",
+            "maxLength": 2048,
+            "title": "Base Url",
+            "type": "string"
+          },
+          "max_tokens": {
+            "default": 2048,
+            "maximum": 16384.0,
+            "minimum": 16.0,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "default": "",
+            "maxLength": 256,
+            "title": "Model",
+            "type": "string"
+          },
+          "probe_max_tokens": {
+            "default": 128,
+            "maximum": 2048.0,
+            "minimum": 16.0,
+            "title": "Probe Max Tokens",
+            "type": "integer"
+          },
+          "provider": {
+            "default": "local",
+            "enum": [
+              "local",
+              "openrouter",
+              "cloud"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "thinking": {
+            "default": "server_default",
+            "enum": [
+              "server_default",
+              "llamacpp_off",
+              "ollama_off"
+            ],
+            "title": "Thinking",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "default": 90,
+            "maximum": 240.0,
+            "minimum": 5.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "token_parameter": {
+            "default": "max_tokens",
+            "enum": [
+              "max_tokens",
+              "max_completion_tokens"
+            ],
+            "title": "Token Parameter",
+            "type": "string"
+          }
+        },
+        "title": "AiProviderConfig",
+        "type": "object"
+      },
+      "AiProviderStatus": {
+        "properties": {
+          "api_key_present": {
+            "title": "Api Key Present",
+            "type": "boolean"
+          },
+          "api_key_readable": {
+            "title": "Api Key Readable",
+            "type": "boolean"
+          },
+          "config": {
+            "$ref": "#/components/schemas/AiProviderConfig"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "encrypted_secrets_available": {
+            "title": "Encrypted Secrets Available",
+            "type": "boolean"
+          },
+          "external_enabled": {
+            "title": "External Enabled",
+            "type": "boolean"
+          },
+          "local_enabled": {
+            "title": "Local Enabled",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "settings",
+              "legacy_profile",
+              "empty"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "revision",
+          "local_enabled",
+          "external_enabled",
+          "api_key_present",
+          "api_key_readable",
+          "encrypted_secrets_available",
+          "configured",
+          "source"
+        ],
+        "title": "AiProviderStatus",
+        "type": "object"
+      },
+      "AiProviderWrite": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "default": "",
+            "maxLength": 2048,
+            "title": "Base Url",
+            "type": "string"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          },
+          "external_enabled": {
+            "default": false,
+            "title": "External Enabled",
+            "type": "boolean"
+          },
+          "local_enabled": {
+            "default": true,
+            "title": "Local Enabled",
+            "type": "boolean"
+          },
+          "max_tokens": {
+            "default": 2048,
+            "maximum": 16384.0,
+            "minimum": 16.0,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "default": "",
+            "maxLength": 256,
+            "title": "Model",
+            "type": "string"
+          },
+          "probe_max_tokens": {
+            "default": 128,
+            "maximum": 2048.0,
+            "minimum": 16.0,
+            "title": "Probe Max Tokens",
+            "type": "integer"
+          },
+          "provider": {
+            "default": "local",
+            "enum": [
+              "local",
+              "openrouter",
+              "cloud"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "thinking": {
+            "default": "server_default",
+            "enum": [
+              "server_default",
+              "llamacpp_off",
+              "ollama_off"
+            ],
+            "title": "Thinking",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "default": 90,
+            "maximum": 240.0,
+            "minimum": 5.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "token_parameter": {
+            "default": "max_tokens",
+            "enum": [
+              "max_tokens",
+              "max_completion_tokens"
+            ],
+            "title": "Token Parameter",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "AiProviderWrite",
+        "type": "object"
+      },
       "AiTask": {
         "properties": {
           "allow_external": {
@@ -120,6 +395,7 @@
           "status": {
             "enum": [
               "queued",
+              "running",
               "done",
               "failed"
             ],
@@ -159,10 +435,14 @@
             "type": "boolean"
           },
           "prompt": {
+            "maxLength": 32000,
+            "minLength": 1,
             "title": "Prompt",
             "type": "string"
           },
           "task_type": {
+            "maxLength": 64,
+            "minLength": 1,
             "title": "Task Type",
             "type": "string"
           }
@@ -190,6 +470,28 @@
           "deleted"
         ],
         "title": "AiTaskDeleteResult",
+        "type": "object"
+      },
+      "AiTaskExecute": {
+        "properties": {
+          "confirm_external": {
+            "default": false,
+            "title": "Confirm External",
+            "type": "boolean"
+          },
+          "provider_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Revision"
+          }
+        },
+        "title": "AiTaskExecute",
         "type": "object"
       },
       "ApiCapabilities": {
@@ -502,6 +804,94 @@
           }
         },
         "title": "ApiResponse[AdminStatus]",
+        "type": "object"
+      },
+      "ApiResponse_AiProbeResult_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiProbeResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[AiProbeResult]",
+        "type": "object"
+      },
+      "ApiResponse_AiProviderStatus_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiProviderStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[AiProviderStatus]",
         "type": "object"
       },
       "ApiResponse_AiTaskDeleteResult_": {
@@ -12262,6 +12652,54 @@
           }
         },
         "title": "ApiResponse[list[AdminSetting]]",
+        "type": "object"
+      },
+      "ApiResponse_list_AiModel__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AiModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[list[AiModel]]",
         "type": "object"
       },
       "ApiResponse_list_AiTask__": {
@@ -75800,7 +76238,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc7"
+    "version": "0.2.0rc8"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -76608,6 +77046,124 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/ai/provider": {
+      "get": {
+        "description": "Ai provider status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "ai_provider_status_api_v1_ai_provider_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiProviderStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ai Provider Status",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "put": {
+        "description": "Save ai provider. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "save_ai_provider_api_v1_ai_provider_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiProviderWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiProviderStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Ai Provider",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/provider/models": {
+      "post": {
+        "description": "Ai provider models. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "ai_provider_models_api_v1_ai_provider_models_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_AiModel__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ai Provider Models",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/provider/test": {
+      "post": {
+        "description": "Test ai provider. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "test_ai_provider_api_v1_ai_provider_test_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiProbeResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Test Ai Provider",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/ai/tasks": {
       "get": {
         "description": "List ai tasks. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -76718,6 +77274,62 @@
           "AI"
         ],
         "x-data-effect": "delete",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/tasks/{task_id}/execute": {
+      "post": {
+        "description": "Execute ai task. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "execute_ai_task_api_v1_ai_tasks__task_id__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiTaskExecute"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiTask_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Ai Task",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

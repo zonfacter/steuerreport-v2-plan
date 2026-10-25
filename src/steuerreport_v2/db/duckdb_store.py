@@ -900,6 +900,42 @@ class DuckDbStore:
             updated_at=created_at,
         )
 
+    def write_admin_settings_batch(self, settings: list[AdminSettingWrite], delete_keys: list[str]) -> None:
+        with self.connect() as con:
+            con.execute("begin transaction")
+            try:
+                for key in delete_keys:
+                    con.execute("delete from admin_settings where key = ?", [key])
+                for item in settings:
+                    con.execute(
+                        "insert into admin_settings (key, value_json, updated_at) values (?, ?, ?) "
+                        "on conflict (key) do update set value_json = excluded.value_json, updated_at = excluded.updated_at",
+                        [item.key, item.value_json, datetime.now(timezone.utc)],
+                    )
+                con.execute("commit")
+            except Exception:
+                con.execute("rollback")
+                raise
+
+    def get_ai_task(self, task_id: str) -> AiTask | None:
+        return next((item for item in self.list_ai_tasks() if item.task_id == task_id), None)
+
+    def claim_ai_task(self, task_id: str) -> bool:
+        with self.connect() as con:
+            return con.execute(
+                "update ai_tasks set status = 'running', updated_at = ? "
+                "where task_id = ? and status = 'queued' returning task_id",
+                [datetime.now(timezone.utc), task_id],
+            ).fetchone() is not None
+
+    def finish_ai_task(self, task_id: str, *, status: AiTaskStatus, result_json: str) -> None:
+        with self.connect() as con:
+            con.execute(
+                "update ai_tasks set status = ?, result_json = ?, updated_at = ? "
+                "where task_id = ? and status = 'running'",
+                [status, result_json, datetime.now(timezone.utc), task_id],
+            )
+
     def list_ai_tasks(self) -> list[AiTask]:
         with self.connect() as con:
             rows = con.execute(

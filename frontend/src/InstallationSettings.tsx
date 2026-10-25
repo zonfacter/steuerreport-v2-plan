@@ -70,7 +70,7 @@ export function InstallationSettings() {
   }, [filename]);
 
   const dirty = settings?.fields.some((field) => field.editable && values[field.key] !== field.value) ?? false;
-  const visibleFields = settings?.fields.filter((field) => !["v1_fx_db_file", "v1_connector_base_url"].includes(field.key)) ?? [];
+  const visibleFields = settings?.fields.filter((field) => !["v1_fx_db_file", "v1_connector_base_url", "local_llm_base", "local_llm_model"].includes(field.key)) ?? [];
   const groups = [...new Set(visibleFields.map((field) => field.group))];
   return (
     <section className="installationSettings" aria-label="Installation und Konten">

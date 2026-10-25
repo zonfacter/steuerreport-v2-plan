@@ -3141,3 +3141,53 @@ ausschliesslich den dynamischen, am Dokumentende stehenden Footer
 anderen sichtbaren Inhalte bleiben Bestandteil des SHA-256-Fingerprints. So
 loest ein taeglich geaendertes Druckdatum keinen falschen Rechtsquellenalarm
 aus; jede fachliche Textaenderung bleibt fail-closed reviewpflichtig.
+
+## KI-Provider Und Explizite Textaufgaben
+
+`GET /api/v1/ai/provider` liest Konfiguration, Revisionshash, Aktivierungen
+und Key-Metadaten ohne Netzwerkabfrage oder Secret-Werte. Frische Installationen
+haben keine Adresse, Modell-ID oder Keys und erlauben keine Cloud-Zugriffe.
+Ein bisheriges lokales Installationsprofil wird nur als kompatibler Startwert
+gelesen; gespeicherte neue Provider-Einstellungen haben Vorrang.
+
+`PUT /api/v1/ai/provider` speichert `provider` (`local`, `openrouter`, `cloud`),
+`base_url`, `model`, Token-/Zeitlimit, optionale lokale Thinking-Steuerung,
+`local_enabled`, `external_enabled` und die erwartete `revision` atomar.
+`api_key=null` behaelt den vorhandenen Key, ein neuer Wert ersetzt ihn;
+`clear_api_key=true` entfernt ihn. Key-Werte werden nur mit verfuegbarem Vault
+verschluesselt gespeichert und an Anbieter plus Adresse gebunden. Bei einem
+Adresswechsel ist Ersetzen oder explizites Entfernen erforderlich. Cloud
+erfordert HTTPS; fuer `openrouter` gilt `https://openrouter.ai/api/v1`.
+
+`POST /api/v1/ai/provider/models` fragt ausdruecklich die Modellliste ab;
+`POST /api/v1/ai/provider/test` sendet ausschliesslich einen neutralen Testtext
+mit standardmaessig 128 Antworttoken. `probe_max_tokens` ist fuer Modelle mit
+groesserem Reasoning-Bedarf bis 2048 konfigurierbar, begrenzt durch `max_tokens`.
+Beide verwenden die gespeicherte Verbindung,
+Cloud nur nach globaler Aktivierung und mit Key. Tests koennen kostenpflichtig
+sein. Es gibt keine automatischen Abrufe beim Lesen/Speichern, keine Redirects,
+keine Wiederholungen und keinen stillen Modellwechsel. Anbieterfehler werden
+als feste Fehlercodes ohne Originalbody, Key oder Anfrageinhalt ausgegeben.
+
+`POST /api/v1/ai/tasks` legt weiterhin Aufgaben an; die Ausfuehrung startet erst
+ueber `POST /api/v1/ai/tasks/{task_id}/execute`. Fuer Cloud muessen die Aufgabe
+`allow_external=true` und der Ausfuehrungsaufruf `confirm_external=true` enthalten.
+Die Oberflaeche sendet ausserdem `provider_revision`; bei zwischenzeitlich
+geaenderter Konfiguration wird die Ausfuehrung vor der Uebermittlung blockiert.
+Jede Ausfuehrung bindet ihren Provider-Snapshot an dessen Revision.
+
+Statusfolge: `queued` -> `running` -> `done` oder `failed`. Ein atomarer Claim
+verhindert parallele Doppelaufrufe derselben Aufgabe. `done` liefert bei
+erneutem Ausfuehrungsaufruf das gespeicherte Ergebnis; Fehler werden nicht
+automatisch wiederholt. Nach einem Prozessabbruch ist `running` kein Nachweis
+einer abgeschlossenen oder nicht abgerechneten Anfrage. Vor einer neuen Aufgabe
+muessen Verlauf und Anbieterstatus geprueft werden.
+
+Der Modellkontext besteht nur aus der festen Systemanweisung und maximal
+32000 Zeichen eingegebenem Text. Es gibt keine SQL-/Datei-/Korrekturwerkzeuge,
+keinen automatischen Datenexport und keine Fachbuchungen aus Modellantworten.
+`result_json` enthaelt sichtbare Antwort, Provider, angeforderte/gemeldete
+Modell-ID, Revisionshash, begrenzte Nutzungsmetadaten und `review_only=true`.
+Reasoning-only-Antworten gelten als fehlgeschlagen. Validierungsantworten der
+KI-Endpunkte spiegeln keine Eingabewerte zurueck. Die bestehende Verantwortung
+des Betreibers fuer Zugriffsschutz und Transportabsicherung bleibt bestehen.

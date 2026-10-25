@@ -19,6 +19,7 @@ from steuerreport_v2.contracts.ai import (
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.admin import AdminService
+from steuerreport_v2.domain.ai_provider import AiProviderError
 
 
 class AiService:
@@ -71,7 +72,11 @@ class AiService:
         return self.store.list_ai_tasks()
 
     def delete_task(self, task_id: str) -> bool:
-        return self.store.delete_ai_task(task_id)
+        with self.store.exclusive_access():
+            task = self.store.get_ai_task(task_id)
+            if task is not None and task.status == "running":
+                raise AiProviderError("ai_task_running")
+            return self.store.delete_ai_task(task_id)
 
     def local_year_package_qa_status(self) -> LocalAiYearPackageQaStatus:
         runs = sorted(self.YEAR_PACKAGE_QA_ROOT.glob("run_*"), reverse=True)

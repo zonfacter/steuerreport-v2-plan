@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { InstallationSettings } from "./InstallationSettings";
 import { FileImportWizard } from "./FileImportWizard";
+import { AiWorkspace } from "./AiWorkspace";
 import {
   AlertTriangle,
   Archive,
@@ -3104,7 +3105,7 @@ const navItems: Array<{
   { id: "portfolio", label: "Portfolio & Haltefristen", description: "Bestand, Preisdeckung und steuerfreie Positionen", group: "evidence", icon: <WalletCards size={18} /> },
   { id: "stichtage", label: "Stichtagswerte", description: "Historische Bestands- und Wertansicht", group: "evidence", icon: <CalendarDays size={18} /> },
   { id: "zugewinn", label: "Zugewinndossier", description: "Stichtagswerte, Erbgeld und familienrechtliche Belege", group: "evidence", icon: <Scale size={18} /> },
-  { id: "ai", label: "Lokale KI", description: "Jahrespaket-QA und KI-Aufgaben", group: "expert", icon: <Bot size={18} /> }
+  { id: "ai", label: "KI-Assistent", description: "Modelle, Verbindung und Review-Aufgaben", group: "workflow", icon: <Bot size={18} /> }
 ];
 
 const API_BASE = import.meta.env.VITE_API_BASE || window.location.origin;
@@ -6438,6 +6439,7 @@ function Content({
     return (
       <Stack>
         <InstallationSettings />
+        <AiWorkspace configurationOnly />
         <ToolSafetyPanel
           title="Administration"
           tone="warning"
@@ -6499,27 +6501,8 @@ function Content({
   }
   return (
     <Stack>
-      <ToolSafetyPanel
-        title="Lokale KI"
-        tone="ok"
-        mode="Read-only QA und Task-Verwaltung"
-        detail="Der Jahrespaket-QA-Status liest vorhandene lokale KI-Artefakte. Neue KI-Aufgaben werden erst ueber das Formular angelegt; externe KI bleibt separat markiert."
-        nextAction="QA-Ergebnis als Hinweis nutzen, steuerliche Freigabe bleibt Review/BMF/Export-Gate."
-      />
-      <LocalAiYearPackageQaPanel report={snapshot.localAiYearPackageQa} onDownload={onDownload} />
-      <AiTaskForm onCreateAiTask={onCreateAiTask} />
-      <TablePanel
-        title="KI-Aufgaben"
-        rows={snapshot.ai ?? []}
-        rowActions={[
-          {
-            label: "KI-Aufgabe entfernen",
-            icon: <Trash2 size={16} />,
-            tone: "danger",
-            onClick: (row) => onDeleteAiTask(String(row.task_id ?? ""))
-          }
-        ]}
-      />
+      <AiWorkspace />
+      {snapshot.localAiYearPackageQa?.status !== "missing" && snapshot.localAiYearPackageQa?.summary_md && <details><summary>Archivierte Jahrespaket-QA</summary><LocalAiYearPackageQaPanel report={snapshot.localAiYearPackageQa} onDownload={onDownload} /></details>}
     </Stack>
   );
 }
