@@ -40,6 +40,8 @@ jobs:
         run: python scripts/export_openapi_v2.py --check
       - name: Endpoint reference drift
         run: python scripts/generate_api_endpoint_reference_v2.py --check
+      - name: Import documentation and empty templates drift
+        run: python scripts/generate_import_format_docs_v2.py --check
 
   frontend:
     runs-on: ubuntu-latest

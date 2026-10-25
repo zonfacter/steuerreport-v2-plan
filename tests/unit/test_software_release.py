@@ -21,6 +21,8 @@ def test_release_excludes_case_work_runtime_and_originals():
         "data/steuerreport.duckdb", "frontend/node_modules/a.js",
         "frontend/dist/index.html", ".env", "src/steuerreport_v2.egg-info/PKG-INFO",
         "tests/evidence.pdf", "tests/export.csv", "../secret.py",
+        "frontend/public/import-vorlagen/private.csv",
+        "frontend/public/import-vorlagen/private.xlsx",
         "configs/source_registry.json", "configs/solana_v1_ownership_scope.json",
     ):
         assert not builder.software_path(name), name
@@ -32,6 +34,9 @@ def test_release_excludes_case_work_runtime_and_originals():
         "configs/source_registry.example.json",
         "configs/binance_small_assets_price_evidence_20260710.json",
         "frontend/public/benutzerleitfaden.pdf", "frontend/public/import-vorlage.csv",
+        "frontend/public/importformate.pdf", "docs/IMPORTFORMATE.md",
+        "frontend/public/import-vorlagen/import-vorlagen.xlsx",
+        "frontend/public/import-vorlagen/bitget.csv",
     ):
         assert builder.software_path(name), name
 

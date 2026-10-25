@@ -116,6 +116,15 @@ assert urllib.request.urlopen("http://127.0.0.1:8010/").status == 200
 assert urllib.request.urlopen("http://127.0.0.1:8010/benutzerleitfaden.html").status == 200
 assert urllib.request.urlopen("http://127.0.0.1:8010/benutzerleitfaden.pdf").read(5) == b"%PDF-"
 assert urllib.request.urlopen("http://127.0.0.1:8010/import-vorlage.csv").read().count(b"\\n") == 1
+assert urllib.request.urlopen("http://127.0.0.1:8010/importformate.html").status == 200
+assert urllib.request.urlopen("http://127.0.0.1:8010/importformate.pdf").read(5) == b"%PDF-"
+from io import BytesIO
+from openpyxl import load_workbook
+book=load_workbook(BytesIO(urllib.request.urlopen("http://127.0.0.1:8010/import-vorlagen/import-vorlagen.xlsx").read()))
+assert book.sheetnames == ["manual-csv","binance","bitget","pionex","coinbase","helium","solana_rpc"]
+for source in book.sheetnames:
+    assert book[source].max_row == 1
+    assert urllib.request.urlopen("http://127.0.0.1:8010/import-vorlagen/"+source+".csv").read().count(b"\\n") == 1
 assert not any(json.loads(Path("/state/private_profile.json").read_text()).values())
 key=Path("/state/keys/vault.key")
 assert key.stat().st_size == 32 and stat.S_IMODE(key.stat().st_mode) == 0o600

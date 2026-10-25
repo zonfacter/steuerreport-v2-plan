@@ -128,7 +128,9 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
   return <section className="fileImportWizard" aria-label="Dateiimport">
     <div className="panelToolbar"><h2>Dateien importieren</h2><div className="buttonRow">
       <a href="/benutzerleitfaden.html#import" target="_blank" rel="noreferrer" className="ghostButton"><FileDown size={16} /> Leitfaden</a>
-      <a href="/import-vorlage.csv" download className="ghostButton"><Download size={16} /> CSV-Vorlage</a>
+      <a href={`/importformate.html${source ? `#${source}` : ""}`} target="_blank" rel="noreferrer" className="ghostButton"><FileDown size={16} /> Formate &amp; Spalten</a>
+      <a href={source ? `/import-vorlagen/${source}.csv` : "/import-vorlage.csv"} download className="ghostButton"><Download size={16} /> CSV-Vorlage</a>
+      <a href="/import-vorlagen/import-vorlagen.xlsx" download className="ghostButton"><Download size={16} /> Excel-Vorlagen</a>
     </div></div>
     <ol className="importStages" aria-label="Importfortschritt">{["Dateien", "Pruefung", "Freigabe", "Ergebnis"].map((label, index) => <li key={label} aria-current={stage === index + 1 ? "step" : undefined} className={stage > index + 1 ? "complete" : ""}><span>{stage > index + 1 ? <Check size={15} /> : index + 1}</span>{label}</li>)}</ol>
     {error && <p role="alert" className="error">{error}</p>}

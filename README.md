@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc5. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc6. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc5
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc6
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -97,6 +97,17 @@ mit Quelle, Blattwahl, Vorschau, Originaldatei-Hash und Dublettenpruefung
 bearbeitet werden. Erst eine ausdrueckliche Freigabe schreibt die Daten und
 startet die vorhandene Pipeline. Der Importverlauf und JSON-Belegspuren
 stehen ohne Expertenmodus bereit. Die CSV-Vorlage enthaelt nur Kopfzeilen.
+
+Unterstuetzte Dateitypen: **CSV (UTF-8, Komma/Semikolon), XLSX und XLS**.
+Ein erkanntes tabellarisches Layout ist erforderlich. Die
+[Importformat-Referenz](docs/IMPORTFORMATE.md) nennt fuer jede angebotene Quelle
+die Pflichtfelder, echten Spalten-Aliase, Beispiele und Zeit-/Zahlenregeln.
+Sie ist im Importdialog als `Formate & Spalten` und separat als
+[HTML](frontend/public/importformate.html) / [PDF](frontend/public/importformate.pdf)
+verlinkt. Dort stehen sieben leere CSV-Vorlagen und eine
+[Excel-Arbeitsmappe mit sieben Vorlagenblaettern](frontend/public/import-vorlagen/import-vorlagen.xlsx)
+bereit. Importierbar bedeutet nicht steuerlich vollstaendig; insbesondere
+sind beliebige Solscan-Exporte oder rohe RPC-JSON-Dateien nicht pauschal abgedeckt.
 
 Technische Versionsvergleiche und Legacy-Cache-Aktionen sind keine
 Benutzernavigation mehr. Bestehende Referenzdaten und fachliche Exportgates

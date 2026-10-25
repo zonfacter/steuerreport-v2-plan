@@ -1,0 +1,158 @@
+<!doctype html><html lang='de'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Steuerreport - Importformate und Spaltenlayouts</title><style>
+*{box-sizing:border-box}body{margin:0;background:#fff;color:#19241e;font:16px/1.6 Arial,sans-serif;letter-spacing:0}main{max-width:960px;margin:auto;padding:28px 24px 60px}h1{font-size:30px;line-height:1.2}h2{font-size:23px;margin-top:36px;border-top:1px solid #cdd8d1;padding-top:18px}a{color:#176348}nav ul{display:flex;flex-wrap:wrap;gap:12px 24px;padding:0;list-style:none}table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:14px}td,th{vertical-align:top;text-align:left;border-bottom:1px solid #cdd8d1;padding:9px;overflow-wrap:anywhere}th:first-child{width:31%}code,pre{font:13px/1.6 monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;background:#f1f5f2;padding:12px}li{margin-bottom:12px}h2,h3{break-after:avoid}tr,pre{break-inside:avoid}@page{size:A4;margin:16mm}@media(max-width:600px){main{padding:20px 14px}h1{font-size:25px}table{font-size:12px}td,th{padding:6px}}@media print{body{font-size:10pt}main{padding:0}h1{font-size:22pt}h2{font-size:15pt}table{font-size:8.5pt}pre{font-size:8pt}.downloads{display:none}a{color:inherit;text-decoration:none}}
+</style></head><body><main><header><p>Steuerreport / Version 0.2.0rc6</p><h1>Importformate und Spaltenlayouts</h1>
+<p>Verbindliche technische Referenz der im normalen Dateiimport angebotenen Profile. Keine Zusage fuer beliebige Exporte eines Anbieters.</p>
+<p class='downloads'><a href='/benutzerleitfaden.html#formate'>Benutzerleitfaden</a> | <a href='/importformate.pdf' download>Formatreferenz als PDF</a> | <a href='/import-vorlagen/import-vorlagen.xlsx' download>Leere Excel-Vorlagen (7 Blaetter)</a></p></header><nav aria-label='Importprofile'><ul>
+<li><a href='#manual-csv'>Manuelles CSV</a></li>
+<li><a href='#binance'>Binance CSV</a></li>
+<li><a href='#bitget'>Bitget CSV</a></li>
+<li><a href='#pionex'>Pionex CSV</a></li>
+<li><a href='#coinbase'>Coinbase Transaction History CSV</a></li>
+<li><a href='#helium'>Helium Legacy/Fairspot</a></li>
+<li><a href='#solana_rpc'>Solana RPC Primaerdaten</a></li>
+</ul></nav><h2>Allgemeine Regeln</h2><ol>
+<li>Unterstuetzte Dateitypen: .csv, .xlsx und .xls. CSV: UTF-8 mit oder ohne BOM, Komma oder Semikolon als Trennzeichen. Bei Komma als Trennzeichen muessen Felder mit Kommas in doppelte Anfuehrungszeichen eingeschlossen sein. Keine PDF-, ZIP-, JSON-, ODS-, Bild- oder Wallet-Backup-Dateien; Umbenennen aendert das Format nicht.</li>
+<li>Tabellenlayout: eine eindeutige Kopfzeile, darunter je Rohposition eine Datenzeile. Spaltenreihenfolge frei; keine verbundenen Zellen, Summenzeilen oder mehreren Tabellen nebeneinander. Zusaetzliche Spalten bleiben Rohdaten, werden aber nicht automatisch fachlich ausgewertet. Excel: richtiges Blatt waehlen; CSV: kein Tabellenblatt. Vorlagenblattnamen sind identisch mit der auszuwaehlenden Quelle. In Excel Datumswerte vorzugsweise als ISO-Text speichern, keine Formeln als einzige Datenquelle oder Passwortverschluesselung verwenden.</li>
+<li>Technisches Minimum je Profil: gueltiger Zeitpunkt, Asset (oder unterstuetztes Paar-/Speziallayout) und gueltige Menge. Eine vorhandene Spalte mit leeren oder unlesbaren Werten reicht nicht. type ist nicht fuer die Spaltenerkennung verpflichtend, aber fuer eine belastbare Zuordnung wesentlich. Ein importierbarer Spaltenkopf beweist weder vollstaendige Einzelzeilen noch vollstaendige Steuerdaten.</li>
+<li>Spaltennamen: Gross-/Kleinschreibung wird ignoriert, Unterstriche werden zu Leerzeichen, fuehrende/nachfolgende und wiederholte Leerzeichen normalisiert. Andere Satzzeichen und Klammern sind nicht frei austauschbar. Die Tabellen zeigen echte Profil-Aliase in Suchreihenfolge, nicht zusaetzliche Pflichtspalten. In der Regel genuegt ein Alias je Feld. Konkurrierende Alias-Spalten vermeiden; quellenspezifische Sonderregeln koennen Vorrang haben.</li>
+<li>Zeitpunkt: empfohlen 2025-01-15T10:00:00Z oder 2025-01-15T11:00:00+01:00. Beide Beispiele meinen denselben Zeitpunkt. Weitere erkannte Formen sind YYYY-MM-DD HH:MM:SS, YYYY/MM/DD HH:MM:SS, DD.MM.YYYY HH:MM:SS und DD.MM.YYYY HH:MM. Ohne Offset gilt normalerweise UTC; Bitget verwendet UTC+8. Erkannte UTC+/-Angaben in Spaltennamen, bei Binance auch im Dateinamen, koennen die Standardzeitzone vorgeben. Bewahren Sie diese Angaben im Original auf. Unix-Sekunden/-Millisekunden nicht als allgemein unterstuetzt voraussetzen. Ein Datum ohne Uhrzeit ersetzt keine genaue Ausfuehrungszeit.</li>
+<li>Zahlen: vorzugsweise Dezimalpunkt ohne Tausendertrennzeichen, z. B. 0.001 oder -25.50; Dezimalkomma nur mit korrekt getrennten/quotierten Feldern. Keine Waehrungszeichen oder Textzusatz in eigenen Mengenfeldern. Mengen, Handelsgegenwert und Preis je Token sind verschiedene Groessen. Vorzeichen aus dem Beleg erhalten; type kann die Richtung zusaetzlich bestimmen. Ein positiver Zufluss ist nicht automatisch Einkommen, Handelsvolumen keine EUR-Auszahlung.</li>
+<li>Fuer eine vollstaendige Auswertung: Konto/Wallet, Original-ID, Ereignisart, beide Handelsseiten, Gebuehren und benoetigte historische Preise/Anschaffungen belegen. Fehlende Anschaffungswerte oder Preise nicht erfinden und nicht beliebig in quote_quantity eintragen. Die Technik kann ohne diese Angaben Zeilen lesen, waehrend die steuerliche Auswertung offen bleibt. Getrennte Exporte von Trades, Transfers, Rewards und Derivaten gemeinsam auf Vollstaendigkeit und Ueberschneidungen pruefen.</li>
+<li>Grenzen: maximal 20 Dateien, je 25 MiB und zusammen 100 MiB im normalen Importdialog. Erst Vorschau pruefen, dann ausdruecklich freigeben; danach Ereignisse, nicht zugeordnete Zeilen und Review-Hinweise kontrollieren. Eine reine Kopfzeile ist absichtlich nicht importierbar. Die Downloads enthalten keine Beispieltransaktionen, Konten oder Geheimnisse.</li>
+<li>Originale niemals fuer eine Layoutanpassung ueberschreiben. Eine normalisierte Kopie mit Bezug auf Originaldatei und Hash getrennt sichern. Kein anderes Profil waehlen, um eine Pruefung zu umgehen. Blockpit und andere Sammelplattformen sind hier keine weitere primaere Handelshistorie; nicht als zweite Buchung derselben Transaktionen einschleusen. Identische Dateihashes verhindern nicht jede Doppelbuchung aus ueberlappenden Exporten.</li>
+</ol>
+<section id='manual-csv'><h2>Manuelles CSV <code>manual-csv</code></h2>
+<p>Eigene belegte Tabellen. buy/sell/trade/convert werden als Handel, deposit/withdrawal/transfer als Transfer, reward/mining/staking als entsprechende Ereignisart erkannt. type ist technisch nicht Pflicht, ohne erkennbaren Typ kann aber unknown entstehen. Bei Verkaeufen negative Asset-Menge oder sell; Auszahlungen negativ oder withdrawal. Gegenmenge und Gebuehr als positive Betraege mit eigenem Asset angeben. Betrag ist eine Tokenmenge, nicht automatisch ein EUR-Wert.</p><p class='downloads'><a href='/import-vorlagen/manual-csv.csv' download>Leere CSV-Vorlage fuer Manuelles CSV</a></p>
+<h3>Konkretes Layout und fiktives Beispiel</h3><p>Nur Erlaeuterung, keine echten Transaktionen. Die herunterladbare Vorlage enthaelt ausschliesslich die erste Zeile.</p>
+<pre>time,asset,amount,type,quote_asset,quote_quantity,fee_asset,fee_quantity,account,tx_id
+2025-01-15T10:00:00Z,BTC,0.001,buy,EUR,70,EUR,0.10,beispiel-konto,beispiel-manuell
+</pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>time</code> / <code>date</code> / <code>datetime</code> / <code>timestamp</code> / <code>utc time</code> / <code>utc_time</code></td></tr>
+<tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>asset</code> / <code>coin</code> / <code>currency</code> / <code>token</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>amount</code> / <code>quantity</code> / <code>qty</code> / <code>change</code> / <code>delta</code></td></tr>
+<tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>type</code> / <code>operation</code> / <code>side</code> / <code>category</code></td></tr>
+<tr><td>Handelspaar: optionaler Asset-Ersatz</td><td><code>pair</code> / <code>symbol</code> / <code>market</code> / <code>trading pair</code> / <code>coin pair</code></td></tr>
+<tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_asset</code> / <code>quote asset</code> / <code>quote</code> / <code>counter asset</code></td></tr>
+<tr><td>Gegenmenge: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_quantity</code> / <code>quote amount</code> / <code>quote_amount</code> / <code>total</code> / <code>value</code></td></tr>
+<tr><td>Gebuehrenasset: sofern eine Gebuehr anfaellt</td><td><code>fee_asset</code> / <code>fee asset</code> / <code>fee coin</code></td></tr>
+<tr><td>Gebuehrenmenge: sofern eine Gebuehr anfaellt</td><td><code>fee_quantity</code> / <code>fee amount</code> / <code>fee_amount</code> / <code>fee</code></td></tr>
+<tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td><code>account</code> / <code>exchange</code> / <code>wallet</code></td></tr>
+<tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td><code>txid</code> / <code>tx_id</code> / <code>hash</code> / <code>transaction hash</code></td></tr>
+<tr><td>Quellreferenz: optional, z. B. Order-ID</td><td><code>id</code> / <code>orderid</code> / <code>order id</code> / <code>txid</code> / <code>tx_id</code> / <code>hash</code></td></tr>
+</tbody></table></section>
+<section id='binance'><h2>Binance CSV <code>binance</code></h2>
+<p>Transaktionshistorie mit Operation/Coin/Change. Change ist die vorzeichenbehaftete Bestandsaenderung, nicht der Geldwert. Einen Mehrzeilen-Trade nicht zu einer zusaetzlichen erfundenen Kaufzeile verdoppeln. Handelsgegenwerte und Gebuehren nur aus belegten Zeilen oder den unten genannten Zusatzfeldern uebernehmen. Das Beispiel ist ein Transfer, kein Einkommen. Nicht jeder Binance-Bericht besitzt dieses Layout.</p><p class='downloads'><a href='/import-vorlagen/binance.csv' download>Leere CSV-Vorlage fuer Binance CSV</a></p>
+<h3>Konkretes Layout und fiktives Beispiel</h3><p>Nur Erlaeuterung, keine echten Transaktionen. Die herunterladbare Vorlage enthaelt ausschliesslich die erste Zeile.</p>
+<pre>UTC_Time,Account,Operation,Coin,Change,Remark,tx_id
+2025-01-15T10:00:00Z,Spot,Deposit,EUR,100,Rein fiktives Beispiel,beispiel-binance
+</pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>utc time</code> / <code>utc_time</code> / <code>time</code> / <code>date</code> / <code>date(UTC)</code> / <code>date(UTC+2)</code> / <code>timestamp</code></td></tr>
+<tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>coin</code> / <code>asset</code> / <code>currency</code> / <code>receive amount</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>change</code> / <code>amount</code> / <code>quantity</code> / <code>qty</code> / <code>receive amount</code></td></tr>
+<tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>operation</code> / <code>type</code> / <code>side</code> / <code>category</code> / <code>status</code></td></tr>
+<tr><td>Handelspaar: optionaler Asset-Ersatz</td><td><code>pair</code> / <code>symbol</code> / <code>market</code> / <code>trading pair</code> / <code>coin pair</code></td></tr>
+<tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_asset</code> / <code>quote asset</code> / <code>quote coin</code></td></tr>
+<tr><td>Gegenmenge: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_quantity</code> / <code>quote amount</code> / <code>total</code> / <code>value</code> / <code>spend amount</code> / <code>indicated amount</code></td></tr>
+<tr><td>Gebuehrenasset: sofern eine Gebuehr anfaellt</td><td><code>fee_asset</code> / <code>fee asset</code> / <code>fee coin</code></td></tr>
+<tr><td>Gebuehrenmenge: sofern eine Gebuehr anfaellt</td><td><code>fee_quantity</code> / <code>fee amount</code> / <code>fee</code></td></tr>
+<tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td><code>account</code> / <code>wallet</code></td></tr>
+<tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td><code>txid</code> / <code>tx_id</code> / <code>transaction id</code> / <code>hash</code></td></tr>
+<tr><td>Quellreferenz: optional, z. B. Order-ID</td><td><code>id</code> / <code>order id</code> / <code>transaction id</code> / <code>txid</code> / <code>tx_id</code></td></tr>
+</tbody></table></section>
+<section id='bitget'><h2>Bitget CSV <code>bitget</code></h2>
+<p>Beispiel fuer Ein-/Auszahlungshistorie. Handelslisten koennen stattdessen Trading pair und Executed sowie Action und Transacted amount verwenden. Fuer einen Trade wird ein belegter Gegenwert benoetigt, nicht ein beliebiger USD-Schaetzwert. Spot-Finanzhistorie, Orders und Derivate nicht als identische Vorgangsarten behandeln. Ohne explizite Zeitzone nimmt dieses Profil UTC+8 an, auch bei einer Spalte Time. ISO-Zeitstempel mit Z oder Offset haben Vorrang; im Beispiel ist 18:00 UTC+8 gleich 10:00 UTC.</p><p class='downloads'><a href='/import-vorlagen/bitget.csv' download>Leere CSV-Vorlage fuer Bitget CSV</a></p>
+<h3>Konkretes Layout und fiktives Beispiel</h3><p>Nur Erlaeuterung, keine echten Transaktionen. Die herunterladbare Vorlage enthaelt ausschliesslich die erste Zeile.</p>
+<pre>Timestamp UTC+8 (Completion),Coin,Quantity,Type,Transaction hash(txid),Account
+2025-01-15 18:00:00,USDT,100,Deposit,beispiel-bitget,beispiel-konto
+</pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>time</code> / <code>timestamp utc+8 (completion)</code> / <code>timestamp utc+8 (created)</code> / <code>timestamp utc+8 (order)</code> / <code>creation timestamp (+8 utc)</code> / <code>timestamp utc+8 (submission)</code> / <code>ctime</code> / <code>utime</code></td></tr>
+<tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>asset</code> / <code>coin</code> / <code>currency</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>amount</code> / <code>quantity</code> / <code>executed</code> / <code>surplus/deduction (after fee)</code> / <code>size</code></td></tr>
+<tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>type</code> / <code>action</code> / <code>action (english)</code> / <code>status</code> / <code>sub category</code></td></tr>
+<tr><td>Handelspaar: optionaler Asset-Ersatz</td><td><code>trading pair</code></td></tr>
+<tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_asset</code> / <code>quote asset</code> / <code>fee deducted in</code></td></tr>
+<tr><td>Gegenmenge: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_quantity</code> / <code>amount in usdt</code> / <code>amount (usdt)</code> / <code>transacted amount</code> / <code>executed amount (usdt)</code></td></tr>
+<tr><td>Gebuehrenasset: sofern eine Gebuehr anfaellt</td><td><code>fee_asset</code> / <code>fee asset</code> / <code>fee deducted in</code></td></tr>
+<tr><td>Gebuehrenmenge: sofern eine Gebuehr anfaellt</td><td><code>fee_quantity</code> / <code>fee</code> / <code>fee (coin quantity)</code> / <code>withdrawal fee</code></td></tr>
+<tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td><code>account</code></td></tr>
+<tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td><code>transaction hash(txid)</code> / <code>txid</code> / <code>tx_id</code> / <code>order no.</code> / <code>order number</code> / <code>id</code></td></tr>
+<tr><td>Quellreferenz: optional, z. B. Order-ID</td><td><code>source_ref</code> / <code>order no.</code> / <code>order number</code> / <code>id</code> / <code>transaction hash(txid)</code></td></tr>
+</tbody></table></section>
+<section id='pionex'><h2>Pionex CSV <code>pionex</code></h2>
+<p>Unterstuetzt sind allgemeine Mengenzeilen und spezifische Paar-/Tauschlayouts: Received Currency + Received Quantity mit Sent Currency + Sent Quantity oder Buy Currency + Buy Amount mit Sell Currency + Sell Amount. Ein weiteres Transferlayout nutzt Amount_USDT + Direction; Direction ist kein Nachweis eines Trades. Stornierte Orders ohne Ausfuehrung erzeugen keine Ausfuehrung. Bot-Orders und deren bereits exportierte Einzeltrades nicht doppelt erfassen.</p><p class='downloads'><a href='/import-vorlagen/pionex.csv' download>Leere CSV-Vorlage fuer Pionex CSV</a></p>
+<h3>Konkretes Layout und fiktives Beispiel</h3><p>Nur Erlaeuterung, keine echten Transaktionen. Die herunterladbare Vorlage enthaelt ausschliesslich die erste Zeile.</p>
+<pre>time,coin,change,type,quote_asset,quote_quantity,fee_asset,fee_quantity,account,tx_id
+2025-01-15T10:00:00Z,USDT,100,deposit,,,,,beispiel-konto,beispiel-pionex
+</pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>time</code> / <code>date</code> / <code>date(UTC+0)</code> / <code>created time</code> / <code>created_at</code> / <code>timestamp</code> / <code>timestamp_utc</code></td></tr>
+<tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>asset</code> / <code>coin</code> / <code>currency</code> / <code>base coin</code> / <code>received currency</code> / <code>buy currency</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>amount</code> / <code>quantity</code> / <code>qty</code> / <code>change</code> / <code>filled amount</code> / <code>executed_qty</code> / <code>received quantity</code> / <code>buy amount</code> / <code>amount_usdt</code></td></tr>
+<tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>type</code> / <code>operation</code> / <code>side</code> / <code>action</code> / <code>tx_type</code> / <code>tag</code> / <code>direction</code></td></tr>
+<tr><td>Handelspaar: optionaler Asset-Ersatz</td><td><code>pair</code> / <code>symbol</code> / <code>market</code> / <code>trading pair</code> / <code>coin pair</code></td></tr>
+<tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_asset</code> / <code>quote asset</code> / <code>quote coin</code> / <code>quote</code> / <code>sent currency</code> / <code>sell currency</code></td></tr>
+<tr><td>Gegenmenge: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_quantity</code> / <code>quote amount</code> / <code>total</code> / <code>value</code> / <code>deal amount</code> / <code>filled total</code> / <code>filled value</code> / <code>sent quantity</code> / <code>sell amount</code></td></tr>
+<tr><td>Gebuehrenasset: sofern eine Gebuehr anfaellt</td><td><code>fee_asset</code> / <code>fee asset</code> / <code>fee coin</code> / <code>fee currency</code></td></tr>
+<tr><td>Gebuehrenmenge: sofern eine Gebuehr anfaellt</td><td><code>fee_quantity</code> / <code>fee amount</code> / <code>fee</code></td></tr>
+<tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td><code>account</code> / <code>exchange</code> / <code>wallet</code> / <code>to_address</code> / <code>from_address</code></td></tr>
+<tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td><code>txid</code> / <code>tx_id</code> / <code>tx-id</code> / <code>hash</code> / <code>transaction id</code> / <code>order id</code> / <code>tax_id</code></td></tr>
+<tr><td>Quellreferenz: optional, z. B. Order-ID</td><td><code>id</code> / <code>order id</code> / <code>transaction id</code> / <code>txid</code> / <code>tx_id</code> / <code>tx-id</code> / <code>tax_id</code></td></tr>
+</tbody></table></section>
+<section id='coinbase'><h2>Coinbase Transaction History CSV <code>coinbase</code></h2>
+<p>Transaction Type mit Buy/Sell/Convert kennzeichnet Handel, Send/Receive einen Transfer. Subtotal ist der Handelsgegenwert; ein Spot-Preis je Token ist nicht dasselbe. Spot Price Currency bezeichnet hier die Waehrung von Subtotal und Fees and/or Spread, nicht das gehandelte Asset. Die Gegenmenge nicht erneut mit der Tokenmenge multiplizieren. Das Profil besitzt keine allgemeine Handelspaar-Spalte als Ersatz fuer Asset.</p><p class='downloads'><a href='/import-vorlagen/coinbase.csv' download>Leere CSV-Vorlage fuer Coinbase Transaction History CSV</a></p>
+<h3>Konkretes Layout und fiktives Beispiel</h3><p>Nur Erlaeuterung, keine echten Transaktionen. Die herunterladbare Vorlage enthaelt ausschliesslich die erste Zeile.</p>
+<pre>Timestamp,Asset,Quantity Transacted,Transaction Type,Spot Price Currency,Subtotal,Fees and/or Spread,Account,Transaction ID
+2025-01-15T10:00:00Z,BTC,0.001,Buy,EUR,70,0.10,beispiel-konto,beispiel-coinbase
+</pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>timestamp</code> / <code>time</code> / <code>date</code> / <code>created at</code> / <code>created_at</code></td></tr>
+<tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>asset</code> / <code>currency</code> / <code>coin</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>quantity transacted</code> / <code>quantity</code> / <code>amount</code></td></tr>
+<tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>transaction type</code> / <code>type</code> / <code>operation</code></td></tr>
+<tr><td>Handelspaar: optionaler Asset-Ersatz</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td><code>spot price currency</code> / <code>native currency</code> / <code>quote asset</code></td></tr>
+<tr><td>Gegenmenge: bei Handel erforderlich zur Rekonstruktion</td><td><code>subtotal</code> / <code>quote quantity</code> / <code>native amount</code></td></tr>
+<tr><td>Gebuehrenasset: sofern eine Gebuehr anfaellt</td><td><code>spot price currency</code> / <code>native currency</code> / <code>fee asset</code></td></tr>
+<tr><td>Gebuehrenmenge: sofern eine Gebuehr anfaellt</td><td><code>fees and/or spread</code> / <code>fees</code> / <code>fee</code></td></tr>
+<tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td><code>account</code> / <code>portfolio</code></td></tr>
+<tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td><code>transaction id</code> / <code>txid</code> / <code>transaction hash</code> / <code>hash</code></td></tr>
+<tr><td>Quellreferenz: optional, z. B. Order-ID</td><td><code>transaction id</code> / <code>id</code> / <code>order id</code> / <code>trade id</code></td></tr>
+</tbody></table></section>
+<section id='helium'><h2>Helium Legacy/Fairspot <code>helium</code></h2>
+<p>Legacy-/Fairspot- und tabellarische Reward-Daten, nicht jede beliebige Hotspot-Datei. Reward wird in diesem Profil als mining normalisiert; das entscheidet nicht ueber die individuelle steuerliche Vermoegenszuordnung. Alternative assetlose Layouts koennen z. B. hnt_amount, iot_amount, mobile_amount oder Mining Rewards HNT/IOT/MOBILE verwenden; keine Preis-/Oracle-Hilfsspalte als Tokenmenge einsetzen. Bei Period Start (UTC) wird auf das Monatsende 23:59:59 UTC datiert: Ein Monatsbericht belegt keinen exakten Einzelzufluss. Sender + Receiver + Amount ist ein besonderes Transferlayout; eigene Walletzuordnung und Richtung pruefen.</p><p class='downloads'><a href='/import-vorlagen/helium.csv' download>Leere CSV-Vorlage fuer Helium Legacy/Fairspot</a></p>
+<h3>Konkretes Layout und fiktives Beispiel</h3><p>Nur Erlaeuterung, keine echten Transaktionen. Die herunterladbare Vorlage enthaelt ausschliesslich die erste Zeile.</p>
+<pre>timestamp,token,amount,type,wallet,tx_id
+2025-01-15T10:00:00Z,HNT,0.25,Reward,beispiel-wallet,beispiel-helium
+</pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>time</code> / <code>date</code> / <code>timestamp</code> / <code>block time</code> / <code>created_at</code> / <code>period start (utc)</code></td></tr>
+<tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>asset</code> / <code>coin</code> / <code>currency</code> / <code>token</code> / <code>buyCurrency</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>amount</code> / <code>quantity</code> / <code>hnt</code> / <code>reward</code> / <code>rewards</code> / <code>buyAmount</code> / <code>hnt_amount</code> / <code>iot_amount</code> / <code>mobile_amount</code> / <code>iot tokens</code> / <code>mobile tokens</code> / <code>mining rewards</code> / <code>mining rewards hnt</code> / <code>mining rewards iot</code> / <code>mining rewards mobile</code> / <code>commissions hnt</code> / <code>commissions iot</code> / <code>commissions mobile</code></td></tr>
+<tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>type</code> / <code>operation</code> / <code>category</code> / <code>reward type</code></td></tr>
+<tr><td>Handelspaar: optionaler Asset-Ersatz</td><td><code>pair</code> / <code>symbol</code> / <code>market</code> / <code>trading pair</code> / <code>coin pair</code></td></tr>
+<tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_asset</code> / <code>quote asset</code></td></tr>
+<tr><td>Gegenmenge: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_quantity</code> / <code>quote amount</code> / <code>value</code> / <code>eur value</code></td></tr>
+<tr><td>Gebuehrenasset: sofern eine Gebuehr anfaellt</td><td><code>fee_asset</code> / <code>fee asset</code></td></tr>
+<tr><td>Gebuehrenmenge: sofern eine Gebuehr anfaellt</td><td><code>fee_quantity</code> / <code>fee amount</code> / <code>fee</code></td></tr>
+<tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td><code>wallet</code> / <code>account</code> / <code>hotspot</code> / <code>hotspot name</code> / <code>gateway address</code> / <code>address</code> / <code>payer</code> / <code>payee</code> / <code>receiver</code> / <code>sender</code></td></tr>
+<tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td><code>txid</code> / <code>tx_id</code> / <code>txId</code> / <code>hash</code> / <code>transaction hash</code> / <code>transaction_hash</code></td></tr>
+<tr><td>Quellreferenz: optional, z. B. Order-ID</td><td><code>id</code> / <code>txid</code> / <code>tx_id</code> / <code>txId</code> / <code>hash</code> / <code>transaction hash</code> / <code>transaction_hash</code> / <code>block</code> / <code>gateway address</code></td></tr>
+</tbody></table></section>
+<section id='solana_rpc'><h2>Solana RPC Primaerdaten <code>solana_rpc</code></h2>
+<p>Bereits aufbereitete RPC-Tabellendaten, nicht rohe JSON-RPC-Antworten und keine pauschale Solscan-CSV-Unterstuetzung. event_type z. B. sol_transfer, token_transfer, swap_in_aggregated oder swap_out_aggregated; side in/out und Wallet/Signatur beleggetreu angeben. Swaps brauchen beide zusammengehoerigen Legs mit derselben Signatur. Ein positiver token_transfer kann als income/reward klassifiziert werden; eine vorhandene Claim-/Reward-Instruktion ist nicht durch einen beliebigen Spaltennamen ersetzbar. Wallet-Eigentum, Rohbelege und erzeugte Klassifikation pruefen. Die Kopfzeile allein garantiert keine fachlich vollstaendige Onchain-Rekonstruktion.</p><p class='downloads'><a href='/import-vorlagen/solana_rpc.csv' download>Leere CSV-Vorlage fuer Solana RPC Primaerdaten</a></p>
+<h3>Konkretes Layout und fiktives Beispiel</h3><p>Nur Erlaeuterung, keine echten Transaktionen. Die herunterladbare Vorlage enthaelt ausschliesslich die erste Zeile.</p>
+<pre>timestamp_utc,asset,quantity,event_type,side,fee_asset,fee,wallet_address,tx_id
+2025-01-15T10:00:00Z,SOL,-0.1,sol_transfer,out,SOL,0.000005,beispiel-wallet,beispiel-solana
+</pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>timestamp_utc</code> / <code>timestamp</code> / <code>time</code> / <code>date</code></td></tr>
+<tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>asset</code> / <code>symbol</code> / <code>mint</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>quantity</code> / <code>amount</code></td></tr>
+<tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>event_type</code> / <code>type</code> / <code>side</code></td></tr>
+<tr><td>Handelspaar: optionaler Asset-Ersatz</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Gegenmenge: bei Handel erforderlich zur Rekonstruktion</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Gebuehrenasset: sofern eine Gebuehr anfaellt</td><td><code>fee_asset</code></td></tr>
+<tr><td>Gebuehrenmenge: sofern eine Gebuehr anfaellt</td><td><code>fee</code> / <code>fee_quantity</code> / <code>fee_amount</code></td></tr>
+<tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td><code>wallet_address</code> / <code>account</code> / <code>wallet</code></td></tr>
+<tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td><code>tx_id</code> / <code>signature</code> / <code>transaction_hash</code></td></tr>
+<tr><td>Quellreferenz: optional, z. B. Order-ID</td><td><code>tx_id</code> / <code>signature</code> / <code>transaction_hash</code></td></tr>
+</tbody></table></section>
+<footer><p>Pflege: scripts/generate_import_format_docs_v2.py --check prueft Profile, Dokumentation und leere Vorlagen auf Gleichstand. Vorschau, Ereignispruefung und Originalnachweise bleiben erforderlich.</p></footer></main></body></html>
