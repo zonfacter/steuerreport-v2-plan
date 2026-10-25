@@ -21,13 +21,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install ruff==0.15.11
+          python -m pip install pytest-xdist==3.8.0
           python -m pip install -c requirements-runtime.lock -e '.[dev]'
       - name: Lint
         run: ruff check src tests scripts
       - name: Private account defaults
         run: python scripts/check_private_data_v2.py
       - name: Unit tests
-        run: pytest tests/unit -q
+        run: >-
+          pytest tests/unit -n 2 --dist loadfile -q
+          --basetemp="${RUNNER_TEMP}/steuerreport-tests"
+          -o tmp_path_retention_policy=failed
+          -o tmp_path_retention_count=1
       - name: OpenAPI contract drift
         run: python scripts/export_openapi_v2.py --check
       - name: Endpoint reference drift
