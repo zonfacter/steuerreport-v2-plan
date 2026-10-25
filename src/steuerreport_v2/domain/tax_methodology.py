@@ -40,22 +40,24 @@ from steuerreport_v2.contracts.tax_methodology import (
 )
 from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.bitget_strategy_fifo import BitgetStrategyFifoGapService
+from steuerreport_v2.domain.fifo_methods import (
+    GLOBAL_ASSET_FIFO_SCOPE,
+    active_fifo_scope,
+)
 from steuerreport_v2.domain.tax_time import (
     event_reporting_year_sql,
     reporting_tax_year,
     reporting_year_sql,
 )
-from steuerreport_v2.domain.fifo_methods import (
-    GLOBAL_ASSET_FIFO_SCOPE,
-    active_fifo_scope,
-)
+from steuerreport_v2.domain.tax_filing_snapshots import TaxFilingSnapshotService
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 from steuerreport_v2.domain.tax_years import TaxYearService
 from steuerreport_v2.domain.valuation import PriceQualityService
 
 
 class TaxMethodologyService:
-    METHOD_VERSION = "bmf_readiness_v2"
+    METHOD_VERSION = "bmf_readiness_v3_provider_basis_classification"
     FIFO_SCOPE = GLOBAL_ASSET_FIFO_SCOPE
     ASSET_FIFO_CORRECTION_MIN_ABS_EUR = Decimal("100")
     EXCHANGE_SEQUENCING_GAP_MAX_QUANTITY = Decimal("1")
@@ -859,8 +861,29 @@ class TaxMethodologyService:
         )
         submission = self.bmf_submission_guide(years=selected_years)
         declared_by_year, setting_exists = self._prior_filing_declared_amounts()
+        snapshot_by_year = self._confirmed_filing_snapshot_amounts()
+        effective_declared_by_year: dict[int, dict[str, object]] = {}
+        for year in selected_years:
+            configured = declared_by_year.get(year)
+            snapshot = snapshot_by_year.get(year)
+            if configured is not None and configured.get(
+                "declared_values_status"
+            ) == "declared_values":
+                effective_declared_by_year[year] = {
+                    **configured,
+                    "_declared_values_source": "admin_setting",
+                }
+            elif snapshot is not None:
+                effective_declared_by_year[year] = snapshot
+            elif configured is not None:
+                effective_declared_by_year[year] = {
+                    **configured,
+                    "_declared_values_source": "admin_setting",
+                }
         rows = [
-            self._bmf_prior_filing_comparison_year(row, declared_by_year.get(row.year))
+            self._bmf_prior_filing_comparison_year(
+                row, effective_declared_by_year.get(row.year)
+            )
             for row in submission.years
         ]
         return TaxBmfPriorFilingComparison(
@@ -878,6 +901,11 @@ class TaxMethodologyService:
             ],
             untrusted_declared_years=[
                 row.year for row in rows if row.status == "declared_values_untrusted"
+            ],
+            confirmed_snapshot_years=[
+                row.year
+                for row in rows
+                if row.declared_values_source == "confirmed_filing_snapshot"
             ],
             empty_years=[row.year for row in rows if row.status == "empty"],
             total_delta_taxable_private_disposals_eur=sum(
@@ -904,13 +932,58 @@ class TaxMethodologyService:
             example_setting_json=self._prior_filing_example_json(),
             ascii_table=self._bmf_prior_filing_ascii(rows),
             methodology=(
-                "Read-only Vergleich zwischen V2-Abgabehilfe und optional hinterlegten "
-                f"Alt-Erklaerungswerten aus Admin-Setting {self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING}. "
+                "Read-only Vergleich zwischen V2-Abgabehilfe und belegter Abgabebasis. "
+                f"Manuell uebertragene Werte aus {self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING} "
+                "haben Vorrang; sonst kann ein hashverifiziertes, ausdruecklich als verwendet "
+                "bestaetigtes Jahrespaket als Vergleichsbasis dienen. "
                 "Positive Deltas bedeuten: V2 liegt ueber dem erklaerten Wert; negative Deltas "
-                "bedeuten: V2 liegt darunter. Der Vergleich schreibt keine Steuerdaten und "
-                "entscheidet nicht automatisch ueber Nachreichung oder Einspruch."
+                "bedeuten: V2 liegt darunter. Paketwerte ersetzen nicht den Feldabgleich mit "
+                "der tatsaechlichen ELSTER-Uebermittlung. Der Vergleich schreibt keine "
+                "Steuerdaten und entscheidet nicht automatisch ueber Nachreichung oder Einspruch."
             ),
         )
+
+    def _confirmed_filing_snapshot_amounts(self) -> dict[int, dict[str, object]]:
+        snapshots = TaxFilingSnapshotService(self.store).list().snapshots
+        selected: dict[int, tuple[int, int, dict[str, object]]] = {}
+        for snapshot in snapshots:
+            if snapshot.integrity_status != "verified":
+                continue
+            if snapshot.state != "submitted" and not snapshot.filing_usage_confirmed:
+                continue
+            priority = 2 if snapshot.state == "submitted" else 1
+            current = selected.get(snapshot.year)
+            if current is not None and (current[0], current[1]) >= (
+                priority,
+                snapshot.revision,
+            ):
+                continue
+            timestamp_known = bool(snapshot.submitted_at)
+            selected[snapshot.year] = (
+                priority,
+                snapshot.revision,
+                {
+                    "taxable_private_disposals_eur": snapshot.values.taxable_private_disposals_eur,
+                    "declared_values_status": "declared_values",
+                    "note": (
+                        "Hashverifiziertes Jahrespaket wurde ausdruecklich als Grundlage "
+                        "der Steuererklaerung bestaetigt; der exakte ELSTER-Feldabgleich "
+                        + (
+                            "bleibt erforderlich."
+                            if timestamp_known
+                            else "und der Uebermittlungszeitpunkt bleiben erforderlich."
+                        )
+                    ),
+                    "rewards_mining_staking_income_eur": snapshot.values.rewards_mining_staking_income_eur,
+                    "derivative_pnl_eur": snapshot.values.derivative_pnl_eur,
+                    "tax_free_private_disposals_eur": snapshot.values.tax_free_private_disposals_eur,
+                    "_declared_values_source": "confirmed_filing_snapshot",
+                    "_snapshot_id": snapshot.snapshot_id,
+                    "_package_sha256": snapshot.package_sha256,
+                    "_submission_timestamp_known": timestamp_known,
+                },
+            )
+        return {year: item[2] for year, item in selected.items()}
 
     def bmf_prior_filing_declared_amounts(self) -> TaxBmfPriorFilingDeclaredAmounts:
         declared_by_year, _setting_exists = self._prior_filing_declared_amounts()
@@ -1041,6 +1114,7 @@ class TaxMethodologyService:
                 if status == "missing_declared_values"
                 else "Keine Aktivitaet",
                 declared_values_configured=False,
+                declared_values_source="none",
                 declared_values_status="unknown",
                 v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
                 v2_rewards_mining_staking_income_eur=row.rewards_mining_staking_income_eur,
@@ -1065,6 +1139,25 @@ class TaxMethodologyService:
             declared.get("declared_values_status") or "declared_values"
         )
         declared_note = str(declared.get("note") or "") or None
+        declared_source = str(
+            declared.get("_declared_values_source") or "admin_setting"
+        )
+        snapshot_id = (
+            str(declared.get("_snapshot_id"))
+            if declared.get("_snapshot_id") is not None
+            else None
+        )
+        package_sha256 = (
+            str(declared.get("_package_sha256"))
+            if declared.get("_package_sha256") is not None
+            else None
+        )
+        submission_timestamp_known = bool(
+            declared.get("_submission_timestamp_known", False)
+        )
+        elster_field_verification_required = (
+            declared_source == "confirmed_filing_snapshot"
+        )
         if declared_status != "declared_values":
             status_label = {
                 "unknown": "Altwerte unbekannt",
@@ -1076,6 +1169,11 @@ class TaxMethodologyService:
                 status="declared_values_untrusted",
                 status_label=status_label,
                 declared_values_configured=True,
+                declared_values_source=declared_source,  # type: ignore[arg-type]
+                declared_values_snapshot_id=snapshot_id,
+                declared_values_package_sha256=package_sha256,
+                submission_timestamp_known=submission_timestamp_known,
+                elster_field_verification_required=elster_field_verification_required,
                 declared_values_status=declared_status,  # type: ignore[arg-type]
                 declared_values_note=declared_note,
                 v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
@@ -1120,8 +1218,21 @@ class TaxMethodologyService:
         result = TaxBmfPriorFilingComparisonYear(
             year=row.year,
             status="delta_review" if has_delta else "match",
-            status_label="Abweichung pruefen" if has_delta else "Altwerte passen",
+            status_label=(
+                "Paketbasis weicht ab"
+                if has_delta and declared_source == "confirmed_filing_snapshot"
+                else "Paketbasis passt"
+                if declared_source == "confirmed_filing_snapshot"
+                else "Abweichung pruefen"
+                if has_delta
+                else "Altwerte passen"
+            ),
             declared_values_configured=True,
+            declared_values_source=declared_source,  # type: ignore[arg-type]
+            declared_values_snapshot_id=snapshot_id,
+            declared_values_package_sha256=package_sha256,
+            submission_timestamp_known=submission_timestamp_known,
+            elster_field_verification_required=elster_field_verification_required,
             declared_values_status="declared_values",
             declared_values_note=declared_note,
             v2_taxable_private_disposals_eur=row.taxable_private_disposals_eur,
@@ -1139,8 +1250,14 @@ class TaxMethodologyService:
             absolute_delta_eur=absolute_delta,
             amendment_review_recommended=has_delta,
             next_action=(
-                "Differenz mit der urspruenglichen Steuererklaerung und Belegen pruefen."
+                "Paketdeltas je Einkunftsart gegen die tatsaechlich uebermittelten "
+                "ELSTER-Felder und Belege pruefen; danach die Voraussetzungen des "
+                "§ 153 AO fachlich bewerten."
+                if has_delta and declared_source == "confirmed_filing_snapshot"
+                else "Differenz mit der urspruenglichen Steuererklaerung und Belegen pruefen."
                 if has_delta
+                else "Tatsaechliche ELSTER-Felder gegen die bestaetigte Paketbasis pruefen."
+                if declared_source == "confirmed_filing_snapshot"
                 else "Altwerte archivieren; keine rechnerische Abweichung oberhalb 0,01 EUR."
             ),
             setting_key=self.PRIOR_FILING_DECLARED_AMOUNTS_SETTING,
@@ -1297,6 +1414,18 @@ class TaxMethodologyService:
             status=status,  # type: ignore[arg-type]
             status_label=label,
             prior_filing_status=prior_status,
+            prior_filing_values_source=str(
+                getattr(comparison, "declared_values_source", "none")
+            ),
+            prior_filing_snapshot_id=getattr(
+                comparison, "declared_values_snapshot_id", None
+            ),
+            prior_filing_absolute_delta_eur=getattr(
+                comparison, "absolute_delta_eur", Decimal("0")
+            ),
+            elster_field_verification_required=bool(
+                getattr(comparison, "elster_field_verification_required", False)
+            ),
             v2_taxable_private_disposals_eur=getattr(
                 submission,
                 "taxable_private_disposals_eur",
@@ -1322,7 +1451,11 @@ class TaxMethodologyService:
             technical_review_requirements_count=technical_review,
             amendment_review_recommended=amendment_review,
             correction_reason=correction_reason,
-            next_action=self._bmf_amendment_next_action(status, prior_status),
+            next_action=self._bmf_amendment_next_action(
+                status,
+                prior_status,
+                str(getattr(comparison, "declared_values_source", "none")),
+            ),
             filing_summary_endpoint=getattr(
                 submission,
                 "filing_summary_endpoint",
@@ -1363,12 +1496,21 @@ class TaxMethodologyService:
         if prior_status == "not_filed":
             return "Jahr ist als nicht erklaert markiert; V2-Werte gegen Abgabepflicht/Nachreichung pruefen."
         if comparison is not None and comparison.status == "delta_review":
-            return "Belegte Altwerte weichen rechnerisch von V2 ab."
+            return (
+                "Bestaetigte, hashverifizierte Paketbasis weicht rechnerisch von V2 ab."
+                if comparison.declared_values_source == "confirmed_filing_snapshot"
+                else "Belegte Altwerte weichen rechnerisch von V2 ab."
+            )
         if submission is not None and submission.amendment_reason:
             return submission.amendment_reason
         return "Keine priorisierte Korrekturpruefung aus V2-Sicht."
 
-    def _bmf_amendment_next_action(self, status: str, prior_status: str) -> str:
+    def _bmf_amendment_next_action(
+        self,
+        status: str,
+        prior_status: str,
+        values_source: str = "none",
+    ) -> str:
         if status == "blocked":
             return "BMF-/FIFO-Blocker zuerst schliessen, dann Korrekturpruefung wiederholen."
         if prior_status in {"probably_wrong", "unknown"}:
@@ -1376,6 +1518,11 @@ class TaxMethodologyService:
         if prior_status == "not_filed":
             return "Pruefen, ob Nachreichung/Erstangabe fuer das Jahr erforderlich ist; Belegpaket vorbereiten."
         if status == "compare_declared_values":
+            if values_source == "confirmed_filing_snapshot":
+                return (
+                    "Paketdeltas je Einkunftsart mit der ELSTER-Uebermittlung abgleichen "
+                    "und die Berichtigungsfrage nach § 153 AO fachlich pruefen."
+                )
             return "Delta-Zeilen fachlich mit Bescheid/Erklaerung vergleichen und Korrekturkarte verwenden."
         if status == "archive_only":
             return "Jahrespaket archivieren."
@@ -2222,6 +2369,10 @@ class TaxMethodologyService:
         evidence_by_code = {
             "asset_fifo_possible_recalculation": "Asset-FIFO-Correction-Review und Entscheidung, ob Tax-Lines nachgerechnet werden muessen.",
             "wallet_fifo_delta_present": "Wallet-FIFO-Delta im Jahresbeleg dokumentieren.",
+            "wallet_fifo_provider_basis_pending": (
+                "Originale Bot-Fills oder eine steuerfachlich freigegebene "
+                "konservative Kostenbasisbehandlung dokumentieren."
+            ),
             "wallet_fifo_exchange_sequencing_documented": "Exchange-Sequencing-Ausnahme mit Gap-Diagnose dokumentieren.",
             "wallet_fifo_unresolved_inbound_provenance": "Herkunft mit Withdrawal-/Deposit-/Onchain-Beleg verknuepfen.",
         }
@@ -2256,12 +2407,14 @@ class TaxMethodologyService:
         counts = self._year_counts(year)
         wallet_fifo_service = WalletFifoPreviewService(self.store)
         wallet_fifo = wallet_fifo_service.preview(year=year)
-        wallet_fifo_exchange_sequencing_count = (
-            self._documented_exchange_sequencing_gap_count(
-                wallet_fifo_service,
-                year=year,
-                unmatched_count=wallet_fifo.unmatched_count,
-            )
+        (
+            wallet_fifo_exchange_sequencing_count,
+            wallet_fifo_provider_basis_gap_count,
+            wallet_fifo_unexplained_unmatched_count,
+        ) = self._wallet_fifo_gap_classification(
+            wallet_fifo_service,
+            year=year,
+            unmatched_count=wallet_fifo.unmatched_count,
         )
         wallet_fifo_documented_non_live_count = self._documented_non_live_count(
             wallet_fifo_service,
@@ -2373,6 +2526,8 @@ class TaxMethodologyService:
             traceability=counts,
             wallet_fifo_unmatched_count=wallet_fifo.unmatched_count,
             wallet_fifo_exchange_sequencing_count=wallet_fifo_exchange_sequencing_count,
+            wallet_fifo_provider_basis_gap_count=wallet_fifo_provider_basis_gap_count,
+            wallet_fifo_unexplained_unmatched_count=wallet_fifo_unexplained_unmatched_count,
             wallet_fifo_delta_eur=wallet_fifo.delta_gain_loss_eur,
             wallet_fifo_unresolved_provenance_count=wallet_fifo.unresolved_inbound_provenance_count,
             wallet_fifo_documented_non_live_count=wallet_fifo_documented_non_live_count,
@@ -2445,6 +2600,8 @@ class TaxMethodologyService:
                 external_unmatched_count=external.unmatched_count,
                 wallet_fifo_unmatched_count=wallet_fifo.unmatched_count,
                 wallet_fifo_exchange_sequencing_count=wallet_fifo_exchange_sequencing_count,
+                wallet_fifo_provider_basis_gap_count=wallet_fifo_provider_basis_gap_count,
+                wallet_fifo_unexplained_unmatched_count=wallet_fifo_unexplained_unmatched_count,
                 asset_fifo_possible_recalculation_count=asset_fifo_review.possible_recalculation_assets_count,
                 asset_fifo_attribution_review_count=asset_fifo_review.attribution_review_assets_count,
                 gain_evidence_price_delta_lines_count=(
@@ -2486,19 +2643,53 @@ class TaxMethodologyService:
         year: int,
         unmatched_count: int,
     ) -> int:
+        sequencing_count, _, _ = self._wallet_fifo_gap_classification(
+            wallet_fifo_service,
+            year=year,
+            unmatched_count=unmatched_count,
+        )
+        return sequencing_count
+
+    def _wallet_fifo_gap_classification(
+        self,
+        wallet_fifo_service: WalletFifoPreviewService,
+        *,
+        year: int,
+        unmatched_count: int,
+    ) -> tuple[int, int, int]:
         if unmatched_count <= 0:
-            return 0
+            return 0, 0, 0
+
         diagnosis = wallet_fifo_service.gap_diagnosis(
             year=year, limit=max(1, min(unmatched_count, 500))
         )
+        current_gap_ids = {
+            gap.disposal_event_id for gap in diagnosis.diagnoses
+        }
+        provider_gap = BitgetStrategyFifoGapService(self.store).report()
+        provider_gap_ids = {
+            disposal.source_event_id
+            for group in (provider_gap.groups if provider_gap is not None else [])
+            if group.year == year
+            and group.quantity_reconciled
+            and group.basis_gap_responsibility == "provider_export_field_gap"
+            for disposal in group.linked_disposals
+            if disposal.quantity_fully_allocated
+        }
+        current_provider_ids = current_gap_ids & provider_gap_ids
+
         events = self.store.list_canonical_events()
-        documented = 0
-        for gap in diagnosis.diagnoses:
-            if self._is_documented_exchange_sequencing_gap(
+        sequencing_ids = {
+            gap.disposal_event_id
+            for gap in diagnosis.diagnoses
+            if gap.disposal_event_id not in current_provider_ids
+            and self._is_documented_exchange_sequencing_gap(
                 wallet_fifo_service, gap, events
-            ):
-                documented += 1
-        return documented
+            )
+        }
+        classified_count = len(current_provider_ids) + len(sequencing_ids)
+        unexplained_count = max(0, unmatched_count - classified_count)
+        return len(sequencing_ids), len(current_provider_ids), unexplained_count
 
     def _documented_fiat_purchase_count(
         self,
@@ -2901,6 +3092,8 @@ class TaxMethodologyService:
         gain_evidence_open_price_delta_eur: Decimal = Decimal("0"),
         gain_evidence_event_level_reconciled_lines_count: int = 0,
         gain_evidence_acquisition_event_level_reconciled_lines_count: int = 0,
+        wallet_fifo_provider_basis_gap_count: int = 0,
+        wallet_fifo_unexplained_unmatched_count: int | None = None,
     ) -> list[TaxMethodologyGap]:
         gaps: list[TaxMethodologyGap] = []
         if traceability["activity_count"] == 0:
@@ -2914,8 +3107,15 @@ class TaxMethodologyService:
                 )
             )
             return gaps
-        blocking_wallet_fifo_unmatched_count = max(
-            0, wallet_fifo_unmatched_count - wallet_fifo_exchange_sequencing_count
+        blocking_wallet_fifo_unmatched_count = (
+            wallet_fifo_unexplained_unmatched_count
+            if wallet_fifo_unexplained_unmatched_count is not None
+            else max(
+                0,
+                wallet_fifo_unmatched_count
+                - wallet_fifo_exchange_sequencing_count
+                - wallet_fifo_provider_basis_gap_count,
+            )
         )
         if blocking_wallet_fifo_unmatched_count:
             gaps.append(
@@ -2932,7 +3132,34 @@ class TaxMethodologyService:
                     blocks_bmf_ready=True,
                 )
             )
-        elif wallet_fifo_exchange_sequencing_count:
+        if wallet_fifo_provider_basis_gap_count:
+            gaps.append(
+                TaxMethodologyGap(
+                    code="wallet_fifo_provider_basis_pending",
+                    severity="blocker",
+                    message=(
+                        f"{wallet_fifo_provider_basis_gap_count} Wallet-/Depot-FIFO-"
+                        "Abgaenge sind mengenmaessig einem Bitget-Strategie-"
+                        "Settlement zugeordnet; originale Bot-Fills mit Anschaffungszeit "
+                        "und Kostenbasis fehlen im Provider-Export."
+                    ),
+                    count=wallet_fifo_provider_basis_gap_count,
+                    action=(
+                        "Originale Bot-Fills beschaffen oder eine steuerfachlich "
+                        "dokumentierte konservative Kostenbasisbehandlung freigeben; "
+                        "keine Kostenbasis erfinden."
+                    ),
+                    evidence_ref=(
+                        "/api/v1/tax/wallet-fifo/bitget-strategy-gaps"
+                    ),
+                    blocks_bmf_ready=True,
+                )
+            )
+        if (
+            not blocking_wallet_fifo_unmatched_count
+            and not wallet_fifo_provider_basis_gap_count
+            and wallet_fifo_exchange_sequencing_count
+        ):
             gaps.append(
                 TaxMethodologyGap(
                     code="wallet_fifo_exchange_sequencing_documented",
@@ -2950,7 +3177,11 @@ class TaxMethodologyService:
                     blocks_bmf_ready=False,
                 )
             )
-        else:
+        elif (
+            not blocking_wallet_fifo_unmatched_count
+            and not wallet_fifo_provider_basis_gap_count
+            and not wallet_fifo_exchange_sequencing_count
+        ):
             gaps.append(
                 TaxMethodologyGap(
                     code="wallet_fifo_evidence_overlay_ok",
@@ -3423,6 +3654,8 @@ class TaxMethodologyService:
         traceability_score: Decimal,
         gain_evidence_price_delta_lines_count: int = 0,
         gain_evidence_open_price_delta_eur: Decimal = Decimal("0"),
+        wallet_fifo_provider_basis_gap_count: int = 0,
+        wallet_fifo_unexplained_unmatched_count: int | None = None,
     ) -> list[TaxTraceabilityMetric]:
         tax_trace_status: TaxMethodologyStatus = "ok"
         if (
@@ -3430,6 +3663,16 @@ class TaxMethodologyService:
             and counts["tax_lines_with_event_trace"] < detail_tax_lines_count
         ):
             tax_trace_status = "blocked"
+        unexplained_wallet_fifo_count = (
+            wallet_fifo_unexplained_unmatched_count
+            if wallet_fifo_unexplained_unmatched_count is not None
+            else max(
+                0,
+                wallet_fifo_unmatched_count
+                - wallet_fifo_exchange_sequencing_count
+                - wallet_fifo_provider_basis_gap_count,
+            )
+        )
         return [
             TaxTraceabilityMetric(
                 key="traceability_score",
@@ -3467,23 +3710,33 @@ class TaxMethodologyService:
             ),
             TaxTraceabilityMetric(
                 key="wallet_fifo_unmatched",
-                label="Wallet-FIFO offene Lots",
+                label="Wallet-FIFO ungeklaerte Lots",
                 status=(
                     "blocked"
-                    if wallet_fifo_unmatched_count
-                    > wallet_fifo_exchange_sequencing_count
+                    if unexplained_wallet_fifo_count
                     else "review"
                     if wallet_fifo_exchange_sequencing_count
                     else "ok"
                 ),
-                value=max(
-                    0,
-                    wallet_fifo_unmatched_count - wallet_fifo_exchange_sequencing_count,
-                ),
+                value=unexplained_wallet_fifo_count,
                 target=0,
                 detail=(
-                    "Wallet-/Depot-FIFO-Evidence-Overlay darf keine echten unmatched Abgaenge enthalten. "
-                    "Kleine dokumentierte CEX-/Grid-Sequencing-Ausnahmen bleiben als Review-Hinweis sichtbar."
+                    "Wirklich ungeklaerte Wallet-/Depot-FIFO-Abgaenge. Kleine "
+                    "dokumentierte CEX-/Grid-Sequencing-Ausnahmen und getrennt "
+                    "klassifizierte Provider-Kostenbasisluecken werden nicht als "
+                    "unbekannte Herkunft gezaehlt."
+                ),
+            ),
+            TaxTraceabilityMetric(
+                key="wallet_fifo_provider_basis_gaps",
+                label="Wallet-FIFO Provider-Kostenbasis",
+                status="blocked" if wallet_fifo_provider_basis_gap_count else "ok",
+                value=wallet_fifo_provider_basis_gap_count,
+                target=0,
+                detail=(
+                    "Mengenmaessig belegte Strategie-Settlements ohne exportierte "
+                    "Original-Bot-Fills bleiben bis zur fachlichen Kostenbasisbehandlung "
+                    "blockiert."
                 ),
             ),
             TaxTraceabilityMetric(
@@ -3613,6 +3866,9 @@ class TaxMethodologyService:
     def _gap_title(self, code: str) -> str:
         titles = {
             "wallet_fifo_preview_unmatched": "Wallet-/Depot-FIFO Herkunft fehlt",
+            "wallet_fifo_provider_basis_pending": (
+                "Wallet-FIFO Provider-Kostenbasis fehlt"
+            ),
             "wallet_fifo_exchange_sequencing_documented": "Wallet-FIFO Exchange-Sequencing dokumentiert",
             "wallet_fifo_delta_present": "Wallet-FIFO Delta dokumentieren",
             "wallet_fifo_evidence_overlay_ok": "Wallet-FIFO Evidence vorhanden",

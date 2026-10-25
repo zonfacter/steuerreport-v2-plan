@@ -24,9 +24,9 @@ DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs" / "crypto_price_sources.json"
 DEFAULT_OWNERSHIP_AUDIT = (
     PROJECT_ROOT
     / "var/solana_v1_ownership_scope"
-    / "latest_G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY_v1_ownership_scope.json"
+    / "latest_6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP_v1_ownership_scope.json"
 )
-DEFAULT_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+DEFAULT_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
 SOURCE = "solana_rpc"
 
 

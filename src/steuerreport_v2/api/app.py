@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_config_path, private_template, private_value
+
 import csv
 import gzip
 import hashlib
@@ -10,11 +12,12 @@ from pathlib import Path
 from threading import RLock
 from time import monotonic
 from uuid import uuid4
+from urllib.parse import quote
 import zipfile
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.routing import APIRoute
@@ -90,12 +93,23 @@ from steuerreport_v2.contracts.cockpit import CockpitSummary
 from steuerreport_v2.contracts.connectors import (
     ConnectorCatalogReport,
     ConnectorConnection,
+    MobileConnectorPairing,
+    MobileConnectorPairingRequest,
+    MobileConnectorScope,
+    MobileConnectorSession,
+    MobileConnectorSessionExchangeRequest,
+    MobileConnectorSessionToken,
     WalletOwnershipChallenge,
     WalletOwnershipChallengeRequest,
     WalletOwnershipVerificationRequest,
     WalletOwnershipVerificationResult,
 )
 from steuerreport_v2.contracts.coverage import ImportCoverageSummary
+from steuerreport_v2.contracts.mobile_documents import (
+    MobileDocumentInboxReport,
+    MobileDocumentKind,
+    MobileDocumentUploadResult,
+)
 from steuerreport_v2.contracts.derivatives import (
     DerivativeLine,
     DerivativeRunResult,
@@ -399,6 +413,15 @@ from steuerreport_v2.contracts.tax_years import (
     TaxStablecoinQuoteLegReview,
     TaxYearsSummary,
 )
+from steuerreport_v2.contracts.tax_filing_snapshots import (
+    TaxFilingSnapshotCaptureRequest,
+    TaxFilingSnapshotCaptureResult,
+    TaxFilingSnapshotComparison,
+    TaxFilingSnapshotList,
+    TaxFilingSnapshotUsageConfirmationRequest,
+    TaxFilingSnapshotUsageConfirmationResult,
+)
+from steuerreport_v2.contracts.tax_filing_audit import TaxFilingAuditReport
 from steuerreport_v2.contracts.transfers import TransferCandidateReport
 from steuerreport_v2.contracts.valuation import (
     PriceCoverageReport,
@@ -455,6 +478,7 @@ from steuerreport_v2.domain.blockpit_solana_preflight import (
 )
 from steuerreport_v2.domain.cockpit import CockpitService
 from steuerreport_v2.domain.connectors import ConnectorAccessPolicy, ConnectorService
+from steuerreport_v2.domain.mobile_documents import MobileDocumentInboxService
 from steuerreport_v2.domain.cross_cex_evidence import (
     CrossCexTransferEvidenceService,
 )
@@ -522,6 +546,15 @@ from steuerreport_v2.domain.wallet_fifo_migrations import (
     WalletFifoMigrationRehearsalService,
 )
 from steuerreport_v2.domain.tax_years import TaxYearService
+from steuerreport_v2.domain.tax_filing_snapshots import (
+    SUBMISSION_CONFIRMATION_TEXT,
+    TaxFilingSnapshotError,
+    TaxFilingSnapshotService,
+)
+from steuerreport_v2.domain.tax_filing_audit import (
+    TaxFilingAuditError,
+    TaxFilingAuditService,
+)
 from steuerreport_v2.domain.transfers import TransferCandidateService
 from steuerreport_v2.domain.valuation import PriceCoverageService, PriceQualityService
 from steuerreport_v2.domain.v1_fx_cache_importer import V1FxCacheImporter
@@ -681,7 +714,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         with response_cache_guard:
             response_cache.clear()
 
-    def authorize_connector_write(authorization: str | None) -> None:
+    def authorize_connector_admin(authorization: str | None) -> None:
         try:
             ConnectorAccessPolicy().authorize(authorization)
         except RuntimeError as exc:
@@ -692,6 +725,30 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         except PermissionError as exc:
             raise HTTPException(
                 status_code=401,
+                detail=str(exc),
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+
+    def authorize_connector_write(
+        authorization: str | None,
+        *,
+        required_scope: MobileConnectorScope,
+    ) -> MobileConnectorSession | None:
+        try:
+            return ConnectorAccessPolicy().authorize_scoped(
+                db,
+                authorization,
+                required_scope,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc),
+            ) from exc
+        except PermissionError as exc:
+            status_code = 403 if str(exc) == "mobile_session_scope_missing" else 401
+            raise HTTPException(
+                status_code=status_code,
                 detail=str(exc),
                 headers={"WWW-Authenticate": "Bearer"},
             ) from exc
@@ -743,12 +800,196 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def connector_connections() -> ApiResponse[list[ConnectorConnection]]:
         return ApiResponse(data=ConnectorService(db).connections())
 
+    @app.post("/api/v1/connectors/mobile/pairings")
+    def create_mobile_connector_pairing(
+        payload: MobileConnectorPairingRequest,
+        authorization: str | None = Header(default=None),
+    ) -> ApiResponse[MobileConnectorPairing]:
+        authorize_connector_admin(authorization)
+        try:
+            return ApiResponse(data=ConnectorService(db).create_mobile_pairing(payload))
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code=str(exc),
+                        message="Die Mobilgeraete-Kopplung konnte nicht erstellt werden.",
+                        field="device_name",
+                    )
+                ],
+            )
+
+    @app.post("/api/v1/connectors/mobile/sessions")
+    def exchange_mobile_connector_pairing(
+        payload: MobileConnectorSessionExchangeRequest,
+    ) -> ApiResponse[MobileConnectorSessionToken]:
+        try:
+            return ApiResponse(data=ConnectorService(db).exchange_mobile_pairing(payload))
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code=str(exc),
+                        message="Die Kopplung ist ungueltig oder nicht mehr aktiv.",
+                        field="pairing_code",
+                    )
+                ],
+            )
+
+    @app.get("/api/v1/connectors/mobile/sessions")
+    def mobile_connector_sessions(
+        authorization: str | None = Header(default=None),
+    ) -> ApiResponse[list[MobileConnectorSession]]:
+        authorize_connector_admin(authorization)
+        return ApiResponse(data=ConnectorService(db).mobile_sessions())
+
+    @app.get("/api/v1/connectors/mobile/session")
+    def current_mobile_connector_session(
+        authorization: str | None = Header(default=None),
+    ) -> ApiResponse[MobileConnectorSession]:
+        try:
+            access_token = ConnectorAccessPolicy._bearer_token(authorization)
+            session = ConnectorService(db).authorize_mobile_session(
+                access_token,
+                required_scope="connector:read",
+            )
+        except PermissionError as exc:
+            status_code = 403 if str(exc) == "mobile_session_scope_missing" else 401
+            raise HTTPException(
+                status_code=status_code,
+                detail=str(exc),
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        return ApiResponse(data=session)
+
+    @app.post("/api/v1/connectors/mobile/documents")
+    async def upload_mobile_connector_document(
+        response: Response,
+        file: UploadFile = File(...),
+        document_kind: MobileDocumentKind = Form("other"),
+        source_hint: str | None = Form(default=None),
+        note: str | None = Form(default=None),
+        captured_at: datetime | None = Form(default=None),
+        authorization: str | None = Header(default=None),
+    ) -> ApiResponse[MobileDocumentUploadResult]:
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        session = authorize_connector_write(
+            authorization,
+            required_scope="document:upload",
+        )
+        content = await file.read(MobileDocumentInboxService.MAX_FILE_BYTES + 1)
+        try:
+            result = MobileDocumentInboxService(db).store_document(
+                filename=file.filename or "",
+                content=content,
+                declared_media_type=file.content_type,
+                document_kind=document_kind,
+                source_hint=source_hint,
+                note=note,
+                captured_at=captured_at,
+                uploaded_by_session_id=session.session_id if session else None,
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code="mobile_document_rejected",
+                        message=str(exc),
+                        field="file",
+                    )
+                ],
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return ApiResponse(
+            status="warning" if result.already_present else "ok",
+            data=result,
+            warnings=(
+                [
+                    ApiMessage(
+                        code="mobile_document_already_present",
+                        message=(
+                            "Der Beleg war bereits hashgleich in der privaten Inbox vorhanden."
+                        ),
+                        field="file",
+                    )
+                ]
+                if result.already_present
+                else []
+            ),
+        )
+
+    @app.get("/api/v1/connectors/mobile/documents")
+    def mobile_connector_documents(
+        response: Response,
+        limit: int = Query(default=100, ge=1, le=500),
+        authorization: str | None = Header(default=None),
+    ) -> ApiResponse[MobileDocumentInboxReport]:
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        authorize_connector_admin(authorization)
+        return ApiResponse(data=MobileDocumentInboxService(db).report(limit=limit))
+
+    @app.get("/api/v1/connectors/mobile/documents/{document_id}/content")
+    def mobile_connector_document_content(
+        document_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        authorize_connector_admin(authorization)
+        try:
+            document, content = MobileDocumentInboxService(db).content(document_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        encoded_filename = quote(document.original_filename, safe="")
+        suffix = Path(document.original_filename).suffix.lower()
+        return Response(
+            content=content,
+            media_type=document.media_type,
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": (
+                    f"attachment; filename=mobile-document-{document.document_id}{suffix}; "
+                    f"filename*=UTF-8''{encoded_filename}"
+                ),
+                "X-Content-SHA256": document.document_sha256,
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.delete("/api/v1/connectors/mobile/sessions/{session_id}")
+    def revoke_mobile_connector_session(
+        session_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> ApiResponse[MobileConnectorSession]:
+        authorize_connector_admin(authorization)
+        try:
+            return ApiResponse(
+                data=ConnectorService(db).revoke_mobile_session(session_id)
+            )
+        except ValueError as exc:
+            return ApiResponse(
+                status="error",
+                errors=[
+                    ApiMessage(
+                        code=str(exc),
+                        message="Die Mobilgeraete-Sitzung wurde nicht gefunden.",
+                        field="session_id",
+                    )
+                ],
+            )
+
     @app.post("/api/v1/connectors/wallet/challenges")
     def create_wallet_ownership_challenge(
         payload: WalletOwnershipChallengeRequest,
         authorization: str | None = Header(default=None),
     ) -> ApiResponse[WalletOwnershipChallenge]:
-        authorize_connector_write(authorization)
+        authorize_connector_write(authorization, required_scope="wallet:verify")
         try:
             challenge = ConnectorService(db).create_wallet_challenge(payload)
         except (ValueError, RuntimeError) as exc:
@@ -769,7 +1010,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         payload: WalletOwnershipVerificationRequest,
         authorization: str | None = Header(default=None),
     ) -> ApiResponse[WalletOwnershipVerificationResult]:
-        authorize_connector_write(authorization)
+        authorize_connector_write(authorization, required_scope="wallet:verify")
         try:
             result = ConnectorService(db).verify_wallet_challenge(
                 payload.challenge_id,
@@ -1134,7 +1375,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def solscan_token_preflight(
         file_path: str = "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv",
         blockpit_file_path: str = "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
-        wallet: str = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+        wallet: str = private_value('primary_solana_wallet', ''),
         asset: str = "IOT",
         token_address: str = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns",
         max_year: int = 2024,
@@ -1162,7 +1403,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def solscan_evidence_trace(
         file_path: str = "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv",
         blockpit_file_path: str = "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv",
-        wallet: str = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+        wallet: str = private_value('primary_solana_wallet', ''),
         asset: str = "IOT",
         token_address: str = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns",
         max_year: int = 2024,
@@ -1192,8 +1433,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/import/wallet-monthly/preflight")
     def wallet_monthly_preflight(
-        file_path: str = "/workspace/steuerreport/usertransfer/Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv",
-        wallet: str = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+        file_path: str = private_template('/workspace/steuerreport/usertransfer/Wallet.{primary_solana_wallet}-month.csv'),
+        wallet: str = private_value('primary_solana_wallet', ''),
         asset: str = "IOT",
         cutoff_at: str = "2024-02-23T21:01:15",
         required_quantity: Decimal = Decimal("339834.071782"),
@@ -1210,7 +1451,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.get("/api/v1/import/jup-perps/preview")
     def jup_perps_preview(
-        file_path: str = "/workspace/steuerreport/usertransfer/jup/G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY.csv",
+        file_path: str = private_template('/workspace/steuerreport/usertransfer/jup/{primary_solana_wallet}.csv'),
         v1_fx_db_path: str = "/root/.local/share/steuerreport/steuerreport.db",
         sample_limit: int = 20,
     ) -> ApiResponse[JupPerpsPreview]:
@@ -1583,6 +1824,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             confidence=payload.confidence,
             dry_run=payload.dry_run,
         )
+        if result.imported_prices:
+            clear_response_cache()
         return ApiResponse(
             status="ok" if result.dry_run or result.imported_prices else "warning",
             data=result,
@@ -1601,6 +1844,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             confidence=payload.confidence,
             dry_run=payload.dry_run,
         )
+        if result.imported_prices:
+            clear_response_cache()
         return ApiResponse(
             status="ok" if result.dry_run or result.imported_prices else "warning",
             data=result,
@@ -1977,6 +2222,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         PortfolioReconciliationRefreshResult
     ]:
         result = PortfolioService(db).refresh_reconciliation_snapshots()
+        clear_response_cache()
         warnings = [
             ApiMessage(
                 code=f"connector_{item.status}",
@@ -2784,6 +3030,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=500, detail=f"Quellenregistry-Lauf fehlgeschlagen: {exc}"
             ) from exc
+        clear_response_cache()
         return ApiResponse(data=report)
 
     @app.get("/api/v1/sources/registry/runs/latest")
@@ -4366,6 +4613,10 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                 "Year",
                 "Status",
                 "Prior_Filing_Status",
+                "Prior_Filing_Values_Source",
+                "Prior_Filing_Snapshot_ID",
+                "Prior_Filing_Absolute_Delta_EUR",
+                "ELSTER_Field_Verification_Required",
                 "V2_Taxable_Private_Disposals_EUR",
                 "V2_Rewards_Mining_Staking_Income_EUR",
                 "V2_Derivative_Pnl_EUR",
@@ -4387,6 +4638,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
                     "Year": row.year,
                     "Status": row.status,
                     "Prior_Filing_Status": row.prior_filing_status,
+                    "Prior_Filing_Values_Source": row.prior_filing_values_source,
+                    "Prior_Filing_Snapshot_ID": row.prior_filing_snapshot_id,
+                    "Prior_Filing_Absolute_Delta_EUR": row.prior_filing_absolute_delta_eur.quantize(
+                        Decimal("0.01")
+                    ),
+                    "ELSTER_Field_Verification_Required": "yes"
+                    if row.elster_field_verification_required
+                    else "no",
                     "V2_Taxable_Private_Disposals_EUR": row.v2_taxable_private_disposals_eur.quantize(
                         Decimal("0.01")
                     ),
@@ -7803,13 +8062,13 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             project_root / "src/steuerreport_v2/domain/valuation.py",
             project_root / "src/steuerreport_v2/domain/valuation_runs.py",
             project_root / "src/steuerreport_v2/domain/wallet_fifo_runs.py",
-            project_root / "configs/source_registry.json",
-            project_root / "configs/solana_service_swap_tax_mappings.json",
-            project_root / "configs/pionex_hnt_reconciliation.json",
+            private_config_path('source_registry.json'),
+            private_config_path('solana_service_swap_tax_mappings.json'),
+            private_config_path('pionex_hnt_reconciliation.json'),
             project_root / "configs/pionex_hnt_minimum_reconciliation_2022.csv",
             project_root / "configs/pionex_hnt_api_probe_2022.json",
-            project_root / "configs/fairspot_hnt_staking_reconciliation.json",
-            project_root / "configs/solana_staking_position_reconciliations.json",
+            private_config_path('fairspot_hnt_staking_reconciliation.json'),
+            private_config_path('solana_staking_position_reconciliations.json'),
             Path("/workspace/steuerreport/usertransfer/pionex/raw-trading-details.csv"),
             Path("/workspace/steuerreport/usertransfer/pionex/trading.csv"),
             project_root / "var/wallet_fifo_runs/latest_wallet_fifo_run.json",
@@ -8804,6 +9063,334 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             headers={
                 "Content-Disposition": f"attachment; filename=steuerreport-v2-tax-year-{year}-evidence.zip",
                 "X-Steuerreport-Cache": "miss",
+            },
+        )
+
+    @app.get("/api/v1/tax-filing-snapshots")
+    def tax_filing_snapshots(
+        year: int | None = Query(default=None, ge=2009, le=2100),
+    ) -> ApiResponse[TaxFilingSnapshotList]:
+        return ApiResponse(data=TaxFilingSnapshotService(db).list(year=year))
+
+    @app.get("/api/v1/tax-years/{year}/filing-snapshots")
+    def tax_year_filing_snapshots(year: int) -> ApiResponse[TaxFilingSnapshotList]:
+        return ApiResponse(data=TaxFilingSnapshotService(db).list(year=year))
+
+    @app.post("/api/v1/tax-years/{year}/filing-snapshots")
+    def capture_tax_filing_snapshot(
+        year: int,
+        payload: TaxFilingSnapshotCaptureRequest,
+    ) -> ApiResponse[TaxFilingSnapshotCaptureResult]:
+        if (
+            payload.state == "submitted"
+            and payload.confirmation_text != SUBMISSION_CONFIRMATION_TEXT
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Eine tatsaechliche Abgabe muss mit dem vorgegebenen "
+                    "Bestaetigungstext bestaetigt werden."
+                ),
+            )
+        service = TaxFilingSnapshotService(db)
+        try:
+            if payload.source_snapshot_id:
+                result = service.capture_from_snapshot(year=year, request=payload)
+            else:
+                package_response = download_tax_year_evidence_package_zip(year)
+                result = service.capture_package(
+                    year=year,
+                    package_bytes=bytes(package_response.body or b""),
+                    request=payload,
+                    source_kind="current_generated_package",
+                )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Der angegebene Quell-Snapshot wurde nicht gefunden.",
+            ) from exc
+        except (TaxFilingSnapshotError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=result)
+
+    @app.post("/api/v1/tax-filing-snapshots/{snapshot_id}/usage-confirmation")
+    def confirm_tax_filing_snapshot_usage(
+        snapshot_id: str,
+        payload: TaxFilingSnapshotUsageConfirmationRequest,
+    ) -> ApiResponse[TaxFilingSnapshotUsageConfirmationResult]:
+        try:
+            result = TaxFilingSnapshotService(db).confirm_package_usage(
+                snapshot_id=snapshot_id,
+                request=payload,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Snapshot nicht gefunden.") from exc
+        except TaxFilingSnapshotError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        clear_response_cache()
+        return ApiResponse(data=result)
+
+    @app.get("/api/v1/tax-years/{year}/filing-snapshot-comparison")
+    def tax_filing_snapshot_comparison(
+        year: int,
+    ) -> ApiResponse[TaxFilingSnapshotComparison]:
+        summary = cached_response(
+            f"tax-years:filing-summary:{year}",
+            60,
+            lambda: TaxYearService(db).filing_summary(year),
+        )
+        return ApiResponse(
+            data=TaxFilingSnapshotService(db).comparison(
+                year,
+                current_summary=summary,
+            )
+        )
+
+    @app.get("/api/v1/tax-years/{year}/filing-audit-report")
+    def tax_filing_audit_report(year: int) -> ApiResponse[TaxFilingAuditReport]:
+        try:
+            report = TaxFilingAuditService(db).build(year)
+        except (KeyError, TaxFilingAuditError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return ApiResponse(data=report)
+
+    @app.get("/api/v1/tax-years/{year}/filing-audit-report.json")
+    def tax_filing_audit_report_json(year: int) -> Response:
+        try:
+            report, content = TaxFilingAuditService(db).read_artifact(year, ".json")
+        except (KeyError, TaxFilingAuditError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": (
+                    f"attachment; filename={report.report_id}.json"
+                ),
+                "X-Steuerreport-Audit-SHA256": report.report_content_sha256,
+                "X-Steuerreport-Audit-Immutable": "true",
+            },
+        )
+
+    @app.get("/api/v1/tax-years/{year}/filing-audit-report.md")
+    def tax_filing_audit_report_markdown(year: int) -> Response:
+        try:
+            report, content = TaxFilingAuditService(db).read_artifact(year, ".md")
+        except (KeyError, TaxFilingAuditError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return Response(
+            content=content,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f"attachment; filename={report.report_id}.md"
+                ),
+                "X-Steuerreport-Audit-SHA256": report.markdown_content_sha256,
+                "X-Steuerreport-Audit-Immutable": "true",
+            },
+        )
+
+    def format_snapshot_eur(value: Decimal) -> str:
+        rendered = f"{value:,.2f}"
+        return rendered.replace(",", "_").replace(".", ",").replace("_", ".")
+
+    def render_tax_filing_snapshot_comparison_html(
+        report: TaxFilingSnapshotComparison,
+    ) -> str:
+        tone = (
+            "blocked"
+            if report.integrity_blocked
+            else "warning"
+            if report.amendment_review_required
+            or report.submission_confirmation_required
+            or report.submission_timestamp_required
+            else "ok"
+        )
+        baseline = report.baseline
+        baseline_label = (
+            f"Revision {baseline.revision} · "
+            f"{'eingereicht' if baseline.state == 'submitted' else 'verwendetes Paket, Zeitpunkt offen' if baseline.filing_usage_confirmed else 'Referenz'} · "
+            f"{html.escape(baseline.package_generated_at)}"
+            if baseline
+            else "Kein archivierter Abgabestand"
+        )
+        delta_rows = "".join(
+            (
+                "<tr>"
+                f"<td><strong>{html.escape(item.label)}</strong><span>{html.escape(item.category)}</span></td>"
+                f"<td>{format_snapshot_eur(item.filed_value_eur)} EUR</td>"
+                f"<td>{format_snapshot_eur(item.current_value_eur)} EUR</td>"
+                f"<td class='{('delta-up' if item.delta_eur > 0 else 'delta-down' if item.delta_eur < 0 else '')}'>"
+                f"{format_snapshot_eur(item.delta_eur)} EUR</td>"
+                f"<td>{html.escape(item.explanation)}</td>"
+                "</tr>"
+            )
+            for item in report.deltas
+        ) or (
+            "<tr><td colspan='5'>Noch kein archivierter Vergleichsstand vorhanden.</td></tr>"
+        )
+        package_link = (
+            f"<a class='button secondary' href='{html.escape(baseline.package_download_endpoint)}'>"
+            "Archivpaket herunterladen</a>"
+            if baseline
+            else ""
+        )
+        package_hash = html.escape(baseline.package_sha256) if baseline else "-"
+        integrity = html.escape(baseline.integrity_status) if baseline else "-"
+        return f"""<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Steuerjahr {report.year} · Abgabestand-Vergleich</title>
+  <style>
+    :root {{ color-scheme: light; font-family: Inter, system-ui, sans-serif; color: #17211d; background: #f4f7f5; }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; }}
+    main {{ max-width: 1160px; margin: 0 auto; padding: 32px 24px 56px; }}
+    header {{ display: flex; justify-content: space-between; gap: 24px; align-items: end; border-bottom: 1px solid #cdd8d2; padding-bottom: 22px; }}
+    .eyebrow {{ color: #4b675b; font-size: 12px; font-weight: 750; text-transform: uppercase; }}
+    h1 {{ margin: 6px 0 8px; font-size: 32px; letter-spacing: 0; }}
+    p {{ line-height: 1.55; }}
+    .status {{ margin: 24px 0; padding: 20px; border-left: 5px solid #2c7a57; background: #fff; }}
+    .status.warning {{ border-color: #c47b17; }} .status.blocked {{ border-color: #b53c37; }}
+    .status h2 {{ margin: 0 0 8px; font-size: 20px; }} .status p {{ margin: 6px 0; }}
+    .facts {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }}
+    .fact {{ border: 1px solid #d7e0db; background: #fff; padding: 14px; }}
+    .fact span, td span {{ display: block; color: #63736b; font-size: 12px; margin-top: 4px; }}
+    .fact code {{ display: block; overflow-wrap: anywhere; font-size: 11px; margin-top: 5px; }}
+    table {{ width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #d7e0db; }}
+    th, td {{ padding: 12px; border-bottom: 1px solid #e2e8e5; text-align: left; vertical-align: top; }}
+    th {{ background: #edf3ef; color: #3d5148; font-size: 12px; text-transform: uppercase; }}
+    td:nth-child(2), td:nth-child(3), td:nth-child(4) {{ white-space: nowrap; text-align: right; }}
+    .delta-up {{ color: #9b3a31; font-weight: 700; }} .delta-down {{ color: #246b4c; font-weight: 700; }}
+    .actions {{ display: flex; flex-wrap: wrap; gap: 10px; margin: 22px 0; }}
+    .button, button {{ border: 0; background: #145c43; color: #fff; padding: 10px 14px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }}
+    .button.secondary {{ background: #e3ece7; color: #1d4d3a; }}
+    .legal {{ margin-top: 24px; color: #53635b; font-size: 13px; }}
+    @media (max-width: 760px) {{ header {{ align-items: start; flex-direction: column; }} .facts {{ grid-template-columns: 1fr; }} .table-wrap {{ overflow-x: auto; }} main {{ padding: 22px 14px; }} }}
+    @media print {{ body {{ background: #fff; }} main {{ max-width: none; padding: 0; }} .actions {{ display: none; }} }}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="eyebrow">Revisionssicherer Steuerreport</div><h1>Steuerjahr {report.year}</h1><p>Abgegebener bzw. archivierter Stand gegen aktuelle Berechnung.</p></div>
+    <div><strong>Erzeugt</strong><br>{html.escape(report.generated_at)}</div>
+  </header>
+  <section class="status {tone}"><h2>{html.escape(report.headline)}</h2><p>{html.escape(report.next_action)}</p></section>
+  <section class="facts">
+    <div class="fact"><strong>Vergleichsbasis</strong><span>{baseline_label}</span></div>
+    <div class="fact"><strong>Integritaet</strong><span>{integrity}</span><code>{package_hash}</code></div>
+    <div class="fact"><strong>Korrekturpruefung</strong><span>{'erforderlich' if report.amendment_review_required else 'aktuell nicht aus diesem Vergleich abgeleitet'}</span></div>
+    <div class="fact"><strong>Uebermittlungszeitpunkt</strong><span>{'noch aus ELSTER-Protokoll nachzutragen' if report.submission_timestamp_required else html.escape(baseline.submitted_at) if baseline and baseline.submitted_at else 'nicht erforderlich oder kein Stand'}</span></div>
+  </section>
+  <div class="actions"><button type="button" onclick="window.print()">Drucken / als PDF sichern</button>{package_link}<a class="button secondary" href="/api/v1/export/tax-years/{report.year}/filing-snapshot-comparison.csv">Delta-CSV</a></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Bereich</th><th>Abgabestand</th><th>Aktuell</th><th>Delta</th><th>Einordnung</th></tr></thead>
+    <tbody>{delta_rows}</tbody>
+  </table></div>
+  <p class="legal"><strong>Rechtlicher Hinweis:</strong> {html.escape(report.legal_notice)}</p>
+  <p class="legal"><strong>Methodik:</strong> {html.escape(report.methodology)}</p>
+</main>
+</body>
+</html>"""
+
+    @app.get("/api/v1/tax-years/{year}/filing-snapshot-comparison.html")
+    def tax_filing_snapshot_comparison_html(year: int) -> Response:
+        summary = cached_response(
+            f"tax-years:filing-summary:{year}",
+            60,
+            lambda: TaxYearService(db).filing_summary(year),
+        )
+        report = TaxFilingSnapshotService(db).comparison(
+            year,
+            current_summary=summary,
+        )
+        return Response(
+            content=render_tax_filing_snapshot_comparison_html(report),
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f"inline; filename=steuerjahr-{year}-abgabestand-vergleich.html"
+                )
+            },
+        )
+
+    @app.get("/api/v1/export/tax-years/{year}/filing-snapshot-comparison.csv")
+    def tax_filing_snapshot_comparison_csv(year: int) -> Response:
+        summary = cached_response(
+            f"tax-years:filing-summary:{year}",
+            60,
+            lambda: TaxYearService(db).filing_summary(year),
+        )
+        report = TaxFilingSnapshotService(db).comparison(
+            year,
+            current_summary=summary,
+        )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "Year",
+                "Category",
+                "Key",
+                "Label",
+                "Filed_Value_EUR",
+                "Current_Value_EUR",
+                "Delta_EUR",
+                "Changed_At_Cent_Precision",
+                "Requires_Review",
+                "Explanation",
+            ]
+        )
+        for item in report.deltas:
+            writer.writerow(
+                [
+                    year,
+                    item.category,
+                    item.key,
+                    item.label,
+                    item.filed_value_eur,
+                    item.current_value_eur,
+                    item.delta_eur,
+                    item.changed_at_cent_precision,
+                    item.requires_review,
+                    item.explanation,
+                ]
+            )
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f"attachment; filename=tax-year-{year}-filing-snapshot-comparison.csv"
+                )
+            },
+        )
+
+    @app.get("/api/v1/tax-filing-snapshots/{snapshot_id}/package.zip")
+    def download_tax_filing_snapshot_package(snapshot_id: str) -> Response:
+        service = TaxFilingSnapshotService(db)
+        try:
+            snapshot = service.get(snapshot_id)
+            content = service.read_package(snapshot_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Snapshot nicht gefunden.") from exc
+        except (TaxFilingSnapshotError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return Response(
+            content=content,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": (
+                    "attachment; filename="
+                    f"steuerreport-v2-{snapshot.year}-revision-{snapshot.revision}-"
+                    f"{snapshot.state}.zip"
+                ),
+                "X-Steuerreport-SHA256": snapshot.package_sha256,
+                "X-Steuerreport-Integrity": snapshot.integrity_status,
             },
         )
 

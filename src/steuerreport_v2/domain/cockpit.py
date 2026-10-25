@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_alias
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -47,8 +49,8 @@ class CockpitService:
         "Binance": "binance",
         "Bitget": "bitget",
         "Pionex": "pionex",
-        "Jup Wallet GmHY...3yu": "jup_wallet",
-        "Solana Wallet 6K9n7y...qEwP": "solana_wallet",
+        ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')): "jup_wallet",
+        ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')): "solana_wallet",
     }
 
     def __init__(self, store: DuckDbStore) -> None:
@@ -496,7 +498,7 @@ class CockpitService:
             accounts.append(
                 PortfolioSourceAccount(
                     account=portfolio.KNOWN_JUP_WALLET,
-                    source_group="Jup Wallet GmHY...3yu",
+                    source_group=('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')),
                     source_type="solana_wallet",
                     value_eur=Decimal("0"),
                     position_count=0,
@@ -1141,7 +1143,7 @@ class CockpitService:
         group: object,
         source_live: dict[str, dict[str, object]],
     ) -> str:
-        if group.source_group == "Jup Wallet GmHY...3yu":
+        if group.source_group == ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')):
             live_value = source_live.get(group.source_group, {}).get("live_value_eur")
             if live_value is not None and abs(live_value - group.value_eur) < Decimal("5"):  # type: ignore[operator]
                 return "live_anchor_reconciled"

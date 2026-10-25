@@ -44,7 +44,12 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Review", ("/api/v1/review",)),
     (
         "Steuer, BMF und Steuerjahre",
-        ("/api/v1/tax-methodology", "/api/v1/tax-years", "/api/v1/tax"),
+        (
+            "/api/v1/tax-methodology",
+            "/api/v1/tax-years",
+            "/api/v1/tax-filing-snapshots",
+            "/api/v1/tax",
+        ),
     ),
     ("Reports und Exporte", ("/api/v1/reports", "/api/v1/export")),
     ("Stichtag und Zugewinn", ("/api/v1/divorce",)),
@@ -54,6 +59,36 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 PURPOSE_OVERRIDES = {
+    ("GET", "/api/v1/tax-filing-snapshots"): (
+        "Liefert das append-only Register hashgebundener Abgabe- und Referenzpakete"
+    ),
+    ("GET", "/api/v1/tax-years/{year}/filing-snapshots"): (
+        "Liefert das hashgebundene Snapshot-Register fuer ein konkretes Steuerjahr"
+    ),
+    ("POST", "/api/v1/tax-years/{year}/filing-snapshots"): (
+        "Archiviert den aktuellen Paketstand oder bestaetigt eine konkrete Revision als tatsaechlich eingereicht"
+    ),
+    ("GET", "/api/v1/tax-years/{year}/filing-snapshot-comparison"): (
+        "Vergleicht den eingereichten bzw. archivierten Stand je Einkunftsart mit der aktuellen Berechnung"
+    ),
+    ("GET", "/api/v1/tax-years/{year}/filing-audit-report"): (
+        "Erzeugt bzw. liefert den read-only Einzelpositions-, Ursachen- und Summenabgleich"
+    ),
+    ("GET", "/api/v1/tax-years/{year}/filing-audit-report.json"): (
+        "Liefert das unveraenderliche JSON-Auditartefakt"
+    ),
+    ("GET", "/api/v1/tax-years/{year}/filing-audit-report.md"): (
+        "Liefert das unveraenderliche Markdown-Auditartefakt"
+    ),
+    ("GET", "/api/v1/tax-years/{year}/filing-snapshot-comparison.html"): (
+        "Liefert die druckbare Korrekturpruefungsakte statt einer rohen JSON-Ansicht"
+    ),
+    ("GET", "/api/v1/export/tax-years/{year}/filing-snapshot-comparison.csv"): (
+        "Liefert den Abgabestand-Delta je Einkunftsart als CSV"
+    ),
+    ("GET", "/api/v1/tax-filing-snapshots/{snapshot_id}/package.zip"): (
+        "Liefert ein erneut SHA-256-geprueftes unveraenderliches Abgabepaket"
+    ),
     ("POST", "/api/v1/divorce/service-route-evidence/refresh"): (
         "Erzeugt einen SHA-gebundenen Solana-RPC-Lebenszyklusbeleg fuer eine Serviceposition"
     ),

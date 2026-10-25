@@ -320,7 +320,15 @@ class BmfEventPriceRemediationService:
         evidence_after = None
         if request.execute:
             evidence_after = self.event_evidence_service.run(
-                BmfFifoEventEvidenceRunRequest(limit=5000, issue_limit=5000)
+                BmfFifoEventEvidenceRunRequest(
+                    limit=5000,
+                    issue_limit=20000,
+                    scope_mode=(
+                        "full_ledger"
+                        if evidence_before.full_ledger_scope
+                        else "priority_delta"
+                    ),
+                )
             )
 
         fingerprint = self._requirements_fingerprint(

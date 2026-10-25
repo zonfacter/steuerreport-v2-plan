@@ -204,7 +204,7 @@
             "type": "string"
           },
           "authentication_mode": {
-            "default": "none_lan_only",
+            "default": "lan_reads_and_scoped_mobile_connector_sessions",
             "title": "Authentication Mode",
             "type": "string"
           },
@@ -228,7 +228,7 @@
             "type": "string"
           },
           "mobile_api_status": {
-            "default": "experimental_read_and_wallet_ownership_setup",
+            "default": "experimental_read_pairing_wallet_ownership_and_document_inbox",
             "title": "Mobile Api Status",
             "type": "string"
           },
@@ -252,6 +252,13 @@
               "$ref": "#/components/schemas/MobileApiEndpoint"
             },
             "title": "Recommended Read Endpoints",
+            "type": "array"
+          },
+          "recommended_write_endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/MobileApiEndpoint"
+            },
+            "title": "Recommended Write Endpoints",
             "type": "array"
           },
           "redoc_url": {
@@ -286,6 +293,7 @@
           "operation_count",
           "path_count",
           "recommended_read_endpoints",
+          "recommended_write_endpoints",
           "methodology"
         ],
         "title": "ApiCapabilities",
@@ -3972,6 +3980,226 @@
         "title": "ApiResponse[LocalAiYearPackageQaStatus]",
         "type": "object"
       },
+      "ApiResponse_MobileConnectorPairing_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MobileConnectorPairing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[MobileConnectorPairing]",
+        "type": "object"
+      },
+      "ApiResponse_MobileConnectorSessionToken_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MobileConnectorSessionToken"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[MobileConnectorSessionToken]",
+        "type": "object"
+      },
+      "ApiResponse_MobileConnectorSession_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MobileConnectorSession"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[MobileConnectorSession]",
+        "type": "object"
+      },
+      "ApiResponse_MobileDocumentInboxReport_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MobileDocumentInboxReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[MobileDocumentInboxReport]",
+        "type": "object"
+      },
+      "ApiResponse_MobileDocumentUploadResult_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MobileDocumentUploadResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[MobileDocumentUploadResult]",
+        "type": "object"
+      },
       "ApiResponse_MoonpayReceiptReport_": {
         "properties": {
           "data": {
@@ -7094,6 +7322,226 @@
           }
         },
         "title": "ApiResponse[TaxExternalInflowReport]",
+        "type": "object"
+      },
+      "ApiResponse_TaxFilingAuditReport_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingAuditReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[TaxFilingAuditReport]",
+        "type": "object"
+      },
+      "ApiResponse_TaxFilingSnapshotCaptureResult_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshotCaptureResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[TaxFilingSnapshotCaptureResult]",
+        "type": "object"
+      },
+      "ApiResponse_TaxFilingSnapshotComparison_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshotComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[TaxFilingSnapshotComparison]",
+        "type": "object"
+      },
+      "ApiResponse_TaxFilingSnapshotList_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshotList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[TaxFilingSnapshotList]",
+        "type": "object"
+      },
+      "ApiResponse_TaxFilingSnapshotUsageConfirmationResult_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshotUsageConfirmationResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[TaxFilingSnapshotUsageConfirmationResult]",
         "type": "object"
       },
       "ApiResponse_TaxHeliumSwapContextReview_": {
@@ -12110,6 +12558,54 @@
           }
         },
         "title": "ApiResponse[list[ImportBatch]]",
+        "type": "object"
+      },
+      "ApiResponse_list_MobileConnectorSession__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MobileConnectorSession"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[list[MobileConnectorSession]]",
         "type": "object"
       },
       "ApiResponse_list_PricePoint__": {
@@ -20785,7 +21281,7 @@
         "properties": {
           "issue_limit": {
             "default": 500,
-            "maximum": 5000.0,
+            "maximum": 20000.0,
             "minimum": 1.0,
             "title": "Issue Limit",
             "type": "integer"
@@ -21388,6 +21884,68 @@
           "file"
         ],
         "title": "Body_divorce_trade_republic_document_upload_api_v1_divorce_trade_republic_documents_post",
+        "type": "object"
+      },
+      "Body_upload_mobile_connector_document_api_v1_connectors_mobile_documents_post": {
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "document_kind": {
+            "default": "other",
+            "enum": [
+              "bank_statement",
+              "exchange_statement",
+              "purchase_receipt",
+              "tax_notice",
+              "inheritance_evidence",
+              "portfolio_statement",
+              "other"
+            ],
+            "title": "Document Kind",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Hint"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_mobile_connector_document_api_v1_connectors_mobile_documents_post",
         "type": "object"
       },
       "BusinessRewardInventoryReviewReport": {
@@ -23070,6 +23628,9 @@
             "title": "Methodology",
             "type": "string"
           },
+          "mobile_document_inbox": {
+            "$ref": "#/components/schemas/MobileDocumentInboxSummary"
+          },
           "security": {
             "$ref": "#/components/schemas/ConnectorSecurityStatus"
           }
@@ -23077,6 +23638,7 @@
         "required": [
           "generated_at",
           "security",
+          "mobile_document_inbox",
           "connectors",
           "methodology"
         ],
@@ -23187,6 +23749,11 @@
       },
       "ConnectorSecurityStatus": {
         "properties": {
+          "active_mobile_sessions": {
+            "default": 0,
+            "title": "Active Mobile Sessions",
+            "type": "integer"
+          },
           "auth_mode": {
             "default": "disabled",
             "enum": [
@@ -23212,6 +23779,11 @@
           "internet_ready": {
             "default": false,
             "title": "Internet Ready",
+            "type": "boolean"
+          },
+          "mobile_pairing_enabled": {
+            "default": false,
+            "title": "Mobile Pairing Enabled",
             "type": "boolean"
           },
           "owner_scope": {
@@ -33761,6 +34333,558 @@
         "title": "MobileApiEndpoint",
         "type": "object"
       },
+      "MobileConnectorPairing": {
+        "properties": {
+          "device_name": {
+            "title": "Device Name",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "issued_at": {
+            "format": "date-time",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "pairing_code": {
+            "title": "Pairing Code",
+            "type": "string"
+          },
+          "pairing_id": {
+            "title": "Pairing Id",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "android",
+              "ios",
+              "web",
+              "other"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "connector:read",
+                "wallet:verify",
+                "document:upload"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "status": {
+            "const": "pending",
+            "default": "pending",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairing_id",
+          "pairing_code",
+          "device_name",
+          "platform",
+          "scopes",
+          "issued_at",
+          "expires_at"
+        ],
+        "title": "MobileConnectorPairing",
+        "type": "object"
+      },
+      "MobileConnectorPairingRequest": {
+        "properties": {
+          "device_name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Device Name",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "android",
+              "ios",
+              "web",
+              "other"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "connector:read",
+                "wallet:verify",
+                "document:upload"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Scopes",
+            "type": "array"
+          },
+          "session_ttl_hours": {
+            "default": 168,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Session Ttl Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "device_name",
+          "platform"
+        ],
+        "title": "MobileConnectorPairingRequest",
+        "type": "object"
+      },
+      "MobileConnectorSession": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_name": {
+            "title": "Device Name",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "platform": {
+            "enum": [
+              "android",
+              "ios",
+              "web",
+              "other"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "connector:read",
+                "wallet:verify",
+                "document:upload"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "device_name",
+          "platform",
+          "scopes",
+          "created_at",
+          "expires_at",
+          "status"
+        ],
+        "title": "MobileConnectorSession",
+        "type": "object"
+      },
+      "MobileConnectorSessionExchangeRequest": {
+        "properties": {
+          "pairing_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Pairing Code",
+            "type": "string"
+          },
+          "pairing_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Pairing Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairing_id",
+          "pairing_code"
+        ],
+        "title": "MobileConnectorSessionExchangeRequest",
+        "type": "object"
+      },
+      "MobileConnectorSessionToken": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "session": {
+            "$ref": "#/components/schemas/MobileConnectorSession"
+          },
+          "token_type": {
+            "const": "Bearer",
+            "default": "Bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "session"
+        ],
+        "title": "MobileConnectorSessionToken",
+        "type": "object"
+      },
+      "MobileDocumentEvidence": {
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "content_download_path": {
+            "title": "Content Download Path",
+            "type": "string"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_kind": {
+            "enum": [
+              "bank_statement",
+              "exchange_statement",
+              "purchase_receipt",
+              "tax_notice",
+              "inheritance_evidence",
+              "portfolio_statement",
+              "other"
+            ],
+            "title": "Document Kind",
+            "type": "string"
+          },
+          "document_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Document Sha256",
+            "type": "string"
+          },
+          "evidence_ref": {
+            "title": "Evidence Ref",
+            "type": "string"
+          },
+          "first_uploaded_at": {
+            "format": "date-time",
+            "title": "First Uploaded At",
+            "type": "string"
+          },
+          "first_uploaded_by_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Uploaded By Session Id"
+          },
+          "last_uploaded_at": {
+            "format": "date-time",
+            "title": "Last Uploaded At",
+            "type": "string"
+          },
+          "last_uploaded_by_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Uploaded By Session Id"
+          },
+          "media_type": {
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Media Type",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "original_filename": {
+            "title": "Original Filename",
+            "type": "string"
+          },
+          "review_status": {
+            "default": "pending_review",
+            "enum": [
+              "pending_review",
+              "reviewed",
+              "rejected"
+            ],
+            "title": "Review Status",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "source_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Hint"
+          },
+          "tax_effect": {
+            "const": "none_pending_review",
+            "default": "none_pending_review",
+            "title": "Tax Effect",
+            "type": "string"
+          },
+          "upload_count": {
+            "default": 1,
+            "title": "Upload Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document_id",
+          "document_sha256",
+          "original_filename",
+          "media_type",
+          "size_bytes",
+          "document_kind",
+          "first_uploaded_at",
+          "last_uploaded_at",
+          "evidence_ref",
+          "content_download_path"
+        ],
+        "title": "MobileDocumentEvidence",
+        "type": "object"
+      },
+      "MobileDocumentInboxReport": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/MobileDocumentEvidence"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "max_file_bytes": {
+            "title": "Max File Bytes",
+            "type": "integer"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "pending_review_documents": {
+            "default": 0,
+            "title": "Pending Review Documents",
+            "type": "integer"
+          },
+          "rejected_documents": {
+            "default": 0,
+            "title": "Rejected Documents",
+            "type": "integer"
+          },
+          "returned_documents": {
+            "default": 0,
+            "title": "Returned Documents",
+            "type": "integer"
+          },
+          "reviewed_documents": {
+            "default": 0,
+            "title": "Reviewed Documents",
+            "type": "integer"
+          },
+          "status": {
+            "default": "empty",
+            "enum": [
+              "empty",
+              "review_required",
+              "stored"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stored_bytes": {
+            "default": 0,
+            "title": "Stored Bytes",
+            "type": "integer"
+          },
+          "supported_media_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Media Types",
+            "type": "array"
+          },
+          "total_documents": {
+            "default": 0,
+            "title": "Total Documents",
+            "type": "integer"
+          },
+          "total_upload_attempts": {
+            "default": 0,
+            "title": "Total Upload Attempts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "max_file_bytes",
+          "methodology"
+        ],
+        "title": "MobileDocumentInboxReport",
+        "type": "object"
+      },
+      "MobileDocumentInboxSummary": {
+        "properties": {
+          "pending_review_documents": {
+            "default": 0,
+            "title": "Pending Review Documents",
+            "type": "integer"
+          },
+          "rejected_documents": {
+            "default": 0,
+            "title": "Rejected Documents",
+            "type": "integer"
+          },
+          "reviewed_documents": {
+            "default": 0,
+            "title": "Reviewed Documents",
+            "type": "integer"
+          },
+          "status": {
+            "default": "empty",
+            "enum": [
+              "empty",
+              "review_required",
+              "stored"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stored_bytes": {
+            "default": 0,
+            "title": "Stored Bytes",
+            "type": "integer"
+          },
+          "total_documents": {
+            "default": 0,
+            "title": "Total Documents",
+            "type": "integer"
+          },
+          "total_upload_attempts": {
+            "default": 0,
+            "title": "Total Upload Attempts",
+            "type": "integer"
+          }
+        },
+        "title": "MobileDocumentInboxSummary",
+        "type": "object"
+      },
+      "MobileDocumentUploadResult": {
+        "properties": {
+          "already_present": {
+            "default": false,
+            "title": "Already Present",
+            "type": "boolean"
+          },
+          "content_restored": {
+            "default": false,
+            "title": "Content Restored",
+            "type": "boolean"
+          },
+          "document": {
+            "$ref": "#/components/schemas/MobileDocumentEvidence"
+          },
+          "inbox": {
+            "$ref": "#/components/schemas/MobileDocumentInboxSummary"
+          }
+        },
+        "required": [
+          "document",
+          "inbox"
+        ],
+        "title": "MobileDocumentUploadResult",
+        "type": "object"
+      },
       "MoonpayReceiptDecisionLayer": {
         "properties": {
           "bank_debit_bound": {
@@ -43539,7 +44663,7 @@
             "type": "string"
           },
           "wallet": {
-            "default": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+            "default": "",
             "title": "Wallet",
             "type": "string"
           }
@@ -47609,6 +48733,1079 @@
         "title": "SparkasseStatementDocumentEvidence",
         "type": "object"
       },
+      "TaxAuditAggregateReconciliation": {
+        "properties": {
+          "aggregate_delta_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Aggregate Delta Eur",
+            "type": "string"
+          },
+          "current_value_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Current Value Eur",
+            "type": "string"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "individual_delta_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Individual Delta Eur"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reference_value_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reference Value Eur",
+            "type": "string"
+          },
+          "residual_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Eur"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "reconciled",
+              "reconciliation_failed",
+              "not_available"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "reference_value_eur",
+          "current_value_eur",
+          "aggregate_delta_eur",
+          "status",
+          "source",
+          "explanation"
+        ],
+        "title": "TaxAuditAggregateReconciliation",
+        "type": "object"
+      },
+      "TaxAuditCashSeparation": {
+        "properties": {
+          "actual_eur_deposits_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Eur Deposits Eur"
+          },
+          "actual_eur_deposits_status": {
+            "title": "Actual Eur Deposits Status",
+            "type": "string"
+          },
+          "actual_eur_withdrawals_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Eur Withdrawals Eur"
+          },
+          "actual_eur_withdrawals_status": {
+            "title": "Actual Eur Withdrawals Status",
+            "type": "string"
+          },
+          "internal_transfers_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Transfers Eur"
+          },
+          "internal_transfers_status": {
+            "title": "Internal Transfers Status",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "tax_free_gain_loss_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tax Free Gain Loss Eur",
+            "type": "string"
+          },
+          "taxable_gain_loss_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Taxable Gain Loss Eur",
+            "type": "string"
+          },
+          "trade_swap_volume_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Trade Swap Volume Eur",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trade_swap_volume_eur",
+          "taxable_gain_loss_eur",
+          "tax_free_gain_loss_eur",
+          "actual_eur_deposits_status",
+          "actual_eur_withdrawals_status",
+          "internal_transfers_status"
+        ],
+        "title": "TaxAuditCashSeparation",
+        "type": "object"
+      },
+      "TaxAuditDelta": {
+        "properties": {
+          "acquisition_cost_delta_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acquisition Cost Delta Eur"
+          },
+          "acquisition_cost_new_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acquisition Cost New Eur"
+          },
+          "acquisition_cost_old_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acquisition Cost Old Eur"
+          },
+          "asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset"
+          },
+          "cause": {
+            "enum": [
+              "new_import",
+              "previously_unconsidered_source",
+              "fifo_lot_assignment",
+              "price_or_fx_change",
+              "holding_period_classification",
+              "rewards_mining_staking",
+              "derivatives",
+              "correction_or_deletion",
+              "unknown"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "cause_explanation": {
+            "title": "Cause Explanation",
+            "type": "string"
+          },
+          "change_kind": {
+            "enum": [
+              "added",
+              "removed",
+              "changed"
+            ],
+            "title": "Change Kind",
+            "type": "string"
+          },
+          "counterpart_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Counterpart Event Ids",
+            "type": "array"
+          },
+          "disposal_proceeds_delta_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disposal Proceeds Delta Eur"
+          },
+          "disposal_proceeds_new_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disposal Proceeds New Eur"
+          },
+          "disposal_proceeds_old_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disposal Proceeds Old Eur"
+          },
+          "event_datetime_europe_berlin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Datetime Europe Berlin"
+          },
+          "event_datetime_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Datetime Utc"
+          },
+          "fifo_lot_new": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fifo Lot New"
+          },
+          "fifo_lot_old": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fifo Lot Old"
+          },
+          "holding_days_new": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holding Days New"
+          },
+          "holding_days_old": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holding Days Old"
+          },
+          "human_approval_actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Approval Actor"
+          },
+          "human_approval_at_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Approval At Utc"
+          },
+          "human_approval_status": {
+            "default": "required",
+            "enum": [
+              "required",
+              "approved",
+              "not_provided"
+            ],
+            "title": "Human Approval Status",
+            "type": "string"
+          },
+          "import_file_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import File Sha256"
+          },
+          "import_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Filename"
+          },
+          "import_row_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Row Number"
+          },
+          "logical_event_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Event Group Id"
+          },
+          "new_value_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Value Eur"
+          },
+          "old_value_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Value Eur"
+          },
+          "position_kind": {
+            "enum": [
+              "tax_line",
+              "reward_income_position",
+              "derivative_line"
+            ],
+            "title": "Position Kind",
+            "type": "string"
+          },
+          "quantity_delta": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Delta"
+          },
+          "quantity_new": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity New"
+          },
+          "quantity_old": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Old"
+          },
+          "review_required": {
+            "default": true,
+            "title": "Review Required",
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_role": {
+            "default": "unknown",
+            "enum": [
+              "primary",
+              "aggregator_mirror",
+              "unknown"
+            ],
+            "title": "Source Role",
+            "type": "string"
+          },
+          "source_validation_status": {
+            "default": "not_applicable",
+            "enum": [
+              "matched_primary_transfer",
+              "matched_aggregator_mirror",
+              "unmatched_review",
+              "not_applicable"
+            ],
+            "title": "Source Validation Status",
+            "type": "string"
+          },
+          "stable_event_id_or_fingerprint": {
+            "title": "Stable Event Id Or Fingerprint",
+            "type": "string"
+          },
+          "tax_inclusion_status": {
+            "default": "not_applicable",
+            "enum": [
+              "included_current_runtime",
+              "not_independent_tax_event",
+              "pending_review",
+              "not_applicable"
+            ],
+            "title": "Tax Inclusion Status",
+            "type": "string"
+          },
+          "value_delta_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Delta Eur"
+          }
+        },
+        "required": [
+          "position_kind",
+          "change_kind",
+          "stable_event_id_or_fingerprint",
+          "cause",
+          "cause_explanation"
+        ],
+        "title": "TaxAuditDelta",
+        "type": "object"
+      },
+      "TaxAuditEndpointEvidence": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "payload_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload Sha256"
+          },
+          "query_timestamp_europe_berlin": {
+            "title": "Query Timestamp Europe Berlin",
+            "type": "string"
+          },
+          "query_timestamp_utc": {
+            "title": "Query Timestamp Utc",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "reference_package",
+              "current_runtime"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "endpoint",
+          "query_timestamp_utc",
+          "query_timestamp_europe_berlin",
+          "source",
+          "available"
+        ],
+        "title": "TaxAuditEndpointEvidence",
+        "type": "object"
+      },
+      "TaxAuditMirrorMatch": {
+        "properties": {
+          "asset": {
+            "title": "Asset",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TaxAuditSourceEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "logical_event_group_id": {
+            "title": "Logical Event Group Id",
+            "type": "string"
+          },
+          "match_basis": {
+            "title": "Match Basis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "logical_event_group_id",
+          "asset",
+          "match_basis"
+        ],
+        "title": "TaxAuditMirrorMatch",
+        "type": "object"
+      },
+      "TaxAuditReproducibility": {
+        "properties": {
+          "current_input_fingerprint": {
+            "title": "Current Input Fingerprint",
+            "type": "string"
+          },
+          "delta_list_identical": {
+            "title": "Delta List Identical",
+            "type": "boolean"
+          },
+          "differences": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Differences",
+            "type": "array"
+          },
+          "reference_input_fingerprint": {
+            "title": "Reference Input Fingerprint",
+            "type": "string"
+          },
+          "snapshot_hashes_identical": {
+            "title": "Snapshot Hashes Identical",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "reproducible",
+              "not_reproducible",
+              "not_verifiable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "sums_identical": {
+            "title": "Sums Identical",
+            "type": "boolean"
+          },
+          "tax_line_count_identical": {
+            "title": "Tax Line Count Identical",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "snapshot_hashes_identical",
+          "tax_line_count_identical",
+          "sums_identical",
+          "delta_list_identical",
+          "status",
+          "reference_input_fingerprint",
+          "current_input_fingerprint"
+        ],
+        "title": "TaxAuditReproducibility",
+        "type": "object"
+      },
+      "TaxAuditSnapshotMetadata": {
+        "properties": {
+          "confirmation_scope": {
+            "title": "Confirmation Scope",
+            "type": "string"
+          },
+          "created_at_europe_berlin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At Europe Berlin"
+          },
+          "created_at_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At Utc"
+          },
+          "database_fingerprint_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Fingerprint Sha256"
+          },
+          "filing_usage_confirmation_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Usage Confirmation Event Id"
+          },
+          "filing_usage_confirmation_statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Usage Confirmation Statement"
+          },
+          "filing_usage_confirmed": {
+            "default": false,
+            "title": "Filing Usage Confirmed",
+            "type": "boolean"
+          },
+          "integrity_status": {
+            "title": "Integrity Status",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "method_version": {
+            "title": "Method Version",
+            "type": "string"
+          },
+          "package_generated_at_europe_berlin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Generated At Europe Berlin"
+          },
+          "package_generated_at_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Generated At Utc"
+          },
+          "package_name": {
+            "title": "Package Name",
+            "type": "string"
+          },
+          "package_sha256": {
+            "title": "Package Sha256",
+            "type": "string"
+          },
+          "runtime_fingerprint_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Fingerprint Sha256"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "software_version": {
+            "title": "Software Version",
+            "type": "string"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "package_name",
+          "package_sha256",
+          "manifest_sha256",
+          "software_version",
+          "method_version",
+          "integrity_status",
+          "source_kind",
+          "confirmation_scope"
+        ],
+        "title": "TaxAuditSnapshotMetadata",
+        "type": "object"
+      },
+      "TaxAuditSourceEvent": {
+        "properties": {
+          "asset": {
+            "title": "Asset",
+            "type": "string"
+          },
+          "event_datetime_utc": {
+            "title": "Event Datetime Utc",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "import_file_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import File Sha256"
+          },
+          "import_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Filename"
+          },
+          "import_row_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Row Number"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "reported_integration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported Integration"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "source_role": {
+            "enum": [
+              "primary",
+              "aggregator_mirror",
+              "unknown"
+            ],
+            "title": "Source Role",
+            "type": "string"
+          },
+          "tax_inclusion_status": {
+            "enum": [
+              "included_current_runtime",
+              "not_independent_tax_event",
+              "pending_review",
+              "not_applicable"
+            ],
+            "title": "Tax Inclusion Status",
+            "type": "string"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          }
+        },
+        "required": [
+          "event_id",
+          "source",
+          "source_role",
+          "event_type",
+          "event_datetime_utc",
+          "asset",
+          "quantity",
+          "tax_inclusion_status"
+        ],
+        "title": "TaxAuditSourceEvent",
+        "type": "object"
+      },
+      "TaxAuditSourceReconciliation": {
+        "properties": {
+          "aggregator_sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aggregator Sources",
+            "type": "array"
+          },
+          "matched_mirror_event_count": {
+            "default": 0,
+            "title": "Matched Mirror Event Count",
+            "type": "integer"
+          },
+          "matched_mirror_group_count": {
+            "default": 0,
+            "title": "Matched Mirror Group Count",
+            "type": "integer"
+          },
+          "matched_primary_transfer_event_count": {
+            "default": 0,
+            "title": "Matched Primary Transfer Event Count",
+            "type": "integer"
+          },
+          "matched_primary_transfer_group_count": {
+            "default": 0,
+            "title": "Matched Primary Transfer Group Count",
+            "type": "integer"
+          },
+          "mirror_matches": {
+            "items": {
+              "$ref": "#/components/schemas/TaxAuditMirrorMatch"
+            },
+            "title": "Mirror Matches",
+            "type": "array"
+          },
+          "open_review_points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Review Points",
+            "type": "array"
+          },
+          "primary_sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Primary Sources",
+            "type": "array"
+          },
+          "source_role_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Source Role Counts",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "review_required"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unmatched_aggregator_derivative_count": {
+            "default": 0,
+            "title": "Unmatched Aggregator Derivative Count",
+            "type": "integer"
+          },
+          "unmatched_aggregator_event_count": {
+            "default": 0,
+            "title": "Unmatched Aggregator Event Count",
+            "type": "integer"
+          },
+          "unmatched_aggregator_tax_line_count": {
+            "default": 0,
+            "title": "Unmatched Aggregator Tax Line Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "TaxAuditSourceReconciliation",
+        "type": "object"
+      },
       "TaxBmfActionItem": {
         "properties": {
           "action": {
@@ -47870,6 +50067,11 @@
             "title": "Display Line",
             "type": "string"
           },
+          "elster_field_verification_required": {
+            "default": false,
+            "title": "Elster Field Verification Required",
+            "type": "boolean"
+          },
           "evidence_package_endpoint": {
             "title": "Evidence Package Endpoint",
             "type": "string"
@@ -47882,8 +50084,30 @@
             "title": "Next Action",
             "type": "string"
           },
+          "prior_filing_absolute_delta_eur": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Prior Filing Absolute Delta Eur",
+            "type": "string"
+          },
+          "prior_filing_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Filing Snapshot Id"
+          },
           "prior_filing_status": {
             "title": "Prior Filing Status",
+            "type": "string"
+          },
+          "prior_filing_values_source": {
+            "default": "none",
+            "title": "Prior Filing Values Source",
             "type": "string"
           },
           "priority": {
@@ -49086,6 +51310,13 @@
             "title": "Available Years",
             "type": "array"
           },
+          "confirmed_snapshot_years": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Confirmed Snapshot Years",
+            "type": "array"
+          },
           "delta_review_years": {
             "items": {
               "type": "integer"
@@ -49265,6 +51496,38 @@
             ],
             "title": "Declared Values Note"
           },
+          "declared_values_package_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Values Package Sha256"
+          },
+          "declared_values_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Values Snapshot Id"
+          },
+          "declared_values_source": {
+            "default": "none",
+            "enum": [
+              "none",
+              "admin_setting",
+              "confirmed_filing_snapshot"
+            ],
+            "title": "Declared Values Source",
+            "type": "string"
+          },
           "declared_values_status": {
             "default": "unknown",
             "enum": [
@@ -49328,6 +51591,11 @@
             "title": "Display Line",
             "type": "string"
           },
+          "elster_field_verification_required": {
+            "default": false,
+            "title": "Elster Field Verification Required",
+            "type": "boolean"
+          },
           "evidence_package_endpoint": {
             "title": "Evidence Package Endpoint",
             "type": "string"
@@ -49358,6 +51626,11 @@
           "status_label": {
             "title": "Status Label",
             "type": "string"
+          },
+          "submission_timestamp_known": {
+            "default": false,
+            "title": "Submission Timestamp Known",
+            "type": "boolean"
           },
           "v2_derivative_pnl_eur": {
             "default": "0",
@@ -50164,6 +52437,955 @@
           "methodology"
         ],
         "title": "TaxExternalInflowReport",
+        "type": "object"
+      },
+      "TaxFilingAuditReport": {
+        "properties": {
+          "automatic_tax_correction": {
+            "default": false,
+            "title": "Automatic Tax Correction",
+            "type": "boolean"
+          },
+          "cash_separation": {
+            "$ref": "#/components/schemas/TaxAuditCashSeparation"
+          },
+          "cause_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Cause Counts",
+            "type": "object"
+          },
+          "current": {
+            "$ref": "#/components/schemas/TaxAuditSnapshotMetadata"
+          },
+          "database_mutated": {
+            "default": false,
+            "title": "Database Mutated",
+            "type": "boolean"
+          },
+          "deltas": {
+            "items": {
+              "$ref": "#/components/schemas/TaxAuditDelta"
+            },
+            "title": "Deltas",
+            "type": "array"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/TaxAuditEndpointEvidence"
+            },
+            "title": "Endpoints",
+            "type": "array"
+          },
+          "generated_at_europe_berlin": {
+            "title": "Generated At Europe Berlin",
+            "type": "string"
+          },
+          "generated_at_utc": {
+            "title": "Generated At Utc",
+            "type": "string"
+          },
+          "human_approval_required_for_material_changes": {
+            "default": true,
+            "title": "Human Approval Required For Material Changes",
+            "type": "boolean"
+          },
+          "human_approvals": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Human Approvals",
+            "type": "array"
+          },
+          "json_artifact_endpoint": {
+            "title": "Json Artifact Endpoint",
+            "type": "string"
+          },
+          "markdown_artifact_endpoint": {
+            "title": "Markdown Artifact Endpoint",
+            "type": "string"
+          },
+          "markdown_content_sha256": {
+            "title": "Markdown Content Sha256",
+            "type": "string"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "open_review_points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Review Points",
+            "type": "array"
+          },
+          "reconciliation": {
+            "items": {
+              "$ref": "#/components/schemas/TaxAuditAggregateReconciliation"
+            },
+            "title": "Reconciliation",
+            "type": "array"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxAuditSnapshotMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "report_content_sha256": {
+            "title": "Report Content Sha256",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "reproducibility": {
+            "$ref": "#/components/schemas/TaxAuditReproducibility"
+          },
+          "schema_version": {
+            "default": "tax-filing-audit-v2",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_files": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Source Files",
+            "type": "array"
+          },
+          "source_reconciliation": {
+            "$ref": "#/components/schemas/TaxAuditSourceReconciliation"
+          },
+          "status": {
+            "enum": [
+              "reconciled",
+              "reconciliation_failed",
+              "integrity_blocked",
+              "review_required"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tax_line_count_current": {
+            "title": "Tax Line Count Current",
+            "type": "integer"
+          },
+          "tax_line_count_reference": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Line Count Reference"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "report_id",
+          "generated_at_utc",
+          "generated_at_europe_berlin",
+          "status",
+          "current",
+          "cash_separation",
+          "source_reconciliation",
+          "reproducibility",
+          "tax_line_count_current",
+          "report_content_sha256",
+          "markdown_content_sha256",
+          "json_artifact_endpoint",
+          "markdown_artifact_endpoint",
+          "methodology"
+        ],
+        "title": "TaxFilingAuditReport",
+        "type": "object"
+      },
+      "TaxFilingSnapshot": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_at_europe_berlin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At Europe Berlin"
+          },
+          "database_fingerprint_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Fingerprint Sha256"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/TaxFilingSnapshotFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "files_count": {
+            "default": 0,
+            "title": "Files Count",
+            "type": "integer"
+          },
+          "filing_kind": {
+            "enum": [
+              "original",
+              "correction"
+            ],
+            "title": "Filing Kind",
+            "type": "string"
+          },
+          "filing_usage_confirmation_actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Usage Confirmation Actor"
+          },
+          "filing_usage_confirmation_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Usage Confirmation Source"
+          },
+          "filing_usage_confirmation_statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Usage Confirmation Statement"
+          },
+          "filing_usage_confirmed": {
+            "default": false,
+            "title": "Filing Usage Confirmed",
+            "type": "boolean"
+          },
+          "filing_usage_confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Usage Confirmed At"
+          },
+          "integrity_status": {
+            "enum": [
+              "verified",
+              "missing",
+              "mismatch"
+            ],
+            "title": "Integrity Status",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "method_version": {
+            "default": "unknown_at_capture",
+            "title": "Method Version",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "package_download_endpoint": {
+            "title": "Package Download Endpoint",
+            "type": "string"
+          },
+          "package_filename": {
+            "title": "Package Filename",
+            "type": "string"
+          },
+          "package_generated_at": {
+            "title": "Package Generated At",
+            "type": "string"
+          },
+          "package_generated_at_europe_berlin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Generated At Europe Berlin"
+          },
+          "package_sha256": {
+            "title": "Package Sha256",
+            "type": "string"
+          },
+          "package_size_bytes": {
+            "title": "Package Size Bytes",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "runtime_fingerprint_sha256": {
+            "title": "Runtime Fingerprint Sha256",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "software_version": {
+            "default": "unknown_at_capture",
+            "title": "Software Version",
+            "type": "string"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Snapshot Id"
+          },
+          "state": {
+            "enum": [
+              "reference",
+              "submitted"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "values": {
+            "$ref": "#/components/schemas/TaxFilingValues"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "year",
+          "revision",
+          "state",
+          "filing_kind",
+          "source_kind",
+          "package_filename",
+          "package_sha256",
+          "package_size_bytes",
+          "manifest_sha256",
+          "runtime_fingerprint_sha256",
+          "package_generated_at",
+          "created_at",
+          "integrity_status",
+          "values",
+          "package_download_endpoint"
+        ],
+        "title": "TaxFilingSnapshot",
+        "type": "object"
+      },
+      "TaxFilingSnapshotCaptureRequest": {
+        "properties": {
+          "confirmation_text": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Text"
+          },
+          "filing_kind": {
+            "default": "original",
+            "enum": [
+              "original",
+              "correction"
+            ],
+            "title": "Filing Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Snapshot Id"
+          },
+          "state": {
+            "default": "reference",
+            "enum": [
+              "reference",
+              "submitted"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          }
+        },
+        "title": "TaxFilingSnapshotCaptureRequest",
+        "type": "object"
+      },
+      "TaxFilingSnapshotCaptureResult": {
+        "properties": {
+          "comparison_endpoint": {
+            "title": "Comparison Endpoint",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/TaxFilingSnapshot"
+          }
+        },
+        "required": [
+          "created",
+          "snapshot",
+          "comparison_endpoint",
+          "message"
+        ],
+        "title": "TaxFilingSnapshotCaptureResult",
+        "type": "object"
+      },
+      "TaxFilingSnapshotComparison": {
+        "properties": {
+          "amendment_review_required": {
+            "default": false,
+            "title": "Amendment Review Required",
+            "type": "boolean"
+          },
+          "audit_report_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Report Endpoint"
+          },
+          "baseline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseline_selection": {
+            "enum": [
+              "latest_submitted",
+              "confirmed_used_reference",
+              "latest_reference",
+              "none"
+            ],
+            "title": "Baseline Selection",
+            "type": "string"
+          },
+          "comparison_html_endpoint": {
+            "title": "Comparison Html Endpoint",
+            "type": "string"
+          },
+          "current_values": {
+            "$ref": "#/components/schemas/TaxFilingValues"
+          },
+          "declaration_change_detected": {
+            "default": false,
+            "title": "Declaration Change Detected",
+            "type": "boolean"
+          },
+          "deltas": {
+            "items": {
+              "$ref": "#/components/schemas/TaxFilingSnapshotDelta"
+            },
+            "title": "Deltas",
+            "type": "array"
+          },
+          "exact_change_detected": {
+            "default": false,
+            "title": "Exact Change Detected",
+            "type": "boolean"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "integrity_blocked": {
+            "default": false,
+            "title": "Integrity Blocked",
+            "type": "boolean"
+          },
+          "latest_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "legal_notice": {
+            "title": "Legal Notice",
+            "type": "string"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "next_action": {
+            "title": "Next Action",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "no_snapshot",
+              "reference_confirmation_required",
+              "submission_timestamp_required",
+              "unchanged",
+              "changed_review_required",
+              "integrity_blocked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "submission_confirmation_required": {
+            "default": false,
+            "title": "Submission Confirmation Required",
+            "type": "boolean"
+          },
+          "submission_timestamp_required": {
+            "default": false,
+            "title": "Submission Timestamp Required",
+            "type": "boolean"
+          },
+          "unconfirmed_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage_confirmed_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "generated_at",
+          "baseline_selection",
+          "current_values",
+          "status",
+          "headline",
+          "next_action",
+          "legal_notice",
+          "comparison_html_endpoint",
+          "methodology"
+        ],
+        "title": "TaxFilingSnapshotComparison",
+        "type": "object"
+      },
+      "TaxFilingSnapshotDelta": {
+        "properties": {
+          "category": {
+            "enum": [
+              "declaration",
+              "supporting",
+              "informational"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "changed_at_cent_precision": {
+            "title": "Changed At Cent Precision",
+            "type": "boolean"
+          },
+          "current_value_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Current Value Eur",
+            "type": "string"
+          },
+          "delta_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Delta Eur",
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "increase",
+              "decrease",
+              "unchanged"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "filed_value_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Filed Value Eur",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "requires_review": {
+            "title": "Requires Review",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "category",
+          "filed_value_eur",
+          "current_value_eur",
+          "delta_eur",
+          "direction",
+          "changed_at_cent_precision",
+          "requires_review",
+          "explanation"
+        ],
+        "title": "TaxFilingSnapshotDelta",
+        "type": "object"
+      },
+      "TaxFilingSnapshotFile": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "source_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Endpoint"
+          }
+        },
+        "required": [
+          "path",
+          "size_bytes",
+          "sha256"
+        ],
+        "title": "TaxFilingSnapshotFile",
+        "type": "object"
+      },
+      "TaxFilingSnapshotList": {
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "integrity_failures": {
+            "default": 0,
+            "title": "Integrity Failures",
+            "type": "integer"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "reference_count": {
+            "default": 0,
+            "title": "Reference Count",
+            "type": "integer"
+          },
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/TaxFilingSnapshot"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          },
+          "submitted_count": {
+            "default": 0,
+            "title": "Submitted Count",
+            "type": "integer"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "generated_at",
+          "methodology"
+        ],
+        "title": "TaxFilingSnapshotList",
+        "type": "object"
+      },
+      "TaxFilingSnapshotUsageConfirmationRequest": {
+        "properties": {
+          "actor": {
+            "default": "user",
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Actor",
+            "type": "string"
+          },
+          "source": {
+            "default": "api",
+            "enum": [
+              "chat_user_statement",
+              "web_ui",
+              "api"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "statement": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Statement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "statement"
+        ],
+        "title": "TaxFilingSnapshotUsageConfirmationRequest",
+        "type": "object"
+      },
+      "TaxFilingSnapshotUsageConfirmationResult": {
+        "properties": {
+          "comparison_endpoint": {
+            "title": "Comparison Endpoint",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/TaxFilingSnapshot"
+          }
+        },
+        "required": [
+          "created",
+          "event_id",
+          "snapshot",
+          "comparison_endpoint",
+          "message"
+        ],
+        "title": "TaxFilingSnapshotUsageConfirmationResult",
+        "type": "object"
+      },
+      "TaxFilingValues": {
+        "properties": {
+          "acquisition_cost_eur": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Acquisition Cost Eur",
+            "type": "string"
+          },
+          "derivative_pnl_eur": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Derivative Pnl Eur",
+            "type": "string"
+          },
+          "export_ready": {
+            "title": "Export Ready",
+            "type": "boolean"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "rewards_mining_staking_income_eur": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Rewards Mining Staking Income Eur",
+            "type": "string"
+          },
+          "tax_free_lines_count": {
+            "default": 0,
+            "title": "Tax Free Lines Count",
+            "type": "integer"
+          },
+          "tax_free_private_disposals_eur": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tax Free Private Disposals Eur",
+            "type": "string"
+          },
+          "taxable_disposal_proceeds_eur": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Taxable Disposal Proceeds Eur",
+            "type": "string"
+          },
+          "taxable_private_disposals_eur": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Taxable Private Disposals Eur",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generated_at",
+          "export_ready"
+        ],
+        "title": "TaxFilingValues",
         "type": "object"
       },
       "TaxHeliumSwapContextAssetSummary": {
@@ -66307,8 +69529,15 @@
             "$ref": "#/components/schemas/WalletFifoRunInputFingerprint"
           },
           "latest_artifact_path": {
-            "title": "Latest Artifact Path",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Artifact Path"
           },
           "material_delta_threshold_eur": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -66427,6 +69656,11 @@
             "title": "Provider Basis Gap Count",
             "type": "integer"
           },
+          "published_as_latest": {
+            "default": true,
+            "title": "Published As Latest",
+            "type": "boolean"
+          },
           "ready_for_method_review_years": {
             "items": {
               "type": "integer"
@@ -66537,7 +69771,6 @@
           "input_fingerprint",
           "semantic_sha256",
           "artifact_path",
-          "latest_artifact_path",
           "methodology"
         ],
         "title": "WalletFifoParallelRunReport",
@@ -72209,13 +75442,27 @@
         "title": "WalletOwnershipVerificationResult",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "ConnectorSetupBearer": {
+        "bearerFormat": "local setup token",
+        "description": "Lokaler Administrator-Token aus STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE; niemals in einer App speichern.",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "MobileConnectorBearer": {
+        "bearerFormat": "srv2m_ scoped session token",
+        "description": "Ablaufende, widerrufbare Mobile-Sitzung aus dem einmaligen Pairing-Flow.",
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.1.0"
+    "version": "0.2.0rc2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -72944,6 +76191,511 @@
         "x-mobile-surface": "recommended-read"
       }
     },
+    "/api/v1/connectors/mobile/documents": {
+      "get": {
+        "description": "Mobile connector documents. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "mobile_connector_documents_api_v1_connectors_mobile_documents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MobileDocumentInboxReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "ConnectorSetupBearer": []
+          }
+        ],
+        "summary": "Mobile Connector Documents",
+        "tags": [
+          "Sources"
+        ],
+        "x-authentication": "connector-setup-bearer",
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "post": {
+        "description": "Upload mobile connector document. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "upload_mobile_connector_document_api_v1_connectors_mobile_documents_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_mobile_connector_document_api_v1_connectors_mobile_documents_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MobileDocumentUploadResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "ConnectorSetupBearer": []
+          },
+          {
+            "MobileConnectorBearer": []
+          }
+        ],
+        "summary": "Upload Mobile Connector Document",
+        "tags": [
+          "Sources"
+        ],
+        "x-authentication": "connector-setup-or-mobile-session-bearer",
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "recommended-write"
+      }
+    },
+    "/api/v1/connectors/mobile/documents/{document_id}/content": {
+      "get": {
+        "description": "Mobile connector document content. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "mobile_connector_document_content_api_v1_connectors_mobile_documents__document_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "ConnectorSetupBearer": []
+          }
+        ],
+        "summary": "Mobile Connector Document Content",
+        "tags": [
+          "Sources"
+        ],
+        "x-authentication": "connector-setup-bearer",
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/connectors/mobile/pairings": {
+      "post": {
+        "description": "Create mobile connector pairing. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "create_mobile_connector_pairing_api_v1_connectors_mobile_pairings_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileConnectorPairingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MobileConnectorPairing_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "ConnectorSetupBearer": []
+          }
+        ],
+        "summary": "Create Mobile Connector Pairing",
+        "tags": [
+          "Sources"
+        ],
+        "x-authentication": "connector-setup-bearer",
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/connectors/mobile/session": {
+      "get": {
+        "description": "Current mobile connector session. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "current_mobile_connector_session_api_v1_connectors_mobile_session_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MobileConnectorSession_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "MobileConnectorBearer": []
+          }
+        ],
+        "summary": "Current Mobile Connector Session",
+        "tags": [
+          "Sources"
+        ],
+        "x-authentication": "mobile-session-bearer",
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "recommended-read"
+      }
+    },
+    "/api/v1/connectors/mobile/sessions": {
+      "get": {
+        "description": "Mobile connector sessions. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "mobile_connector_sessions_api_v1_connectors_mobile_sessions_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_MobileConnectorSession__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "ConnectorSetupBearer": []
+          }
+        ],
+        "summary": "Mobile Connector Sessions",
+        "tags": [
+          "Sources"
+        ],
+        "x-authentication": "connector-setup-bearer",
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "post": {
+        "description": "Exchange mobile connector pairing. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "exchange_mobile_connector_pairing_api_v1_connectors_mobile_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileConnectorSessionExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MobileConnectorSessionToken_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Exchange Mobile Connector Pairing",
+        "tags": [
+          "Sources"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "recommended-write"
+      }
+    },
+    "/api/v1/connectors/mobile/sessions/{session_id}": {
+      "delete": {
+        "description": "Revoke mobile connector session. Der Aufruf loescht den im Pfad bezeichneten lokalen Datensatz. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "revoke_mobile_connector_session_api_v1_connectors_mobile_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MobileConnectorSession_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "ConnectorSetupBearer": []
+          }
+        ],
+        "summary": "Revoke Mobile Connector Session",
+        "tags": [
+          "Sources"
+        ],
+        "x-authentication": "connector-setup-bearer",
+        "x-data-effect": "delete",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/connectors/wallet/challenges": {
       "post": {
         "description": "Create wallet ownership challenge. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -72998,13 +76750,22 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "ConnectorSetupBearer": []
+          },
+          {
+            "MobileConnectorBearer": []
+          }
+        ],
         "summary": "Create Wallet Ownership Challenge",
         "tags": [
           "Sources"
         ],
+        "x-authentication": "connector-setup-or-mobile-session-bearer",
         "x-data-effect": "write",
         "x-long-running": false,
-        "x-mobile-surface": "expert-or-internal"
+        "x-mobile-surface": "recommended-write"
       }
     },
     "/api/v1/connectors/wallet/verifications": {
@@ -73061,13 +76822,22 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "ConnectorSetupBearer": []
+          },
+          {
+            "MobileConnectorBearer": []
+          }
+        ],
         "summary": "Verify Wallet Ownership Challenge",
         "tags": [
           "Sources"
         ],
+        "x-authentication": "connector-setup-or-mobile-session-bearer",
         "x-data-effect": "write",
         "x-long-running": false,
-        "x-mobile-surface": "expert-or-internal"
+        "x-mobile-surface": "recommended-write"
       }
     },
     "/api/v1/contracts/event-types": {
@@ -76680,6 +80450,50 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/export/tax-years/{year}/filing-snapshot-comparison.csv": {
+      "get": {
+        "description": "Tax filing snapshot comparison csv. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "operationId": "tax_filing_snapshot_comparison_csv_api_v1_export_tax_years__year__filing_snapshot_comparison_csv_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tax Filing Snapshot Comparison Csv",
+        "tags": [
+          "Reports"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/export/token-risk-documentation.csv": {
       "get": {
         "description": "Download token risk documentation csv. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
@@ -77587,7 +81401,7 @@
             "name": "file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/jup/G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY.csv",
+              "default": "/workspace/steuerreport/usertransfer/jup/.csv",
               "title": "File Path",
               "type": "string"
             }
@@ -77803,7 +81617,7 @@
             "name": "wallet",
             "required": false,
             "schema": {
-              "default": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+              "default": "",
               "title": "Wallet",
               "type": "string"
             }
@@ -77998,7 +81812,7 @@
             "name": "wallet",
             "required": false,
             "schema": {
-              "default": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+              "default": "",
               "title": "Wallet",
               "type": "string"
             }
@@ -78075,7 +81889,7 @@
             "name": "file_path",
             "required": false,
             "schema": {
-              "default": "/workspace/steuerreport/usertransfer/Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv",
+              "default": "/workspace/steuerreport/usertransfer/Wallet.-month.csv",
               "title": "File Path",
               "type": "string"
             }
@@ -78085,7 +81899,7 @@
             "name": "wallet",
             "required": false,
             "schema": {
-              "default": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+              "default": "",
               "title": "Wallet",
               "type": "string"
             }
@@ -82316,6 +86130,161 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/tax-filing-snapshots": {
+      "get": {
+        "description": "Tax filing snapshots. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "tax_filing_snapshots_api_v1_tax_filing_snapshots_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2100,
+                  "minimum": 2009,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxFilingSnapshotList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tax Filing Snapshots",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "recommended-read"
+      }
+    },
+    "/api/v1/tax-filing-snapshots/{snapshot_id}/package.zip": {
+      "get": {
+        "description": "Download tax filing snapshot package. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "operationId": "download_tax_filing_snapshot_package_api_v1_tax_filing_snapshots__snapshot_id__package_zip_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Tax Filing Snapshot Package",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-filing-snapshots/{snapshot_id}/usage-confirmation": {
+      "post": {
+        "description": "Confirm tax filing snapshot usage. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "confirm_tax_filing_snapshot_usage_api_v1_tax_filing_snapshots__snapshot_id__usage_confirmation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxFilingSnapshotUsageConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxFilingSnapshotUsageConfirmationResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Tax Filing Snapshot Usage",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/tax-methodology/bmf-action-plan": {
       "get": {
         "description": "Tax methodology bmf action plan. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -84795,6 +88764,330 @@
         ],
         "x-data-effect": "read-only",
         "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/filing-audit-report": {
+      "get": {
+        "description": "Tax filing audit report. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "tax_filing_audit_report_api_v1_tax_years__year__filing_audit_report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxFilingAuditReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tax Filing Audit Report",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/filing-audit-report.json": {
+      "get": {
+        "description": "Tax filing audit report json. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "operationId": "tax_filing_audit_report_json_api_v1_tax_years__year__filing_audit_report_json_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tax Filing Audit Report Json",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/filing-audit-report.md": {
+      "get": {
+        "description": "Tax filing audit report markdown. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "tax_filing_audit_report_markdown_api_v1_tax_years__year__filing_audit_report_md_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tax Filing Audit Report Markdown",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/filing-snapshot-comparison": {
+      "get": {
+        "description": "Tax filing snapshot comparison. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "tax_filing_snapshot_comparison_api_v1_tax_years__year__filing_snapshot_comparison_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxFilingSnapshotComparison_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tax Filing Snapshot Comparison",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "recommended-read"
+      }
+    },
+    "/api/v1/tax-years/{year}/filing-snapshot-comparison.html": {
+      "get": {
+        "description": "Tax filing snapshot comparison html. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "operationId": "tax_filing_snapshot_comparison_html_api_v1_tax_years__year__filing_snapshot_comparison_html_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tax Filing Snapshot Comparison Html",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/filing-snapshots": {
+      "get": {
+        "description": "Tax year filing snapshots. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "tax_year_filing_snapshots_api_v1_tax_years__year__filing_snapshots_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxFilingSnapshotList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tax Year Filing Snapshots",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": true,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "post": {
+        "description": "Capture tax filing snapshot. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "capture_tax_filing_snapshot_api_v1_tax_years__year__filing_snapshots_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxFilingSnapshotCaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxFilingSnapshotCaptureResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capture Tax Filing Snapshot",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": true,
         "x-mobile-surface": "expert-or-internal"
       }
     },
@@ -89881,8 +94174,8 @@
       "name": "Parity"
     }
   ],
-  "x-api-lifecycle": "experimental-mobile-read-and-wallet-ownership-setup",
+  "x-api-lifecycle": "experimental_read_pairing_wallet_ownership_and_document_inbox",
   "x-decimal-transport": "string",
-  "x-production-security": "Wallet ownership writes require a local setup bearer, but the API has no global user authentication. Keep it in a trusted LAN/VPN or place TLS and authentication in front of it.",
+  "x-production-security": "Mobile connector sessions are paired through a local setup bearer, scoped, stored as hashes and revocable, but the API has no global user authentication. Keep it in a trusted LAN/VPN or place TLS and authentication in front of it.",
   "x-tax-day-timezone": "Europe/Berlin"
 }

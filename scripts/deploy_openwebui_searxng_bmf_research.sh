@@ -8,7 +8,7 @@ OPENWEBUI_DB=${OPENWEBUI_DB:-/opt/openwebui/data/webui.db}
 SEARXNG_DIR=${SEARXNG_DIR:-/opt/searxng}
 STATE_DIR=${STATE_DIR:-/var/lib/openwebui-searxng-bmf-research}
 IMAGE_TAG=docker.io/searxng/searxng:latest
-OPENWEBUI_DERIVED_IMAGE=local/open-webui:v0.11.0-bmf-web-v6
+OPENWEBUI_DERIVED_IMAGE=local/open-webui:v0.11.3-bmf-web-v1
 OPENWEBUI_INTEGRATION_DIR="$ROOT/integrations/openwebui"
 SEARCH_QUERY='site:gesetze-im-internet.de EStG 23 private Veraeusserungsgeschaefte'
 

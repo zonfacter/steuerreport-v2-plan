@@ -114,6 +114,12 @@ class PipelineService:
         return len(suppressed)
 
     def _carry_forward_solana_rpc_legacy_helium_claim_rewards(self) -> int:
+        # 2025/HNT is explicitly covered because the source audit matched the
+        # legacy monthly quantity to the Solana claim quantity within 0.23%.
+        # These Solana claim rows are retained as raw/canonical evidence but
+        # neutralized from tax lots; treating them as transfers would create
+        # artificial wallet-provenance blockers for the same reward.
+        # Other years/assets remain opt-in until the same evidence exists.
         with self.store.connect() as con:
             carried = con.execute(
                 """
@@ -147,7 +153,10 @@ class PipelineService:
                     join legacy
                       on legacy.tax_year = solana.tax_year
                      and legacy.asset = solana.asset
-                    where solana.tax_year = 2024
+                    where (
+                        solana.tax_year = 2024
+                        or (solana.tax_year = 2025 and solana.asset = 'HNT')
+                    )
                       and legacy.legacy_quantity > 0
                       and solana.solana_quantity > 0
                       and abs(solana.solana_quantity - legacy.legacy_quantity)
@@ -155,7 +164,16 @@ class PipelineService:
                           <= 0.10
                 )
                 update canonical_events event
-                   set event_type = 'transfer',
+                   set event_type = case
+                           when matched.tax_year = 2025 and matched.asset = 'HNT'
+                           then 'unknown'
+                           else 'transfer'
+                       end,
+                       quantity = case
+                           when matched.tax_year = 2025 and matched.asset = 'HNT'
+                           then 0
+                           else event.quantity
+                       end,
                        quote_asset = null,
                        quote_quantity = null,
                        confidence = 0.85

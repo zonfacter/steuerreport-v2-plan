@@ -466,13 +466,13 @@ def test_csv_preview_does_not_treat_jup_market_data_row_as_header(tmp_path):
         "Deposit / Withdraw ($), Execution price ($), Trade size ($), Profit / Loss ($), "
         "Trade fee ($), Liquidation fee ($), Mint, Collateral, Collateral mint\n"
         "Fri Dec 06 2024 16:27:25 GMT+0000 (Coordinated Universal Time),"
-        " 2GiGMexQouHtvnath4E6a8qojbmDCkCmkNJxLn8cwbsB8kHYZRtu6T3pg8N3NtVe3axhDdhfBytzYdM4sbzo8Uck,"
+        " 4bfeLE8kETYdJgaoHh6JKPxyEoJNZa6AN1z1Adj22gVCW7yvpwFFMx6KBJeHrchpqkXquTQuAi8ThrbwUZBV6Pjv,"
         " BTC, Long, Decrease, Market, 84.28, 98929.26, 5646.52, -26.21, 4.29, , BTC, BTC, BTC\n"
     )
 
     preview = importer.preview_base64(
         source="manual-csv",
-        filename="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY.csv",
+        filename="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP.csv",
         content_base64=base64.b64encode(content.encode("utf-8")).decode("ascii"),
     )
 

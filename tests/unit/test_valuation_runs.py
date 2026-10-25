@@ -140,6 +140,14 @@ def test_divorce_valuation_run_versions_two_exact_fifo_checkpoints_and_evidence(
     assert all(
         item.report_url.endswith(item.run_id) for item in report.fifo_checkpoints
     )
+    assert service.wallet_fifo_service.latest() is None
+    checkpoint_reports = [
+        service.wallet_fifo_service.get(item.run_id)
+        for item in report.fifo_checkpoints
+    ]
+    assert all(item is not None for item in checkpoint_reports)
+    assert all(item.published_as_latest is False for item in checkpoint_reports if item)
+    assert all(item.latest_artifact_path is None for item in checkpoint_reports if item)
     assert service.latest() == report
     assert service.get(report.run_id) == report
 

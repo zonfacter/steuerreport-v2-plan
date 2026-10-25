@@ -90,7 +90,7 @@ def test_report_center_collects_existing_export_surfaces(tmp_path):
         for artifact in center.csv_exports
         if artifact.artifact_id == "hnt-fairspot-timeline"
     )
-    assert "account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp" in str(
+    assert "account=133mLjQyaZs6RpT3Mo9aBW4MHMJar3VsmjQ9FUpSsFzuocRZRuN" in str(
         fairspot_timeline.endpoint
     )
     assert center.years
@@ -1033,7 +1033,7 @@ def test_tax_year_evidence_package_download_endpoint_contains_year_files(tmp_pat
                 "utf-8"
             )
         )
-        assert matrix["matrix_version"] == "bmf_requirements_2025_v12"
+        assert matrix["matrix_version"] == "bmf_requirements_2025_v13"
         time_audit = json.loads(
             package.read("00_Manifest/tax-year-2021-time-precision-audit.json").decode(
                 "utf-8"

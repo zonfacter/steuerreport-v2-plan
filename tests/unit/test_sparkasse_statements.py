@@ -65,3 +65,41 @@ def test_sparkasse_statement_connector_csv_contains_only_masked_account_identity
     assert report.crypto_debits_eur == Decimal("0")
     assert content.startswith("document_sha256,account_last4,ownership_scope")
     assert "Konto-Nr." not in content
+
+
+def test_statement_paths_ignore_non_statement_pdfs_when_canonical_files_exist(
+    tmp_path,
+):
+    statement = tmp_path / "Konto_0080000001-Auszug_2025_0006.pdf"
+    statement.write_bytes(b"%PDF-statement")
+    (tmp_path / "Ihre_Vertragsunterlagen_vom_13_06_2025.pdf").write_bytes(
+        b"%PDF-contract"
+    )
+    (tmp_path / "Konto_0080000003-Jahresauszug_2025.pdf").write_bytes(
+        b"%PDF-loan"
+    )
+
+    paths = SparkasseStatementDocumentService.statement_paths(tmp_path)
+
+    assert paths == [statement]
+
+
+def test_statement_period_does_not_start_after_its_closing_date():
+    text = """Kontoauszug 1 / 2025
+1. Juli 2025
+Konto-Nr. 100199266, DE12 3456 7890 1234 5678 90 Max Mustermann
+Kontostand am 30.06.2025, Auszug Nr. 0 0,00
+Kontostand am 30.06.2025 um 20:04 Uhr 0,00
+"""
+
+    document = SparkasseStatementDocumentService()._parse_text(
+        text,
+        page_texts=[text],
+        document_sha256="a" * 64,
+        size_bytes=1024,
+        evidence_ref=f"sparkasse-statement:sha256:{'a' * 64}",
+        camt_investments=[],
+    )
+
+    assert document.period_from == date(2025, 6, 30)
+    assert document.period_to == date(2025, 6, 30)

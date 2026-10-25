@@ -18,7 +18,7 @@ from steuerreport_v2.domain.tax_years import TaxYearService
 
 def _fixture(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    wallet = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
+    wallet = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
     sender = MoonpayReceiptService.MOONPAY_SOLANA_SENDER
     sol_tx = "s" * 88
     usdc_tx = "u" * 88

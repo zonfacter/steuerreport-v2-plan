@@ -56,7 +56,7 @@ BmfOriginTaxSphere = Literal[
 
 class BmfFifoEventEvidenceRunRequest(BaseModel):
     limit: int = Field(default=200, ge=1, le=5000)
-    issue_limit: int = Field(default=500, ge=1, le=5000)
+    issue_limit: int = Field(default=500, ge=1, le=20000)
     min_abs_delta_eur: Decimal = Field(default=Decimal("0.01"), ge=0)
     scope_mode: BmfEventEvidenceScopeMode = "priority_delta"
 

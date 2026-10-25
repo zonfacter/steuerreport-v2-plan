@@ -50,8 +50,9 @@ Verbindliche Transportregeln:
 ## Sicherheitsgrenze
 
 Die V2-API besitzt aktuell keine allgemeine Benutzeranmeldung und verwendet
-offenes CORS fuer das lokale Web-Frontend. Nur der Solana-Wallet-
-Eigentumsnachweis ist mit einem separaten lokalen Setup-Bearer geschuetzt. Die
+offenes CORS fuer das lokale Web-Frontend. Mobile Connector-Schreibzugriffe
+verwenden gescopte, widerrufbare Sitzungen; deren einmalige Kopplung und
+Administration bleibt mit einem separaten lokalen Setup-Bearer geschuetzt. Die
 API ist deshalb weiterhin nur im vertrauenswuerdigen LAN oder VPN sicher. Vor
 Internetzugriff oder App-Store-Verteilung sind mindestens TLS,
 Authentifizierung/Autorisierung, restriktives CORS, Rate-Limits und getrennte
@@ -74,10 +75,64 @@ Liefert signierte Wallet-Verbindungen einschliesslich vollstaendiger Adresse
 fuer den Drilldown. Clients muessen Wallets in Listen kuerzen und die
 vollstaendige Adresse nur im Detail anzeigen.
 
+`POST /api/v1/connectors/mobile/pairings`
+
+Erzeugt nach Autorisierung mit dem lokalen Setup-Bearer einen einmaligen,
+zehn Minuten gueltigen Kopplungscode. Der Code wird nur in dieser Antwort
+ausgegeben und serverseitig ausschliesslich als SHA-256-Hash gespeichert.
+
+`POST /api/v1/connectors/mobile/sessions`
+
+Tauscht Kopplungs-ID und Einmalcode genau einmal gegen einen zufaelligen
+Mobile-Bearer. Der Bearer wird nur einmal ausgegeben; gespeichert werden nur
+Hash, Geraet, Plattform, Scopes, Ablauf- und Auditzeitpunkte.
+
+`GET /api/v1/connectors/mobile/session`
+
+Prueft die aktuelle Mobile-Sitzung und liefert Scopes, Ablauf und letzten
+Zugriff. `GET /api/v1/connectors/mobile/sessions` und
+`DELETE /api/v1/connectors/mobile/sessions/{session_id}` sind ausschliesslich
+mit dem lokalen Setup-Bearer fuer Inventar und Widerruf zugaenglich.
+Das OpenAPI-Schema beschreibt diese Grenzen mit den Security-Schemes
+`ConnectorSetupBearer` und `MobileConnectorBearer`; beim Wallet-Nachweis sind
+beide als alternative Autorisierung dokumentiert.
+
+`POST /api/v1/connectors/mobile/documents`
+
+Nimmt genau eine PDF-, JPEG- oder PNG-Datei als `multipart/form-data` an. Der
+Aufruf verlangt den lokalen Setup-Bearer oder eine aktive Mobile-Sitzung mit
+Scope `document:upload`. Zulaessige Formfelder sind `document_kind`,
+`source_hint`, `note` und `captured_at`. Maximalgroesse: 25 MiB. Dateiendung,
+gemeldeter Medientyp und Magic Bytes werden gegengeprueft. Der Inhalt wird
+unter seinem SHA-256 content-addressed abgelegt; ein identischer erneuter
+Upload erhoeht nur den Uploadzaehler und erzeugt kein zweites Dokument.
+
+`GET /api/v1/connectors/mobile/documents`
+
+Liefert die private Review-Inbox mit Metadaten und Hashbindungen. Die Route ist
+ausschliesslich mit dem lokalen Setup-Bearer erreichbar. Der ungeschuetzte
+Connector-Katalog enthaelt nur aggregierte Zaehler, niemals Dateinamen, Hashes,
+Notizen oder Inhalte.
+
+`GET /api/v1/connectors/mobile/documents/{document_id}/content`
+
+Liefert das zuvor erneut SHA-256-gepruefte Original ausschliesslich mit dem
+lokalen Setup-Bearer. Upload-, Inventar- und Downloadantworten verwenden
+`Cache-Control: no-store` und `X-Content-Type-Options: nosniff`; der Download
+liefert zusaetzlich den Inhalts-Hash im Header.
+
+Jeder neue Upload bleibt `pending_review` und hat
+`tax_effect=none_pending_review`. Die Inbox schreibt keine Canonical Events,
+Ledgerzeilen, FIFO-Lots, Steuerzeilen oder fachlichen Review-Freigaben. OCR und
+Weiterleitung an Erbnachweis-, Bank-, Exchange- oder Kaufbelegpfade sind
+separate, spaetere Review-Aktionen. Ein ungepruefter Inbox-Beleg blockiert das
+bestehende Export-Gate daher nicht automatisch.
+
 `POST /api/v1/connectors/wallet/challenges`
 
 Erzeugt eine einmalige, fuenf Minuten gueltige Solana-`signMessage`-Challenge.
-Die Route verlangt `Authorization: Bearer <setup-token>`.
+Die Route akzeptiert den lokalen Setup-Bearer oder eine aktive Mobile-Sitzung
+mit Scope `wallet:verify`.
 
 `POST /api/v1/connectors/wallet/verifications`
 
@@ -195,7 +250,7 @@ importiert.
 
 Vergleicht eine Solscan-CSV fuer ein Token/Wallet-Paar gegen die
 Blockpit-Solana-Datei. Standard ist die IOT-Auswertung fuer
-`G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY`. Die Schnittstelle aggregiert
+`6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP`. Die Schnittstelle aggregiert
 Solscan-Transfers und Blockpit-Bewegungen je Signatur, vergleicht die Mengen
 und liefert:
 
@@ -244,7 +299,7 @@ Review-Entscheidungen oder Portfolio-Bestaende. `import_effect` bleibt `none`.
 
 `GET /api/v1/import/wallet-monthly/preflight`
 
-Wertet die Datei `Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv`
+Wertet die Datei `Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv`
 als Monats-/Gateway-Beleg aus. Standard ist die IOT-Pruefung gegen den
 Blockpit/Solana-Defizitzeitpunkt `2024-02-23T21:01:15` und den aktuell
 erforderlichen Startbestand `339834.071782 IOT`.
@@ -1463,6 +1518,129 @@ Datenbank, Steuer-/FIFO-Code, Quellenregistry und Governance-Artefakte
 unveraendert sind. Der Response-Header `X-Steuerreport-Cache` meldet `miss`
 beim Neuaufbau und `hit` bei einem validen Cache-Treffer. Die ZIP-Datei fuehrt
 Groesse und SHA-256 jeder enthaltenen Nachweisdatei im Jahresmanifest.
+
+## Revisionssicherer Abgabestand
+
+`GET /api/v1/tax-filing-snapshots?year=2025`
+
+Liefert das append-only Register archivierter Jahrespakete. `reference`
+bedeutet nur, dass ein historischer Berechnungsstand gesichert wurde;
+`submitted` wird ausschliesslich nach ausdruecklicher Nutzerbestaetigung mit
+tatsaechlichem Uebermittlungszeitpunkt erzeugt. Ein Altstand wird nie
+ueberschrieben. ZIP, Jahresmanifest und jede darin manifestierte Datei sind
+ueber SHA-256 gebunden; `integrity_status` ist vor jeder fachlichen Verwendung
+auszuwerten.
+
+`POST /api/v1/tax-years/{year}/filing-snapshots`
+
+Ohne `source_snapshot_id` erzeugt und archiviert der Endpunkt das aktuelle
+Jahresbelegpaket. Mit `source_snapshot_id` wird exakt das bereits archivierte
+Paket als neue Revision referenziert. Fuer `state=submitted` sind
+`submitted_at` und der exakte Bestaetigungstext
+`ICH BESTAETIGE DIE TATSAECHLICHE ABGABE` zwingend. `filing_kind` trennt
+`original` und `correction`. Der Aufruf schreibt weder Imports noch Preise,
+Ledger, FIFO-Lots oder Tax-Lines.
+
+`POST /api/v1/tax-filing-snapshots/{snapshot_id}/usage-confirmation`
+
+Dokumentiert append-only, dass ein hashverifiziertes Referenzpaket nach
+ausdruecklicher Nutzererklaerung als Grundlage einer Steuererklaerung verwendet
+wurde, obwohl der tatsaechliche ELSTER-Uebermittlungszeitpunkt noch nicht
+vorliegt. Der Request enthaelt `statement`, `actor` und `source`. Der Endpunkt
+veraendert weder das Paket noch seinen Zustand und erzeugt insbesondere kein
+erfundenes `submitted_at`. Wiederholte identische oder weitere Aufrufe bleiben
+idempotent beim ersten Nutzungsereignis. Ein fehlender oder hashabweichender
+Archivinhalt blockiert die Bestaetigung.
+
+`GET /api/v1/tax-years/{year}/filing-snapshot-comparison`
+
+Vergleicht vorrangig die neueste bestaetigte Abgabe, danach ein ausdruecklich
+als verwendet bestaetigtes Referenzpaket und erst sonst die neueste reine
+Referenz mit der aktuellen Jahresberechnung. Private Veraeusserungen,
+Rewards/Mining/Staking und Derivate bleiben getrennte deklarationsrelevante
+Kategorien. Erloese, Anschaffungskosten und steuerfreie Veraeusserungen werden
+als Nachweiswerte separat ausgewiesen. `amendment_review_required=true` ist
+eine Korrekturpruefung, keine automatische rechtliche Feststellung und keine
+automatische Aenderung von Steuerdaten.
+
+`submission_timestamp_required=true` kennzeichnet eine bestaetigte
+Paketnutzung ohne belegten ELSTER-Zeitpunkt. `baseline_selection` lautet in
+diesem Fall `confirmed_used_reference`. Dieser Zustand aktiviert bei
+deklarationsrelevanten Deltas die Korrekturpruefung, behauptet aber noch keine
+vollstaendig verifizierte Uebermittlung.
+
+`GET /api/v1/tax-years/{year}/filing-snapshot-comparison.html`
+
+Liefert dieselbe Korrekturpruefungsakte als lesbare, druckbare Webseite.
+`GET /api/v1/export/tax-years/{year}/filing-snapshot-comparison.csv` liefert
+die Deltas verlustfrei als CSV.
+
+`GET /api/v1/tax-filing-snapshots/{snapshot_id}/package.zip`
+
+Prueft den Paket-Hash erneut und liefert nur bei intakter SHA-256-Bindung das
+archivierte ZIP. Bei fehlender oder veraenderter Datei antwortet der Endpunkt
+mit HTTP `409` statt einen scheinbar gueltigen Beleg auszugeben.
+
+### Steuerjahr-Auditvergleich
+
+`GET /api/v1/tax-years/{year}/filing-snapshots`
+
+Ist die jahresspezifische Aliasroute fuer das append-only Snapshot-Register.
+Sie liest ausschliesslich den vorhandenen Registerstand.
+
+`GET /api/v1/tax-years/{year}/filing-audit-report`
+
+Vergleicht den hashverifizierten Referenzstand mit der aktuellen V2-Auswertung
+auf Einzelpositions- und Aggregatebene. Der Report bindet Snapshot-ID,
+Paket-/Manifest-SHA-256, UTC- und Europe/Berlin-Zeitstempel,
+Software-/Methodenversion, Datenbank-/Runtime-Fingerprint, Quellen- und
+Importdatei-Hashes, Zeilennummern, FIFO-Lots sowie die Ursachenklassifikation.
+Unbekannte Ursachen erhalten immer eine gesonderte Erklaerung und bleiben
+reviewpflichtig. Der Status `reconciliation_failed` wird gesetzt, sobald die
+Einzelpositionen nicht exakt auf eine der sechs geforderten Summen ueberleiten.
+
+Der Report ruft read-only die Vergleichs-, Snapshot-, Methodik-, Treiber-,
+Umsatz- und drei Gain-Evidence-Routen ab. Handels-/Swapvolumen,
+tatsaechliche EUR-Einzahlungen, EUR-Auszahlungen, steuerliche Ergebnisse und
+interne Transfers werden getrennt ausgewiesen. Handelsvolumen wird nie als
+Einkommen oder Auszahlung bezeichnet. Es wird keine Datenbankzeile, Tax-Line,
+FIFO-Zuordnung oder steuerliche Korrekturentscheidung veraendert.
+
+Der Auditvertrag `tax-filing-audit-v2` fuehrt zusaetzlich eine
+`source_reconciliation` ein. Primaere Quellen sind derzeit Binance- und
+Solana-/Helium-Evidenz; Blockpit ist ausschliesslich
+`aggregator_mirror`. Ein Blockpit-Transfer wird nur dann einer primaeren
+Gegenbuchung zugeordnet, wenn Transaktions-ID, Asset und Gegenmenge exakt
+uebereinstimmen. Beide Belege bleiben erhalten, bilden aber nur eine logische
+Transfergruppe und keinen zweiten steuerpflichtigen Vorgang. Nicht gematchte
+Blockpit-Steuer- und Derivatepositionen erhalten
+`source_validation_status=unmatched_review` und
+`tax_inclusion_status=pending_review`; sie werden nicht als fachlich bestaetigt
+freigegeben. Die Deltazeilen enthalten dafuer Quellenrolle,
+Gegenereignis-IDs, logische Transfergruppen-ID und den Steuerstatus.
+
+Der Abgleich prueft zusaetzlich primaere Quellen direkt gegeneinander. Binance-
+und Solana/RPC-Transferereignisse mit identischer Transaktions-ID, identischem
+Asset und exakt entgegengesetzter Menge werden als ein internes Transferereignis
+markiert. Sie werden nicht als zwei unabhaengige Zu- oder Abgaenge bewertet;
+die beiden Rohbelege bleiben jedoch separat nachvollziehbar.
+
+Die Quellenpruefung ist Bestandteil des aktuellen Eingabefingerprints. Auch eine
+Aenderung an reinen Transfer-/Quellenbelegen wird dadurch als neue
+Auswertungsgrundlage erkannt. Solscan-/RPC- bzw. Binance-Gegenbelege werden
+nicht als zusaetzliche Transaktionen gezaehlt, sondern als Belege derselben
+logischen Ereignisgruppe gefuehrt.
+
+`GET /api/v1/tax-years/{year}/filing-audit-report.json` und
+`GET /api/v1/tax-years/{year}/filing-audit-report.md`
+
+Liefern die content-addressed Auditdateien. Beide Dateien werden unter einem
+aus dem stabilen Vergleichsinhalt abgeleiteten Report-ID-Pfad einmalig mit
+Schreibschutz erzeugt. Ein erneuter Lauf mit unveraenderten Eingaben verwendet
+denselben Report-ID-/Inhaltsfingerprint und ueberschreibt kein Artefakt. Die
+JSON-Datei enthaelt eine leere menschliche Freigabeliste sowie
+`human_approvals_required=true`; wesentliche Aenderungen bleiben manuell zu
+pruefen.
 
 `GET /api/v1/tax/wallet-fifo-runs/latest`
 

@@ -23,11 +23,12 @@ def test_bmf_compliance_matrix_never_claims_strict_ready_without_required_artifa
 
     assert matrix.strict_bmf_ready is False
     assert matrix.strict_ready_years == []
-    assert matrix.matrix_version == "bmf_requirements_2025_v12"
+    assert matrix.matrix_version == "bmf_requirements_2025_v13"
     assert matrix.requirements_count == len(matrix.requirements)
     assert matrix.blocked_count >= 3
     by_id = {item.requirement_id: item for item in matrix.requirements}
     assert by_id["current_legal_sources"].evidence_status == "blocked"
+    assert by_id["filing_snapshot_immutability"].evidence_status == "satisfied"
     assert by_id["wallet_fifo"].implementation_status == "partial"
     assert by_id["wallet_fifo"].evidence_status == "blocked"
     assert by_id["source_completeness"].evidence_status == "blocked"
@@ -191,7 +192,7 @@ def test_bmf_compliance_matrix_api_endpoint(tmp_path):
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["strict_bmf_ready"] is False
-    assert data["matrix_version"] == "bmf_requirements_2025_v12"
+    assert data["matrix_version"] == "bmf_requirements_2025_v13"
     assert any(item["requirement_id"] == "wallet_fifo" for item in data["requirements"])
 
 

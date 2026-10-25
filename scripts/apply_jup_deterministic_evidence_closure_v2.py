@@ -32,11 +32,11 @@ NATIVE_AUDIT_SCRIPT = SCRIPT_ROOT / "audit_solana_native_balance_coverage_v2.py"
 NATIVE_BACKFILL_SCRIPT = SCRIPT_ROOT / "backfill_solana_native_balance_evidence_v2.py"
 TOKEN_AUDIT_SCRIPT = SCRIPT_ROOT / "audit_solana_token_account_coverage_v2.py"
 
-MAIN_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
-JUP_WALLET = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
+MAIN_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
+JUP_WALLET = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
 SPCXX_MINT = "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8"
 SPCXX_TX_ID = (
-    "5RsazzqTr3fHyhchuQuEtTAQVar9sU58j7XMZxbqHQZbm87ubP77FoeGgz8Pn2g2BaUgT8MQ1nwTEvNU4GHHMz8d"
+    "2XWdreG6W3FEvfQLhEXc1FzYnVQVdbcJVhtdPvSrMu66mALxdc87mYig4kxz2xgYCqgtWGJHiRY9umt8m58QBzLG"
 )
 JUP_TOKEN_TARGETS = {
     "HNT": "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux",

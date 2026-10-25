@@ -33,6 +33,10 @@ class SparkasseStatementDocumentService:
     MAX_FILE_BYTES = 50 * 1024 * 1024
     MAX_PDF_PAGES = 250
     MAX_EXTRACTED_TEXT_CHARS = 2_000_000
+    _CANONICAL_STATEMENT_FILENAME = re.compile(
+        r"^Konto_\d+-Auszug_\d{4}_\d+\.pdf$",
+        re.IGNORECASE,
+    )
     PROVIDER_MARKERS = {
         "trade republic": "trade_republic",
         "moonpay": "moonpay",
@@ -84,15 +88,7 @@ class SparkasseStatementDocumentService:
         *,
         camt_investments: list[SparkasseCamtInvestmentEvidence],
     ) -> SparkasseStatementConnectorStatus:
-        paths = (
-            sorted(
-                path
-                for path in root.rglob("*")
-                if path.is_file() and path.suffix.lower() in self.SUPPORTED_SUFFIXES
-            )
-            if root.is_dir()
-            else []
-        )
+        paths = self.statement_paths(root)
         manifest: list[dict[str, object]] = []
         documents_by_hash: dict[str, SparkasseStatementDocumentEvidence] = {}
         for path in paths:
@@ -225,6 +221,23 @@ class SparkasseStatementDocumentService:
                 "ein zusaetzlicher Primaerbeleg, aber kein neuer Investmentfluss."
             ),
         )
+
+    @classmethod
+    def statement_paths(cls, root: Path) -> list[Path]:
+        """Return actual account statements, with a legacy fallback for old folders."""
+        if not root.is_dir():
+            return []
+        pdf_paths = sorted(
+            path
+            for path in root.rglob("*")
+            if path.is_file() and path.suffix.lower() in cls.SUPPORTED_SUFFIXES
+        )
+        canonical_paths = [
+            path
+            for path in pdf_paths
+            if cls._CANONICAL_STATEMENT_FILENAME.fullmatch(path.name)
+        ]
+        return canonical_paths or pdf_paths
 
     def csv(self, report: SparkasseStatementConnectorStatus) -> str:
         output = io.StringIO()
@@ -384,6 +397,15 @@ class SparkasseStatementDocumentService:
         exact_matches = sum(
             item.camt_match_status == "exact" for item in crypto_debits
         )
+        period_from = (
+            opening_date + timedelta(days=1) if opening_date is not None else None
+        )
+        if (
+            period_from is not None
+            and closing_date is not None
+            and period_from > closing_date
+        ):
+            period_from = closing_date
         return SparkasseStatementDocumentEvidence(
             document_sha256=document_sha256,
             size_bytes=size_bytes,
@@ -399,9 +421,7 @@ class SparkasseStatementDocumentService:
                 statement_match and statement_match.group("duplicate")
             ),
             issue_date=self._issue_date(text),
-            period_from=(
-                opening_date + timedelta(days=1) if opening_date is not None else None
-            ),
+            period_from=period_from,
             period_to=closing_date,
             account_last4=(account_number[-4:] if account_number else None),
             account_fingerprint_sha256=(

@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from steuerreport_v2.api.app import create_app
-from steuerreport_v2.contracts.connectors import WalletOwnershipChallengeRequest
+from steuerreport_v2.contracts.connectors import (
+    MobileConnectorPairingRequest,
+    MobileConnectorSessionExchangeRequest,
+    WalletOwnershipChallengeRequest,
+)
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.connectors import BASE58_ALPHABET, ConnectorService
 
@@ -197,3 +202,198 @@ def test_invalid_or_expired_wallet_signature_is_rejected(tmp_path, monkeypatch):
         assert str(exc) == "wallet_challenge_expired"
     else:
         raise AssertionError("expired challenge was accepted")
+
+
+def test_mobile_pairing_uses_hash_only_session_and_authorizes_wallet_setup(
+    tmp_path, monkeypatch
+):
+    _private_key, wallet_address = _wallet_keypair()
+    store, client, setup_headers = _authorized_client(tmp_path, monkeypatch)
+
+    pairing_response = client.post(
+        "/api/v1/connectors/mobile/pairings",
+        headers=setup_headers,
+        json={
+            "device_name": "Mein iPhone",
+            "platform": "ios",
+            "scopes": ["connector:read", "wallet:verify"],
+            "session_ttl_hours": 24,
+        },
+    )
+    assert pairing_response.status_code == 200
+    pairing = pairing_response.json()["data"]
+    assert pairing["status"] == "pending"
+    assert len(pairing["pairing_code"].replace("-", "")) == 20
+
+    exchange_response = client.post(
+        "/api/v1/connectors/mobile/sessions",
+        json={
+            "pairing_id": pairing["pairing_id"],
+            "pairing_code": pairing["pairing_code"],
+        },
+    )
+    assert exchange_response.status_code == 200
+    exchange = exchange_response.json()["data"]
+    access_token = exchange["access_token"]
+    assert access_token.startswith("srv2m_")
+    assert exchange["session"]["status"] == "active"
+    mobile_headers = {"Authorization": f"Bearer {access_token}"}
+
+    current = client.get(
+        "/api/v1/connectors/mobile/session",
+        headers=mobile_headers,
+    ).json()["data"]
+    assert current["device_name"] == "Mein iPhone"
+    assert current["scopes"] == ["connector:read", "wallet:verify"]
+    assert current["last_used_at"] is not None
+
+    challenge_response = client.post(
+        "/api/v1/connectors/wallet/challenges",
+        headers=mobile_headers,
+        json={"wallet_address": wallet_address, "wallet_provider": "phantom"},
+    )
+    assert challenge_response.status_code == 200
+    assert challenge_response.json()["status"] == "ok"
+
+    sessions = client.get(
+        "/api/v1/connectors/mobile/sessions",
+        headers=setup_headers,
+    )
+    assert access_token not in sessions.text
+    sessions = sessions.json()["data"]
+    assert len(sessions) == 1
+    assert sessions[0]["session_id"] == exchange["session"]["session_id"]
+    assert sessions[0]["last_used_at"] is not None
+    catalog = client.get("/api/v1/connectors/catalog").json()["data"]
+    assert catalog["security"]["mobile_pairing_enabled"] is True
+    assert catalog["security"]["active_mobile_sessions"] == 1
+
+    with store.connect() as con:
+        pairing_row = con.execute(
+            "select code_hash from mobile_connector_pairings"
+        ).fetchone()
+        session_row = con.execute(
+            "select token_hash from mobile_connector_sessions"
+        ).fetchone()
+        assert pairing["pairing_code"] not in str(pairing_row[0])
+        assert access_token not in str(session_row[0])
+        assert con.execute("select count(*) from canonical_events").fetchone()[0] == 0
+        assert con.execute("select count(*) from tax_lots").fetchone()[0] == 0
+
+    replay = client.post(
+        "/api/v1/connectors/mobile/sessions",
+        json={
+            "pairing_id": pairing["pairing_id"],
+            "pairing_code": pairing["pairing_code"],
+        },
+    ).json()
+    assert replay["status"] == "error"
+    assert replay["errors"][0]["code"] == "mobile_pairing_invalid"
+
+    revoked = client.delete(
+        f"/api/v1/connectors/mobile/sessions/{exchange['session']['session_id']}",
+        headers=setup_headers,
+    ).json()["data"]
+    assert revoked["status"] == "revoked"
+    rejected = client.post(
+        "/api/v1/connectors/wallet/challenges",
+        headers=mobile_headers,
+        json={"wallet_address": wallet_address},
+    )
+    assert rejected.status_code == 401
+    assert rejected.json()["detail"] == "mobile_session_revoked"
+
+
+def test_mobile_session_scope_is_enforced(tmp_path, monkeypatch):
+    _private_key, wallet_address = _wallet_keypair()
+    _store, client, setup_headers = _authorized_client(tmp_path, monkeypatch)
+    pairing = client.post(
+        "/api/v1/connectors/mobile/pairings",
+        headers=setup_headers,
+        json={
+            "device_name": "Read-only Android",
+            "platform": "android",
+            "scopes": ["connector:read"],
+        },
+    ).json()["data"]
+    token = client.post(
+        "/api/v1/connectors/mobile/sessions",
+        json={
+            "pairing_id": pairing["pairing_id"],
+            "pairing_code": pairing["pairing_code"],
+        },
+    ).json()["data"]["access_token"]
+
+    response = client.post(
+        "/api/v1/connectors/wallet/challenges",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"wallet_address": wallet_address},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "mobile_session_scope_missing"
+
+
+def test_mobile_pairing_expires_without_creating_session(tmp_path):
+    store = DuckDbStore(tmp_path / "db.duckdb")
+    service = ConnectorService(store)
+    issued_at = datetime(2026, 8, 27, 12, tzinfo=timezone.utc)
+    pairing = service.create_mobile_pairing(
+        MobileConnectorPairingRequest(
+            device_name="Expired Device",
+            platform="android",
+        ),
+        now=issued_at,
+    )
+
+    with pytest.raises(ValueError, match="mobile_pairing_expired"):
+        service.exchange_mobile_pairing(
+            MobileConnectorSessionExchangeRequest(
+                pairing_id=pairing.pairing_id,
+                pairing_code=pairing.pairing_code,
+            ),
+            now=issued_at + timedelta(minutes=11),
+        )
+
+    with store.connect() as con:
+        assert con.execute(
+            "select status from mobile_connector_pairings"
+        ).fetchone()[0] == "expired"
+        assert con.execute(
+            "select count(*) from mobile_connector_sessions"
+        ).fetchone()[0] == 0
+
+
+def test_mobile_pairing_locks_after_five_invalid_codes(tmp_path):
+    store = DuckDbStore(tmp_path / "db.duckdb")
+    service = ConnectorService(store)
+    pairing = service.create_mobile_pairing(
+        MobileConnectorPairingRequest(
+            device_name="Untrusted Device",
+            platform="other",
+        )
+    )
+    invalid = MobileConnectorSessionExchangeRequest(
+        pairing_id=pairing.pairing_id,
+        pairing_code="22222-22222-22222-22222",
+    )
+
+    for _ in range(5):
+        with pytest.raises(ValueError, match="mobile_pairing_invalid"):
+            service.exchange_mobile_pairing(invalid)
+
+    with pytest.raises(ValueError, match="mobile_pairing_invalid"):
+        service.exchange_mobile_pairing(
+            MobileConnectorSessionExchangeRequest(
+                pairing_id=pairing.pairing_id,
+                pairing_code=pairing.pairing_code,
+            )
+        )
+    with store.connect() as con:
+        row = con.execute(
+            "select status, attempt_count from mobile_connector_pairings"
+        ).fetchone()
+        assert row == ("failed", 5)
+        assert con.execute(
+            "select count(*) from mobile_connector_sessions"
+        ).fetchone()[0] == 0

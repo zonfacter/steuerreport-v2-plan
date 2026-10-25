@@ -24,6 +24,8 @@ jobs:
           python -m pip install -e '.[dev]'
       - name: Lint
         run: ruff check src tests scripts
+      - name: Private account defaults
+        run: python scripts/check_private_data_v2.py
       - name: Unit tests
         run: pytest tests/unit -q
       - name: OpenAPI contract drift

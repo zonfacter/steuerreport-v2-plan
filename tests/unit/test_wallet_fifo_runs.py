@@ -409,6 +409,8 @@ def test_wallet_fifo_parallel_run_api_blocks_unmatched_pool_and_serves_evidence(
 
     assert response.status_code == 200
     data = response.json()["data"]
+    assert data["published_as_latest"] is True
+    assert data["latest_artifact_path"]
     assert data["status"] == "blocked"
     assert data["strict_ready"] is False
     assert data["unmatched_count"] == 1
@@ -1334,7 +1336,7 @@ def test_wallet_fifo_marks_documented_moonpay_onramp_cost_basis_for_receipt_revi
         tmp_path / "moonpay-trade-history-missing.csv",
     )
     txid = "moonpay-sol-tx"
-    wallet = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
+    wallet = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
     event_time = datetime(2026, 1, 1, 14, 49, tzinfo=timezone.utc)
     store.add_price_point(
         PricePointCreate(

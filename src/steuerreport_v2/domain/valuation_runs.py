@@ -82,7 +82,10 @@ class DivorceValuationRunService:
         cutoff_fifo = self.wallet_fifo_service.find_reusable_run(cutoff_request)
         cutoff_reused = cutoff_fifo is not None
         if cutoff_fifo is None:
-            cutoff_fifo = self.wallet_fifo_service.run(cutoff_request)
+            cutoff_fifo = self.wallet_fifo_service.run(
+                cutoff_request,
+                publish_latest=False,
+            )
         valuation_request = WalletFifoParallelRunRequest(
             years=valuation_years,
             as_of=summary.valuation_at,
@@ -93,7 +96,10 @@ class DivorceValuationRunService:
         )
         valuation_reused = valuation_fifo is not None
         if valuation_fifo is None:
-            valuation_fifo = self.wallet_fifo_service.run(valuation_request)
+            valuation_fifo = self.wallet_fifo_service.run(
+                valuation_request,
+                publish_latest=False,
+            )
         bitget_strategy_service = BitgetStrategyFifoGapService(
             self.store,
             artifact_root=self.wallet_fifo_service.artifact_root,
@@ -143,12 +149,12 @@ class DivorceValuationRunService:
             if bitget_support_package is not None
             else None
         )
-        latest_fifo_path = Path(valuation_fifo.latest_artifact_path)
-        if not latest_fifo_path.is_absolute():
-            latest_fifo_path = self.PROJECT_ROOT / latest_fifo_path
+        valuation_fifo_path = Path(valuation_fifo.artifact_path)
+        if not valuation_fifo_path.is_absolute():
+            valuation_fifo_path = self.PROJECT_ROOT / valuation_fifo_path
         solana_staking_position = SolanaStakingPositionReconciliationService(
             self.store,
-            latest_wallet_fifo_path=latest_fifo_path,
+            latest_wallet_fifo_path=valuation_fifo_path,
         ).report()
         moonpay_service = MoonpayReceiptService(self.store)
         moonpay_report = moonpay_service.report(as_of=summary.valuation_at)

@@ -161,7 +161,7 @@ def test_helium_main_legacy_wallet_is_grouped_as_solana_migration(tmp_path):
 
 def test_helium_legacy_service_wallets_are_not_dashboard_sources(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    legacy_service_wallet = "133bkeRPNK4BFhGfcf3uzmARbBfACprQ1TjWFMaxoHQoBqc5kfQ"
+    legacy_service_wallet = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
     batch = CsvRawImporter(store).import_text(
         source="helium",
         filename="helium-service.csv",

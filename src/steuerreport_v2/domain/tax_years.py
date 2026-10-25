@@ -2535,22 +2535,39 @@ class TaxYearService:
         quote_asset: str | None,
         quote_quantity: Decimal | None,
         event_quantity: Decimal | None = None,
+        event_asset: str | None = None,
         fallback_asset: str,
         fallback_quantity: Decimal,
         event_time: datetime,
         actual_value: Decimal,
     ) -> dict[str, object]:
-        price_asset = str(quote_asset or fallback_asset).upper()
-        fallback_asset_normalized = str(fallback_asset).upper()
-        if quote_quantity is not None and price_asset != fallback_asset_normalized:
-            price_quantity = abs(quote_quantity)
-            if event_quantity:
-                event_abs = abs(event_quantity)
-                line_abs = abs(fallback_quantity)
-                if event_abs and line_abs and line_abs < event_abs:
-                    price_quantity = price_quantity * line_abs / event_abs
+        event_asset_normalized = str(event_asset or "").upper()
+        received_asset_is_stable_anchor = (
+            event_quantity is not None
+            and event_quantity > 0
+            and event_asset_normalized in STABLECOIN_LIKE_ASSETS
+            and quote_asset is not None
+            and quote_quantity is not None
+            and str(quote_asset).upper() not in {"EUR"}
+        )
+        if received_asset_is_stable_anchor:
+            # TaxService values a positive stablecoin leg by the received
+            # stablecoin amount. Comparing it to the token-quote price creates
+            # a false event delta for swaps such as TRUMP -> USDT.
+            price_asset = event_asset_normalized
+            price_quantity = abs(event_quantity or Decimal("0"))
         else:
-            price_quantity = abs(fallback_quantity)
+            price_asset = str(quote_asset or fallback_asset).upper()
+            fallback_asset_normalized = str(fallback_asset).upper()
+            if quote_quantity is not None and price_asset != fallback_asset_normalized:
+                price_quantity = abs(quote_quantity)
+                if event_quantity:
+                    event_abs = abs(event_quantity)
+                    line_abs = abs(fallback_quantity)
+                    if event_abs and line_abs and line_abs < event_abs:
+                        price_quantity = price_quantity * line_abs / event_abs
+            else:
+                price_quantity = abs(fallback_quantity)
         price_point = price_lookup.at_or_before(price_asset, event_time)
         if price_point is None:
             return {
@@ -3248,6 +3265,8 @@ class TaxYearService:
                 price_lookup=price_lookup,
                 quote_asset=quote_asset,
                 quote_quantity=quote_quantity,
+                event_quantity=event_quantity,
+                event_asset=event_asset,
                 fallback_asset=quote_asset,
                 fallback_quantity=abs(quote_quantity or Decimal("0")),
                 event_time=disposed_at,
@@ -3391,6 +3410,8 @@ class TaxYearService:
                 price_lookup=price_lookup,
                 quote_asset=quote_asset,
                 quote_quantity=quote_quantity,
+                event_quantity=event_quantity,
+                event_asset=event_asset,
                 fallback_asset=quote_asset,
                 fallback_quantity=abs(quote_quantity or Decimal("0")),
                 event_time=acquired_at,
@@ -4254,7 +4275,9 @@ class TaxYearService:
                     de.quantity,
                     de.quote_asset,
                     de.quote_quantity,
-                    de.raw_object_id
+                    de.raw_object_id,
+                    ae.asset,
+                    de.asset
                 from tax_lines l
                 join tax_lots lot on lot.lot_id = l.lot_id
                 left join canonical_events ae on ae.event_id = lot.source_event_id
@@ -4292,6 +4315,7 @@ class TaxYearService:
                 quote_asset=row[14],
                 quote_quantity=row[15],
                 event_quantity=row[13],
+                event_asset=row[24],
                 fallback_asset=row[1],
                 fallback_quantity=row[5],
                 event_time=acquired_at,
@@ -4302,6 +4326,7 @@ class TaxYearService:
                 quote_asset=row[21],
                 quote_quantity=row[22],
                 event_quantity=row[20],
+                event_asset=row[25],
                 fallback_asset=row[1],
                 fallback_quantity=row[5],
                 event_time=disposed_at,

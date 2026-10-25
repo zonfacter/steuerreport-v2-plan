@@ -17,11 +17,18 @@ from steuerreport_v2.contracts.connectors import (
     ConnectorCatalogReport,
     ConnectorConnection,
     ConnectorSecurityStatus,
+    MobileConnectorPairing,
+    MobileConnectorPairingRequest,
+    MobileConnectorScope,
+    MobileConnectorSession,
+    MobileConnectorSessionExchangeRequest,
+    MobileConnectorSessionToken,
     WalletOwnershipChallenge,
     WalletOwnershipChallengeRequest,
     WalletOwnershipVerificationResult,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.mobile_documents import MobileDocumentInboxService
 from steuerreport_v2.domain.secret_vault import secret_vault_status
 from steuerreport_v2.domain.secrets import secret_metadata
 from steuerreport_v2.domain.source_registry import SourceRegistryService
@@ -63,15 +70,33 @@ class ConnectorAccessPolicy:
         expected = self.setup_token()
         if not expected:
             raise RuntimeError("connector_setup_auth_not_configured")
-        scheme, separator, supplied = (authorization or "").partition(" ")
-        if separator != " " or scheme.lower() != "bearer" or not supplied:
-            raise PermissionError("connector_setup_bearer_required")
+        supplied = self._bearer_token(authorization)
         if not hmac.compare_digest(supplied.strip(), expected):
             raise PermissionError("connector_setup_bearer_invalid")
+
+    def authorize_scoped(
+        self,
+        store: DuckDbStore,
+        authorization: str | None,
+        required_scope: MobileConnectorScope,
+    ) -> MobileConnectorSession | None:
+        expected = self.setup_token()
+        if not authorization and not expected:
+            raise RuntimeError("connector_setup_auth_not_configured")
+        supplied = self._bearer_token(authorization)
+        if expected and hmac.compare_digest(supplied, expected):
+            return None
+        if supplied.startswith("srv2m_"):
+            return ConnectorService(store).authorize_mobile_session(
+                supplied,
+                required_scope=required_scope,
+            )
+        raise PermissionError("connector_setup_bearer_invalid")
 
     def security_status(self, store: DuckDbStore) -> ConnectorSecurityStatus:
         vault = secret_vault_status(store)
         auth_mode = "setup_token" if self.setup_token() else "disabled"
+        active_mobile_sessions = ConnectorService(store).active_mobile_session_count()
         public_base_url = os.environ.get(self.PUBLIC_BASE_URL_ENV, "").strip() or None
         blockers: list[str] = []
         if auth_mode == "disabled":
@@ -85,22 +110,42 @@ class ConnectorAccessPolicy:
         blockers.append("oidc_not_implemented")
         return ConnectorSecurityStatus(
             auth_mode=auth_mode,
-            connector_writes_enabled=auth_mode != "disabled",
+            connector_writes_enabled=(
+                auth_mode != "disabled" or active_mobile_sessions > 0
+            ),
             internet_ready=False,
             public_base_url=public_base_url,
+            mobile_pairing_enabled=auth_mode == "setup_token",
+            active_mobile_sessions=active_mobile_sessions,
             vault=vault,
             blockers=blockers,
         )
 
+    @staticmethod
+    def _bearer_token(authorization: str | None) -> str:
+        scheme, separator, supplied = (authorization or "").partition(" ")
+        if separator != " " or scheme.lower() != "bearer" or not supplied.strip():
+            raise PermissionError("connector_setup_bearer_required")
+        return supplied.strip()
+
 
 class ConnectorService:
     CHALLENGE_TTL = timedelta(minutes=5)
+    MOBILE_PAIRING_TTL = timedelta(minutes=10)
+    MOBILE_PAIRING_MAX_ATTEMPTS = 5
+    MOBILE_PAIRING_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+    MOBILE_SCOPES: tuple[MobileConnectorScope, ...] = (
+        "connector:read",
+        "wallet:verify",
+        "document:upload",
+    )
 
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
 
     def catalog(self) -> ConnectorCatalogReport:
         security = ConnectorAccessPolicy().security_status(self.store)
+        mobile_document_inbox = MobileDocumentInboxService(self.store).summary()
         connections = self.connections()
         registered_wallets = self._registered_wallet_addresses()
         connection_by_connector = {item.connector_id: item for item in connections}
@@ -111,6 +156,7 @@ class ConnectorService:
         return ConnectorCatalogReport(
             generated_at=datetime.now(timezone.utc),
             security=security,
+            mobile_document_inbox=mobile_document_inbox,
             connectors=entries,
             connections=connections,
             methodology=(
@@ -132,6 +178,251 @@ class ConnectorService:
                 """
             ).fetchall()
         return [self._connection_from_row(row) for row in rows]
+
+    def create_mobile_pairing(
+        self,
+        payload: MobileConnectorPairingRequest,
+        *,
+        now: datetime | None = None,
+    ) -> MobileConnectorPairing:
+        issued_at = self._utc(now or datetime.now(timezone.utc))
+        expires_at = issued_at + self.MOBILE_PAIRING_TTL
+        pairing_id = str(uuid4())
+        device_name = " ".join(payload.device_name.split())
+        if not device_name:
+            raise ValueError("mobile_device_name_required")
+        scopes = self._normalize_mobile_scopes(payload.scopes)
+        compact_code = "".join(
+            secrets.choice(self.MOBILE_PAIRING_CODE_ALPHABET) for _ in range(20)
+        )
+        pairing_code = "-".join(
+            compact_code[index : index + 5] for index in range(0, 20, 5)
+        )
+        with self.store.connect() as con:
+            con.execute(
+                """
+                insert into mobile_connector_pairings (
+                    pairing_id, code_hash, device_name, platform, scopes_json,
+                    session_ttl_hours, issued_at, expires_at, status,
+                    attempt_count, exchanged_at, session_id
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, null, null)
+                """,
+                [
+                    pairing_id,
+                    self._secret_hash(compact_code),
+                    device_name[:120],
+                    payload.platform,
+                    json.dumps(scopes, separators=(",", ":")),
+                    payload.session_ttl_hours,
+                    issued_at,
+                    expires_at,
+                ],
+            )
+        return MobileConnectorPairing(
+            pairing_id=pairing_id,
+            pairing_code=pairing_code,
+            device_name=device_name[:120],
+            platform=payload.platform,
+            scopes=scopes,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+
+    def exchange_mobile_pairing(
+        self,
+        payload: MobileConnectorSessionExchangeRequest,
+        *,
+        now: datetime | None = None,
+    ) -> MobileConnectorSessionToken:
+        checked_at = self._utc(now or datetime.now(timezone.utc))
+        compact_code = self._normalize_pairing_code(payload.pairing_code)
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select pairing_id, code_hash, device_name, platform, scopes_json,
+                       session_ttl_hours, expires_at, status, attempt_count
+                from mobile_connector_pairings
+                where pairing_id = ?
+                """,
+                [payload.pairing_id.strip()],
+            ).fetchone()
+            if row is None or str(row[7]) != "pending":
+                raise ValueError("mobile_pairing_invalid")
+            if checked_at > self._utc(row[6]):
+                con.execute(
+                    """
+                    update mobile_connector_pairings
+                    set status = 'expired'
+                    where pairing_id = ? and status = 'pending'
+                    """,
+                    [str(row[0])],
+                )
+                raise ValueError("mobile_pairing_expired")
+            if not hmac.compare_digest(
+                self._secret_hash(compact_code),
+                str(row[1]),
+            ):
+                attempt_count = int(row[8]) + 1
+                status = (
+                    "failed"
+                    if attempt_count >= self.MOBILE_PAIRING_MAX_ATTEMPTS
+                    else "pending"
+                )
+                con.execute(
+                    """
+                    update mobile_connector_pairings
+                    set attempt_count = ?, status = ?
+                    where pairing_id = ? and status = 'pending'
+                    """,
+                    [attempt_count, status, str(row[0])],
+                )
+                raise ValueError("mobile_pairing_invalid")
+
+            scopes = self._normalize_mobile_scopes(json.loads(str(row[4])))
+            session_id = str(uuid4())
+            access_token = f"srv2m_{secrets.token_urlsafe(32)}"
+            expires_at = checked_at + timedelta(hours=int(row[5]))
+            con.execute(
+                """
+                insert into mobile_connector_sessions (
+                    session_id, token_hash, device_name, platform, scopes_json,
+                    created_at, expires_at, last_used_at, revoked_at
+                ) values (?, ?, ?, ?, ?, ?, ?, null, null)
+                """,
+                [
+                    session_id,
+                    self._secret_hash(access_token),
+                    str(row[2]),
+                    str(row[3]),
+                    json.dumps(scopes, separators=(",", ":")),
+                    checked_at,
+                    expires_at,
+                ],
+            )
+            con.execute(
+                """
+                update mobile_connector_pairings
+                set status = 'exchanged', exchanged_at = ?, session_id = ?
+                where pairing_id = ? and status = 'pending'
+                """,
+                [checked_at, session_id, str(row[0])],
+            )
+        session = MobileConnectorSession(
+            session_id=session_id,
+            device_name=str(row[2]),
+            platform=str(row[3]),
+            scopes=scopes,
+            created_at=checked_at,
+            expires_at=expires_at,
+            status="active",
+        )
+        return MobileConnectorSessionToken(
+            access_token=access_token,
+            session=session,
+        )
+
+    def mobile_sessions(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> list[MobileConnectorSession]:
+        checked_at = self._utc(now or datetime.now(timezone.utc))
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select session_id, device_name, platform, scopes_json,
+                       created_at, expires_at, last_used_at, revoked_at
+                from mobile_connector_sessions
+                order by created_at desc, session_id
+                """
+            ).fetchall()
+        return [self._mobile_session_from_row(row, checked_at) for row in rows]
+
+    def authorize_mobile_session(
+        self,
+        access_token: str,
+        *,
+        required_scope: MobileConnectorScope,
+        now: datetime | None = None,
+    ) -> MobileConnectorSession:
+        checked_at = self._utc(now or datetime.now(timezone.utc))
+        if not access_token.startswith("srv2m_"):
+            raise PermissionError("mobile_session_invalid")
+        token_hash = self._secret_hash(access_token)
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select session_id, device_name, platform, scopes_json,
+                       created_at, expires_at, last_used_at, revoked_at
+                from mobile_connector_sessions
+                where token_hash = ?
+                """,
+                [token_hash],
+            ).fetchone()
+            if row is None:
+                raise PermissionError("mobile_session_invalid")
+            session = self._mobile_session_from_row(row, checked_at)
+            if session.status == "revoked":
+                raise PermissionError("mobile_session_revoked")
+            if session.status == "expired":
+                raise PermissionError("mobile_session_expired")
+            if required_scope not in session.scopes:
+                raise PermissionError("mobile_session_scope_missing")
+            con.execute(
+                """
+                update mobile_connector_sessions
+                set last_used_at = ?
+                where session_id = ? and revoked_at is null
+                """,
+                [checked_at, session.session_id],
+            )
+        return session.model_copy(update={"last_used_at": checked_at})
+
+    def revoke_mobile_session(
+        self,
+        session_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> MobileConnectorSession:
+        revoked_at = self._utc(now or datetime.now(timezone.utc))
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select session_id, device_name, platform, scopes_json,
+                       created_at, expires_at, last_used_at, revoked_at
+                from mobile_connector_sessions
+                where session_id = ?
+                """,
+                [session_id.strip()],
+            ).fetchone()
+            if row is None:
+                raise ValueError("mobile_session_not_found")
+            if row[7] is None:
+                con.execute(
+                    """
+                    update mobile_connector_sessions
+                    set revoked_at = ?
+                    where session_id = ? and revoked_at is null
+                    """,
+                    [revoked_at, str(row[0])],
+                )
+        return self._mobile_session_from_row(
+            (*row[:7], row[7] or revoked_at),
+            revoked_at,
+        )
+
+    def active_mobile_session_count(self, *, now: datetime | None = None) -> int:
+        checked_at = self._utc(now or datetime.now(timezone.utc))
+        with self.store.connect() as con:
+            row = con.execute(
+                """
+                select count(*)
+                from mobile_connector_sessions
+                where revoked_at is null and expires_at > ?
+                """,
+                [checked_at],
+            ).fetchone()
+        return int(row[0]) if row else 0
 
     def create_wallet_challenge(
         self,
@@ -351,6 +642,9 @@ class ConnectorService:
                 connection_status = "registered"
             elif connector_id in connection_by_connector:
                 connection_status = connection_by_connector[connector_id].status
+        elif connector_id == "document-scan":
+            configured = bool(ConnectorAccessPolicy().setup_token())
+            connection_status = "configured" if configured else "not_configured"
         else:
             secret_keys = list(spec.get("secret_keys", []))
             if secret_keys:
@@ -445,6 +739,60 @@ class ConnectorService:
             last_sync_at=ConnectorService._utc(row[9]) if row[9] is not None else None,
             tax_activation="registry_active" if status == "registered" else "review_required",
         )
+
+    @classmethod
+    def _mobile_session_from_row(
+        cls,
+        row: tuple[object, ...],
+        checked_at: datetime,
+    ) -> MobileConnectorSession:
+        revoked_at = cls._utc(row[7]) if row[7] is not None else None
+        expires_at = cls._utc(row[5])
+        status = (
+            "revoked"
+            if revoked_at is not None
+            else "expired"
+            if checked_at > expires_at
+            else "active"
+        )
+        return MobileConnectorSession(
+            session_id=str(row[0]),
+            device_name=str(row[1]),
+            platform=str(row[2]),
+            scopes=cls._normalize_mobile_scopes(json.loads(str(row[3]))),
+            created_at=cls._utc(row[4]),
+            expires_at=expires_at,
+            last_used_at=cls._utc(row[6]) if row[6] is not None else None,
+            revoked_at=revoked_at,
+            status=status,
+        )
+
+    @classmethod
+    def _normalize_mobile_scopes(
+        cls,
+        scopes: list[str] | tuple[str, ...],
+    ) -> list[MobileConnectorScope]:
+        requested = {str(scope).strip() for scope in scopes}
+        unknown = requested.difference(cls.MOBILE_SCOPES)
+        if unknown:
+            raise ValueError("mobile_session_scope_invalid")
+        normalized = [scope for scope in cls.MOBILE_SCOPES if scope in requested]
+        if not normalized:
+            raise ValueError("mobile_session_scope_required")
+        return normalized
+
+    @classmethod
+    def _normalize_pairing_code(cls, pairing_code: str) -> str:
+        compact = "".join(character for character in pairing_code.upper() if character != "-")
+        if len(compact) != 20 or any(
+            character not in cls.MOBILE_PAIRING_CODE_ALPHABET for character in compact
+        ):
+            raise ValueError("mobile_pairing_invalid")
+        return compact
+
+    @staticmethod
+    def _secret_hash(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _validate_solana_address(address: str) -> None:
@@ -617,11 +965,20 @@ class ConnectorService:
                 "label": "Dokumente und Belege scannen",
                 "category": "document",
                 "auth_method": "device_capture",
-                "availability": "planned",
+                "availability": "available",
                 "mobile_platforms": ["android", "ios"],
-                "capabilities": ["pdf", "jpeg", "ocr", "sha256_evidence"],
+                "capabilities": [
+                    "pdf",
+                    "jpeg",
+                    "png",
+                    "sha256_evidence",
+                    "review_inbox",
+                ],
                 "required_fields": ["document"],
-                "safety_notes": ["OCR-Ergebnisse muessen vor Steueruebernahme bestaetigt werden."],
+                "safety_notes": [
+                    "Uploads bleiben bis zur fachlichen Review steuerlich wirkungslos."
+                ],
+                "limitation": "OCR und fachliche Weiterleitung sind getrennte Review-Schritte.",
             },
             {
                 "connector_id": "apple-pay",

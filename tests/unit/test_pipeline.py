@@ -360,6 +360,54 @@ def test_pipeline_carries_forward_solana_helium_claim_when_legacy_mining_matches
     ]
 
 
+def test_pipeline_carries_forward_2025_hnt_claim_when_legacy_mining_matches(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    importer = CsvRawImporter(store)
+    importer.import_rows(
+        source="helium",
+        filename="legacy-hnt-mining-2025.csv",
+        file_hash="legacy-hnt-mining-2025",
+        rows=[
+            {
+                "time": "2025-12-31T23:59:59Z",
+                "asset": "HNT",
+                "amount": "105.53273133",
+                "type": "mining",
+                "quote_asset": "EUR",
+                "quote_quantity": "100",
+                "account": "legacy-wallet",
+            }
+        ],
+    )
+    importer.import_rows(
+        source="solana_rpc",
+        filename="solana-hnt-claim-2025.json",
+        file_hash="solana-hnt-claim-2025",
+        rows=[
+            {
+                "timestamp_utc": "2025-12-26T21:13:31+00:00",
+                "event_type": "token_transfer",
+                "asset": "HNT",
+                "quantity": "105.777024",
+                "side": "in",
+                "tx_id": "claim-hnt-on-solana-2025",
+                "wallet_address": "wallet-1",
+                "defi_label": "helium_reward",
+                "logMessages": ["Program log: Instruction: SetCurrentRewardsWrapperV1"],
+            }
+        ],
+    )
+
+    PipelineService(store).rebuild_all()
+
+    with store.connect() as con:
+        event = con.execute(
+            "select event_type, asset, quantity from canonical_events where tx_id = 'claim-hnt-on-solana-2025'"
+        ).fetchone()
+
+    assert event == ("unknown", "HNT", Decimal("0E-18"))
+
+
 def test_pipeline_keeps_solana_helium_reward_without_legacy_match_taxable(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     CsvRawImporter(store).import_rows(
@@ -965,6 +1013,83 @@ def test_current_portfolio_price_backfill_imports_live_price(tmp_path, monkeypat
     latest = store.latest_price_points()["HNT"]
     assert latest.price_eur == Decimal("3.210000000000000000")
     assert latest.source == "coingecko:simple-price:eur"
+
+
+def test_current_portfolio_price_backfill_blocks_spam_review_token(
+    tmp_path,
+    monkeypatch,
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    store.add_canonical_event(
+        CanonicalEventCreate(
+            source="manual-test",
+            source_ref="cbdc-balance",
+            event_time=datetime(2026, 5, 24, 12, tzinfo=timezone.utc),
+            event_type="transfer",
+            asset="CBDC",
+            quantity=Decimal("1000000"),
+            account="wallet",
+        )
+    )
+    BalanceLedgerBuilder(store).rebuild()
+    now = datetime.now(timezone.utc)
+    with store.connect() as con:
+        con.execute(
+            """
+            insert into jupiter_token_metadata_cache (
+                mint, symbol, name, decimals, icon, token_program, is_verified,
+                organic_score, organic_score_label, holder_count, liquidity_usd,
+                usd_price, market_cap_usd, risk_status, source,
+                discovered_sources_json, refreshed_at, jupiter_updated_at
+            ) values (
+                'fakeMint1111111111111111111111111111111111', 'CBDC',
+                'Central Bank Digital Currency', 6, null, null, false,
+                1, 'low', 1, 0, 0, 0, 'spam_review', 'unit', '[]', ?, null
+            )
+            """,
+            [now],
+        )
+    config = tmp_path / "prices.json"
+    config.write_text(
+        json.dumps(
+            {
+                "assets": [
+                    {
+                        "symbol": "CBDC",
+                        "defillama_id": (
+                            "solana:fakeMint1111111111111111111111111111111111"
+                        ),
+                        "store_keys": ["CBDC"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        ExternalPriceBackfillService,
+        "_fetch_defillama_current_prices_usd",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("spam_review must be blocked before provider access")
+        ),
+    )
+
+    result = ExternalPriceBackfillService(store).run_current_portfolio(
+        config_path=str(config),
+        provider="coingecko",
+        assets_filter=["CBDC"],
+        max_requests=5,
+        timeout_seconds=5,
+        confidence=Decimal("0.95"),
+        dry_run=False,
+    )
+
+    assert result.imported_prices == 0
+    assert result.attempted == 0
+    assert result.skipped == 1
+    assert result.jobs[0].status == "skipped"
+    assert result.jobs[0].reason == "token_risk_spam_review"
+    assert "CBDC" not in store.latest_price_points()
 
 
 def test_current_portfolio_price_backfill_prefers_exact_defillama_mint(

@@ -435,7 +435,7 @@ def test_divorce_equalization_uses_receipted_moonpay_cost_and_only_estimates_unm
 
 def test_divorce_equalization_summary_marks_low_confidence_wallet_tokens(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    wallet = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    wallet = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     store.add_canonical_events(
         [
             CanonicalEventCreate(

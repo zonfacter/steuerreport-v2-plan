@@ -15,7 +15,7 @@ assert SPEC and SPEC.loader
 SPEC.loader.exec_module(MODULE)
 
 
-SOLANA_SIG = "37cPEEVnEs3CDcXEMLvEbsd3yR4LkiLNoJcZWyL15MsswqGDkjVGUz7jzLpKN9s3zXUWg2DBMVMszJRrVGUk2ano"
+SOLANA_SIG = "4aKouT6YjgngAmY173WL17Assygt3gXrQBahz3RjydHdoSTUfvQ8EFWiT8mF29qnuZdqimVmrxeordhvkWwrf4cd"
 
 
 def test_all_transaction_matrix_classifies_solana_and_cex_paths(tmp_path):

@@ -33,7 +33,7 @@ TAG_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Prices", ("/api/v1/prices",)),
     ("Transactions", ("/api/v1/events", "/api/v1/ledger", "/api/v1/flows", "/api/v1/transfers")),
     ("Review", ("/api/v1/review",)),
-    ("Tax", ("/api/v1/tax", "/api/v1/tax-years", "/api/v1/tax-methodology", "/api/v1/derivatives")),
+    ("Tax", ("/api/v1/tax", "/api/v1/tax-years", "/api/v1/tax-methodology", "/api/v1/tax-filing-snapshots", "/api/v1/derivatives")),
     ("Reports", ("/api/v1/reports", "/api/v1/export")),
     ("Valuation", ("/api/v1/divorce",)),
     ("AI", ("/api/v1/ai",)),
@@ -49,6 +49,7 @@ MOBILE_RECOMMENDED_READ_PATHS = {
     "/api/v1/product/readiness",
     "/api/v1/connectors/catalog",
     "/api/v1/connectors/connections",
+    "/api/v1/connectors/mobile/session",
     "/api/v1/sources/overview",
     "/api/v1/sources/{source_id}",
     "/api/v1/sources/registry/runs/latest",
@@ -63,10 +64,20 @@ MOBILE_RECOMMENDED_READ_PATHS = {
     "/api/v1/tax-years/payment-overview",
     "/api/v1/tax-years/filing-matrix",
     "/api/v1/tax-years/filing-closure-overview",
+    "/api/v1/tax-years/{year}/filing-snapshot-comparison",
+    "/api/v1/tax-filing-snapshots",
     "/api/v1/tax-years/{year}",
     "/api/v1/reports/center",
     "/api/v1/divorce/equalization-summary",
     "/api/v1/divorce/valuation-runs/latest",
+}
+
+
+MOBILE_RECOMMENDED_WRITE_PATHS = {
+    ("POST", "/api/v1/connectors/mobile/sessions"),
+    ("POST", "/api/v1/connectors/mobile/documents"),
+    ("POST", "/api/v1/connectors/wallet/challenges"),
+    ("POST", "/api/v1/connectors/wallet/verifications"),
 }
 
 
@@ -79,8 +90,43 @@ LONG_RUNNING_MARKERS = (
     "/wallet-fifo",
     "/bmf-",
     "/valuation-runs",
+    "/filing-snapshots",
 )
 DOWNLOAD_SUFFIXES = (".csv", ".json", ".pdf", ".zip", ".html")
+
+
+CONNECTOR_SETUP_SECURITY_PATHS = {
+    ("POST", "/api/v1/connectors/mobile/pairings"),
+    ("GET", "/api/v1/connectors/mobile/documents"),
+    ("GET", "/api/v1/connectors/mobile/documents/{document_id}/content"),
+    ("GET", "/api/v1/connectors/mobile/sessions"),
+    ("DELETE", "/api/v1/connectors/mobile/sessions/{session_id}"),
+}
+MOBILE_SESSION_SECURITY_PATHS = {
+    ("GET", "/api/v1/connectors/mobile/session"),
+}
+CONNECTOR_SETUP_OR_MOBILE_SECURITY_PATHS = {
+    ("POST", "/api/v1/connectors/mobile/documents"),
+    ("POST", "/api/v1/connectors/wallet/challenges"),
+    ("POST", "/api/v1/connectors/wallet/verifications"),
+}
+
+
+def _route_security(methods: Iterable[str], path: str) -> tuple[list[dict[str, list[str]]], str] | None:
+    method_set = set(methods)
+    if any((method, path) in CONNECTOR_SETUP_SECURITY_PATHS for method in method_set):
+        return ([{"ConnectorSetupBearer": []}], "connector-setup-bearer")
+    if any((method, path) in MOBILE_SESSION_SECURITY_PATHS for method in method_set):
+        return ([{"MobileConnectorBearer": []}], "mobile-session-bearer")
+    if any(
+        (method, path) in CONNECTOR_SETUP_OR_MOBILE_SECURITY_PATHS
+        for method in method_set
+    ):
+        return (
+            [{"ConnectorSetupBearer": []}, {"MobileConnectorBearer": []}],
+            "connector-setup-or-mobile-session-bearer",
+        )
+    return None
 
 
 def tag_for_path(path: str) -> str:
@@ -129,13 +175,58 @@ def configure_openapi_routes(app: FastAPI) -> None:
         route.tags = [tag_for_path(route.path)]
         if not route.description:
             route.description = _description(route, effect)
+        route_security = _route_security(methods, route.path)
         route.openapi_extra = {
             **(route.openapi_extra or {}),
             "x-data-effect": effect,
             "x-mobile-surface": (
                 "recommended-read"
                 if "GET" in methods and route.path in MOBILE_RECOMMENDED_READ_PATHS
+                else "recommended-write"
+                if any(
+                    (method, route.path) in MOBILE_RECOMMENDED_WRITE_PATHS
+                    for method in methods
+                )
                 else "expert-or-internal"
             ),
             "x-long-running": any(marker in route.path for marker in LONG_RUNNING_MARKERS),
+            **(
+                {
+                    "security": route_security[0],
+                    "x-authentication": route_security[1],
+                }
+                if route_security
+                else {}
+            ),
         }
+
+    default_openapi = app.openapi
+
+    def openapi_with_connector_security() -> dict[str, object]:
+        schema = default_openapi()
+        components = schema.setdefault("components", {})
+        security_schemes = components.setdefault("securitySchemes", {})
+        security_schemes.update(
+            {
+                "ConnectorSetupBearer": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "bearerFormat": "local setup token",
+                    "description": (
+                        "Lokaler Administrator-Token aus "
+                        "STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE; niemals in einer App speichern."
+                    ),
+                },
+                "MobileConnectorBearer": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "bearerFormat": "srv2m_ scoped session token",
+                    "description": (
+                        "Ablaufende, widerrufbare Mobile-Sitzung aus dem einmaligen Pairing-Flow."
+                    ),
+                },
+            }
+        )
+        return schema
+
+    app.openapi = openapi_with_connector_security

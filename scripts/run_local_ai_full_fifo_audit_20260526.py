@@ -24,8 +24,8 @@ API_BASE = os.environ.get("STEUERREPORT_V2_API", "http://127.0.0.1:8010")
 LLM_BASE = os.environ.get("LOCAL_LLM_BASE", "http://192.168.2.203:11435/v1")
 LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL", "qwen3.6-35b-a3b-iq4xs")
 
-MAIN_WALLET = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
-FAIRSPOT_WALLET = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
+MAIN_WALLET = "133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v"
+FAIRSPOT_WALLET = "133mLjQyaZs6RpT3Mo9aBW4MHMJar3VsmjQ9FUpSsFzuocRZRuN"
 
 
 def main() -> int:

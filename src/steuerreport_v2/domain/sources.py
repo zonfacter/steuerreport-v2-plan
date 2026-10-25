@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_alias
+
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import json
@@ -41,8 +43,8 @@ class SourceService:
     CONNECTOR_BY_SOURCE = {
         "Bitget": "bitget",
         "Pionex": "pionex",
-        "Jup Wallet GmHY...3yu": "jup_wallet",
-        "Solana Wallet 6K9n7y...qEwP": "solana_wallet",
+        ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')): "jup_wallet",
+        ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')): "solana_wallet",
         "Binance": "binance",
         "Coinbase": "coinbase",
     }
@@ -528,7 +530,7 @@ class SourceService:
             reconciliation.status
             if (
                 (
-                    group.source_group == "Jup Wallet GmHY...3yu"
+                    group.source_group == ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...'))
                     and reconciliation.status == "live_anchor_reconciled"
                 )
                 or (

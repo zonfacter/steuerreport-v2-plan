@@ -153,14 +153,14 @@ def load_registry(path: Path | None, service: WalletFifoPreviewService) -> Addre
     owned_private_wallets = {
         address: label
         for address, label in {
-            "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod": "Jup Wallet",
-            "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY": "Solana Main Wallet",
+            "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu": "Jup Wallet",
+            "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP": "Solana Main Wallet",
             **{wallet: "Known own Solana wallet" for wallet in service.KNOWN_OWN_SOLANA_WALLETS},
         }.items()
     }
     owned_cex_deposit_addresses: dict[str, str] = {}
     known_infrastructure_wallets = {
-        "DWf2k9851Uxny6fvj3jq5bY6W5xaHmjxfBVobMPSHVvM": "Binance Solana Hot Wallet",
+        "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr": "Binance Solana Hot Wallet",
     }
     service_programs = {
         "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4": "Jupiter Aggregator",

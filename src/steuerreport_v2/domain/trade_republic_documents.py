@@ -58,6 +58,38 @@ class TradeRepublicDocumentService:
         "wertpapiere",
         "securities value",
     )
+    _SUMMARY_AMOUNT = re.compile(
+        r"^\s*(?P<label>[A-Za-z\u00c0-\u024f -]+?)\s*:?[ \t]+"
+        r"(?P<amount>-?[0-9][0-9. ,'\u00a0]*[,.][0-9]{2})"
+        r"(?:\s*(?:EUR|\u20ac))?\s*$",
+        re.IGNORECASE,
+    )
+    _GERMAN_MONTHS = {
+        "jan": 1,
+        "januar": 1,
+        "feb": 2,
+        "februar": 2,
+        "mar": 3,
+        "marz": 3,
+        "apr": 4,
+        "april": 4,
+        "mai": 5,
+        "jun": 6,
+        "juni": 6,
+        "jul": 7,
+        "juli": 7,
+        "aug": 8,
+        "august": 8,
+        "sep": 9,
+        "sept": 9,
+        "september": 9,
+        "okt": 10,
+        "oktober": 10,
+        "nov": 11,
+        "november": 11,
+        "dez": 12,
+        "dezember": 12,
+    }
 
     def scan(
         self,
@@ -136,6 +168,15 @@ class TradeRepublicDocumentService:
         if accepted_value_eur is not None and accepted_evidence_ref:
             statement_status = "reviewed"
             review_status = "reviewed"
+            for item in documents:
+                if (
+                    item.evidence_ref == accepted_evidence_ref
+                    and item.total_value_eur == accepted_value_eur
+                ):
+                    item.findings = [
+                        "Exakter Stichtagswert extrahiert und durch separate "
+                        "Review Decision freigegeben."
+                    ]
         elif len(distinct_values) > 1:
             statement_status = "ambiguous"
             review_status = "ambiguous"
@@ -572,9 +613,24 @@ class TradeRepublicDocumentService:
         statement_date = self._labeled_date(canonical)
         period_from, period_to = self._period(canonical)
         exact = statement_date == end_asset_date
-        total_values = self._labeled_amounts(lines, self._TOTAL_LABELS)
-        cash_values = self._labeled_amounts(lines, self._CASH_LABELS)
-        securities_values = self._labeled_amounts(lines, self._SECURITIES_LABELS)
+        if document_type == "portfolio_statement":
+            summary_values = self._portfolio_summary_amounts(lines)
+            total_values = summary_values["total"] or self._labeled_amounts(
+                lines, self._TOTAL_LABELS
+            )
+            cash_values = summary_values["cash"] or self._labeled_amounts(
+                lines, self._CASH_LABELS
+            )
+            securities_values = summary_values[
+                "securities"
+            ] or self._labeled_amounts(lines, self._SECURITIES_LABELS)
+        else:
+            # Transaction and account statements contain many occurrences of
+            # words such as "cash" and "value". They are evidence of activity,
+            # not an exact-date portfolio valuation.
+            total_values = set()
+            cash_values = set()
+            securities_values = set()
         total = next(iter(total_values)) if len(total_values) == 1 else None
         cash_value = next(iter(cash_values)) if len(cash_values) == 1 else None
         securities_value = (
@@ -627,6 +683,42 @@ class TradeRepublicDocumentService:
             findings=findings,
         )
 
+    def _portfolio_summary_amounts(
+        self,
+        lines: list[str],
+    ) -> dict[str, set[Decimal]]:
+        result: dict[str, set[Decimal]] = {
+            "total": set(),
+            "cash": set(),
+            "securities": set(),
+        }
+        labels = {
+            "gesamt": "total",
+            "gesamtwert": "total",
+            "total": "total",
+            "total value": "total",
+            "net asset value": "total",
+            "cash": "cash",
+            "cashkonto": "cash",
+            "cashbestand": "cash",
+            "cash balance": "cash",
+            "verrechnungskonto": "cash",
+            "brokerage": "securities",
+            "depotwert": "securities",
+            "wertpapierbestand": "securities",
+            "securities": "securities",
+            "securities value": "securities",
+        }
+        for line in lines:
+            match = self._SUMMARY_AMOUNT.match(line)
+            if not match:
+                continue
+            bucket = labels.get(self._canonical(match.group("label")).strip())
+            value = self._parse_amount(match.group("amount"))
+            if bucket is not None and value is not None:
+                result[bucket].add(value)
+        return result
+
     def _labeled_amounts(
         self,
         lines: list[str],
@@ -651,6 +743,7 @@ class TradeRepublicDocumentService:
         patterns = (
             rf"(?:stichtag|bewertungstag|stand(?: zum)?|depotauszug (?:zum|per))\s*:?\s*({cls._DATE_VALUE})",
             rf"(?:portfolio|depot)\s+(?:zum|per)\s+({cls._DATE_VALUE})",
+            rf"(?:vermogensubersicht|net worth statement)\s+(?:zum|per)\s+({cls._DATE_VALUE})",
         )
         values: list[date] = []
         for pattern in patterns:
@@ -667,6 +760,17 @@ class TradeRepublicDocumentService:
             canonical,
             flags=re.IGNORECASE,
         )
+        if match:
+            return cls._parse_date(match.group(1)), cls._parse_date(match.group(2))
+        month_names = "|".join(
+            sorted(cls._GERMAN_MONTHS, key=len, reverse=True)
+        )
+        human_date = rf"\d{{1,2}}\.?\s+(?:{month_names})\.?\s+\d{{4}}"
+        match = re.search(
+            rf"(?:datum|zeitraum|periode)\s*({human_date})\s*(?:bis|-)\s*({human_date})",
+            canonical,
+            flags=re.IGNORECASE,
+        )
         if not match:
             return None, None
         return cls._parse_date(match.group(1)), cls._parse_date(match.group(2))
@@ -679,7 +783,9 @@ class TradeRepublicDocumentService:
                 "depotauszug",
                 "depotubersicht",
                 "portfolioubersicht",
+                "vermogensubersicht",
                 "portfolio overview",
+                "net worth statement",
             )
         ):
             return "portfolio_statement"
@@ -762,6 +868,18 @@ class TradeRepublicDocumentService:
                 return datetime.strptime(text, pattern).date()
             except ValueError:
                 continue
+        canonical = TradeRepublicDocumentService._canonical(text)
+        match = re.fullmatch(
+            r"(\d{1,2})\.?\s+([a-z]+)\.?\s+(\d{4})",
+            canonical,
+        )
+        if match:
+            month = TradeRepublicDocumentService._GERMAN_MONTHS.get(match.group(2))
+            if month is not None:
+                try:
+                    return date(int(match.group(3)), month, int(match.group(1)))
+                except ValueError:
+                    return None
         return None
 
     @staticmethod

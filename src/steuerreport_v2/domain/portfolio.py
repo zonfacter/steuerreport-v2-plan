@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_alias, private_config_path, private_template, private_value
+
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -71,7 +73,7 @@ from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 class PortfolioService:
     PROJECT_ROOT = Path(__file__).resolve().parents[3]
-    SOURCE_REGISTRY_CONFIG_PATH = PROJECT_ROOT / "configs/source_registry.json"
+    SOURCE_REGISTRY_CONFIG_PATH = private_config_path('source_registry.json')
     DEFAULT_SEPARATION_CUTOFF = datetime(2025, 6, 13, tzinfo=timezone.utc)
     SEPARATION_LABEL = "Virtuelle Wallet: Neubestand ab 13.06.2025"
     SEPARATION_EXCLUDED_ASSETS = {"EUR"}
@@ -80,13 +82,13 @@ class PortfolioService:
         "Rechnerischer EUR-Wert kumulierter technischer Belegkonten. Kein Konto- oder "
         "Portfoliobestand; nicht in total_value_eur enthalten und nicht dazu addieren."
     )
-    MAIN_HELIUM_LEGACY_WALLET = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
+    MAIN_HELIUM_LEGACY_WALLET = private_value('legacy_helium_wallet', '')
     HELIUM_TO_SOLANA_MIGRATION_ACCOUNT = "Helium -> Solana Migration Startbestand"
     HELIUM_SERVICE_TO_SOLANA_MIGRATION_ACCOUNT = "Helium Service-Transfers -> Solana Startbestand"
     HELIUM_LEGACY_ASSETS = {"HNT", "IOT", "MOBILE"}
-    FAIRSPOT_STAKING_WALLET = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
-    KNOWN_JUP_WALLET = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
-    PRIMARY_SOLANA_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    FAIRSPOT_STAKING_WALLET = private_value('staking_route_wallet', '')
+    KNOWN_JUP_WALLET = private_value('secondary_solana_wallet', '')
+    PRIMARY_SOLANA_WALLET = private_value('primary_solana_wallet', '')
     SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
     SOLANA_RPC_URLS = [
         "https://api.mainnet-beta.solana.com",
@@ -127,7 +129,7 @@ class PortfolioService:
             "Pionex Gap-Analyse: docs/146_PIONEX_USDT_PLATFORM_GAP_CURRENT_2026-05-09.md und "
             "docs/167_PIONEX_USDT_FINAL_BLOCKER_AUDIT_2026-05-09.md"
         ),
-        "Jup Wallet GmHY...3yu": "Nutzerhinweis 2026-05-25: aktuelle Jup-Wallet, in V2 noch nicht importiert.",
+        ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')): "Nutzerhinweis 2026-05-25: aktuelle Jup-Wallet, in V2 noch nicht importiert.",
     }
     PRICE_FRESH_DAYS = 3
     PRICE_STALE_DAYS = 14
@@ -143,16 +145,16 @@ class PortfolioService:
         "Bitget": "bitget",
         "Pionex": "pionex",
         "Coinbase": "coinbase",
-        "Jup Wallet GmHY...3yu": "jup_wallet",
-        "Solana Wallet 6K9n7y...qEwP": "solana_wallet",
+        ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')): "jup_wallet",
+        ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')): "solana_wallet",
     }
     SOURCE_REGISTRY_ID_BY_SOURCE_GROUP = {
         "Binance": "binance-account",
         "Bitget": "bitget-account",
         "Pionex": "pionex-account",
         "Coinbase": "coinbase-account",
-        "Jup Wallet GmHY...3yu": "jup-inheritance-wallet",
-        "Solana Wallet 6K9n7y...qEwP": "solana-main-wallet",
+        ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')): "jup-inheritance-wallet",
+        ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')): "solana-main-wallet",
     }
     LIVE_STALE_AFTER_DAYS = 3
 
@@ -622,7 +624,7 @@ class PortfolioService:
             accounts.append(
                 PortfolioSourceAccount(
                     account=self.KNOWN_JUP_WALLET,
-                    source_group="Jup Wallet GmHY...3yu",
+                    source_group=('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')),
                     source_type="solana_wallet",
                     value_eur=Decimal("0"),
                     position_count=0,
@@ -1110,7 +1112,7 @@ class PortfolioService:
             applied_ledger_adjustments_count=len(applied_adjustment_ids),
             missing_wallets=(
                 sorted(set(missing_wallets))
-                if any(row.source_group == "Jup Wallet GmHY...3yu" and row.severity == "blocker" for row in rows)
+                if any(row.source_group == ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')) and row.severity == "blocker" for row in rows)
                 else []
             ),
             rows=sorted(
@@ -3260,17 +3262,17 @@ class PortfolioService:
         if "coinbase" in lower:
             return "Coinbase", "exchange"
         if lower == "helium":
-            return "Solana Wallet 6K9n7y...qEwP", "solana_wallet"
+            return ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')), "solana_wallet"
         if normalized == self.HELIUM_TO_SOLANA_MIGRATION_ACCOUNT:
-            return "Solana Wallet 6K9n7y...qEwP", "solana_wallet"
+            return ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')), "solana_wallet"
         if normalized == self.HELIUM_SERVICE_TO_SOLANA_MIGRATION_ACCOUNT:
-            return "Solana Wallet 6K9n7y...qEwP", "solana_wallet"
+            return ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')), "solana_wallet"
         if normalized == self.MAIN_HELIUM_LEGACY_WALLET:
-            return "Solana Wallet 6K9n7y...qEwP", "solana_wallet"
+            return ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')), "solana_wallet"
         if normalized == self.KNOWN_JUP_WALLET:
-            return "Jup Wallet GmHY...3yu", "solana_wallet"
+            return ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')), "solana_wallet"
         if normalized == self.PRIMARY_SOLANA_WALLET:
-            return "Solana Wallet 6K9n7y...qEwP", "solana_wallet"
+            return ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')), "solana_wallet"
         if normalized == self.FAIRSPOT_STAKING_WALLET:
             return "Fairspot Staking Transfer Counterparty", "transfer_counterparty"
         if "HNT" in {asset.upper() for asset in assets} and _looks_like_base58_wallet(normalized):
@@ -3282,7 +3284,7 @@ class PortfolioService:
     def _source_current_status(self, source_group: str) -> str:
         if source_group in self.EXPECTED_ZERO_SOURCES:
             return "ledger_residual_expected_zero"
-        if source_group == "Jup Wallet GmHY...3yu":
+        if source_group == ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')):
             return "known_wallet_missing_import"
         return "ledger_current"
 
@@ -3313,14 +3315,9 @@ class PortfolioService:
             )
         if source_group == "Fairspot Staking Transfer Counterparty":
             return (
-                "Bekannte Fairspot-/Staking-Plattform des Nutzers. HNT-Transfers "
-                "zu dieser Adresse werden als Transfer-Gegenpartei fuer FIFO-"
-                "Nachverfolgung erhalten, aber nicht als aktuelle Portfolio-Wallet "
-                "oder eigene Dashboard-Quelle bewertet. "
-                "Fairspot-Beleg: https://www.fairspot.host/hnt-export-mining-tax"
-                "?account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
+                private_template('Bekannte Fairspot-/Staking-Plattform des Nutzers. HNT-Transfers zu dieser Adresse werden als Transfer-Gegenpartei fuer FIFO-Nachverfolgung erhalten, aber nicht als aktuelle Portfolio-Wallet oder eigene Dashboard-Quelle bewertet. Fairspot-Beleg: https://www.fairspot.host/hnt-export-mining-tax?account={staking_route_wallet}')
             )
-        if source_group == "Jup Wallet GmHY...3yu":
+        if source_group == ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')):
             return (
                 "Aktuelle Jup-Wallet laut Nutzer. Historie wird ueber Solscan "
                 "Balance-Change importiert; Live-Anker stammt aus Solscan Pro."

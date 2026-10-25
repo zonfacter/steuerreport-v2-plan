@@ -1,6 +1,6 @@
 services:
   open-webui:
-    image: local/open-webui:v0.11.0-bmf-web-v6
+    image: local/open-webui:v0.11.3-bmf-web-v1
     depends_on:
       - searxng
     environment:

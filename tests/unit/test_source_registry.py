@@ -14,7 +14,7 @@ from steuerreport_v2.domain.source_registry import SourceRegistryService
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 
-WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
 
 
 def _config(

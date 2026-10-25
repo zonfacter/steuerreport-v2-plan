@@ -1,9 +1,11 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 import hashlib
+from io import BytesIO
 from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
+from reportlab.pdfgen import canvas
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.events import CanonicalEventCreate
@@ -78,6 +80,66 @@ def test_coinbase_connector_without_history_skips_portfolio_replay(
     assert connector.assets == []
 
 
+def test_statement_discovery_prefers_nested_folder_with_most_real_statements(
+    tmp_path,
+    monkeypatch,
+):
+    legacy = tmp_path / "S_20260825_000303_Postfach_-_Sammeldownload"
+    legacy.mkdir()
+    (legacy / "Konto_1-Auszug_2025_0001.pdf").write_bytes(b"%PDF-legacy")
+    current = tmp_path / "Sparkasse" / "Sparkasse Sammeldownload"
+    current.mkdir(parents=True)
+    for number in (1, 2):
+        (current / f"Konto_1-Auszug_2025_{number:04d}.pdf").write_bytes(
+            b"%PDF-current" + str(number).encode("ascii")
+        )
+    (current / "Ihre_Vertragsunterlagen.pdf").write_bytes(b"%PDF-contract")
+    monkeypatch.setattr(
+        DivorceInheritanceOriginService,
+        "DEFAULT_SPARKASSE_STATEMENT_DISCOVERY_ROOT",
+        tmp_path,
+    )
+    service = DivorceInheritanceOriginService(
+        DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    )
+
+    assert service._discover_sparkasse_statement_dir() == current
+
+
+def test_bank_statement_coverage_requires_a_continuous_interval():
+    status, period_from, period_to = (
+        DivorceInheritanceOriginService._bank_statement_coverage(
+            [
+                (date(2025, 6, 1), date(2025, 6, 30)),
+                (date(2026, 7, 1), date(2026, 7, 31)),
+            ],
+            required_from=date(2025, 6, 13),
+            required_to=date(2026, 7, 24),
+        )
+    )
+
+    assert status == "partial"
+    assert period_from == date(2025, 6, 1)
+    assert period_to == date(2026, 7, 31)
+
+
+def test_bank_statement_coverage_merges_adjacent_pdf_and_camt_periods():
+    status, period_from, period_to = (
+        DivorceInheritanceOriginService._bank_statement_coverage(
+            [
+                (date(2025, 6, 1), date(2025, 6, 30)),
+                (date(2025, 7, 1), date(2026, 7, 31)),
+            ],
+            required_from=date(2025, 6, 13),
+            required_to=date(2026, 7, 24),
+        )
+    )
+
+    assert status == "complete"
+    assert period_from == date(2025, 6, 1)
+    assert period_to == date(2026, 7, 31)
+
+
 def _add_origin_decision(store, flow_id):
     store.add_review_decision(
         ReviewDecisionCreate(
@@ -99,6 +161,17 @@ def _trade_republic_snapshot_csv(total="3357,92", cash="157,92", securities="320
         "valuation_date;cash_eur;securities_value_eur;total_value_eur\n"
         f"2026-07-24;{cash};{securities};{total}\n"
     ).encode("utf-8")
+
+
+def _trade_republic_pdf(lines):
+    output = BytesIO()
+    document = canvas.Canvas(output)
+    y = 810
+    for line in lines:
+        document.drawString(40, y, line)
+        y -= 18
+    document.save()
+    return output.getvalue()
 
 
 def _inheritance_evidence_pdf():
@@ -374,6 +447,58 @@ def test_trade_republic_exact_csv_is_review_candidate_not_automatic_valuation(tm
     assert "depot-export.csv" not in csv_text
 
 
+def test_trade_republic_official_pdf_layout_extracts_exact_value_and_period(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    trade_republic_dir = tmp_path / "TradeRepublic"
+    trade_republic_dir.mkdir()
+    (trade_republic_dir / "net-worth.pdf").write_bytes(
+        _trade_republic_pdf(
+            [
+                "VERM\u00d6GENS\u00dcBERSICHT",
+                "zum 24.07.2026",
+                "PORTFOLIO KURSWERT IN EUR",
+                "Brokerage 3.506,73",
+                "Cash 11,92",
+                "GESAMT 3.518,65 EUR",
+            ]
+        )
+    )
+    (trade_republic_dir / "account-statement.pdf").write_bytes(
+        _trade_republic_pdf(
+            [
+                "KONTOAUSZUG",
+                "DATUM 01 M\u00e4rz 2026 - 22 Sept. 2026",
+                "Cashkonto 0,00 EUR 6.556,14 EUR 6.536,43 EUR 19,71 EUR",
+                "Cash Dividend for ISIN DE000A0F5UF5 0,22 EUR 11,73 EUR",
+            ]
+        )
+    )
+
+    connector = DivorceInheritanceOriginService(
+        store,
+        bank_camt_dir=None,
+        trade_republic_document_root=trade_republic_dir,
+    ).trade_republic_documents()
+
+    assert connector.end_asset_statement_status == "exact_date_candidate"
+    assert connector.valuation_review_ready is True
+    assert connector.candidate_end_asset_value_eur == Decimal("3518.65")
+    assert connector.candidate_cash_value_eur == Decimal("11.92")
+    assert connector.candidate_securities_value_eur == Decimal("3506.73")
+    portfolio = next(
+        item for item in connector.documents if item.document_type == "portfolio_statement"
+    )
+    account = next(
+        item for item in connector.documents if item.document_type == "account_statement"
+    )
+    assert portfolio.statement_date == date(2026, 7, 24)
+    assert portfolio.valuation_status == "exact_date_candidate"
+    assert account.period_from == date(2026, 3, 1)
+    assert account.period_to == date(2026, 9, 22)
+    assert account.valuation_status == "missing"
+    assert account.total_value_eur is None
+
+
 def test_trade_republic_zip_member_is_parsed_without_exposing_member_name(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     trade_republic_dir = tmp_path / "TradeRepublic"
@@ -469,6 +594,10 @@ def test_trade_republic_exact_valuation_decision_is_idempotent_and_updates_repor
         ]
         == "reviewed"
     )
+    accepted_document = accepted.json()["data"]["origin_report"][
+        "trade_republic_connector"
+    ]["documents"][0]
+    assert "freigegeben" in accepted_document["findings"][0]
     trade_republic = next(
         item
         for item in accepted.json()["data"]["origin_report"]["provider_summaries"]

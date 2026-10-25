@@ -751,7 +751,7 @@ def test_price_quality_stablecoin_fx_anchor_preview_latest_reads_artifact_and_de
 
 def test_price_quality_solscan_signature_review_separates_signature_refs(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    signature = "3YTtgWxaXt8hf9N2ja69r1rpvfozBK7vyrkmZDy8EvtBCSg3YcCrujEFJc4mDQW1pnCTLFaWLHaofD3zdaZGdcQ"
+    signature = "4bQxeiXBbUQ4Gya95iF8DC5njbWb9A7NVGv32eZqJb4bErSXcYYEaS1UkDuA7PUAUeyTYC2ob31xC9u7DAih87zD"
     store.add_canonical_event(
         CanonicalEventCreate(
             source="solana_rpc",

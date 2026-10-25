@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_config_path
+
 from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
@@ -16,15 +18,12 @@ from steuerreport_v2.contracts.tax_wallet_fifo import (
     WalletFifoSolanaServiceSwapEvidenceRecord,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.paths import PROJECT_ROOT
 
 
 class ServiceSwapTaxMappingService:
-    DEFAULT_CONFIG_PATH = Path(
-        "/workspace/steuerreport-v2-plan/configs/solana_service_swap_tax_mappings.json"
-    )
-    DEFAULT_EVIDENCE_DIR = Path(
-        "/workspace/steuerreport-v2-plan/var/solana_service_swap_evidence"
-    )
+    DEFAULT_CONFIG_PATH = private_config_path('solana_service_swap_tax_mappings.json')
+    DEFAULT_EVIDENCE_DIR = PROJECT_ROOT / "var/solana_service_swap_evidence"
     LAMPORTS_PER_SOL = Decimal("1000000000")
     VALUATION_METHOD = "received_asset_market_value_at_swap_time"
     DIRECT_COST_TREATMENT = (

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_config_path, private_value
+
 import ast
 import json
 import calendar
@@ -20,12 +22,12 @@ from steuerreport_v2.importers.source_profiles import (
 from steuerreport_v2.paths import PROJECT_ROOT
 
 DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
-DEFAULT_SOLANA_OWNERSHIP_CONFIG = PROJECT_ROOT / "configs/solana_v1_ownership_scope.json"
+DEFAULT_SOLANA_OWNERSHIP_CONFIG = private_config_path('solana_v1_ownership_scope.json')
 DEFAULT_FAIRSPOT_STAKING_RECONCILIATION_CONFIG = (
-    PROJECT_ROOT / "configs/fairspot_hnt_staking_reconciliation.json"
+    private_config_path('fairspot_hnt_staking_reconciliation.json')
 )
 DEFAULT_SOLANA_STAKING_POSITION_RECONCILIATIONS_CONFIG = (
-    PROJECT_ROOT / "configs/solana_staking_position_reconciliations.json"
+    private_config_path('solana_staking_position_reconciliations.json')
 )
 
 
@@ -38,8 +40,8 @@ class NormalizationReport:
 
 
 class RawNormalizer:
-    HELIUM_MAIN_LEGACY_WALLET = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
-    HELIUM_FAIRSPOT_STAKING_WALLET = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
+    HELIUM_MAIN_LEGACY_WALLET = private_value('legacy_helium_wallet', '')
+    HELIUM_FAIRSPOT_STAKING_WALLET = private_value('staking_route_wallet', '')
     HELIUM_VSR_POSITION_RECEIPTS = {
         "5MFEM7LYTSGP2X3TVJXHXLENXSLRW6DQR3PSPJXVUETF": "MOBILE",
         "7RPAXCSA3BIKAUOQTJ3DDSMKBLHEFQNBACPAUNBGC3KQ": "IOT",
@@ -2296,6 +2298,17 @@ class RawNormalizer:
             and any(token in raw_type for token in ("assert_location", "add_gateway", "fee"))
         ):
             return f"-{hnt_fee}", "HNT"
+        # Wallet-month exports reuse the IOT/MOBILE quantity columns after
+        # the Helium migration. The adjacent token column is authoritative;
+        # e.g. `IOT Tokens=0.05` with `IOT Token=HNT` is an HNT reward.
+        for quantity_key, token_key, default_asset in (
+            ("iot tokens", "iot token", "IOT"),
+            ("mobile tokens", "mobile token", "MOBILE"),
+        ):
+            value = row.get(self._normalize_key(quantity_key))
+            if self._has_decimal_value(value):
+                token = row.get(self._normalize_key(token_key))
+                return value, (token.strip().upper() if token and token.strip() else default_asset)
         for key, asset in (
             ("hnt_amount", "HNT"),
             ("iot_amount", "IOT"),

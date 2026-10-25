@@ -27,10 +27,10 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_V1_DB = Path("/workspace/steuerreport/var/ai_readonly/steuerreport_ai_readonly.tmp.sqlite")
 DEFAULT_WALLET_MONTH = Path(
-    "/workspace/steuerreport/usertransfer/Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv"
+    "/workspace/steuerreport/usertransfer/Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv"
 )
 DEFAULT_PRICE_CONFIG = PROJECT_ROOT / "configs" / "crypto_price_sources.json"
-DEFAULT_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+DEFAULT_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
 PRICE_ASSETS = ["IOT", "CWIF", "USDC"]
 
 sys.path.insert(0, str(SCRIPT_DIR))

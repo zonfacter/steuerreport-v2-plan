@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from steuerreport_v2.contracts.mobile_documents import MobileDocumentInboxSummary
+
 
 ConnectorCategory = Literal[
     "wallet",
@@ -39,6 +41,12 @@ ConnectorConnectionStatus = Literal[
     "registered",
     "revoked",
 ]
+MobileConnectorPlatform = Literal["android", "ios", "web", "other"]
+MobileConnectorScope = Literal[
+    "connector:read",
+    "wallet:verify",
+    "document:upload",
+]
 
 
 class ConnectorVaultStatus(BaseModel):
@@ -57,6 +65,8 @@ class ConnectorSecurityStatus(BaseModel):
     internet_ready: bool = False
     public_base_url: str | None = None
     owner_scope: Literal["single_user_local", "multi_tenant"] = "single_user_local"
+    mobile_pairing_enabled: bool = False
+    active_mobile_sessions: int = 0
     vault: ConnectorVaultStatus
     blockers: list[str] = Field(default_factory=list)
 
@@ -95,6 +105,7 @@ class ConnectorConnection(BaseModel):
 class ConnectorCatalogReport(BaseModel):
     generated_at: datetime
     security: ConnectorSecurityStatus
+    mobile_document_inbox: MobileDocumentInboxSummary
     connectors: list[ConnectorCatalogEntry]
     connections: list[ConnectorConnection] = Field(default_factory=list)
     methodology: str
@@ -128,6 +139,50 @@ class WalletOwnershipVerificationResult(BaseModel):
     connection: ConnectorConnection
     registry_match: bool = False
     message: str
+
+
+class MobileConnectorPairingRequest(BaseModel):
+    device_name: str = Field(min_length=1, max_length=120)
+    platform: MobileConnectorPlatform
+    scopes: list[MobileConnectorScope] = Field(
+        default_factory=lambda: ["connector:read", "wallet:verify"],
+        min_length=1,
+    )
+    session_ttl_hours: int = Field(default=168, ge=1, le=720)
+
+
+class MobileConnectorPairing(BaseModel):
+    pairing_id: str
+    pairing_code: str
+    device_name: str
+    platform: MobileConnectorPlatform
+    scopes: list[MobileConnectorScope]
+    issued_at: datetime
+    expires_at: datetime
+    status: Literal["pending"] = "pending"
+
+
+class MobileConnectorSessionExchangeRequest(BaseModel):
+    pairing_id: str = Field(min_length=1, max_length=64)
+    pairing_code: str = Field(min_length=1, max_length=64)
+
+
+class MobileConnectorSession(BaseModel):
+    session_id: str
+    device_name: str
+    platform: MobileConnectorPlatform
+    scopes: list[MobileConnectorScope]
+    created_at: datetime
+    expires_at: datetime
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+    status: Literal["active", "expired", "revoked"]
+
+
+class MobileConnectorSessionToken(BaseModel):
+    access_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    session: MobileConnectorSession
 
 
 class SecretVaultMigrationResult(BaseModel):

@@ -10,7 +10,7 @@ def test_parser_preflight_inspects_parser_needed_files_without_import(tmp_path):
     root = tmp_path / "usertransfer"
     jup_dir = root / "jup"
     jup_dir.mkdir(parents=True)
-    (jup_dir / "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY.csv").write_text(
+    (jup_dir / "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP.csv").write_text(
         "timestamp,market,side,size,pnl\n"
         "2024-01-01T00:00:00Z,SOL-PERP,long,1,-12.5\n",
         encoding="utf-8",
@@ -35,7 +35,7 @@ def test_parser_preflight_inspects_parser_needed_files_without_import(tmp_path):
 
 def test_parser_preflight_api_is_registered_and_returns_report(tmp_path):
     root = tmp_path / "usertransfer"
-    wallet_file = root / "Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv"
+    wallet_file = root / "Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv"
     wallet_file.parent.mkdir(parents=True)
     wallet_file.write_text(
         "Date,Asset,Amount\n2024-01-01,SOL,1\n",
@@ -56,7 +56,7 @@ def test_parser_preflight_api_is_registered_and_returns_report(tmp_path):
 
 def test_parser_preflight_wallet_month_recognizes_helium_columns_but_keeps_realimport_blocked(tmp_path):
     root = tmp_path / "usertransfer"
-    wallet_file = root / "Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv"
+    wallet_file = root / "Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv"
     wallet_file.parent.mkdir(parents=True)
     wallet_file.write_text(
         "Gateway Address,Name,Tag,Period Start (UTC),IOT Tokens,IOT Token,MOBILE Tokens,MOBILE Token\n"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_config_path
+
 import csv
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -20,9 +22,7 @@ from steuerreport_v2.domain.tax_time import reporting_tax_year
 
 
 class CrossCexTransferEvidenceService:
-    DEFAULT_CONFIG_PATH = Path(
-        "/workspace/steuerreport-v2-plan/configs/source_registry.json"
-    )
+    DEFAULT_CONFIG_PATH = private_config_path('source_registry.json')
     DEFAULT_LATEST_RUN_PATH = Path(
         "/workspace/steuerreport-v2-plan/var/wallet_fifo_runs/latest_wallet_fifo_run.json"
     )

@@ -23,7 +23,7 @@ DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_AUDIT = (
     PROJECT_ROOT
     / "var/solana_token_account_coverage"
-    / "latest_G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY_token_account_coverage.json"
+    / "latest_6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP_token_account_coverage.json"
 )
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/solana_evidence_backfills"
 SOURCE = "solana_rpc"

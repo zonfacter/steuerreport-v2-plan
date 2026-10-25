@@ -300,8 +300,9 @@ class WalletFifoParallelRunReport(BaseModel):
     bitget_strategy_reconstruction_semantic_sha256: str | None = None
     bitget_strategy_reconstruction_groups_count: int = 0
     bitget_strategy_reconstruction_disposals_count: int = 0
+    published_as_latest: bool = True
     artifact_path: str
-    latest_artifact_path: str
+    latest_artifact_path: str | None = None
     findings: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     methodology: str

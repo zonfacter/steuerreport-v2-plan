@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_alias
+
 from collections import defaultdict
 import csv
 from datetime import date, datetime, time, timezone
@@ -402,8 +404,8 @@ class DivorceEqualizationService:
             "Binance",
             "Bitget",
             "Pionex",
-            "Jup Wallet GmHY...3yu",
-            "Solana Wallet 6K9n7y...qEwP",
+            ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')),
+            ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')),
         }
         report = portfolio_service.reconciliation_report()
         rows = [

@@ -23,6 +23,7 @@ from steuerreport_v2.domain.legal_research import LegalResearchService
 from steuerreport_v2.domain.bmf_event_evidence import BmfFifoEventEvidenceService
 from steuerreport_v2.domain.bmf_fifo_staging import BmfCombinedFifoStagingService
 from steuerreport_v2.domain.tax_methodology import TaxMethodologyService
+from steuerreport_v2.domain.tax_filing_snapshots import TaxFilingSnapshotService
 from steuerreport_v2.domain.swap_valuation import CryptoSwapValuationReviewService
 from steuerreport_v2.domain.swap_valuation_parallel import (
     CryptoSwapFifoParallelPreviewService,
@@ -35,7 +36,7 @@ from steuerreport_v2.domain.wallet_fifo_runs import WalletFifoParallelRunService
 
 
 class BmfComplianceMatrixService:
-    MATRIX_VERSION = "bmf_requirements_2025_v12"
+    MATRIX_VERSION = "bmf_requirements_2025_v13"
     BMF_REFERENCE = "BMF-Schreiben vom 6. Maerz 2025 zu Kryptowerten"
     BMF_REFERENCE_URL = (
         "https://www.bundesfinanzministerium.de/Content/DE/Downloads/"
@@ -76,6 +77,15 @@ class BmfComplianceMatrixService:
         counts = self._counts()
         scope_years = self._available_years()
         filing = self._filing_snapshot(scope_years)
+        filing_archives = TaxFilingSnapshotService(self.store).governance_status()
+        filing_archive_status: TaxBmfComplianceStatus = (
+            "blocked"
+            if int(filing_archives["integrity_failures"]) > 0
+            else "review"
+            if filing_archives["unconfirmed_reference_years"]
+            or filing_archives["submission_timestamp_missing_years"]
+            else "satisfied"
+        )
         wallet_fifo = self._artifact_state(self.wallet_fifo_latest)
         wallet_fifo_migration = self._artifact_state(
             self.wallet_fifo_migration_latest
@@ -244,6 +254,113 @@ class BmfComplianceMatrixService:
                 next_action=(
                     "Alle Matrix-Blocker schliessen und danach einen neuen versionierten "
                     "BMF-Filing-Snapshot erzeugen."
+                ),
+            ),
+            self._requirement(
+                requirement_id="filing_snapshot_immutability",
+                title="Unveraenderbarer Abgabestand und erkennbare Korrekturen",
+                bmf_paragraphs=["90", "95", "96", "98", "101", "§ 146 Abs. 4 AO"],
+                requirement=(
+                    "Tatsaechlich verwendete Abgabepakete muessen unveraenderlich, "
+                    "hashgebunden und mit ihren spaeteren Anpassungen nachvollziehbar "
+                    "aufbewahrt werden. Eine Korrektur darf den Altstand nicht ersetzen."
+                ),
+                implementation_status="implemented",
+                evidence_status=filing_archive_status,
+                affected_years=sorted(
+                    set(filing_archives["unconfirmed_reference_years"])
+                    | set(filing_archives["submission_timestamp_missing_years"])
+                ),
+                metrics=[
+                    self._metric(
+                        "immutable_filing_snapshots",
+                        "Registrierte Abgabestaende",
+                        int(filing_archives["snapshots_count"]),
+                        "alle tatsaechlich verwendeten Pakete registriert",
+                        filing_archive_status,
+                        (
+                            "ZIP, Manifest, Einzeldateien und Laufzeit-Fingerprint sind "
+                            "SHA-256-gebunden und append-only registriert."
+                        ),
+                    ),
+                    self._metric(
+                        "submitted_filing_years",
+                        "Als tatsaechlich eingereicht bestaetigte Jahre",
+                        len(filing_archives["submitted_years"]),
+                        "entspricht den tatsaechlich abgegebenen Jahren",
+                        (
+                            "satisfied"
+                            if not filing_archives["unconfirmed_reference_years"]
+                            and not filing_archives["submission_timestamp_missing_years"]
+                            else "review"
+                        ),
+                        "Eine Referenz wird nie automatisch als beim Finanzamt eingereicht behauptet.",
+                    ),
+                    self._metric(
+                        "filing_usage_confirmed_years",
+                        "Als Erklaerungsgrundlage bestaetigte Referenzjahre",
+                        len(filing_archives["usage_confirmed_reference_years"]),
+                        "0 ohne Uebermittlungszeitpunkt",
+                        (
+                            "review"
+                            if filing_archives["submission_timestamp_missing_years"]
+                            else "satisfied"
+                        ),
+                        (
+                            "Die Paketverwendung ist als Nutzererklaerung append-only belegt; "
+                            "sie ersetzt keinen ELSTER-Uebermittlungszeitpunkt."
+                        ),
+                    ),
+                    self._metric(
+                        "filing_archive_integrity_failures",
+                        "Archiv-Hashfehler",
+                        int(filing_archives["integrity_failures"]),
+                        "0",
+                        (
+                            "satisfied"
+                            if int(filing_archives["integrity_failures"]) == 0
+                            else "blocked"
+                        ),
+                        "Fehlende oder veraenderte ZIP-Dateien blockieren den Nachweis.",
+                    ),
+                ],
+                evidence_refs=[
+                    "/api/v1/tax-filing-snapshots",
+                    "/api/v1/tax-years/{year}/filing-snapshot-comparison",
+                    "/api/v1/tax-years/{year}/filing-snapshot-comparison.html",
+                ],
+                findings=(
+                    [
+                        "Mindestens ein archivierter Paketstand ist nicht mehr hashidentisch vorhanden."
+                    ]
+                    if int(filing_archives["integrity_failures"]) > 0
+                    else [
+                        "Paketverwendung bestaetigt, tatsaechlicher ELSTER-"
+                        "Uebermittlungszeitpunkt noch offen: "
+                        + ", ".join(
+                            str(year)
+                            for year in filing_archives[
+                                "submission_timestamp_missing_years"
+                            ]
+                        )
+                    ]
+                    if filing_archives["submission_timestamp_missing_years"]
+                    else [
+                        "Historische Referenzpakete warten noch auf den Abgleich mit der tatsaechlichen Abgabe: "
+                        + ", ".join(
+                            str(year)
+                            for year in filing_archives["unconfirmed_reference_years"]
+                        )
+                    ]
+                    if filing_archives["unconfirmed_reference_years"]
+                    else [
+                        "Das append-only Abgabearchiv ist technisch bereit und ohne Integritaetsfehler."
+                    ]
+                ),
+                next_action=(
+                    "Referenzpakete nur nach Abgleich mit der tatsaechlich uebermittelten "
+                    "Erklaerung als verwendet bestaetigen; den echten ELSTER-Zeitpunkt "
+                    "getrennt nachtragen und Abweichungen je Einkunftsart pruefen."
                 ),
             ),
             self._requirement(

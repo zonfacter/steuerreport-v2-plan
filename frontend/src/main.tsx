@@ -406,6 +406,79 @@ type DivorceInheritanceOriginGate = {
   methodology: string;
 };
 
+type TaxFilingSnapshotRecord = {
+  snapshot_id: string;
+  year: number;
+  revision: number;
+  state: "reference" | "submitted";
+  filing_kind: "original" | "correction";
+  source_kind: string;
+  source_snapshot_id?: string | null;
+  package_filename: string;
+  package_sha256: string;
+  package_size_bytes: number;
+  manifest_sha256: string;
+  runtime_fingerprint_sha256: string;
+  package_generated_at: string;
+  created_at: string;
+  submitted_at?: string | null;
+  filing_usage_confirmed: boolean;
+  filing_usage_confirmed_at?: string | null;
+  filing_usage_confirmation_actor?: string | null;
+  filing_usage_confirmation_source?: string | null;
+  filing_usage_confirmation_statement?: string | null;
+  note?: string | null;
+  integrity_status: "verified" | "missing" | "mismatch";
+  values: {
+    generated_at: string;
+    export_ready: boolean;
+    taxable_private_disposals_eur: string;
+    taxable_disposal_proceeds_eur: string;
+    acquisition_cost_eur: string;
+    rewards_mining_staking_income_eur: string;
+    derivative_pnl_eur: string;
+    tax_free_private_disposals_eur: string;
+    tax_free_lines_count: number;
+  };
+  files_count: number;
+  package_download_endpoint: string;
+};
+
+type TaxFilingSnapshotComparison = {
+  year: number;
+  generated_at: string;
+  baseline?: TaxFilingSnapshotRecord | null;
+  baseline_selection: "latest_submitted" | "confirmed_used_reference" | "latest_reference" | "none";
+  latest_reference?: TaxFilingSnapshotRecord | null;
+  unconfirmed_reference?: TaxFilingSnapshotRecord | null;
+  usage_confirmed_reference?: TaxFilingSnapshotRecord | null;
+  current_values: TaxFilingSnapshotRecord["values"];
+  deltas: Array<{
+    key: string;
+    label: string;
+    category: "declaration" | "supporting" | "informational";
+    filed_value_eur: string;
+    current_value_eur: string;
+    delta_eur: string;
+    direction: "increase" | "decrease" | "unchanged";
+    changed_at_cent_precision: boolean;
+    requires_review: boolean;
+    explanation: string;
+  }>;
+  exact_change_detected: boolean;
+  declaration_change_detected: boolean;
+  amendment_review_required: boolean;
+  submission_confirmation_required: boolean;
+  submission_timestamp_required: boolean;
+  integrity_blocked: boolean;
+  status: string;
+  headline: string;
+  next_action: string;
+  legal_notice: string;
+  comparison_html_endpoint: string;
+  methodology: string;
+};
+
 type Snapshot = {
   cockpit?: {
     generated_at: string;
@@ -502,6 +575,8 @@ type Snapshot = {
       internet_ready: boolean;
       public_base_url?: string | null;
       owner_scope: "single_user_local" | "multi_tenant";
+      mobile_pairing_enabled: boolean;
+      active_mobile_sessions: number;
       vault: {
         configured: boolean;
         require_encrypted_secrets: boolean;
@@ -512,6 +587,15 @@ type Snapshot = {
         status: "encrypted" | "migration_required" | "not_configured" | "error";
       };
       blockers: string[];
+    };
+    mobile_document_inbox: {
+      status: "empty" | "review_required" | "stored";
+      total_documents: number;
+      pending_review_documents: number;
+      reviewed_documents: number;
+      rejected_documents: number;
+      stored_bytes: number;
+      total_upload_attempts: number;
     };
     connectors: Array<{
       connector_id: string;
@@ -1862,6 +1946,7 @@ type Snapshot = {
     delta_review_years: number[];
     missing_declared_years: number[];
     untrusted_declared_years: number[];
+    confirmed_snapshot_years: number[];
     empty_years: number[];
     total_delta_taxable_private_disposals_eur: string;
     total_delta_rewards_mining_staking_income_eur: string;
@@ -2396,6 +2481,7 @@ type Snapshot = {
     checklist_ascii?: string;
     methodology: string;
   };
+  taxFilingSnapshotComparison?: TaxFilingSnapshotComparison;
   taxYearCorrectionMap?: {
     year: number;
     generated_at: string;
@@ -3401,6 +3487,7 @@ function App() {
         taxYearDetail: { key: "taxYearDetail", label: "Steuerjahr-Detail", load: () => getApi<Snapshot["taxYearDetail"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}`) },
         taxDeclarationGuide: { key: "taxDeclarationGuide", label: "Steuererklaerungshilfe", load: () => getApi<Snapshot["taxDeclarationGuide"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/declaration-guide`) },
         taxYearFilingSummary: { key: "taxYearFilingSummary", label: "Steuerjahr-Erklaerung", load: () => getApi<Snapshot["taxYearFilingSummary"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/filing-summary`) },
+        taxFilingSnapshotComparison: { key: "taxFilingSnapshotComparison", label: "Abgabestand-Vergleich", load: () => getApi<Snapshot["taxFilingSnapshotComparison"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/filing-snapshot-comparison`) },
         taxYearCorrectionMap: { key: "taxYearCorrectionMap", label: "Korrekturkarte", load: () => getApi<Snapshot["taxYearCorrectionMap"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/correction-map`) },
         taxYearMethodology: { key: "taxYearMethodology", label: "BMF-Jahrescheck", load: () => getApi<Snapshot["taxYearMethodology"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/methodology`) },
         taxYearWalletFifoDelta: { key: "taxYearWalletFifoDelta", label: "Wallet-FIFO-Delta", load: () => getApi<Snapshot["taxYearWalletFifoDelta"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-delta`) },
@@ -3453,12 +3540,12 @@ function App() {
         taxYearWalletFifoProvenancePriorities: { key: "taxYearWalletFifoProvenancePriorities", label: "Wallet-FIFO Provenance", load: () => getApi<Snapshot["taxYearWalletFifoProvenancePriorities"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-provenance-priorities?limit=25`) },
         taxYearWalletFifoRawProvenanceBreakdown: { key: "taxYearWalletFifoRawProvenanceBreakdown", label: "Raw Provenance Breakdown", load: () => getApi<Snapshot["taxYearWalletFifoRawProvenanceBreakdown"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-raw-provenance-breakdown?limit=50`) },
         taxYearWalletFifoExchangeEvidenceGaps: { key: "taxYearWalletFifoExchangeEvidenceGaps", label: "Exchange Evidence Gaps", load: () => getApi<Snapshot["taxYearWalletFifoExchangeEvidenceGaps"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-exchange-evidence-gaps?limit=50`) },
-        taxYearWalletFifoSolanaProvenanceClassification: { key: "taxYearWalletFifoSolanaProvenanceClassification", label: "Solana Provenance", load: () => getApi<Snapshot["taxYearWalletFifoSolanaProvenanceClassification"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-provenance-classification?asset=SOL&pool_id=solana_rpc%3AG39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY&limit=5&provider=rpc_public`) },
+        taxYearWalletFifoSolanaProvenanceClassification: { key: "taxYearWalletFifoSolanaProvenanceClassification", label: "Solana Provenance", load: () => getApi<Snapshot["taxYearWalletFifoSolanaProvenanceClassification"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-provenance-classification?asset=SOL&limit=5&provider=rpc_public`) },
         taxYearWalletFifoSolanaProvenanceBatchLatest: { key: "taxYearWalletFifoSolanaProvenanceBatchLatest", label: "Solana Provenance Batch", load: () => getApi<Snapshot["taxYearWalletFifoSolanaProvenanceBatchLatest"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-provenance-batch-latest?asset=SOL`) },
-        taxYearWalletFifoSolanaRawProvenanceSenders: { key: "taxYearWalletFifoSolanaRawProvenanceSenders", label: "Solana Raw Sender", load: () => getApi<Snapshot["taxYearWalletFifoSolanaRawProvenanceSenders"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-raw-provenance-senders?asset=SOL&pool_id=solana_rpc%3AG39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY&limit=25`) },
-        taxYearWalletFifoSolanaRawProvenancePriorities: { key: "taxYearWalletFifoSolanaRawProvenancePriorities", label: "Solana Raw Prioritaeten", load: () => getApi<Snapshot["taxYearWalletFifoSolanaRawProvenancePriorities"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-raw-provenance-priorities?asset=SOL&pool_id=solana_rpc%3AG39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY&limit=30`) },
-        taxYearWalletFifoSolanaRawBmfEvidenceSummary: { key: "taxYearWalletFifoSolanaRawBmfEvidenceSummary", label: "Solana BMF-Belege", load: () => getApi<Snapshot["taxYearWalletFifoSolanaRawBmfEvidenceSummary"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-raw-bmf-evidence-summary?asset=SOL&pool_id=solana_rpc%3AG39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY&limit=25`) },
-        taxYearWalletFifoSolanaRawBmfEvidenceDrilldown: { key: "taxYearWalletFifoSolanaRawBmfEvidenceDrilldown", label: "Solana BMF-Drilldown", load: () => getApi<Snapshot["taxYearWalletFifoSolanaRawBmfEvidenceDrilldown"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-raw-bmf-evidence-drilldown?asset=SOL&pool_id=solana_rpc%3AG39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY&route_classification=program_service_route&bmf_evidence_priority=high&limit=25`) },
+        taxYearWalletFifoSolanaRawProvenanceSenders: { key: "taxYearWalletFifoSolanaRawProvenanceSenders", label: "Solana Raw Sender", load: () => getApi<Snapshot["taxYearWalletFifoSolanaRawProvenanceSenders"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-raw-provenance-senders?asset=SOL&limit=25`) },
+        taxYearWalletFifoSolanaRawProvenancePriorities: { key: "taxYearWalletFifoSolanaRawProvenancePriorities", label: "Solana Raw Prioritaeten", load: () => getApi<Snapshot["taxYearWalletFifoSolanaRawProvenancePriorities"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-raw-provenance-priorities?asset=SOL&limit=30`) },
+        taxYearWalletFifoSolanaRawBmfEvidenceSummary: { key: "taxYearWalletFifoSolanaRawBmfEvidenceSummary", label: "Solana BMF-Belege", load: () => getApi<Snapshot["taxYearWalletFifoSolanaRawBmfEvidenceSummary"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-raw-bmf-evidence-summary?asset=SOL&limit=25`) },
+        taxYearWalletFifoSolanaRawBmfEvidenceDrilldown: { key: "taxYearWalletFifoSolanaRawBmfEvidenceDrilldown", label: "Solana BMF-Drilldown", load: () => getApi<Snapshot["taxYearWalletFifoSolanaRawBmfEvidenceDrilldown"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-raw-bmf-evidence-drilldown?asset=SOL&route_classification=program_service_route&bmf_evidence_priority=high&limit=25`) },
         taxYearWalletFifoSolanaSenderClusters: { key: "taxYearWalletFifoSolanaSenderClusters", label: "Solana Sender-Cluster", load: () => getApi<Snapshot["taxYearWalletFifoSolanaSenderClusters"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-sender-clusters?asset=SOL&limit=25`) },
         taxYearWalletFifoSolanaSenderClusterOutflows: { key: "taxYearWalletFifoSolanaSenderClusterOutflows", label: "Solana Outflow-Kandidaten", load: () => getApi<Snapshot["taxYearWalletFifoSolanaSenderClusterOutflows"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-sender-cluster-outflows?asset=SOL&limit=25&window_hours=48&amount_tolerance_percent=1`) },
         taxYearWalletFifoSolanaOrigin: { key: "taxYearWalletFifoSolanaOrigin", label: "Solana-Herkunft", load: () => getApi<Snapshot["taxYearWalletFifoSolanaOrigin"]>(`/api/v1/tax-years/${encodeURIComponent(selectedTaxYear)}/wallet-fifo-solana-origin?asset=JUP&pool_id=binance%3ASpot&limit=5`) },
@@ -3508,6 +3595,7 @@ function App() {
         "taxYearsSummary",
         "taxPaymentOverview",
         "taxYearFilingSummary",
+        "taxFilingSnapshotComparison",
         "taxYearFilingMatrix",
         "taxFilingClosureOverview",
         "taxBmfComplianceMatrix",
@@ -6190,6 +6278,7 @@ function Content({
         taxYearDetail={snapshot.taxYearDetail}
         taxDeclarationGuide={snapshot.taxDeclarationGuide}
         taxYearFilingSummary={snapshot.taxYearFilingSummary}
+        taxFilingSnapshotComparison={snapshot.taxFilingSnapshotComparison}
         taxYearCorrectionMap={snapshot.taxYearCorrectionMap}
         taxYearMethodology={snapshot.taxYearMethodology}
         taxYearWalletFifoDelta={snapshot.taxYearWalletFifoDelta}
@@ -6940,14 +7029,12 @@ function MobileConnectorCatalog({
   const connectors = catalog?.connectors ?? [];
   const connections = catalog?.connections ?? [];
   const security = catalog?.security;
+  const documentInbox = catalog?.mobile_document_inbox;
   const connected = connectors.filter((item) =>
     ["configured", "registered"].includes(item.connection_status)
   ).length;
   const pending = connectors.filter(
     (item) => item.connection_status === "ownership_verified_pending_registry"
-  ).length;
-  const mobileReady = connectors.filter((item) =>
-    item.mobile_platforms.some((platform) => platform === "android" || platform === "ios")
   ).length;
   const securityTone = !security
     ? "loading"
@@ -6989,6 +7076,16 @@ function MobileConnectorCatalog({
     registered: "Registry aktiv",
     revoked: "widerrufen"
   };
+  const vaultStatusLabels: Record<string, string> = {
+    encrypted: "aktiv",
+    migration_required: "Migration offen",
+    not_configured: "nicht eingerichtet",
+    error: "Fehler"
+  };
+  const blockerLabels: Record<string, string> = {
+    https_public_base_url_missing: "Oeffentliche HTTPS-Adresse fehlt",
+    oidc_not_implemented: "OIDC-Anmeldung fehlt"
+  };
   const connectionTone = (status: string) => {
     if (["configured", "registered"].includes(status)) return "ok";
     if (status === "ownership_verified_pending_registry") return "warning";
@@ -7013,10 +7110,17 @@ function MobileConnectorCatalog({
         <Metric title="Connectoren" value={catalog ? String(connectors.length) : "Wird geladen"} />
         <Metric title="Eingerichtet" value={catalog ? String(connected) : "Wird geladen"} />
         <Metric title="Registry-Review" value={catalog ? String(pending) : "Wird geladen"} />
-        <Metric title="Mobil vorgesehen" value={catalog ? String(mobileReady) : "Wird geladen"} />
+        <Metric
+          title="Gekoppelte Geraete"
+          value={security ? String(security.active_mobile_sessions) : "Wird geladen"}
+        />
+        <Metric
+          title="Belege offen"
+          value={documentInbox ? String(documentInbox.pending_review_documents) : "Wird geladen"}
+        />
         <Metric
           title="Secret-Vault"
-          value={security ? security.vault.status : "Wird geladen"}
+          value={security ? vaultStatusLabels[security.vault.status] ?? security.vault.status : "Wird geladen"}
         />
         <Metric
           title="Betriebsmodus"
@@ -7026,7 +7130,7 @@ function MobileConnectorCatalog({
       {security?.blockers.length ? (
         <div className="mobileConnectorBlockers">
           {security.blockers.map((blocker) => (
-            <span key={blocker}>{blocker.replaceAll("_", " ")}</span>
+            <span key={blocker}>{blockerLabels[blocker] ?? blocker.replaceAll("_", " ")}</span>
           ))}
         </div>
       ) : null}
@@ -12991,11 +13095,11 @@ function ReportCenterPanel({
             <FileDown size={16} />
             HNT Events
           </button>
-          <button type="button" onClick={() => onDownload("/api/v1/export/hnt-provenance-timeline.csv?account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp")}>
+          <button type="button" onClick={() => onDownload("/api/v1/export/hnt-provenance-timeline.csv")}>
             <FileDown size={16} />
             Fairspot Timeline
           </button>
-          <button type="button" onClick={() => onDownload("/api/v1/export/hnt-provenance-events.csv?account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp")}>
+          <button type="button" onClick={() => onDownload("/api/v1/export/hnt-provenance-events.csv")}>
             <FileDown size={16} />
             Fairspot Events
           </button>
@@ -13407,7 +13511,7 @@ function HntFifoProvenancePanel({
           <button type="button" onClick={() => onDownload("/api/v1/parity/hnt-fifo-provenance?limit=1000&source=binance")}>
             Binance
           </button>
-          <button type="button" onClick={() => onDownload("/api/v1/parity/hnt-fifo-provenance?limit=1000&account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp")}>
+          <button type="button" onClick={() => onDownload("/api/v1/parity/hnt-fifo-provenance?limit=1000")}>
             Fairspot
           </button>
         </div>
@@ -14095,6 +14199,290 @@ function BitgetStrategyBasisDecisionPanel({
   );
 }
 
+function TaxFilingSnapshotPanel({
+  year,
+  initialReport,
+  onDownload
+}: {
+  year: number;
+  initialReport: TaxFilingSnapshotComparison | undefined;
+  onDownload: (path: string) => void;
+}) {
+  const [report, setReport] = useState<TaxFilingSnapshotComparison | undefined>(initialReport);
+  const [submittedAt, setSubmittedAt] = useState("");
+  const [actionLoading, setActionLoading] = useState<"archive" | "usage" | "submit" | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setReport(initialReport);
+    setSubmittedAt("");
+    setActionMessage(null);
+    setActionError(null);
+  }, [initialReport, year]);
+
+  async function reloadComparison() {
+    const next = await getApi<TaxFilingSnapshotComparison>(
+      `/api/v1/tax-years/${encodeURIComponent(String(year))}/filing-snapshot-comparison`
+    );
+    setReport(next);
+  }
+
+  async function archiveCurrent() {
+    setActionLoading("archive");
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      const result = await postApi<{
+        created: boolean;
+        snapshot: TaxFilingSnapshotRecord;
+        message: string;
+      }>(
+        `/api/v1/tax-years/${encodeURIComponent(String(year))}/filing-snapshots`,
+        {
+          state: "reference",
+          filing_kind: report?.baseline?.state === "submitted" ? "correction" : "original",
+          note: "Ueber die Steuerjahr-Oberflaeche unveraenderlich archivierter Berechnungsstand."
+        },
+        300_000
+      );
+      await reloadComparison();
+      setActionMessage(result.message);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Abgabestand konnte nicht archiviert werden.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function confirmSubmitted() {
+    const candidate = report?.unconfirmed_reference;
+    if (!candidate || !submittedAt) {
+      return;
+    }
+    if (!window.confirm(
+      `Nur bestaetigen, wenn Revision ${candidate.revision} fuer ${year} tatsaechlich an das Finanzamt uebermittelt wurde. Fortfahren?`
+    )) {
+      return;
+    }
+    const parsedSubmittedAt = new Date(submittedAt);
+    if (Number.isNaN(parsedSubmittedAt.getTime())) {
+      setActionError("Der Uebermittlungszeitpunkt ist ungueltig.");
+      return;
+    }
+    setActionLoading("submit");
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      const result = await postApi<{
+        created: boolean;
+        snapshot: TaxFilingSnapshotRecord;
+        message: string;
+      }>(
+        `/api/v1/tax-years/${encodeURIComponent(String(year))}/filing-snapshots`,
+        {
+          state: "submitted",
+          filing_kind: report?.baseline?.state === "submitted" ? "correction" : "original",
+          submitted_at: parsedSubmittedAt.toISOString(),
+          confirmation_text: "ICH BESTAETIGE DIE TATSAECHLICHE ABGABE",
+          source_snapshot_id: candidate.snapshot_id,
+          note: "Vom Nutzer als tatsaechlich uebermittelter Stand bestaetigt."
+        },
+        120_000
+      );
+      await reloadComparison();
+      setSubmittedAt("");
+      setActionMessage(result.message);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Abgabe konnte nicht registriert werden.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function confirmPackageUsage() {
+    const candidate = report?.unconfirmed_reference;
+    if (!candidate || candidate.filing_usage_confirmed) {
+      return;
+    }
+    if (!window.confirm(
+      `Bestaetigen, dass Revision ${candidate.revision} fuer die Steuererklaerung ${year} verwendet wurde, der genaue ELSTER-Zeitpunkt aber noch offen ist?`
+    )) {
+      return;
+    }
+    setActionLoading("usage");
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      const result = await postApi<{
+        created: boolean;
+        snapshot: TaxFilingSnapshotRecord;
+        message: string;
+      }>(
+        `/api/v1/tax-filing-snapshots/${encodeURIComponent(candidate.snapshot_id)}/usage-confirmation`,
+        {
+          statement: "Vom Nutzer in der Steuerreport-Oberflaeche als Grundlage der Steuererklaerung bestaetigt.",
+          actor: "user",
+          source: "web_ui"
+        }
+      );
+      await reloadComparison();
+      setActionMessage(result.message);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Paketverwendung konnte nicht registriert werden.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  if (!report) {
+    return (
+      <section className="filingSnapshotPanel loadingPlaceholder" aria-label="Abgabestand wird geladen">
+        <span />
+        <span />
+        <span />
+      </section>
+    );
+  }
+
+  const baseline = report.baseline;
+  const candidate = report.unconfirmed_reference;
+  const tone = report.integrity_blocked
+    ? "blocked"
+    : report.amendment_review_required || candidate
+      ? "warning"
+      : report.status === "unchanged"
+        ? "ok"
+        : "neutral";
+  const changedRows = report.deltas.filter((item) => item.changed_at_cent_precision);
+
+  return (
+    <section className={`filingSnapshotPanel ${tone}`}>
+      <div className="filingSnapshotHeader">
+        <div>
+          <span className="heroKicker">Revisionssicherer Abgabestand</span>
+          <h2>{report.headline}</h2>
+          <p>{report.next_action}</p>
+        </div>
+        <span className={`statusPill ${tone === "neutral" ? "warning" : tone}`}>
+          {report.integrity_blocked
+            ? "Integritaet blockiert"
+            : report.amendment_review_required
+              ? "Korrektur pruefen"
+              : report.submission_timestamp_required
+                ? "Zeitpunkt offen"
+              : candidate
+                ? "Bestaetigung offen"
+                : baseline?.state === "submitted"
+                  ? "Abgabe gesichert"
+                  : "noch kein Abgabestand"}
+        </span>
+      </div>
+
+      <div className="filingSnapshotFacts">
+        <div>
+          <span>Vergleichsbasis</span>
+          <strong>{baseline ? `Revision ${baseline.revision}` : "keine"}</strong>
+          <em>{baseline ? (baseline.state === "submitted" ? "tatsaechlich eingereicht" : baseline.filing_usage_confirmed ? "als verwendetes Paket bestaetigt" : "nur Referenz") : "aktuellen Stand archivieren"}</em>
+        </div>
+        <div>
+          <span>Paketstand</span>
+          <strong>{baseline ? formatDateTime(baseline.package_generated_at) : "-"}</strong>
+          <em>{baseline ? `${baseline.files_count} manifestierte Dateien` : "kein Hash registriert"}</em>
+        </div>
+        <div>
+          <span>SHA-256 / Integritaet</span>
+          <strong>{baseline ? baseline.integrity_status : "-"}</strong>
+          <code title={baseline?.package_sha256}>{baseline ? shortAccount(baseline.package_sha256) : "-"}</code>
+        </div>
+        <div>
+          <span>Eintragungsrelevante Deltas</span>
+          <strong>{report.deltas.filter((item) => item.requires_review).length}</strong>
+          <em>{report.declaration_change_detected ? "je Einkunftsart pruefen" : "keine Cent-Abweichung"}</em>
+        </div>
+      </div>
+
+      {changedRows.length > 0 ? (
+        <div className="filingSnapshotDeltaTable">
+          <div className="filingSnapshotDeltaHead">
+            <span>Bereich</span><span>Abgabestand</span><span>Aktuell</span><span>Delta</span>
+          </div>
+          {changedRows.map((item) => (
+            <div className={item.requires_review ? "review" : ""} key={item.key}>
+              <span><strong>{item.label}</strong><em>{item.category === "declaration" ? "eintragungsrelevant" : "Nachweiswert"}</em></span>
+              <span>{formatCurrency(item.filed_value_eur)} EUR</span>
+              <span>{formatCurrency(item.current_value_eur)} EUR</span>
+              <span className={parseNumber(item.delta_eur) > 0 ? "positiveDelta" : "negativeDelta"}>{formatCurrency(item.delta_eur)} EUR</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="filingSnapshotNoDelta">Keine Abweichung auf Cent-Ebene zum registrierten Vergleichsstand.</p>
+      )}
+
+      {candidate ? (
+        <div className="filingSubmissionConfirm">
+          <div>
+            <strong>
+              {candidate.filing_usage_confirmed
+                ? `ELSTER-Zeitpunkt fuer Revision ${candidate.revision} ergaenzen`
+                : `Revision ${candidate.revision} als verwendetes Paket dokumentieren`}
+            </strong>
+            <span>
+              {candidate.filing_usage_confirmed
+                ? "Die Paketnutzung ist belegt. Nur der wirkliche Uebermittlungszeitpunkt gehoert in die Nachweisakte."
+                : "Ist der genaue Zeitpunkt nicht greifbar, kann zuerst nur die Paketnutzung revisionsfest bestaetigt werden."}
+            </span>
+            {!candidate.filing_usage_confirmed ? (
+              <button
+                className="filingUsageConfirmButton"
+                type="button"
+                disabled={actionLoading !== null}
+                onClick={confirmPackageUsage}
+              >
+                <Archive size={17} />
+                <span>{actionLoading === "usage" ? "Wird dokumentiert" : "Dieses Paket wurde verwendet"}</span>
+              </button>
+            ) : null}
+          </div>
+          <label>
+            Uebermittelt am
+            <input
+              type="datetime-local"
+              value={submittedAt}
+              onChange={(event) => setSubmittedAt(event.target.value)}
+            />
+          </label>
+          <button type="button" disabled={!submittedAt || actionLoading !== null} onClick={confirmSubmitted}>
+            <LockKeyhole size={17} />
+            <span>{actionLoading === "submit" ? "Wird registriert" : "Mit ELSTER-Zeitpunkt bestaetigen"}</span>
+          </button>
+        </div>
+      ) : null}
+
+      <div className="filingSnapshotActions">
+        <button type="button" disabled={actionLoading !== null} onClick={archiveCurrent}>
+          <Archive size={17} />
+          <span>{actionLoading === "archive" ? "Paket wird erzeugt" : "Aktuellen Stand archivieren"}</span>
+        </button>
+        <button type="button" onClick={() => onDownload(report.comparison_html_endpoint)}>
+          <ReceiptText size={17} />
+          <span>Vergleichsakte oeffnen</span>
+        </button>
+        {baseline ? (
+          <button type="button" onClick={() => onDownload(baseline.package_download_endpoint)}>
+            <FileDown size={17} />
+            <span>Archivpaket</span>
+          </button>
+        ) : null}
+      </div>
+      {actionMessage ? <p className="filingSnapshotMessage ok">{actionMessage}</p> : null}
+      {actionError ? <p className="filingSnapshotMessage error">{actionError}</p> : null}
+      <p className="filingSnapshotLegal">{report.legal_notice}</p>
+    </section>
+  );
+}
+
 function TaxPanel({
   taxSummary,
   taxHoldingPeriods,
@@ -14124,6 +14512,7 @@ function TaxPanel({
   taxYearDetail,
   taxDeclarationGuide,
   taxYearFilingSummary,
+  taxFilingSnapshotComparison,
   taxYearCorrectionMap,
   taxYearMethodology,
   taxYearWalletFifoDelta,
@@ -14237,6 +14626,7 @@ function TaxPanel({
   taxYearDetail: Snapshot["taxYearDetail"];
   taxDeclarationGuide: Snapshot["taxDeclarationGuide"];
   taxYearFilingSummary: Snapshot["taxYearFilingSummary"];
+  taxFilingSnapshotComparison: Snapshot["taxFilingSnapshotComparison"];
   taxYearCorrectionMap: Snapshot["taxYearCorrectionMap"];
   taxYearMethodology: Snapshot["taxYearMethodology"];
   taxYearWalletFifoDelta: Snapshot["taxYearWalletFifoDelta"];
@@ -14738,6 +15128,12 @@ function TaxPanel({
         </div>
       </section>
 
+      <TaxFilingSnapshotPanel
+        year={Number(activeYearValue)}
+        initialReport={taxFilingSnapshotComparison}
+        onDownload={onDownload}
+      />
+
       {taxCoreReady ? (
         <TaxFilingAtAGlance
           year={activeYearValue}
@@ -14906,6 +15302,10 @@ function TaxPanel({
               jahr: row.year,
               status: row.status_label,
               altwert_status: row.prior_filing_status,
+              vergleichsbasis: row.prior_filing_values_source,
+              snapshot: row.prior_filing_snapshot_id ? shortAccount(String(row.prior_filing_snapshot_id)) : "-",
+              absolut_delta_eur: formatCurrency(row.prior_filing_absolute_delta_eur),
+              elster_feldabgleich: row.elster_field_verification_required ? "offen" : "nicht markiert",
               anlage_so_eur: formatCurrency(row.v2_taxable_private_disposals_eur),
               rewards_eur: formatCurrency(row.v2_rewards_mining_staking_income_eur),
               derivate_eur: formatCurrency(row.v2_derivative_pnl_eur),
@@ -14969,7 +15369,11 @@ function TaxPanel({
             rows={(taxBmfPriorFilingComparison.years ?? []).map((row) => ({
               jahr: row.year,
               status: row.status_label,
-              altwerte: row.declared_values_configured ? "hinterlegt" : "fehlen",
+              altwerte: row.declared_values_source === "confirmed_filing_snapshot" ? "bestaetigte Paketbasis" : row.declared_values_configured ? "manuell hinterlegt" : "fehlen",
+              quelle: row.declared_values_source,
+              snapshot: row.declared_values_snapshot_id ? shortAccount(String(row.declared_values_snapshot_id)) : "-",
+              elster_zeitpunkt: row.submission_timestamp_known ? "bekannt" : row.declared_values_source === "confirmed_filing_snapshot" ? "offen" : "-",
+              elster_feldabgleich: row.elster_field_verification_required ? "erforderlich" : "-",
               altwert_status: row.declared_values_status,
               notiz: row.declared_values_note,
               v2_anlage_so_eur: formatCurrency(row.v2_taxable_private_disposals_eur),
@@ -16927,7 +17331,7 @@ function TaxPanel({
             <FileJson size={16} />
             Provenance-Events JSON
           </button>
-          <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/wallet-fifo-solana-provenance-classification?asset=SOL&pool_id=solana_rpc%3AG39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY&limit=10&provider=rpc_public`)}>
+          <button type="button" onClick={() => onDownload(`/api/v1/tax-years/${activeYearValue}/wallet-fifo-solana-provenance-classification?asset=SOL&limit=10&provider=rpc_public`)}>
             <FileJson size={16} />
             SOL-Klassifizierung JSON
           </button>

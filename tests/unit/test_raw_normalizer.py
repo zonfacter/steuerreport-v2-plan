@@ -127,7 +127,7 @@ def test_binance_withdrawal_api_normalizes_as_zero_quantity_evidence(tmp_path):
                 "transaction_fee": "1.72",
                 "gross_amount": "5532.275703",
                 "complete_time": "2025-03-23 13:49:42",
-                "address": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                "address": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 "network": "SOL",
                 "tx_id": "withdraw-tx",
                 "source_ref": "withdraw-id",
@@ -337,7 +337,7 @@ def test_solana_rpc_helium_reward_instruction_maps_incoming_hnt_to_reward(tmp_pa
                 "quantity": "3.488129",
                 "side": "in",
                 "tx_id": "reward-tx",
-                "wallet_address": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                "wallet_address": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 "logMessages": [
                     "Program log: Instruction: SetCurrentRewardsWrapperV1",
                     "Program log: Instruction: SetCurrentRewardsV0",
@@ -351,7 +351,7 @@ def test_solana_rpc_helium_reward_instruction_maps_incoming_hnt_to_reward(tmp_pa
                 "quantity": "1",
                 "side": "in",
                 "tx_id": "normal-transfer-tx",
-                "wallet_address": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                "wallet_address": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 "logMessages": ["Program log: Instruction: TransferChecked"],
             },
         ],
@@ -734,7 +734,7 @@ def test_helium_wallet_month_derives_iot_reward_without_ours_other_party_double_
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
         source="helium",
-        filename="Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv",
+        filename="Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv",
         content=(
             "Gateway Address,Name,Tag,Period Start (UTC),IOT Tokens,IOT Token,"
             "MOBILE Tokens,MOBILE Token,IOT (Ours),IOT (Other Party),"
@@ -758,11 +758,30 @@ def test_helium_wallet_month_derives_iot_reward_without_ours_other_party_double_
     assert events[0].event_time.day == 30
 
 
+def test_helium_wallet_month_uses_explicit_token_column_for_hnt(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="helium",
+        filename="Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv",
+        content=(
+            "Gateway Address,Period Start (UTC),IOT Tokens,IOT Token,MOBILE Tokens,MOBILE Token\n"
+            "gateway-1,01.01.25,0.05455185,HNT,,\n"
+        ),
+    )
+
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+
+    assert len(events) == 1
+    assert events[0].event_type == "mining"
+    assert events[0].asset == "HNT"
+    assert events[0].quantity == Decimal("0.05455185")
+
+
 def test_helium_wallet_month_skips_zero_iot_and_mobile_rows(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     batch = CsvRawImporter(store).import_text(
         source="helium",
-        filename="Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv",
+        filename="Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv",
         content=(
             "Gateway Address,Period Start (UTC),IOT Tokens,IOT Token,MOBILE Tokens,MOBILE Token\n"
             "gateway-1,01.04.23,0,IOT,,\n"
@@ -820,7 +839,7 @@ def test_helium_payment_v2_fairspot_roundtrip_stays_transfer_on_main_wallet(tmp_
 def test_helium_payment_v2_inbound_to_main_wallet_is_positive_on_main_wallet(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     main_wallet = RawNormalizer.HELIUM_MAIN_LEGACY_WALLET
-    service_wallet = "133bkeRPNK4BFhGfcf3uzmARbBfACprQ1TjWFMaxoHQoBqc5kfQ"
+    service_wallet = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
     batch = CsvRawImporter(store).import_text(
         source="helium",
         filename="helium-inbound-payment-v2.csv",

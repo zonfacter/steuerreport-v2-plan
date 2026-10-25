@@ -462,6 +462,119 @@ class DuckDbStore:
         )
         con.execute(
             """
+            create table if not exists mobile_connector_pairings (
+                pairing_id varchar primary key,
+                code_hash varchar not null,
+                device_name varchar not null,
+                platform varchar not null,
+                scopes_json varchar not null,
+                session_ttl_hours integer not null,
+                issued_at timestamp not null,
+                expires_at timestamp not null,
+                status varchar not null,
+                attempt_count integer not null,
+                exchanged_at timestamp,
+                session_id varchar
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists mobile_connector_sessions (
+                session_id varchar primary key,
+                token_hash varchar unique not null,
+                device_name varchar not null,
+                platform varchar not null,
+                scopes_json varchar not null,
+                created_at timestamp not null,
+                expires_at timestamp not null,
+                last_used_at timestamp,
+                revoked_at timestamp
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists mobile_document_inbox (
+                document_id varchar primary key,
+                document_sha256 varchar unique not null,
+                original_filename varchar not null,
+                storage_filename varchar not null,
+                media_type varchar not null,
+                size_bytes bigint not null,
+                document_kind varchar not null,
+                source_hint varchar,
+                note varchar,
+                captured_at timestamp,
+                first_uploaded_at timestamp not null,
+                last_uploaded_at timestamp not null,
+                upload_count integer not null,
+                first_uploaded_by_session_id varchar,
+                last_uploaded_by_session_id varchar,
+                review_status varchar not null
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists tax_filing_snapshots (
+                snapshot_id varchar primary key,
+                year integer not null,
+                revision integer not null,
+                state varchar not null,
+                filing_kind varchar not null,
+                source_kind varchar not null,
+                source_snapshot_id varchar,
+                package_filename varchar not null,
+                archive_relative_path varchar not null,
+                package_sha256 varchar not null,
+                package_size_bytes bigint not null,
+                manifest_sha256 varchar not null,
+                runtime_fingerprint_sha256 varchar not null,
+                package_generated_at timestamp not null,
+                summary_json varchar not null,
+                manifest_json varchar not null,
+                metadata_json varchar not null,
+                taxable_private_disposals_eur decimal(38, 18) not null,
+                taxable_disposal_proceeds_eur decimal(38, 18) not null,
+                acquisition_cost_eur decimal(38, 18) not null,
+                rewards_mining_staking_income_eur decimal(38, 18) not null,
+                derivative_pnl_eur decimal(38, 18) not null,
+                tax_free_private_disposals_eur decimal(38, 18) not null,
+                tax_free_lines_count integer not null,
+                export_ready boolean not null,
+                note varchar,
+                created_at timestamp not null,
+                submitted_at timestamp,
+                unique (year, revision)
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists tax_filing_snapshot_files (
+                snapshot_id varchar not null,
+                path varchar not null,
+                size_bytes bigint not null,
+                sha256 varchar not null,
+                source_endpoint varchar,
+                primary key (snapshot_id, path)
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists tax_filing_snapshot_events (
+                event_id varchar primary key,
+                snapshot_id varchar not null,
+                event_type varchar not null,
+                payload_json varchar not null,
+                created_at timestamp not null
+            )
+            """
+        )
+        con.execute(
+            """
             create table if not exists ai_tasks (
                 task_id varchar primary key,
                 task_type varchar not null,

@@ -401,7 +401,7 @@ def test_tax_year_rewards_include_solana_helium_instruction_rewards(tmp_path):
                 "quantity": "3.488129",
                 "side": "in",
                 "tx_id": "reward-tx",
-                "wallet_address": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                "wallet_address": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 "logMessages": [
                     "Program log: Instruction: SetCurrentRewardsWrapperV1",
                     "Program log: Instruction: SetCurrentRewardsV0",
@@ -885,6 +885,47 @@ def test_gain_evidence_price_delta_drilldown_uses_proportional_quote_for_split_l
     assert acquisition_event_report.event_level_review_count == 0
     assert acquisition_event_report.event_delta_eur == Decimal("0E-18")
     assert all(line.status == "event_level_ok" for line in acquisition_event_report.lines)
+
+
+def test_gain_evidence_event_delta_uses_received_stablecoin_for_positive_trade(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_text(
+        source="binance",
+        filename="gain-evidence-stablecoin-received.csv",
+        content=(
+            "time,asset,amount,type,quote_asset,quote_quantity\n"
+            "2025-01-01T00:00:00Z,TRUMP,140,buy,EUR,100\n"
+            "2025-01-20T06:49:58Z,USDT,8363.628,buy,TRUMP,140\n"
+        ),
+    )
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_point(
+        PricePointCreate(
+            asset="USDT",
+            price_eur=Decimal("0.96937"),
+            priced_at=datetime(2025, 1, 20, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    store.add_price_point(
+        PricePointCreate(
+            asset="TRUMP",
+            price_eur=Decimal("41.4405675"),
+            priced_at=datetime(2025, 1, 20, tzinfo=timezone.utc),
+            source="manual-test",
+        )
+    )
+    TaxService(store).rebuild_fifo()
+
+    report = TaxYearService(store).gain_evidence_event_delta_review(2025)
+
+    assert report.events_count == 1
+    event = report.lines[0]
+    assert event.price_asset == "USDT"
+    assert event.event_total_proceeds_eur == Decimal("8107.450074360000000000")
+    assert event.actual_proceeds_eur == Decimal("8107.450074360000000000")
+    assert event.event_delta_eur == Decimal("0E-18")
+    assert event.status == "event_level_ok"
 
 
 def test_loss_realization_planner_marks_usable_and_expired_loss_windows(tmp_path):
@@ -2243,7 +2284,7 @@ def test_tax_year_evidence_report_surfaces_cex_exchange_outflow_evidence(tmp_pat
                         "asset": "SOL",
                         "amount": "7.0700475",
                         "provider_status": "alchemy",
-                        "onchain_sender": "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr",
+                        "onchain_sender": "CySAjqmKLQCT729gypchz3zbYSSNh85rXx8Tk9e7PC7P",
                         "deposit_address": "binance-deposit-address",
                         "cex_account": "binance",
                         "fifo_transfer_status": "missing",

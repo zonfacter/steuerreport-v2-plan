@@ -86,6 +86,57 @@ def test_tax_methodology_report_blocks_unmatched_disposals(tmp_path):
     assert any(gap.blocks_bmf_ready for gap in report.gaps)
 
 
+def test_tax_methodology_separates_provider_basis_gap_from_unknown_origin(tmp_path):
+    service = TaxMethodologyService(DuckDbStore(tmp_path / "steuerreport_v2.duckdb"))
+
+    gaps = service._gaps(
+        year=2024,
+        tax_lines_count=1,
+        income_events_count=0,
+        derivative_lines_count=0,
+        unmatched_disposals=0,
+        missing_price_groups=0,
+        review_issues_count=0,
+        external_review_count=0,
+        external_unmatched_count=0,
+        traceability={
+            "activity_count": 1,
+            "tax_lines_without_event_count": 0,
+            "lots_without_event_count": 0,
+            "tax_lines_with_event_trace": 1,
+        },
+        wallet_fifo_unmatched_count=10,
+        wallet_fifo_exchange_sequencing_count=0,
+        wallet_fifo_delta_eur=Decimal("0"),
+        wallet_fifo_unresolved_provenance_count=0,
+        wallet_fifo_documented_non_live_count=0,
+        wallet_fifo_documented_fiat_purchase_count=0,
+        wallet_fifo_documented_legacy_cex_deposit_count=0,
+        wallet_fifo_documented_legacy_cex_deposit_mirror_count=0,
+        wallet_fifo_documented_fairspot_staking_return_count=0,
+        wallet_fifo_documented_legacy_counterparty_mirror_count=0,
+        wallet_fifo_documented_exchange_deposit_history_count=0,
+        wallet_fifo_documented_legacy_hnt_external_payment_count=0,
+        wallet_fifo_documented_token_redenomination_count=0,
+        wallet_fifo_documented_manual_cex_deposit_count=0,
+        wallet_fifo_documented_external_or_unknown_count=0,
+        wallet_fifo_documented_unverified_cex_count=0,
+        wallet_fifo_documented_service_swap_count=0,
+        asset_fifo_possible_recalculation_count=0,
+        asset_fifo_attribution_review_count=0,
+        wallet_fifo_provider_basis_gap_count=10,
+        wallet_fifo_unexplained_unmatched_count=0,
+    )
+
+    provider_gap = next(
+        gap for gap in gaps if gap.code == "wallet_fifo_provider_basis_pending"
+    )
+    assert provider_gap.count == 10
+    assert provider_gap.blocks_bmf_ready is True
+    assert not any(gap.code == "wallet_fifo_preview_unmatched" for gap in gaps)
+    assert not any(gap.code == "wallet_fifo_evidence_overlay_ok" for gap in gaps)
+
+
 def test_tax_methodology_documents_small_exchange_sequencing_gap_without_blocker(
     tmp_path,
 ):
@@ -1198,7 +1249,10 @@ def test_tax_methodology_api_endpoints(tmp_path):
     assert 2024 in reward_recheck.json()["data"]["available_years"]
     assert action_plan.json()["data"]["available_years"] == [2024]
     assert filing_readiness.json()["data"]["available_years"] == [2024]
-    assert detail.json()["data"]["policy"]["method_version"] == "bmf_readiness_v2"
+    assert (
+        detail.json()["data"]["policy"]["method_version"]
+        == "bmf_readiness_v3_provider_basis_classification"
+    )
     assert (
         status.json()["data"]["methodology_endpoint"]
         == "/api/v1/tax-years/2024/methodology"

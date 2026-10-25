@@ -27,15 +27,15 @@ NATIVE_BACKFILL_SCRIPT = SCRIPT_ROOT / "backfill_solana_native_balance_evidence_
 PRIMARY_TOKEN_AUDIT = (
     PROJECT_ROOT
     / "var/solana_token_account_coverage"
-    / "token_account_coverage_20260710T201911Z_G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY.json"
+    / "token_account_coverage_20260710T201911Z_6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP.json"
 )
 SHARK_TOKEN_AUDIT = (
     PROJECT_ROOT
     / "var/solana_token_account_coverage"
-    / "token_account_coverage_20260710T212451Z_G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY.json"
+    / "token_account_coverage_20260710T212451Z_6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP.json"
 )
 OPENING_BATCH_ID = "bb73e499-058e-47cb-85ca-ea623a33dae8"
-WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
 EXPECTED_BALANCES = {
     "CWIF": Decimal("11310642.83"),
     "HNT": Decimal("75.175403"),

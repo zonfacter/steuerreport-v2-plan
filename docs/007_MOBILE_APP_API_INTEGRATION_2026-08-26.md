@@ -9,13 +9,19 @@ iOS-App. Der Server bleibt die einzige Instanz fuer Steuerlogik, FIFO,
 Stichtagsbewertung, Quellenregeln und Belegerzeugung. Ein Mobile-Client stellt
 diese Ergebnisse dar und darf sie nicht lokal nachberechnen.
 
-Der aktuelle Status lautet `experimental_read_and_wallet_ownership_setup`:
+Der aktuelle Status lautet
+`experimental_read_pairing_wallet_ownership_and_document_inbox`:
 
 - Die empfohlenen Lese-Endpunkte sind fuer einen ersten Mobile-Client geeignet.
 - Der Connector-Katalog und ein signierter Solana-Wallet-Eigentumsnachweis
   sind als erste schmale Setup-Oberflaeche vorhanden.
+- Mobilgeraete erhalten ueber einen einmaligen Kopplungscode eine gescopte,
+  ablaufende und serverseitig widerrufbare Sitzung. Der dauerhafte Setup-Token
+  wird nicht auf dem Mobilgeraet gespeichert.
 - Das API-Schema ist versioniert und maschinenlesbar eingecheckt.
-- Schreibende Endpunkte bleiben Expert-/Admin-Oberflaeche.
+- Schreibende Endpunkte bleiben grundsaetzlich Expert-/Admin-Oberflaeche.
+  Ausnahmen sind die explizit als `recommended-write` markierten, eng
+  gescopten Wallet-Nachweis- und Dokumentuploadpfade.
 - Die API ist ohne vorgeschaltetes TLS/Auth-Gateway nicht internetfaehig.
 
 Die Laufzeitmerkmale liefert:
@@ -123,6 +129,7 @@ Geldbetraege, Kurse und Tokenmengen werden im JSON als Strings transportiert:
 | `GET /api/v1/product/readiness` | Abgabe-/Systemstatus | 60 Sekunden |
 | `GET /api/v1/connectors/catalog` | Connector-, Vault- und Sicherheitsstatus | 60 Sekunden |
 | `GET /api/v1/connectors/connections` | Signierte Wallet-Verbindungen | 60 Sekunden |
+| `GET /api/v1/connectors/mobile/session` | Scope und Ablauf der gekoppelten App-Sitzung | App-Start |
 | `GET /api/v1/sources/overview` | Eigene Quellen, Live- und Ledgerstatus | 60 Sekunden |
 | `GET /api/v1/sources/{source_id}` | Quellen-Drilldown | 60 Sekunden |
 | `GET /api/v1/portfolio/snapshot` | Aktueller Bestand | 30 Sekunden |
@@ -156,15 +163,28 @@ Der erste schreibende Mobile-Flow ist bewusst eng begrenzt:
    `review_required`. Sie veraendert weder Canonical Events noch Ledger,
    Portfolio, FIFO oder Steuerdaten.
 
-Beide POST-Endpunkte verlangen:
+Vor dem ersten schreibenden Mobile-Aufruf wird das Geraet gekoppelt:
+
+1. Ein Administrator erzeugt mit `POST /api/v1/connectors/mobile/pairings`
+   und dem lokalen Setup-Bearer einen zehn Minuten gueltigen Einmalcode.
+2. Die App tauscht Kopplungs-ID und Code einmalig ueber
+   `POST /api/v1/connectors/mobile/sessions` gegen einen Mobile-Bearer.
+3. Der Bearer wird im Android Keystore beziehungsweise in der iOS Keychain
+   gespeichert und mit `GET /api/v1/connectors/mobile/session` geprueft.
+4. Der Server speichert nur SHA-256-Hashes, Scopes und Auditzeitpunkte.
+5. Der Administrator kann jede Sitzung ueber
+   `DELETE /api/v1/connectors/mobile/sessions/{session_id}` widerrufen.
+
+Die Wallet-POST-Endpunkte akzeptieren danach:
 
 ```text
-Authorization: Bearer <connector-setup-token>
+Authorization: Bearer <mobile-session-token mit wallet:verify>
 ```
 
-Der Token liegt nur in der root-geschuetzten Datei aus
-`STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE`. Er ist ein lokaler
-Einrichtungsnachweis und kein Ersatz fuer OIDC bei Internetbetrieb.
+Der dauerhafte Setup-Token liegt weiterhin nur in der root-geschuetzten Datei
+aus `STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE`. Er autorisiert alternativ
+lokale Administration, gehoert aber niemals in die App. Mobile-Sitzungen und
+Setup-Token ersetzen kein OIDC bei Internetbetrieb.
 
 Seed Phrase, Private Key und Wallet-Passwort werden weder abgefragt noch
 gespeichert. Die API akzeptiert ausschliesslich Adresse und Signatur.
@@ -200,6 +220,8 @@ Jede Operation besitzt:
 - `x-data-effect=write`: kann Daten, Decisions, Jobs oder Artefakte schreiben.
 - `x-data-effect=delete`: loescht den bezeichneten lokalen Datensatz.
 - `x-mobile-surface=recommended-read`: freigegebener Mobile-Leseeinstieg.
+- `x-mobile-surface=recommended-write`: eng gescopter Mobile-Setup- oder
+  Uploadpfad.
 - `x-mobile-surface=expert-or-internal`: nicht Teil der ersten App-Oberflaeche.
 - `x-long-running=true`: mit langem Timeout und sichtbarem Fortschritt behandeln.
 
@@ -222,6 +244,34 @@ muss spaeter das Gateway erzwingen.
 - Retry nur fuer idempotente GET-Aufrufe und mit exponentiellem Backoff.
 - POST/PUT/PATCH/DELETE niemals automatisch wiederholen, solange keine
   dokumentierte Idempotenz vorhanden ist.
+
+Der Dokumentupload ist durch den Inhalts-Hash idempotent: Ein bytegleiches
+Original erzeugt kein zweites Inbox-Dokument. Die App soll das Ergebnisfeld
+`already_present` trotzdem sichtbar auswerten und einen abgebrochenen Request
+nicht blind parallel wiederholen.
+
+## Mobile Beleg-Inbox
+
+`POST /api/v1/connectors/mobile/documents` verwendet `multipart/form-data` und
+eine gekoppelte Sitzung mit `document:upload`. Unterstuetzt werden PDF, JPEG
+und PNG bis 25 MiB. Die App uebergibt neben `file` optional:
+
+- `document_kind`: `bank_statement`, `exchange_statement`,
+  `purchase_receipt`, `tax_notice`, `inheritance_evidence`,
+  `portfolio_statement` oder `other`,
+- `source_hint`: kurze Providerangabe,
+- `note`: lokale Review-Notiz,
+- `captured_at`: ISO-8601-Zeitpunkt mit Zeitzone.
+
+Der Server prueft Dateiendung, Medientyp und Magic Bytes, bereinigt den
+Dateinamen, speichert content-addressed und antwortet mit SHA-256,
+`evidence_ref`, Reviewstatus und Downloadpfad. `pending_review` bedeutet
+ausdruecklich, dass weder OCR noch Steuer-, FIFO-, Ledger- oder Importlogik
+ausgeloest wurde.
+
+Inbox-Liste und Originaldownload sind Adminpfade und akzeptieren keinen
+Mobile-Bearer. Dadurch kann ein kompromittiertes Aufnahmegeraet Belege
+hochladen, aber den vorhandenen Belegbestand nicht auslesen.
 
 ## Downloads und Belege
 
@@ -324,9 +374,10 @@ Generierung explizit verifiziert werden.
 
 ## Sicherheitsarchitektur vor App-Store-Betrieb
 
-Die API besitzt noch keine allgemeine Benutzeranmeldung. Nur die beiden
-Wallet-Eigentumsnachweis-Routen verlangen den separaten Setup-Bearer. Dieser
-enge Schutz aendert nichts an der LAN-/VPN-Grenze fuer die Gesamt-API.
+Die API besitzt noch keine allgemeine Benutzeranmeldung. Connector-Schreibwege
+verwenden gescopte Mobile-Sitzungen, und die Kopplungsadministration verlangt
+den separaten Setup-Bearer. Dieser enge Schutz aendert nichts an der
+LAN-/VPN-Grenze fuer die Gesamt-API.
 
 Mindestens erforderlich:
 

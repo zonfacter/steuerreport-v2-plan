@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_template, private_value
+
 import csv
 from collections import defaultdict
 from datetime import datetime
@@ -15,9 +17,9 @@ from steuerreport_v2.paths import USERTRANSFER_ROOT
 
 DEFAULT_WALLET_MONTHLY_FILE = (
     USERTRANSFER_ROOT
-    / "Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv"
+    / private_template('Wallet.{primary_solana_wallet}-month.csv')
 )
-DEFAULT_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+DEFAULT_WALLET = private_value('primary_solana_wallet', '')
 
 
 class WalletMonthlyPreflightService:

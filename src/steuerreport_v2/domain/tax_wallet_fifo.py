@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_alias, private_config_path, private_template, private_value
+
 from collections.abc import Iterable
 from collections import Counter, defaultdict, deque
 from datetime import datetime, timedelta, timezone
@@ -269,17 +271,16 @@ class WalletFifoPreviewService:
     DEFAULT_SOLANA_SERVICE_SWAP_EVIDENCE_DIR = Path(
         "/workspace/steuerreport-v2-plan/var/solana_service_swap_evidence"
     )
-    MAIN_HELIUM_LEGACY_WALLET = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
-    FAIRSPOT_STAKING_WALLET = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
-    LEGACY_STAKING_WALLET = "133bkeRPNK4BFhGfcf3uzmARbBfACprQ1TjWFMaxoHQoBqc5kfQ"
+    MAIN_HELIUM_LEGACY_WALLET = private_value('legacy_helium_wallet', '')
+    FAIRSPOT_STAKING_WALLET = private_value('staking_route_wallet', '')
+    LEGACY_STAKING_WALLET = private_value('legacy_staking_wallet', '')
     HISTORICAL_STAKING_WALLETS = frozenset(
-        {FAIRSPOT_STAKING_WALLET, LEGACY_STAKING_WALLET}
+        value for value in {FAIRSPOT_STAKING_WALLET, LEGACY_STAKING_WALLET} if value
     )
-    PRIMARY_SOLANA_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
-    MOONPAY_APPLE_PAY_SOLANA_SENDER = "Dw8phQHJuLhCMzUUNWTNkHcui847dMdoADdg8XDxsVtE"
+    PRIMARY_SOLANA_WALLET = private_value('primary_solana_wallet', '')
+    MOONPAY_APPLE_PAY_SOLANA_SENDER = private_value('configured_identifier_80', '')
     FAIRSPOT_EVIDENCE_URL = (
-        "https://www.fairspot.host/hnt-export-mining-tax"
-        "?account=13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
+        private_template('https://www.fairspot.host/hnt-export-mining-tax?account={staking_route_wallet}')
     )
     _SOLANA_ORIGIN_TRACE_CACHE: dict[
         tuple[str, str, str, str, str], WalletFifoSolanaOriginTrace
@@ -295,22 +296,22 @@ class WalletFifoPreviewService:
     DEFAULT_CEX_SENDER_OWNERSHIP_DIR = Path(
         "/workspace/steuerreport-v2-plan/var/cex_deposit_sender_ownership"
     )
-    DEFAULT_SOURCE_REGISTRY_CONFIG = Path(
-        "/workspace/steuerreport-v2-plan/configs/source_registry.json"
-    )
+    DEFAULT_SOURCE_REGISTRY_CONFIG = private_config_path('source_registry.json')
     KNOWN_OWN_SOLANA_WALLETS = {
-        "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod",
-        "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+        value for value in (
+            private_value('secondary_solana_wallet', ''),
+            private_value('primary_solana_wallet', ''),
+        ) if value
     }
-    KNOWN_SOLANA_EXCHANGE_INFRASTRUCTURE = {
-        "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr": "Bitget Exchange",
+    KNOWN_SOLANA_EXCHANGE_INFRASTRUCTURE = {key: item for key, item in ({
+        private_value('configured_identifier_97', ''): "Bitget Exchange",
         "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9": "Binance 2",
-    }
-    KNOWN_OWN_CEX_DEPOSIT_ADDRESSES = {
-        "0x6b007cb6d125f4aaa77b3154c6e4a8316e84bffc": "bitget:bitget",
-        "4txxDLNGsGF1HyaW957fdhpnGbPxeuyEhA2V6x284kTN": "bitget:bitget",
-        "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW": "binance:Spot",
-    }
+    }).items() if key}
+    KNOWN_OWN_CEX_DEPOSIT_ADDRESSES = {key: item for key, item in ({
+        private_value('configured_identifier_04', ''): "bitget:bitget",
+        private_value('configured_identifier_79', ''): "bitget:bitget",
+        private_value('configured_identifier_100', ''): "binance:Spot",
+    }).items() if key}
     PROVENANCE_EVIDENCE_TRACE_STATUSES = {
         "unresolved_inbound_provenance",
         "resolved_by_documented_opening_balance",
@@ -515,7 +516,7 @@ class WalletFifoPreviewService:
             ),
             LegacyHeliumWalletSummary(
                 address=self.PRIMARY_SOLANA_WALLET,
-                label="Solana Main Wallet 6K9n7y...qEwP",
+                label=('Solana Main Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')),
                 role="migration_target",
                 included_in_portfolio=False,
                 note=(
@@ -5155,7 +5156,7 @@ class WalletFifoPreviewService:
             onchain_quantity=onchain_quantity,
             quantity_delta=quantity_delta,
             deposit_address=deposit_address,
-            cex_main_wallet="DWf2k9851Uxny6fvj3jq5bY6W5xaHmjxfBVobMPSHVvM"
+            cex_main_wallet=private_value('configured_identifier_95', '')
             if cex == "binance" and network == "SOL"
             else None,
             tx_id=tx_id,

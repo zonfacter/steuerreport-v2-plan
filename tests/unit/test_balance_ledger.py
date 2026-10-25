@@ -231,7 +231,7 @@ def test_balance_ledger_zeroes_stablecoin_sub_cent_dust_balance(tmp_path):
 
 def test_balance_ledger_merges_unique_truncated_wallet_account_alias(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    wallet = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
+    wallet = "133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v"
     short_wallet = "133iWieuw...xU6WUW8v"
     batch = CsvRawImporter(store).import_text(
         source="manual-csv",

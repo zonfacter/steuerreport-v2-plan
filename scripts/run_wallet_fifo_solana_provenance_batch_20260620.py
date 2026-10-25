@@ -17,7 +17,7 @@ from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "solana_provenance_batches"
-DEFAULT_POOL_ID = "solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+DEFAULT_POOL_ID = "solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
 FAILED_STATUSES = {"failed", "not_found", "rate_limited", "missing_txid"}
 
 

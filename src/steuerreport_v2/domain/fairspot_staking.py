@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_config_path
+
 import csv
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -18,7 +20,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 
 class FairspotStakingReconciliationService:
     PROJECT_ROOT = Path(__file__).resolve().parents[3]
-    DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs/fairspot_hnt_staking_reconciliation.json"
+    DEFAULT_CONFIG_PATH = private_config_path('fairspot_hnt_staking_reconciliation.json')
     DEFAULT_INDEPENDENT_SOURCE_PATH = (
         PROJECT_ROOT
         / "var/fairspot_staking_reconciliation/latest_fairspot_staking_source.csv"

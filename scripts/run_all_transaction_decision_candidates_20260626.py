@@ -15,11 +15,11 @@ DEFAULT_DETAIL = PROJECT_ROOT / "var" / "all_transaction_open_detail_reviews" / 
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var" / "all_transaction_decision_candidates"
 BINANCE_DEPOSIT_ADDRESS = "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW"
 OWN_SOLANA_WALLETS = {
-    "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY": "Main Solana Wallet",
-    "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod": "JUP Wallet",
+    "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP": "Main Solana Wallet",
+    "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu": "JUP Wallet",
 }
 KNOWN_INFRASTRUCTURE = {
-    "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr": "Bitget Exchange",
+    "CySAjqmKLQCT729gypchz3zbYSSNh85rXx8Tk9e7PC7P": "Bitget Exchange",
     "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9": "Binance Hot Wallet",
 }
 

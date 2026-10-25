@@ -551,7 +551,7 @@ def test_wallet_fifo_carries_linked_bitget_hot_wallet_withdrawal(tmp_path):
                             {
                                 "signature": tx_id,
                                 "signers": [
-                                    "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr"
+                                    "CySAjqmKLQCT729gypchz3zbYSSNh85rXx8Tk9e7PC7P"
                                 ],
                             }
                         ],
@@ -904,7 +904,7 @@ def test_wallet_fifo_preview_anchors_binance_withdrawal_net_to_solana_and_consum
             row_number=1,
             payload_json=(
                 '{"asset":"JUP","amount":"5530.555703","transaction_fee":"1.72",'
-                '"gross_amount":"5532.275703","address":"G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",'
+                '"gross_amount":"5532.275703","address":"6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",'
                 '"network":"SOL","tx_id":"withdraw-tx","complete_time":"2025-03-23 13:49:42"}'
             ),
         ),
@@ -939,7 +939,7 @@ def test_wallet_fifo_preview_anchors_binance_withdrawal_net_to_solana_and_consum
     trace = report.transfer_traces[0]
     assert trace.source_pool_id == "binance:Spot"
     assert (
-        trace.target_pool_id == "solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+        trace.target_pool_id == "solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     )
     assert trace.quantity == Decimal("5530.555703")
     assert trace.fee_quantity == Decimal("1.72")
@@ -965,7 +965,7 @@ def test_wallet_fifo_preview_anchors_binance_sol_withdrawal_net_to_solana_and_co
             row_number=1,
             payload_json=(
                 '{"asset":"SOL","amount":"1.12889582","transaction_fee":"0.008",'
-                '"gross_amount":"1.13689582","address":"G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",'
+                '"gross_amount":"1.13689582","address":"6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",'
                 '"network":"SOL","tx_id":"withdraw-sol-tx","complete_time":"2024-11-24 07:24:42"}'
             ),
         ),
@@ -996,7 +996,7 @@ def test_wallet_fifo_preview_anchors_binance_sol_withdrawal_net_to_solana_and_co
                 event_type="transfer",
                 asset="SOL",
                 quantity=Decimal("1.12889582"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="withdraw-sol-tx",
             ),
         ]
@@ -1010,7 +1010,7 @@ def test_wallet_fifo_preview_anchors_binance_sol_withdrawal_net_to_solana_and_co
     trace = report.transfer_traces[0]
     assert trace.source_pool_id == "binance:Spot"
     assert (
-        trace.target_pool_id == "solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+        trace.target_pool_id == "solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     )
     assert trace.quantity == Decimal("1.12889582")
     assert trace.fee_quantity == Decimal("0.008")
@@ -1038,7 +1038,7 @@ def test_wallet_fifo_preview_carries_binance_withdrawal_api_evidence_without_bal
             row_number=1,
             payload_json=(
                 '{"asset":"JUP","amount":"5530.555703","transaction_fee":"1.72",'
-                '"gross_amount":"5532.275703","address":"G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",'
+                '"gross_amount":"5532.275703","address":"6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",'
                 '"network":"SOL","tx_id":"withdraw-api-tx","operation":"Withdraw",'
                 '"complete_time":"2026-07-27 21:30:50"}'
             ),
@@ -1062,7 +1062,7 @@ def test_wallet_fifo_preview_carries_binance_withdrawal_api_evidence_without_bal
                 event_type="transfer",
                 asset="JUP",
                 quantity=Decimal("5530.555703"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="withdraw-api-tx",
             ),
             CanonicalEventCreate(
@@ -1087,7 +1087,7 @@ def test_wallet_fifo_preview_carries_binance_withdrawal_api_evidence_without_bal
     assert trace.status == "ok"
     assert trace.source_pool_id == "binance:Spot"
     assert trace.target_pool_id == (
-        "solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+        "solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     )
     assert trace.quantity == Decimal("5530.555703")
     assert trace.fee_quantity == Decimal("1.72")
@@ -1792,7 +1792,7 @@ def test_wallet_fifo_provenance_closure_documents_moonpay_apple_pay_onramp(
     tmp_path, monkeypatch
 ):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    wallet = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
+    wallet = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
     batch = store.create_import_batch(
         ImportBatchCreate(
             source="solana_rpc",
@@ -2196,7 +2196,7 @@ def test_wallet_fifo_provenance_closure_counts_fairspot_staking_return(tmp_path)
 def test_wallet_fifo_provenance_closure_documents_legacy_counterparty_mirror(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     main_wallet = WalletFifoPreviewService.MAIN_HELIUM_LEGACY_WALLET
-    service_wallet = "133bkeRPNK4BFhGfcf3uzmARbBfACprQ1TjWFMaxoHQoBqc5kfQ"
+    service_wallet = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
     short_service_wallet = "13xfSeV2U...pCbA78Yp\u00a0"
     helium_batch = store.create_import_batch(
         ImportBatchCreate(
@@ -2726,7 +2726,7 @@ def test_wallet_fifo_provenance_priorities_surface_withdrawal_outflow_evidence(
             row_number=1,
             payload_json=(
                 '{"asset":"USDT","amount":"100","transaction_fee":"1",'
-                '"address":"G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",'
+                '"address":"6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",'
                 '"network":"SOL","tx_id":"withdraw-usdt-tx","complete_time":"2025-02-01 12:00:00"}'
             ),
         ),
@@ -2748,7 +2748,7 @@ def test_wallet_fifo_provenance_priorities_surface_withdrawal_outflow_evidence(
                 event_type="transfer",
                 asset="USDT",
                 quantity=Decimal("100"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="withdraw-usdt-tx",
             ),
             CanonicalEventCreate(
@@ -2759,7 +2759,7 @@ def test_wallet_fifo_provenance_priorities_surface_withdrawal_outflow_evidence(
                 quantity=Decimal("1"),
                 quote_asset="USDT",
                 quote_quantity=Decimal("50"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
             ),
         ]
     )
@@ -2770,7 +2770,7 @@ def test_wallet_fifo_provenance_priorities_surface_withdrawal_outflow_evidence(
     event_report = service.provenance_events(
         2025,
         asset="USDT",
-        pool_id="solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+        pool_id="solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
     )
 
     group = priority_report.groups[0]
@@ -2782,7 +2782,7 @@ def test_wallet_fifo_provenance_priorities_surface_withdrawal_outflow_evidence(
     assert group.best_outflow_candidate.withdrawal_tx_id == "withdraw-usdt-tx"
     assert (
         group.best_outflow_candidate.withdrawal_address
-        == "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+        == "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     )
     event = event_report.events[0]
     assert event.evidence_status == "withdrawal_evidence_ready"
@@ -3743,7 +3743,7 @@ def test_wallet_fifo_provenance_resolves_bitget_recharge_with_known_solana_outfl
                             "meta": {
                                 "preTokenBalances": [
                                     {
-                                        "owner": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                                        "owner": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                                         "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
                                         "uiTokenAmount": {
                                             "uiAmountString": "57.012482",
@@ -3761,7 +3761,7 @@ def test_wallet_fifo_provenance_resolves_bitget_recharge_with_known_solana_outfl
                                 ],
                                 "postTokenBalances": [
                                     {
-                                        "owner": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                                        "owner": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                                         "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
                                         "uiTokenAmount": {
                                             "uiAmountString": "2.012482",
@@ -3782,7 +3782,7 @@ def test_wallet_fifo_provenance_resolves_bitget_recharge_with_known_solana_outfl
                                 "message": {
                                     "accountKeys": [
                                         {
-                                            "pubkey": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                                            "pubkey": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                                             "signer": True,
                                             "writable": True,
                                         },
@@ -3799,8 +3799,8 @@ def test_wallet_fifo_provenance_resolves_bitget_recharge_with_known_solana_outfl
                     "side": "out",
                     "source": "solana_rpc",
                     "timestamp_utc": "2024-03-07T15:54:07+00:00",
-                    "tx_id": "4xZ3ktww1TogJUtWZFuZQ3jkAYyatg6pnVyjy4YuYU2gBzhKaz5AUcyH62xpX3qp1uWpuGnVqa1th2NAj2NJGM4T",
-                    "wallet_address": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                    "tx_id": "35dJxyr62S6DmwTXZs8qzQ19qew4h4XTD9wbRy87ucg4JqxYtXCgX1k6189P8X2mQ8LmKnh6w41CNYVgU2HbPJfW",
+                    "wallet_address": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 }
             ),
         ),
@@ -3813,8 +3813,8 @@ def test_wallet_fifo_provenance_resolves_bitget_recharge_with_known_solana_outfl
                 event_type="transfer",
                 asset="USDT",
                 quantity=Decimal("-55"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
-                tx_id="4xZ3ktww1TogJUtWZFuZQ3jkAYyatg6pnVyjy4YuYU2gBzhKaz5AUcyH62xpX3qp1uWpuGnVqa1th2NAj2NJGM4T",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
+                tx_id="35dJxyr62S6DmwTXZs8qzQ19qew4h4XTD9wbRy87ucg4JqxYtXCgX1k6189P8X2mQ8LmKnh6w41CNYVgU2HbPJfW",
                 raw_object_id=raw_outflow.raw_object_id,
             ),
             CanonicalEventCreate(
@@ -3843,7 +3843,7 @@ def test_wallet_fifo_provenance_resolves_bitget_recharge_with_known_solana_outfl
     )
     assert (
         preview.transfer_traces[0].source_pool_id
-        == "solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+        == "solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     )
     assert report.groups_count == 0
     assert raw_breakdown.groups_count == 0
@@ -4059,7 +4059,7 @@ def test_wallet_fifo_raw_provenance_breakdown_groups_raw_only_patterns_and_api(
                 event_type="transfer",
                 asset="SOL",
                 quantity=Decimal("0.005"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="solana-raw-tx",
                 raw_object_id=sol_raw.raw_object_id,
             ),
@@ -4080,7 +4080,7 @@ def test_wallet_fifo_raw_provenance_breakdown_groups_raw_only_patterns_and_api(
     events = WalletFifoPreviewService(store).provenance_events(
         2024,
         asset="SOL",
-        pool_id="solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+        pool_id="solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
     )
     response = TestClient(create_app(store)).get(
         "/api/v1/tax-years/2024/wallet-fifo-raw-provenance-breakdown?limit=10"
@@ -4101,7 +4101,7 @@ def test_wallet_fifo_raw_provenance_breakdown_groups_raw_only_patterns_and_api(
 
 def test_wallet_fifo_opening_balance_evidence_reports_csv_row_and_api(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    account = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    account = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     batch = store.create_import_batch(
         ImportBatchCreate(
             source="opening-balance-scope-test",
@@ -4196,7 +4196,7 @@ def test_wallet_fifo_provenance_resolves_solana_tiny_raw_credit(tmp_path):
                 event_type="transfer",
                 asset="SOL",
                 quantity=Decimal("0.000005"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="tiny-sol-tx",
                 raw_object_id=raw.raw_object_id,
             ),
@@ -4256,7 +4256,7 @@ def test_wallet_fifo_provenance_resolves_solana_helium_reward_claim_context(tmp_
                 event_type="transfer",
                 asset="IOT",
                 quantity=Decimal("898221.114046"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="iot-claim-tx",
                 raw_object_id=raw.raw_object_id,
             ),
@@ -4327,7 +4327,7 @@ def test_wallet_fifo_provenance_resolves_solana_helium_staking_reward_context(tm
                 event_type="transfer",
                 asset="IOT",
                 quantity=Decimal("164.879512"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="iot-staking-tx",
                 raw_object_id=raw.raw_object_id,
             ),
@@ -4380,7 +4380,7 @@ def test_wallet_fifo_solana_raw_provenance_priorities_join_latest_batch_artifact
                                             "signer": True,
                                         },
                                         {
-                                            "pubkey": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                                            "pubkey": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                                             "signer": False,
                                         },
                                     ],
@@ -4419,7 +4419,7 @@ def test_wallet_fifo_solana_raw_provenance_priorities_join_latest_batch_artifact
                 event_type="transfer",
                 asset="SOL",
                 quantity=Decimal("15.261428266"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="sig-priority",
                 raw_object_id=raw.raw_object_id,
             )
@@ -4442,7 +4442,7 @@ def test_wallet_fifo_solana_raw_provenance_priorities_join_latest_batch_artifact
                         "matched_amount": "15.261428266",
                         "wallet_delta_quantity": "15.261428266",
                         "sender_owner": "ExternalSender111111111111111111111111111",
-                        "receiver_owner": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                        "receiver_owner": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                         "sender_is_known_own_wallet": False,
                         "receiver_is_known_own_wallet": True,
                         "block_time": "2024-11-22T19:34:42+00:00",
@@ -4625,7 +4625,7 @@ def test_wallet_fifo_provenance_recognizes_bitget_withdrawal_history_fields(tmp_
             payload_json=(
                 '{"Order no.":"1247109485523623953","Transaction hash(txid)":"bitget-chain-tx",'
                 '"Coin":"USDT","Network":"SOL","Quantity":"100","Withdrawal fee":"1",'
-                '"Type":"Withdrawal","To address":"G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",'
+                '"Type":"Withdrawal","To address":"6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",'
                 '"Timestamp UTC+8 (Completion)":"2024-12-01 21:33:12"}'
             ),
         ),
@@ -4648,7 +4648,7 @@ def test_wallet_fifo_provenance_recognizes_bitget_withdrawal_history_fields(tmp_
                 event_type="transfer",
                 asset="USDT",
                 quantity=Decimal("100"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                 tx_id="bitget-chain-tx",
             ),
         ]
@@ -4664,7 +4664,7 @@ def test_wallet_fifo_provenance_recognizes_bitget_withdrawal_history_fields(tmp_
     assert group.best_outflow_candidate.withdrawal_tx_id == "bitget-chain-tx"
     assert (
         group.best_outflow_candidate.withdrawal_address
-        == "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+        == "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     )
     assert group.best_outflow_candidate.withdrawal_amount == Decimal("100")
     assert group.best_outflow_candidate.withdrawal_fee == Decimal("1")
@@ -4842,7 +4842,7 @@ def test_wallet_fifo_solana_origin_trace_marks_known_sender(tmp_path):
                 "err": None,
                 "preTokenBalances": [
                     {
-                        "owner": "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod",
+                        "owner": "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu",
                         "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
                         "uiTokenAmount": {
                             "uiAmountString": "9000",
@@ -4862,7 +4862,7 @@ def test_wallet_fifo_solana_origin_trace_marks_known_sender(tmp_path):
                 ],
                 "postTokenBalances": [
                     {
-                        "owner": "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod",
+                        "owner": "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu",
                         "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
                         "uiTokenAmount": {
                             "uiAmountString": "572.706347",
@@ -4898,7 +4898,7 @@ def test_wallet_fifo_solana_origin_trace_marks_known_sender(tmp_path):
         )
 
     assert trace.status == "own_wallet_transfer_candidate"
-    assert trace.sender_owner == "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
+    assert trace.sender_owner == "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
     assert trace.receiver_owner == "Ftf2dgeRpBrPFmbd4wQWWqSjCmRjGes1GzNXtxKETeLW"
     assert trace.sender_is_known_own_wallet is True
     assert trace.receiver_is_deposit_address is True
@@ -4984,7 +4984,7 @@ def test_wallet_fifo_preview_carries_external_solana_deposit_to_binance_pool(
                 quantity=Decimal("4"),
                 quote_asset="EUR",
                 quote_quantity=Decimal("40"),
-                account="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                account="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
             ),
             CanonicalEventCreate(
                 source="binance",
@@ -5026,12 +5026,12 @@ def test_wallet_fifo_preview_carries_external_solana_deposit_to_binance_pool(
             asset=asset,
             expected_amount=expected_amount,
             deposit_address=deposit_address,
-            sender_owner="G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+            sender_owner="6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
             receiver_owner="binance-deposit-address",
             sender_is_known_own_wallet=True,
             receiver_is_deposit_address=True,
             matched_amount=expected_amount,
-            known_wallets=["G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"],
+            known_wallets=["6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"],
             recommended_action="test",
         )
 
@@ -5045,7 +5045,7 @@ def test_wallet_fifo_preview_carries_external_solana_deposit_to_binance_pool(
     assert report.transfer_traces_count == 1
     assert (
         report.transfer_traces[0].source_pool_id
-        == "solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+        == "solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     )
     assert report.transfer_traces[0].target_pool_id == "binance:Spot"
     assert (
@@ -5072,7 +5072,7 @@ def test_wallet_fifo_preview_carries_external_solana_deposit_to_binance_pool(
     assert evidence.deposits[0].cex_account == "binance"
     assert (
         evidence.deposits[0].fifo_source_pool_id
-        == "solana_rpc:G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+        == "solana_rpc:6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     )
     assert evidence.deposits[0].fifo_target_pool_id == "binance:Spot"
     assert evidence.deposits[0].tax_label == "Transfer / Uebertrag"
@@ -5114,8 +5114,8 @@ def test_cex_sender_ownership_latest_reads_latest_artifact(tmp_path):
                         "asset": "JUP",
                         "amount": "8427.293653",
                         "provider_status": "alchemy",
-                        "onchain_sender": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
-                        "primary_signer": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                        "onchain_sender": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
+                        "primary_signer": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                         "deposit_address": "binance-deposit-address",
                         "cex_account": "binance",
                         "fifo_transfer_status": "inferred_cross_pool",
@@ -5136,8 +5136,8 @@ def test_cex_sender_ownership_latest_reads_latest_artifact(tmp_path):
                         "asset": "SOL",
                         "amount": "7.0700475",
                         "provider_status": "alchemy",
-                        "onchain_sender": "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr",
-                        "primary_signer": "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr",
+                        "onchain_sender": "CySAjqmKLQCT729gypchz3zbYSSNh85rXx8Tk9e7PC7P",
+                        "primary_signer": "CySAjqmKLQCT729gypchz3zbYSSNh85rXx8Tk9e7PC7P",
                         "deposit_address": "binance-deposit-address",
                         "cex_account": "binance",
                         "fifo_transfer_status": "missing",
@@ -5174,7 +5174,7 @@ def test_cex_sender_ownership_latest_reads_latest_artifact(tmp_path):
     assert report.decisions[0].decision_layer["sender_is_own_wallet"] is True
     assert (
         report.decisions[1].onchain_sender
-        == "3wUnjrkdLcXARm51UmsPNAn43bh5zAB7MDv28C2MHNfr"
+        == "CySAjqmKLQCT729gypchz3zbYSSNh85rXx8Tk9e7PC7P"
     )
     assert report.decisions[1].onchain_sender_label == "Bitget Exchange"
     assert report.decisions[1].sender_classification == "exchange_infrastructure"
@@ -5478,7 +5478,7 @@ def test_wallet_fifo_withdrawal_gap_trace_matches_binance_api_amount_plus_fee(tm
             row_number=1,
             payload_json=(
                 '{"asset":"JUP","amount":"5530.555703","transaction_fee":"1.72",'
-                '"gross_amount":"5532.275703","address":"G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",'
+                '"gross_amount":"5532.275703","address":"6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",'
                 '"network":"SOL","tx_id":"withdraw-tx","complete_time":"2025-03-23 13:49:42"}'
             ),
         ),
@@ -5516,14 +5516,14 @@ def test_wallet_fifo_withdrawal_gap_trace_matches_binance_api_amount_plus_fee(tm
     assert candidates[0].evidence_status == "ready_for_transfer_anchor"
     assert candidates[0].withdrawal_history_evidence is not None
     assert candidates[0].onchain_tx_id == "withdraw-tx"
-    assert candidates[0].to_address == "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    assert candidates[0].to_address == "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
 
 
 def test_wallet_fifo_solana_provenance_classifies_native_sol_own_transfer(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = WalletFifoPreviewService(store)
-    source_wallet = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
-    target_wallet = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    source_wallet = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
+    target_wallet = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     event = WalletFifoProvenanceEvent(
         event_id="event-1",
         event_time=datetime(2024, 2, 1, tzinfo=timezone.utc),
@@ -5572,8 +5572,8 @@ def test_wallet_fifo_solana_provenance_classifies_native_sol_own_transfer(tmp_pa
 def test_wallet_fifo_solana_provenance_classifies_solscan_actions(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = WalletFifoPreviewService(store)
-    source_wallet = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
-    target_wallet = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    source_wallet = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
+    target_wallet = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     event = WalletFifoProvenanceEvent(
         event_id="event-1",
         event_time=datetime(2024, 2, 1, tzinfo=timezone.utc),
@@ -5615,7 +5615,7 @@ def test_wallet_fifo_solana_provenance_classification_api_with_mocked_rpc(
     tmp_path, monkeypatch
 ):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    wallet = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    wallet = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     store.add_canonical_events(
         [
             CanonicalEventCreate(
@@ -5715,8 +5715,8 @@ def test_wallet_fifo_solana_sender_clusters_group_batch_artifact(tmp_path, monke
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     artifact_dir = tmp_path / "batches"
     artifact_dir.mkdir()
-    own_sender = "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod"
-    own_receiver = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    own_sender = "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu"
+    own_receiver = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     external_sender = "ExternalSender111111111111111111111111111111"
     artifact = artifact_dir / "latest_2024_SOL_provenance_classification.json"
     artifact.write_text(
@@ -5822,7 +5822,7 @@ def test_wallet_fifo_solana_sender_cluster_outflows_find_nearby_local_outflow(
     artifact_dir = tmp_path / "batches"
     artifact_dir.mkdir()
     sender = "ExternalSender111111111111111111111111111111"
-    receiver = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    receiver = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     (artifact_dir / "latest_2024_SOL_provenance_classification.json").write_text(
         json.dumps(
             {
@@ -5890,7 +5890,7 @@ def test_wallet_fifo_solana_sender_cluster_outflows_marks_binance_history_missin
     artifact_dir = tmp_path / "batches"
     artifact_dir.mkdir()
     sender = "ExchangeHotWallet111111111111111111111111111"
-    receiver = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    receiver = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
     (artifact_dir / "latest_2024_SOL_provenance_classification.json").write_text(
         json.dumps(
             {

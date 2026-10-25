@@ -859,7 +859,7 @@ def test_portfolio_separation_report_lists_unrealized_lots_with_price_quality(tm
 
 def test_portfolio_snapshot_merges_unique_truncated_wallet_alias(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    wallet = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
+    wallet = "133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v"
     short_wallet = "133iWieuw...xU6WUW8v"
     batch = CsvRawImporter(store).import_text(
         source="manual-csv",
@@ -980,7 +980,7 @@ def test_portfolio_reconciliation_flags_expected_zero_cex_and_missing_jup_wallet
             "time,asset,amount,type,account\n"
             "2024-12-12T00:00:00Z,USDT,1000,deposit,bitget\n"
             "2024-11-22T00:00:00Z,USDT,100,deposit,pionex\n"
-            "2024-12-31T00:00:00Z,SOL,2,deposit,G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY\n"
+            "2024-12-31T00:00:00Z,SOL,2,deposit,6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP\n"
         ),
     )
     RawNormalizer(store).normalize_batch(batch.batch_id)

@@ -13,6 +13,14 @@ artifacts/
 !.env.example
 *.pem
 *.key
+private_profile.json
+private_profile.*.json
+/configs/source_registry.json
+/configs/solana_v1_ownership_scope.json
+/configs/fairspot_hnt_staking_reconciliation.json
+/configs/solana_staking_position_reconciliations.json
+/configs/pionex_hnt_reconciliation.json
+/configs/solana_service_swap_tax_mappings.json
 
 # Python
 __pycache__/
@@ -22,6 +30,7 @@ __pycache__/
 .venv/
 venv/
 *.pyc
+*.egg-info/
 
 # Frontend
 frontend/node_modules/

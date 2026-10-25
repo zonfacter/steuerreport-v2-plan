@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_value
+
 import csv
 import httpx
 import json
@@ -37,7 +39,7 @@ DEFAULT_BLOCKPIT_SOLANA_FILE = (
     / "blockpit"
     / "blockpit 09052026 Transactions.csv"
 )
-DEFAULT_SOLANA_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+DEFAULT_SOLANA_WALLET = private_value('primary_solana_wallet', '')
 DEFAULT_IOT_TOKEN_ADDRESS = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns"
 DEFAULT_RPC_EVIDENCE_ARTIFACT = (
     PROJECT_ROOT

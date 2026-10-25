@@ -74,7 +74,7 @@ def test_derivatives_manager_marks_missing_prices_and_review_blocks(tmp_path):
 
 def test_derivatives_manager_resolves_unique_truncated_wallet_alias(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
-    wallet = "1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV"
+    wallet = "133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v"
     short_wallet = "133iWieuw...xU6WUW8v"
     event_time = datetime(2024, 1, 2, 12, tzinfo=timezone.utc)
     store.add_price_point(

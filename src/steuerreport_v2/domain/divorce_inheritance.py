@@ -301,17 +301,23 @@ class DivorceInheritanceOriginService:
         bank_dates = [item.balance_date for item in balances] or [
             item.booking_date for item in entries
         ]
-        statement_from = min(bank_dates, default=None)
-        statement_to = max(bank_dates, default=None)
-        bank_statement_status = (
-            "missing"
-            if not bank_files
-            else "complete"
-            if statement_from is not None
-            and statement_from <= separation_date
-            and statement_to is not None
-            and statement_to >= end_asset_date
-            else "partial"
+        coverage_intervals: list[tuple[date, date]] = []
+        if bank_dates:
+            coverage_intervals.append((min(bank_dates), max(bank_dates)))
+        if sparkasse_statement_connector.status in {"parsed", "partial"}:
+            coverage_intervals.extend(
+                (document.period_from, document.period_to)
+                for document in sparkasse_statement_connector.documents
+                if document.extraction_status == "parsed"
+                and document.period_from is not None
+                and document.period_to is not None
+            )
+        bank_statement_status, statement_from, statement_to = (
+            self._bank_statement_coverage(
+                coverage_intervals,
+                required_from=separation_date,
+                required_to=end_asset_date,
+            )
         )
         opening_balance = self._opening_balance(balances)
         closing_balance = self._closing_balance(balances, end_asset_date)
@@ -2394,16 +2400,58 @@ class DivorceInheritanceOriginService:
         )
         return candidates[-1] if candidates else None
 
+    @staticmethod
+    def _bank_statement_coverage(
+        intervals: list[tuple[date, date]],
+        *,
+        required_from: date,
+        required_to: date,
+    ) -> tuple[str, date | None, date | None]:
+        valid = sorted(
+            (start, end)
+            for start, end in intervals
+            if start <= end
+        )
+        if not valid:
+            return "missing", None, None
+        merged: list[tuple[date, date]] = []
+        for start, end in valid:
+            if merged and start <= merged[-1][1] + timedelta(days=1):
+                previous_start, previous_end = merged[-1]
+                merged[-1] = (previous_start, max(previous_end, end))
+            else:
+                merged.append((start, end))
+        complete = any(
+            start <= required_from and end >= required_to
+            for start, end in merged
+        )
+        return (
+            "complete" if complete else "partial",
+            min(start for start, _end in valid),
+            max(end for _start, end in valid),
+        )
+
     def _discover_sparkasse_statement_dir(self) -> Path:
         root = self.DEFAULT_SPARKASSE_STATEMENT_DISCOVERY_ROOT
         if root.is_dir():
-            candidates = sorted(
+            candidates = {
                 path
-                for path in root.glob("S_*_Postfach_-_Sammeldownload")
-                if path.is_dir() and any(path.rglob("*.pdf"))
-            )
+                for pattern in (
+                    "S_*_Postfach_-_Sammeldownload",
+                    "Sparkasse/*Sammeldownload*",
+                )
+                for path in root.glob(pattern)
+                if path.is_dir()
+                and SparkasseStatementDocumentService.statement_paths(path)
+            }
             if candidates:
-                return candidates[-1]
+                return max(
+                    candidates,
+                    key=lambda path: (
+                        len(SparkasseStatementDocumentService.statement_paths(path)),
+                        str(path),
+                    ),
+                )
         return self.DEFAULT_BANK_CAMT_ROOT / "statements-managed"
 
     @staticmethod

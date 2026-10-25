@@ -21,7 +21,7 @@ from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
 DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "var/solana_native_evidence_backfills"
-DEFAULT_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+DEFAULT_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
 DEFAULT_AUDIT = (
     PROJECT_ROOT
     / "var/solana_native_balance_coverage"

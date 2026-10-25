@@ -1162,7 +1162,7 @@ p {
 .mobileConnectorMetrics {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .mobileConnectorBlockers {
@@ -5898,6 +5898,292 @@ th {
   th,
   td {
     max-width: 220px;
+  }
+}
+
+.filingSnapshotPanel {
+  border: 1px solid #cfdad4;
+  border-left: 5px solid #557167;
+  background: #ffffff;
+  padding: 20px;
+}
+
+.filingSnapshotPanel.ok {
+  border-left-color: #2f7b58;
+}
+
+.filingSnapshotPanel.warning {
+  border-left-color: #c37a18;
+}
+
+.filingSnapshotPanel.blocked {
+  border-left-color: #b4453f;
+}
+
+.filingSnapshotHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.filingSnapshotHeader h2 {
+  margin: 5px 0 6px;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.filingSnapshotHeader p {
+  max-width: 860px;
+  margin: 0;
+  color: #52645c;
+  line-height: 1.5;
+}
+
+.filingSnapshotFacts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 18px;
+  border-top: 1px solid #dce4df;
+  border-bottom: 1px solid #dce4df;
+}
+
+.filingSnapshotFacts > div {
+  min-width: 0;
+  padding: 14px 14px 14px 0;
+}
+
+.filingSnapshotFacts > div + div {
+  border-left: 1px solid #e3e9e6;
+  padding-left: 14px;
+}
+
+.filingSnapshotFacts span,
+.filingSnapshotFacts em,
+.filingSnapshotFacts code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.filingSnapshotFacts span {
+  color: #68776f;
+  font-size: 12px;
+}
+
+.filingSnapshotFacts strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 16px;
+}
+
+.filingSnapshotFacts em,
+.filingSnapshotFacts code {
+  margin-top: 4px;
+  color: #68776f;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.filingSnapshotDeltaTable {
+  margin-top: 18px;
+  border: 1px solid #dce4df;
+}
+
+.filingSnapshotDeltaTable > div {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.5fr) repeat(3, minmax(130px, 0.7fr));
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5ebe8;
+}
+
+.filingSnapshotDeltaTable > div:last-child {
+  border-bottom: 0;
+}
+
+.filingSnapshotDeltaTable > div.review {
+  background: #fff8e9;
+}
+
+.filingSnapshotDeltaTable .filingSnapshotDeltaHead {
+  background: #eef3f0;
+  color: #516159;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.filingSnapshotDeltaTable > div > span:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.filingSnapshotDeltaTable em {
+  display: block;
+  margin-top: 3px;
+  color: #718078;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.filingSnapshotDeltaTable .positiveDelta {
+  color: #a03c35;
+  font-weight: 750;
+}
+
+.filingSnapshotDeltaTable .negativeDelta {
+  color: #26704f;
+  font-weight: 750;
+}
+
+.filingSnapshotNoDelta {
+  margin: 16px 0 0;
+  color: #446356;
+  font-weight: 650;
+}
+
+.filingSubmissionConfirm {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(210px, 0.5fr) auto;
+  gap: 14px;
+  align-items: end;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #e3c17b;
+  background: #fff9ed;
+}
+
+.filingSubmissionConfirm > div span {
+  display: block;
+  margin-top: 4px;
+  color: #6c665a;
+  font-size: 12px;
+}
+
+.filingSubmissionConfirm .filingUsageConfirmButton {
+  margin-top: 10px;
+  border: 1px solid #ba8b34;
+  background: #ffffff;
+  color: #6d4a0d;
+}
+
+.filingSubmissionConfirm .filingUsageConfirmButton span {
+  margin-top: 0;
+  color: inherit;
+}
+
+.filingSubmissionConfirm label {
+  display: grid;
+  gap: 5px;
+  color: #5a625d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filingSubmissionConfirm input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #b9c7bf;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #17211d;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.filingSnapshotActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.filingSnapshotActions button,
+.filingSubmissionConfirm button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+}
+
+.filingSnapshotMessage {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.filingSnapshotMessage.ok {
+  background: #eaf5ef;
+  color: #275e46;
+}
+
+.filingSnapshotMessage.error {
+  background: #faeceb;
+  color: #8f332f;
+}
+
+.filingSnapshotLegal {
+  margin: 14px 0 0;
+  color: #6a7771;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 960px) {
+  .filingSnapshotFacts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filingSnapshotFacts > div:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .filingSubmissionConfirm {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filingSubmissionConfirm > div {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .filingSnapshotPanel {
+    padding: 16px;
+  }
+
+  .filingSnapshotHeader {
+    flex-direction: column;
+  }
+
+  .filingSnapshotFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .filingSnapshotFacts > div + div,
+  .filingSnapshotFacts > div:nth-child(3) {
+    border-top: 1px solid #e3e9e6;
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .filingSnapshotDeltaTable {
+    overflow-x: auto;
+  }
+
+  .filingSnapshotDeltaTable > div {
+    min-width: 720px;
+  }
+
+  .filingSubmissionConfirm {
+    grid-template-columns: 1fr;
+  }
+
+  .filingSubmissionConfirm > div {
+    grid-column: auto;
   }
 }
 

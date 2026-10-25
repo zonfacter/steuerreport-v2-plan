@@ -66,6 +66,7 @@ class ExternalPriceBackfillService:
         timeout_seconds = max(3, min(timeout_seconds, 60))
         requested_assets = sorted({asset.strip().upper() for asset in assets_filter if asset.strip()})
         seen_asset_dates: set[tuple[str, str]] = set()
+        token_risk_statuses = self._token_risk_statuses()
 
         with httpx.Client(timeout=timeout_seconds, headers={"user-agent": "steuerreport-v2/0.1"}) as client:
             for requirement in requirements:
@@ -86,6 +87,18 @@ class ExternalPriceBackfillService:
                             price_date=requirement.price_date,
                             status="skipped",
                             reason="asset_not_configured",
+                        )
+                    )
+                    continue
+                if token_risk_statuses.get(requirement.asset.upper()) == "spam_review":
+                    skipped += 1
+                    jobs.append(
+                        ExternalPriceBackfillJob(
+                            asset=requirement.asset,
+                            price_date=requirement.price_date,
+                            provider_id=asset.coingecko_id or asset.defillama_id,
+                            status="skipped",
+                            reason="token_risk_spam_review",
                         )
                     )
                     continue
@@ -243,6 +256,7 @@ class ExternalPriceBackfillService:
         priced_at = datetime.now(timezone.utc)
         timeout_seconds = max(3, min(timeout_seconds, 60))
         normalized_provider = provider if provider in {"coingecko"} else "coingecko"
+        token_risk_statuses = self._token_risk_statuses()
 
         configured: dict[str, _PriceAsset] = {}
         for asset_symbol in selected_assets:
@@ -254,6 +268,17 @@ class ExternalPriceBackfillService:
                         asset=asset_symbol,
                         status="skipped",
                         reason="asset_not_configured",
+                    )
+                )
+                continue
+            if token_risk_statuses.get(asset_symbol) == "spam_review":
+                skipped += 1
+                jobs.append(
+                    CurrentPortfolioPriceBackfillJob(
+                        asset=asset_symbol,
+                        provider_id=asset.defillama_id or asset.coingecko_id,
+                        status="skipped",
+                        reason="token_risk_spam_review",
                     )
                 )
                 continue
@@ -397,6 +422,30 @@ class ExternalPriceBackfillService:
                         defillama_id=defillama_id,
                     )
                 )
+        return result
+
+    def _token_risk_statuses(self) -> dict[str, str]:
+        priority = {
+            "spam_review": 4,
+            "review": 3,
+            "unverified_plausible": 2,
+            "verified": 1,
+        }
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select upper(coalesce(symbol, mint)), risk_status
+                from jupiter_token_metadata_cache
+                where coalesce(symbol, mint) is not null
+                """
+            ).fetchall()
+        result: dict[str, str] = {}
+        for asset, status in rows:
+            key = str(asset).upper()
+            candidate = str(status or "review")
+            current = result.get(key)
+            if current is None or priority.get(candidate, 3) > priority.get(current, 3):
+                result[key] = candidate
         return result
 
     def _alias_map(self, assets: list[_PriceAsset]) -> dict[str, _PriceAsset]:

@@ -119,7 +119,12 @@ class WalletFifoParallelRunService:
             return report
         return None
 
-    def run(self, request: WalletFifoParallelRunRequest) -> WalletFifoParallelRunReport:
+    def run(
+        self,
+        request: WalletFifoParallelRunRequest,
+        *,
+        publish_latest: bool = True,
+    ) -> WalletFifoParallelRunReport:
         generated_at = datetime.now(timezone.utc)
         years = self._validated_years(request.years, generated_at.year)
         as_of = self._resolve_as_of(request.as_of, years, generated_at)
@@ -434,8 +439,11 @@ class WalletFifoParallelRunService:
             bitget_strategy_reconstruction_disposals_count=(
                 bitget_strategy_reconstruction.linked_disposals_count
             ),
+            published_as_latest=publish_latest,
             artifact_path=self._display_path(artifact_path),
-            latest_artifact_path=self._display_path(latest_path),
+            latest_artifact_path=(
+                self._display_path(latest_path) if publish_latest else None
+            ),
             findings=findings,
             next_actions=self._next_actions(
                 blocked_years,
@@ -464,7 +472,8 @@ class WalletFifoParallelRunService:
         )
         content = json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False).encode("utf-8")
         self._atomic_write(artifact_path, content)
-        self._atomic_write(latest_path, content)
+        if publish_latest:
+            self._atomic_write(latest_path, content)
         return report
 
     @staticmethod

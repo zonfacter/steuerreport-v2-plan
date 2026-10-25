@@ -196,7 +196,7 @@ def test_jupiter_metadata_cache_collects_v1_solscan_token_addresses(
         )
         con.execute(
             "insert into solscan_account_transfers (token_address, wallet_address) values (?, ?)",
-            [hnt_mint, "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"],
+            [hnt_mint, "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"],
         )
     monkeypatch.setattr(JupiterTokenService, "V1_DB_PATH", v1_db)
     monkeypatch.setattr(JupiterTokenService, "_api_key", lambda _self: "jup-key")

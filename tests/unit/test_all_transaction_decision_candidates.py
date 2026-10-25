@@ -64,7 +64,7 @@ def test_decision_candidates_marks_owned_binance_withdrawal_safe(tmp_path):
                     {
                         "payload_preview": json.dumps(
                             {
-                                "address": "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
+                                "address": "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP",
                                 "amount": "5530.555703",
                                 "asset": "JUP",
                                 "transaction_fee": "1.72",
@@ -90,13 +90,13 @@ def test_decision_candidates_keeps_external_usdc_inflow_open(tmp_path):
                 "tx_id": "tx-3",
                 "sources": "solana_rpc",
                 "assets": "USDC",
-                "accounts": "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod",
+                "accounts": "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu",
                 "detail_classification": "owner_delta_without_local_signer_tax_review",
                 "tax_impact_detected": True,
                 "signers": ["external-signer"],
                 "token_deltas": [
                     {
-                        "owner": "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod",
+                        "owner": "GmHYjZGkcHBZ3WyGZ9eUGDZMfHvJTLtTKXu6dnSc63yu",
                         "asset_hint": "USDC",
                         "delta": "274.85",
                     }

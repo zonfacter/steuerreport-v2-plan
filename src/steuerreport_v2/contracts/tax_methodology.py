@@ -387,6 +387,13 @@ class TaxBmfPriorFilingComparisonYear(BaseModel):
     status: Literal["match", "delta_review", "missing_declared_values", "declared_values_untrusted", "empty"]
     status_label: str
     declared_values_configured: bool = False
+    declared_values_source: Literal[
+        "none", "admin_setting", "confirmed_filing_snapshot"
+    ] = "none"
+    declared_values_snapshot_id: str | None = None
+    declared_values_package_sha256: str | None = None
+    submission_timestamp_known: bool = False
+    elster_field_verification_required: bool = False
     declared_values_status: Literal["declared_values", "unknown", "probably_wrong", "not_filed"] = "unknown"
     declared_values_note: str | None = None
     v2_taxable_private_disposals_eur: Decimal = Decimal("0")
@@ -421,6 +428,7 @@ class TaxBmfPriorFilingComparison(BaseModel):
     delta_review_years: list[int] = Field(default_factory=list)
     missing_declared_years: list[int] = Field(default_factory=list)
     untrusted_declared_years: list[int] = Field(default_factory=list)
+    confirmed_snapshot_years: list[int] = Field(default_factory=list)
     empty_years: list[int] = Field(default_factory=list)
     total_delta_taxable_private_disposals_eur: Decimal = Decimal("0")
     total_delta_rewards_mining_staking_income_eur: Decimal = Decimal("0")
@@ -464,6 +472,10 @@ class TaxBmfAmendmentWorklistYear(BaseModel):
     status: Literal["prepare_correction_review", "compare_declared_values", "archive_only", "blocked"]
     status_label: str
     prior_filing_status: str
+    prior_filing_values_source: str = "none"
+    prior_filing_snapshot_id: str | None = None
+    prior_filing_absolute_delta_eur: Decimal = Decimal("0")
+    elster_field_verification_required: bool = False
     v2_taxable_private_disposals_eur: Decimal = Decimal("0")
     v2_rewards_mining_staking_income_eur: Decimal = Decimal("0")
     v2_derivative_pnl_eur: Decimal = Decimal("0")

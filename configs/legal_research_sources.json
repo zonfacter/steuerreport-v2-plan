@@ -1,5 +1,5 @@
 {
-  "registry_version": "2026-08-24-v3",
+  "registry_version": "2026-09-22-v4",
   "freshness_hours": 36,
   "sources": [
     {
@@ -80,8 +80,9 @@
       "authority": "gesetze_im_internet",
       "kind": "law_section",
       "url": "https://www.gesetze-im-internet.de/ao_1977/__147.html",
-      "reviewed_sha256": "64b2d3ce02b0959d101fac7a18fe23c6eb3208a523a591fee037547e64aead8c",
-      "relevance_tags": ["aufbewahrung", "betriebsvermoegen"]
+      "reviewed_sha256": "fb58b2da717aac78398b3f78c6fe9e94f74a464a27c8bfe90837c4f0244fdaca",
+      "relevance_tags": ["aufbewahrung", "betriebsvermoegen"],
+      "note": "Am 2026-09-22 gegen die konsolidierte amtliche Fassung geprueft. Absatz 3 nennt je Unterlagenart zehn, acht oder sechs Jahre; steuerlich weiter benoetigte Unterlagen laufen nicht vor Ende ihrer Relevanz aus. Keine Aenderung der FIFO- oder Bewertungsregel."
     },
     {
       "source_id": "ao-150",
@@ -134,8 +135,9 @@
       "authority": "bundesfinanzhof",
       "kind": "court_decision",
       "url": "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202310057/",
-      "reviewed_sha256": "c10c8106a988cbef20dc9bf4dff88bda38efc78c0eb7b6168c7b07c563f9594e",
-      "relevance_tags": ["wirtschaftsgut", "kryptowerte", "estg_23"]
+      "reviewed_sha256": "4d119941ed62febf10160bbf600fd98a2e229423d8f7e6538985be6c3e86b7f9",
+      "relevance_tags": ["wirtschaftsgut", "kryptowerte", "estg_23"],
+      "note": "Am 2026-09-22 im amtlichen Volltext erneut geprueft. Currency Token bleiben Wirtschaftsgueter; Tausch gegen Fiat, Fremdwaehrung oder andere Currency Token bleibt Anschaffung beziehungsweise Veraeusserung nach Paragraph 23 EStG. Keine Regelanpassung erforderlich."
     },
     {
       "source_id": "bfh-ix-b-24-26",
@@ -143,9 +145,9 @@
       "authority": "bundesfinanzhof",
       "kind": "court_decision",
       "url": "https://www.bundesfinanzhof.de/de/entscheidung/entscheidungen-online/detail/STRE202650119/",
-      "reviewed_sha256": "2e09070547e4d9e0493bbc9b86f7d8edc0a3cd81491dd0695150c142c8c67103",
+      "reviewed_sha256": "28087f47cd3951cda2ca8990b575bbe499f22672af794b9020c8f7a0a183584d",
       "relevance_tags": ["estg_23", "fristberechnung", "transaktionszeitpunkt"],
-      "note": "Immobilienfall zu EStG Paragraph 23 Absatz 1 Satz 1 Nummer 1; keine unmittelbare Aenderung der Krypto-FIFO-Regel. Der bindende Transaktionszeitpunkt bleibt als Nachweisanker zu beachten."
+      "note": "Am 2026-09-22 im amtlichen Volltext geprueft. Immobilienfall zu EStG Paragraph 23 Absatz 1 Satz 1 Nummer 1; keine unmittelbare Aenderung der Krypto-FIFO-Regel. Der bindende Transaktionszeitpunkt bleibt als Nachweisanker zu beachten."
     },
     {
       "source_id": "bundestag-crypto-holding-period-proposal-result-2026",
@@ -153,8 +155,9 @@
       "authority": "bundestag",
       "kind": "legislation",
       "url": "https://www.bundestag.de/presse/hib/kurzmeldungen-1179034",
-      "reviewed_sha256": "04dc28f30f3ee961800475424acf0476e6979e2e8ddef1c54ba1334c87eefc71",
-      "relevance_tags": ["haltefrist", "gesetzgebung", "entwurf"]
+      "reviewed_sha256": "c5e64e10b13a296cf3f37162ceea635f0f14b4d9d7e1f3993581704bdf39b793",
+      "relevance_tags": ["haltefrist", "gesetzgebung", "entwurf"],
+      "note": "Am 2026-09-22 geprueft. Der Vorstoss 21/5752 zur geaenderten Kryptowerte-Besteuerung ist im Finanzausschuss gescheitert und aendert die geltende Haltefrist nicht."
     }
   ],
   "monitors": [

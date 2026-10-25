@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_value
+
 import base64
 import binascii
 import csv
@@ -76,12 +78,12 @@ class MoonpayReceiptService:
     DEFAULT_ALCHEMY_AUDIT_PATH = (
         PROJECT_ROOT / "var/solana_tx_alchemy_audits/latest_all_tx_alchemy_audit.json"
     )
-    MOONPAY_SOLANA_SENDER = "Dw8phQHJuLhCMzUUNWTNkHcui847dMdoADdg8XDxsVtE"
+    MOONPAY_SOLANA_SENDER = private_value('configured_identifier_80', '')
     KNOWN_RECEIVER_WALLETS = frozenset(
-        {
-            "4dCdKKXm1aHzMLFHFz7Cyn6CA14RK7WdYKeAGrHx4fod",
-            "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY",
-        }
+        value for value in {
+            private_value('secondary_solana_wallet', ''),
+            private_value('primary_solana_wallet', ''),
+        } if value
     )
     QUANTITY_TOLERANCE = Decimal("0.000000001")
     MAX_TRADE_MATCH_TIME_DELTA_SECONDS = 5 * 60

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_value
+
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -77,7 +79,7 @@ class SolscanTokenPreflightReport(BaseModel):
 class SolanaRpcProbeRequest(BaseModel):
     file_path: str = "/workspace/steuerreport/usertransfer/legacy_daten/Steuer-2022/export-solscan.csv"
     blockpit_file_path: str = "/workspace/steuerreport/usertransfer/blockpit/blockpit 09052026 Transactions.csv"
-    wallet: str = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+    wallet: str = private_value('primary_solana_wallet', '')
     asset: str = "IOT"
     token_address: str = "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns"
     max_year: int | None = 2024

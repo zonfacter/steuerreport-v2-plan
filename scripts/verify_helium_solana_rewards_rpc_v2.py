@@ -20,7 +20,7 @@ DEFAULT_RPC_URLS = [
     "https://solana-rpc.publicnode.com",
     "https://solana.publicnode.dev",
 ]
-DEFAULT_WALLET = "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY"
+DEFAULT_WALLET = "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP"
 DEFAULT_FROM_TIME = "2026-06-19T21:39:00+00:00"
 DEFAULT_TO_TIME = "2026-06-19T21:42:00+00:00"
 

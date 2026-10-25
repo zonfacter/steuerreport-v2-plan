@@ -96,7 +96,7 @@ def test_curated_real_sources_use_helium_raw_and_transfer_proof_only(tmp_path) -
     _touch(
         tmp_path
         / "Helium"
-        / "helium-1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV-all-raw_12122024.csv"
+        / "helium-133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v-all-raw_12122024.csv"
     )
     heliumtracker_root = tmp_path / "legacy_daten" / "Heliumtracker" / "advance"
     _touch(heliumtracker_root / "Heliumtracker 2021.xlsx")
@@ -107,13 +107,13 @@ def test_curated_real_sources_use_helium_raw_and_transfer_proof_only(tmp_path) -
         / "legacy_daten"
         / "Export fuer Steuer"
         / "raw"
-        / "helium-1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV-2021-raw.csv"
+        / "helium-133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v-2021-raw.csv"
     )
     _touch(
         tmp_path
         / "legacy_daten"
         / "Export fuer Steuer"
-        / "helium-1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV-2021-2023 cointracking.xlsx"
+        / "helium-133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v-2021-2023 cointracking.xlsx"
     )
 
     candidates = curated_candidates(tmp_path)
@@ -124,7 +124,7 @@ def test_curated_real_sources_use_helium_raw_and_transfer_proof_only(tmp_path) -
     ]
 
     assert helium_paths == [
-        "Helium/helium-1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV-all-raw_12122024.csv",
+        "Helium/helium-133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v-all-raw_12122024.csv",
         "legacy_daten/Heliumtracker/advance/Heliumtracker 2021.xlsx",
     ]
 
@@ -132,8 +132,8 @@ def test_curated_real_sources_use_helium_raw_and_transfer_proof_only(tmp_path) -
 def test_curated_real_sources_exclude_blockpit_solana_and_jupiter_reference_files(tmp_path) -> None:
     _touch(tmp_path / "2025 Transaktionen Blockpit.csv")
     _touch(tmp_path / "blockpit" / "blockpit 09052026 Transactions.csv")
-    _touch(tmp_path / "Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv")
-    _touch(tmp_path / "jup" / "G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY.csv")
+    _touch(tmp_path / "Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv")
+    _touch(tmp_path / "jup" / "6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP.csv")
     _touch(tmp_path / "legacy_daten" / "Steuer-2022" / "Blockpit - Manual Import Template.xlsx")
     _touch(tmp_path / "legacy_daten" / "Steuer-2022" / "export-solscan.csv")
 
@@ -143,8 +143,8 @@ def test_curated_real_sources_exclude_blockpit_solana_and_jupiter_reference_file
     assert not candidate_paths & {
         "2025 Transaktionen Blockpit.csv",
         "blockpit/blockpit 09052026 Transactions.csv",
-        "Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv",
-        "jup/G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY.csv",
+        "Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv",
+        "jup/6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP.csv",
         "legacy_daten/Steuer-2022/Blockpit - Manual Import Template.xlsx",
         "legacy_daten/Steuer-2022/export-solscan.csv",
     }

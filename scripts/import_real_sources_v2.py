@@ -60,7 +60,7 @@ def curated_candidates(root: Path = USERTRANSFER) -> list[ImportCandidate]:
     # Helium uses the consolidated Fairspot-style raw export as active primary
     # evidence. Older yearly raw/CoinTracking files and monthly Heliumtracker
     # reward reports overlap by TXID or are reference-only in V1 audits.
-    helium_raw = root / "Helium" / "helium-1362Z4gXFbBuUp22PtwNhdNc3iR6Tjc7ty5S8CPjSwVH6F7BsHV-all-raw_12122024.csv"
+    helium_raw = root / "Helium" / "helium-133iWieuwSsyRYopuykZFnxs5qJJW1AiRgXqH43S9rJxU6WUW8v-all-raw_12122024.csv"
     if helium_raw.exists():
         candidates.append(ImportCandidate("helium", helium_raw))
 

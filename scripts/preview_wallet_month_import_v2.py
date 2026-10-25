@@ -23,7 +23,7 @@ PROJECT_ROOT = Path("/workspace/steuerreport-v2-plan")
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
 DEFAULT_WALLET_MONTH = (
     Path("/workspace/steuerreport/usertransfer")
-    / "Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv"
+    / "Wallet.6K9n7yyZHxgQ9ycSak29WtVitZy1ZNTF3Jms9CErqEwP-month.csv"
 )
 
 

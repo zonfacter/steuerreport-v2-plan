@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_value
+
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -24,7 +26,7 @@ from steuerreport_v2.domain.valuation import PriceCoverageService
 
 
 class ReportCenterService:
-    FAIRSPOT_STAKING_WALLET = "13xfSeV2UcVgUiTKmd9V1Htunc6N7wsAgkGRHtquN9hpCbA78Yp"
+    FAIRSPOT_STAKING_WALLET = private_value('staking_route_wallet', '')
     EVIDENCE_GROUP_PATHS = {
         "structure": "01_Struktur_Audit",
         "tax": "02_Steuerliche_CSVs",

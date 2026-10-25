@@ -35,6 +35,12 @@ from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.tax import TaxService
 
 
+def test_event_evidence_request_supports_full_price_review_worklists():
+    request = BmfFifoEventEvidenceRunRequest(issue_limit=10_000)
+
+    assert request.issue_limit == 10_000
+
+
 def _event_evidence_store(
     tmp_path,
     *,
@@ -639,7 +645,9 @@ def test_bmf_event_price_remediation_dry_run_and_apply_are_tax_read_only(
         artifact_root=tmp_path / "bmf-event-evidence",
         staging_service=staging,
     )
-    evidence_before = event_service.run(BmfFifoEventEvidenceRunRequest())
+    evidence_before = event_service.run(
+        BmfFifoEventEvidenceRunRequest(scope_mode="full_ledger")
+    )
     service = BmfEventPriceRemediationService(
         store,
         artifact_root=tmp_path / "bmf-event-price-remediation",
@@ -677,6 +685,7 @@ def test_bmf_event_price_remediation_dry_run_and_apply_are_tax_read_only(
     assert TaxService(store).list_tax_lines() == before_lines
     after_evidence = event_service.latest()
     assert after_evidence is not None
+    assert after_evidence.full_ledger_scope is True
     assert after_evidence.staging_matches_current_input is False
     assert after_evidence.status == "blocked"
 

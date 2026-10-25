@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_alias
+
 from datetime import datetime, timezone
 from decimal import Decimal
 from hashlib import sha1
@@ -850,8 +852,8 @@ class ReviewService:
             "Binance": "binance",
             "Bitget": "bitget",
             "Pionex": "pionex",
-            "Jup Wallet GmHY...3yu": "jup_wallet",
-            "Solana Wallet 6K9n7y...qEwP": "solana_wallet",
+            ('Jup Wallet ' + private_alias('secondary_solana_wallet', 4, 3, '...')): "jup_wallet",
+            ('Solana Wallet ' + private_alias('primary_solana_wallet', 6, 4, '...')): "solana_wallet",
         }
         tasks: list[ReviewTask] = []
         for group in overview.groups:

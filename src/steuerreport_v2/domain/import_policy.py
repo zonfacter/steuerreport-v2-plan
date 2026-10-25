@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from steuerreport_v2.private_settings import private_template
+
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
@@ -52,7 +54,7 @@ RULES: tuple[_PolicyRule, ...] = (
     _PolicyRule("MoonPay_trade-history.csv", "reference_only", False, "evidence_only", "MoonPay-Trade-History wird ausschliesslich ueber den spezialisierten Anschaffungsnachweis verarbeitet."),
     _PolicyRule("Sparkasse/*.CSV", "reference_only", False, "evidence_only", "Sparkassen-CAMT-Aggregate sind ausschliesslich read-only Fiat-/MoonPay-Belege und keine Krypto-Importquelle."),
     _PolicyRule("legacy_daten/Steuer-2022/Blockpit - Manual Import Template.xlsx", "reference_only", False, "exclude", "Blockpit-Template ist Arbeitsbeleg."),
-    _PolicyRule("Wallet.G39FV6RkM6U4LTGMcph7HWi7zZQJavzGaw9YvSvueLhY-month.csv", "parser_needed", False, "exclude", "Wallet-Monatsaggregat braucht eigenen Parser."),
+    _PolicyRule(private_template('Wallet.{primary_solana_wallet}-month.csv'), "parser_needed", False, "exclude", "Wallet-Monatsaggregat braucht eigenen Parser."),
     _PolicyRule("jup/*.csv", "parser_needed", False, "exclude", "JUP-/Perps-Datei braucht Derivate-/Perps-Parser."),
     _PolicyRule("legacy_daten/Steuer-2022/export-solscan.csv", "parser_needed", False, "exclude", "Solscan braucht Mint-Mapping und Wallet-Richtungslogik."),
     _PolicyRule("wiso/*.csv", "reference_only", False, "parity_reference", "WISO ist Altreport-Plausibilitaetsreferenz, keine Bewegung."),
