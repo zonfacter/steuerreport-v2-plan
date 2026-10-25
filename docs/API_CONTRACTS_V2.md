@@ -3191,3 +3191,14 @@ Modell-ID, Revisionshash, begrenzte Nutzungsmetadaten und `review_only=true`.
 Reasoning-only-Antworten gelten als fehlgeschlagen. Validierungsantworten der
 KI-Endpunkte spiegeln keine Eingabewerte zurueck. Die bestehende Verantwortung
 des Betreibers fuer Zugriffsschutz und Transportabsicherung bleibt bestehen.
+
+Die Modellliste ergaenzt `is_free` (bool oder null),
+`prompt_price_usd_per_token`, `completion_price_usd_per_token`,
+`request_price_usd` und `context_length`. Preisfelder werden ausschliesslich
+fuer den OpenRouter-Katalog interpretiert. Die Pruefung verwendet endliche,
+nichtnegative Decimal-Werte. `is_free=true` verlangt null fuer beide Textpreise
+und den Anfragepreis (ohne ausgewiesene Anfragegebuehr wird null angesetzt).
+Ein positiver Preis ergibt false, unbekannte oder ungueltige Preise ohne
+positiven Gegenbeleg ergeben null. Der Namenszusatz `:free` ersetzt diese
+Preispruefung nicht. Diese Metadaten sind ein Katalogstand, keine Preisgarantie;
+der Abruf startet keine Modellinferenz und aendert keine gespeicherte Auswahl.

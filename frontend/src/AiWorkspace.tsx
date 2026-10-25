@@ -5,7 +5,7 @@ import { API_BASE } from "./api-base";
 type Config = { provider: "local" | "openrouter" | "cloud"; base_url: string; model: string; max_tokens: number; probe_max_tokens: number; timeout_seconds: number; token_parameter: "max_tokens" | "max_completion_tokens"; thinking: "server_default" | "llamacpp_off" | "ollama_off" };
 type Settings = { config: Config; revision: string; local_enabled: boolean; external_enabled: boolean; api_key_present: boolean; api_key_readable: boolean; encrypted_secrets_available: boolean; configured: boolean; source: string };
 type Task = { task_id: string; task_type: string; prompt: string; status: string; result_json?: string; allow_external: boolean; created_at: string };
-type Model = { id: string; name: string };
+type Model = { id: string; name: string; is_free?: boolean | null; prompt_price_usd_per_token?: string | null; completion_price_usd_per_token?: string | null; request_price_usd?: string | null; context_length?: number | null };
 type Probe = { model: string; answer: string; truncated: boolean };
 
 const ERRORS: Record<string, string> = {
@@ -62,6 +62,11 @@ function resultOf(task: Task): { answer?: string; error?: string; model?: string
   try { return JSON.parse(task.result_json || "{}"); } catch { return {}; }
 }
 
+function tokenPrice(value?: string | null): string {
+  if (value == null || !Number.isFinite(Number(value) * 1000000)) return "unbekannt";
+  return (Number(value) * 1000000).toLocaleString("de-DE", { maximumSignificantDigits: 6 }) + " USD / Mio. Token";
+}
+
 export function AiWorkspace({ configurationOnly = false }: { configurationOnly?: boolean }) {
   const [saved, setSaved] = useState<Settings | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
@@ -70,6 +75,9 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
   const [key, setKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
   const [models, setModels] = useState<Model[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
+  const [freeOnly, setFreeOnly] = useState(false);
   const [probe, setProbe] = useState<Probe | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [prompt, setPrompt] = useState("");
@@ -79,7 +87,6 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const gate = useRef(false);
-  const listId = configurationOnly ? "ai-settings-models" : "ai-workspace-models";
 
   const setSettings = (value: Settings) => { setSaved(value); setConfig(value.config); setLocalEnabled(value.local_enabled); setExternalEnabled(value.external_enabled); setKey(""); setClearKey(false); setProbe(null); setConfirmed(false); };
   useEffect(() => {
@@ -89,6 +96,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
       .catch(() => { if (active) setError("KI-Einstellungen konnten nicht geladen werden."); });
     return () => { active = false; };
   }, [configurationOnly]);
+  useEffect(() => { setFreeOnly(config?.provider === "openrouter"); setModelSearch(""); }, [config?.provider]);
   useEffect(() => {
     if (!tasks.some((task) => task.status === "running")) return;
     const timer = window.setInterval(() => { void api<Task[]>("/tasks").then(setTasks).catch(() => {}); }, 3000);
@@ -98,6 +106,13 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
   const dirty = !!saved && (JSON.stringify(config) !== JSON.stringify(saved.config) || localEnabled !== saved.local_enabled || externalEnabled !== saved.external_enabled || !!key || clearKey);
   const cloud = config?.provider !== "local";
   const connectionAllowed = !!saved && !dirty && (cloud ? saved.external_enabled && saved.api_key_readable : saved.local_enabled) && !!config?.base_url;
+  const isOpenRouter = config?.provider === "openrouter";
+  const query = modelSearch.trim().toLocaleLowerCase();
+  const filteredModels = models.filter((model) => (!isOpenRouter || !freeOnly || model.is_free === true) && (!query || `${model.name} ${model.id}`.toLocaleLowerCase().includes(query)));
+  const selectedModel = models.find((model) => model.id === config?.model);
+  const selectedOutsideFilter = !!config?.model && !filteredModels.some((model) => model.id === config.model);
+  const clearCatalog = () => { setModels([]); setCatalogLoaded(false); setModelSearch(""); };
+  const selectModel = (model: string) => { if (config) setConfig({ ...config, model }); setProbe(null); setConfirmed(false); };
   async function act(action: () => Promise<void>) {
     if (gate.current) return;
     gate.current = true; setBusy(true); setError(""); setNotice("");
@@ -115,7 +130,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
     <div className="panelToolbar"><h2>KI-Einrichtung</h2><div className="buttonRow">
       <a href="/benutzerleitfaden.html#ki" target="_blank" rel="noreferrer"><BookOpen size={16} /> Leitfaden</a>
       <button type="button" className="ghostButton" title="KI-Einstellungen neu laden" aria-label="KI-Einstellungen neu laden" disabled={busy}
-        onClick={() => { if (!dirty || window.confirm("Ungespeicherte KI-Einstellungen verwerfen?")) void act(async () => { setSettings(await api<Settings>("/provider")); setModels([]); }); }}><RefreshCw size={16} /></button>
+        onClick={() => { if (!dirty || window.confirm("Ungespeicherte KI-Einstellungen verwerfen?")) void act(async () => { setSettings(await api<Settings>("/provider")); clearCatalog(); }); }}><RefreshCw size={16} /></button>
     </div></div>
     {error && <p role="alert" className="error">{error}</p>}
     {notice && <p role="status">{notice}</p>}
@@ -129,11 +144,24 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
           <label>Anbieter<select aria-label="KI-Anbieter" value={config.provider} onChange={(event) => {
             const provider = event.target.value as Config["provider"];
             setConfig({ ...config, provider, base_url: provider === "openrouter" ? "https://openrouter.ai/api/v1" : "", model: "", thinking: "server_default", token_parameter: "max_tokens" });
-            setModels([]); setProbe(null); setConfirmed(false);
+            clearCatalog(); setProbe(null); setConfirmed(false);
           }}><option value="local">Lokaler OpenAI-kompatibler Server</option><option value="openrouter">OpenRouter (Cloud)</option><option value="cloud">Andere OpenAI-kompatible Cloud-API</option></select></label>
-          <label>API-Basisadresse<input aria-label="KI-API-Basisadresse" type="url" autoComplete="off" spellCheck={false} value={config.base_url} readOnly={config.provider === "openrouter"} maxLength={2048} onChange={(event) => { setConfig({ ...config, base_url: event.target.value }); setModels([]); setProbe(null); }} /></label>
-          <label>Modell-ID<input aria-label="KI-Modell-ID" list={listId} autoComplete="off" spellCheck={false} maxLength={256} value={config.model} onChange={(event) => { setConfig({ ...config, model: event.target.value }); setProbe(null); }} /><datalist id={listId}>{models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}</datalist></label>
+          <label>API-Basisadresse<input aria-label="KI-API-Basisadresse" type="url" autoComplete="off" spellCheck={false} value={config.base_url} readOnly={config.provider === "openrouter"} maxLength={2048} onChange={(event) => { setConfig({ ...config, base_url: event.target.value }); clearCatalog(); setProbe(null); }} /></label>
+          <label>Modell<select aria-label="KI-Modellauswahl" title={selectedModel?.name || config.model} value={config.model} disabled={!catalogLoaded} onChange={(event) => selectModel(event.target.value)}>
+            <option value="">{catalogLoaded ? filteredModels.length ? "Modell auswaehlen" : "Keine Treffer" : "Keine Modellliste geladen"}</option>
+            {selectedOutsideFilter && <option value={config.model}>{selectedModel?.name || config.model} (ausgewaehlt, ausserhalb Filter){selectedModel?.is_free === false ? " - Kostenpflichtig" : ""}</option>}
+            {filteredModels.map((model) => <option key={model.id} value={model.id}>{model.is_free === true ? "Free - " : ""}{model.name} ({model.id})</option>)}
+          </select></label>
           <label>API-Key {saved.api_key_present ? saved.api_key_readable ? "(gespeichert)" : "(nicht lesbar)" : "(nicht gespeichert)"}<input aria-label="KI-API-Key" type="password" autoComplete="new-password" value={key} maxLength={8192} disabled={!saved.encrypted_secrets_available} onChange={(event) => setKey(event.target.value)} /></label>
+        </div>
+        <div className="aiModelCatalog"><div className="formGrid"><label>Modellsuche<input type="search" aria-label="KI-Modellsuche" value={modelSearch} disabled={!catalogLoaded} onChange={(event) => setModelSearch(event.target.value)} /></label>
+          <label>Modell-ID<input aria-label="KI-Modell-ID" autoComplete="off" spellCheck={false} maxLength={256} value={config.model} onChange={(event) => selectModel(event.target.value)} /></label></div>
+          {isOpenRouter && <label className="checkboxLabel"><input type="checkbox" checked={freeOnly} onChange={(event) => setFreeOnly(event.target.checked)} /> Nur Free-Modelle</label>}
+          {catalogLoaded && <span role="status">{filteredModels.length} von {models.length} Textmodellen{isOpenRouter ? ` / ${models.filter((model) => model.is_free === true).length} Free` : ""}</span>}
+          {config.model && isOpenRouter && <div className="aiModelFacts" aria-label="Ausgewaehltes Modell"><strong>{selectedModel?.is_free === true ? "Free" : selectedModel?.is_free === false ? "Kostenpflichtig" : "Preis unbekannt"}</strong>
+            <span>Eingabe: {tokenPrice(selectedModel?.prompt_price_usd_per_token)}</span><span>Ausgabe: {tokenPrice(selectedModel?.completion_price_usd_per_token)}</span>
+            {selectedModel?.request_price_usd != null && Number(selectedModel.request_price_usd) > 0 && <span>{Number(selectedModel.request_price_usd).toLocaleString("de-DE", { maximumSignificantDigits: 6 })} USD / Anfrage</span>}
+            {selectedModel?.context_length != null && <span>Kontext: {selectedModel.context_length.toLocaleString("de-DE")} Token</span>}</div>}
         </div>
         {saved.api_key_present && <label className="checkboxLabel"><input type="checkbox" checked={clearKey} onChange={(event) => setClearKey(event.target.checked)} /> Gespeicherten KI-API-Key entfernen</label>}
         <div className="aiChecks"><label className="checkboxLabel"><input type="checkbox" checked={localEnabled} onChange={(event) => setLocalEnabled(event.target.checked)} /> Lokale KI aktivieren</label>
@@ -147,7 +175,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
           {!cloud && <label>Thinking-Steuerung<select value={config.thinking} onChange={(event) => setConfig({ ...config, thinking: event.target.value as Config["thinking"] })}><option value="server_default">Serverstandard</option><option value="llamacpp_off">llama.cpp: Thinking aus</option><option value="ollama_off">Ollama: Thinking aus</option></select></label>}
         </div></details></fieldset>
         <div className="buttonRow"><button type="submit" className="primaryButton" disabled={busy || !dirty}><Save size={16} /> KI-Einstellungen speichern</button>
-          <button type="button" disabled={busy || !connectionAllowed} onClick={() => void act(async () => { const rows = await api<Model[]>("/provider/models", "POST"); setModels(rows); setNotice(`${rows.length} Textmodelle geladen.`); })}><Download size={16} /> Modelle laden</button>
+          <button type="button" disabled={busy || !connectionAllowed} onClick={() => void act(async () => { const rows = await api<Model[]>("/provider/models", "POST"); setModels(rows); setCatalogLoaded(true); setNotice(`${rows.length} Textmodelle geladen${isOpenRouter ? `, davon ${rows.filter((model) => model.is_free === true).length} Free` : ""}.`); })}><Download size={16} /> Modelle laden</button>
           <button type="button" disabled={busy || !connectionAllowed || !saved.configured} onClick={() => void act(async () => { setProbe(null); setProbe(await api<Probe>("/provider/test", "POST")); })}>{busy ? <LoaderCircle size={16} /> : <Check size={16} />} Verbindung testen</button></div>
       </form>
       {probe && <div role="status" className="aiProbe"><strong>Verbindung erfolgreich: {probe.model}</strong><p>{probe.answer}</p>{probe.truncated && <span>Testantwort am Tokenlimit beendet.</span>}</div>}

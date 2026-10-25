@@ -6,6 +6,7 @@ import ipaddress
 import json
 import socket
 import time
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -232,8 +233,35 @@ class AiProviderService:
                 continue
             model_id = self._redact(row["id"], token)[:256]
             if model_id:
-                result[model_id] = AiModel(id=model_id, name=self._redact(str(row.get("name") or model_id), token)[:256])
+                model = AiModel(id=model_id, name=self._redact(str(row.get("name") or model_id), token)[:256])
+                context = row.get("context_length")
+                if type(context) is int and 0 < context <= 1_000_000_000:
+                    model.context_length = context
+                if config.provider == "openrouter":
+                    prices = row.get("pricing") if isinstance(row.get("pricing"), dict) else {}
+                    prompt = self._catalog_price(prices.get("prompt"))
+                    completion = self._catalog_price(prices.get("completion"))
+                    request = self._catalog_price(prices.get("request", "0"))
+                    model.prompt_price_usd_per_token = prompt
+                    model.completion_price_usd_per_token = completion
+                    model.request_price_usd = request
+                    known = [Decimal(value) for value in (prompt, completion, request) if value is not None]
+                    if any(value > 0 for value in known):
+                        model.is_free = False
+                    elif len(known) == 3:
+                        model.is_free = True
+                result[model_id] = model
         return sorted(result.values(), key=lambda item: item.id)
+
+    @staticmethod
+    def _catalog_price(value: object) -> str | None:
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)) or len(str(value)) > 128:
+            return None
+        try:
+            price = Decimal(str(value))
+            return str(price) if price.is_finite() and price >= 0 else None
+        except InvalidOperation:
+            return None
 
     @staticmethod
     def _redact(text: str, token: str) -> str:

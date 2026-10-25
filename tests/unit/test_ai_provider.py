@@ -105,6 +105,46 @@ def test_model_catalog_and_neutral_openrouter_test_use_saved_connection(setup, m
     assert len(calls) == 2
 
 
+@pytest.mark.parametrize("pricing,expected", [
+    ({"prompt": "0", "completion": "0", "request": "0"}, True),
+    ({"prompt": "0", "completion": "0"}, True),
+    ({"prompt": 0, "completion": 0, "request": 0}, True),
+    ({"prompt": "0.000001", "completion": "0"}, False),
+    ({"prompt": "0", "completion": "0.000002"}, False),
+    ({"prompt": "0", "completion": "0", "request": "0.01"}, False),
+    ({"prompt": "1e-12", "completion": "0"}, False),
+    ({}, None),
+    ({"prompt": "NaN", "completion": "0"}, None),
+    ({"prompt": "-1", "completion": "0"}, None),
+    ({"prompt": True, "completion": "0"}, None),
+    ({"prompt": "0", "completion": "Infinity"}, None),
+    ({"prompt": "0", "completion": "0", "request": None}, None),
+    ({"prompt": "0", "completion": "0", "request": "invalid"}, None),
+])
+def test_openrouter_free_classification_uses_real_decimal_prices_not_name(setup, monkeypatch, pricing, expected):
+    _store, service = setup
+    save(service, provider="openrouter", base_url=OPENROUTER_BASE, api_key=TOKEN, external_enabled=True)
+    transport(monkeypatch, lambda _request: httpx.Response(200, json={"data": [{
+        "id": "fixture/misleading:free", "name": "Free im Namen ist kein Preisnachweis",
+        "pricing": pricing, "context_length": 131072,
+    }]}))
+    model = service.models()[0]
+    assert model.is_free is expected
+    assert model.context_length == 131072
+    assert TOKEN not in model.model_dump_json()
+
+
+def test_non_openrouter_models_do_not_claim_free_pricing(setup, monkeypatch):
+    _store, service = setup
+    save(service)
+    transport(monkeypatch, lambda _request: httpx.Response(200, json={"data": [{
+        "id": "local/free", "pricing": {"prompt": "0", "completion": "0"}, "context_length": True,
+    }]}))
+    model = service.models()[0]
+    assert model.is_free is None and model.prompt_price_usd_per_token is None
+    assert model.context_length is None
+
+
 def test_probe_budget_is_configurable_for_reasoning_models(setup, monkeypatch):
     _store, service = setup
     save(service, probe_max_tokens=1024, max_tokens=512)

@@ -6614,6 +6614,8 @@ th {
 .aiWorkspace button.primaryButton { background: #234c3b; border-color: #234c3b; color: #fff; }
 .aiWorkspace a { display: inline-flex; align-items: center; gap: 6px; color: #176348; font-size: 13px; }
 .aiChecks { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+.aiModelCatalog { display: grid; min-width: 0; gap: 12px; }
+.aiModelFacts { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; overflow-wrap: anywhere; }
 .aiTaskComposer, .aiTaskList { border-top: 1px solid #c8d4cc; padding-top: 20px; }
 .aiTaskList { display: grid; gap: 16px; }
 .aiTask { min-width: 0; border: 1px solid #c8d4cc; border-radius: 4px; padding: 16px; background: #fff; }

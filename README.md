@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc8. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc9. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc8
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc9
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -130,6 +130,14 @@ ausloesen. Eine echte Cloud-Aufgabe braucht zusaetzlich eine ausdrueckliche
 Textfreigabe. Die Ausfuehrung nutzt ausschliesslich den eingegebenen Text,
 keinen automatischen Zugriff auf Datenbank, Dateien oder Korrekturwerkzeuge.
 Ergebnisse sind Review-Hinweise, keine steuerlichen Entscheidungen.
+
+Die Modellliste besitzt eine sichtbare Auswahl und Namens-/ID-Suche.
+Bei OpenRouter ist `Nur Free-Modelle` anfangs aktiviert. Free wird anhand
+der veroeffentlichten Prompt-/Completion- und gegebenenfalls Anfragepreise
+klassifiziert, nicht anhand des Modellnamens. Unbekannte Preise gelten nicht
+als kostenlos. Preise in USD und Kontextgroesse werden fuer die Auswahl
+angezeigt. Filteraenderungen ersetzen kein ausgewaehltes Modell; ein bereits
+gewaehltes kostenpflichtiges Modell bleibt entsprechend gekennzeichnet.
 
 `POST /api/v1/ai/tasks` bleibt mit bestehenden Clients kompatibel und legt
 Aufgaben an. Die explizite Ausfuehrung erfolgt ueber

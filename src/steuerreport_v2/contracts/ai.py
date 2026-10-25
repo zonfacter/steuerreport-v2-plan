@@ -64,6 +64,11 @@ class AiProviderStatus(BaseModel):
 class AiModel(BaseModel):
     id: str
     name: str
+    is_free: bool | None = None
+    prompt_price_usd_per_token: str | None = None
+    completion_price_usd_per_token: str | None = None
+    request_price_usd: str | None = None
+    context_length: int | None = None
 
 
 class AiProbeResult(BaseModel):
