@@ -114,6 +114,11 @@ class AdminService:
         upsert_secret(self.store, setting_key, value)
 
     def v1_cex_credential_takeover_report(self) -> V1CexCredentialTakeoverReport:
+        if not self.V1_ADMIN_BASE_URL:
+            return V1CexCredentialTakeoverReport(
+                generated_at=datetime.now(timezone.utc), items=[], transferable=0, blocked=0,
+                methodology="Optionale V1-Migration ist nicht konfiguriert. CEX-Zugangsdaten werden direkt in V2 verwaltet; es wurde kein V1-Dienst abgefragt.",
+            )
         items = [self._v1_cex_takeover_item(connector_id) for connector_id in sorted(self.CEX_CONNECTORS)]
         return V1CexCredentialTakeoverReport(
             generated_at=datetime.now(timezone.utc),
@@ -132,6 +137,8 @@ class AdminService:
         self,
         connectors: list[str] | None = None,
     ) -> V1CexCredentialTakeoverResult:
+        if not self.V1_ADMIN_BASE_URL:
+            raise ValueError("v1_migration_not_configured")
         requested = sorted({item.strip().lower() for item in (connectors or sorted(self.CEX_CONNECTORS)) if item.strip()})
         unsupported = [item for item in requested if item not in self.CEX_CONNECTORS]
         if unsupported:
@@ -172,6 +179,16 @@ class AdminService:
         self,
         connector_id: str,
     ) -> tuple[V1CexCredentialTakeoverItem, dict[str, str]]:
+        if not self.V1_ADMIN_BASE_URL:
+            return (
+                V1CexCredentialTakeoverItem(
+                    connector_id=connector_id, status="not_configured", can_take_over=False,
+                    has_api_key=False, has_api_secret=False,
+                    credential_issue="v1_migration_not_configured",
+                    next_action="API-Zugangsdaten direkt in der V2-Administration hinterlegen.",
+                ),
+                {},
+            )
         diagnostic = next(
             (
                 item

@@ -1340,6 +1340,7 @@ def test_portfolio_reconciliation_expected_zero_reconciles_live_match_and_dust(t
 
 
 def test_portfolio_reconciliation_refresh_persists_live_snapshots(tmp_path, monkeypatch):
+    monkeypatch.setattr(PortfolioService, "V1_CONNECTOR_BASE_URL", "https://legacy.invalid")
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     monkeypatch.setattr(PortfolioService, "_v1_cex_live_balance_snapshots", lambda _self, _connector_id, _fetched_at: [])
     monkeypatch.setattr(
@@ -1397,6 +1398,7 @@ def test_portfolio_reconciliation_refresh_persists_live_snapshots(tmp_path, monk
 
 
 def test_portfolio_reconciliation_refresh_keeps_cex_product_metadata(tmp_path, monkeypatch):
+    monkeypatch.setattr(PortfolioService, "V1_CONNECTOR_BASE_URL", "https://legacy.invalid")
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
 
     def cex_snapshots(_self, connector_id, fetched_at):

@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc3. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc4. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc3
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc4
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -83,6 +83,20 @@ Nur der Publish-Job erhaelt `packages: write`. Der Pull-Pruefjob hat lediglich
 Leserecht. Beide verwenden den kurzlebigen `GITHUB_TOKEN`, keine persoenlichen
 Registry-Secrets im Quellstand oder Image. Die Nachweise stehen als
 `ghcr-publication-*` und `ghcr-pull-verification-*` bei den Workflow-Artefakten.
+
+## Eigenstaendiger Betrieb
+
+Docker benoetigt keinen V1-Dienst. Binance, Bitget, Pionex und Coinbase werden
+mit den in der V2-Administration gespeicherten Zugangsdaten direkt abgefragt.
+Nicht verwendete Boersen muessen nicht eingerichtet werden. Fehlende
+Zugangsdaten sind kein bestaetigter Nullbestand und loesen ohne explizit
+konfigurierte Legacy-API keinen V1-Fallback aus.
+
+Der V1-Credential-Uebernahmecheck ist nicht Bestandteil der Administration.
+Die bestehende Legacy-API bleibt fuer ausdruecklich konfigurierte Migrationen
+kompatibel, ist ohne Legacy-URL jedoch inaktiv und fuehrt keine externen
+Anfragen oder Secret-Schreibvorgaenge aus. Historische Referenzimporte und
+vorhandene Steuerstaende bleiben davon unberuehrt.
 
 ## Native Installation
 

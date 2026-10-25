@@ -738,13 +738,6 @@ type Snapshot = {
     semantic_sha256: string;
     methodology: string;
   } | null;
-  v1CexCredentialTakeover?: {
-    generated_at: string;
-    items: Array<Record<string, unknown>>;
-    transferable: number;
-    blocked: number;
-    methodology: string;
-  };
   sourceReconciliationEvidence?: {
     generated_at: string;
     source_id: string;
@@ -3349,7 +3342,6 @@ function App() {
         sourcesOverview: { key: "sourcesOverview", label: "Quellen", load: () => getApi<Snapshot["sourcesOverview"]>("/api/v1/sources/overview") },
         sourceConnectorDiagnostics: { key: "sourceConnectorDiagnostics", label: "Connector-Diagnose", load: () => getApi<Snapshot["sourceConnectorDiagnostics"]>("/api/v1/sources/connector-diagnostics") },
         sourceRegistry: { key: "sourceRegistry", label: "Quellenregistry", load: () => getApi<Snapshot["sourceRegistry"]>("/api/v1/sources/registry/runs/latest") },
-        v1CexCredentialTakeover: { key: "v1CexCredentialTakeover", label: "V1-CEX-Credential-Uebernahme", load: () => getApi<Snapshot["v1CexCredentialTakeover"]>("/api/v1/admin/cex-credentials/v1-takeover") },
         sourceDetail: {
           key: "sourceDetail",
           label: "Quellen-Detail",
@@ -3756,7 +3748,7 @@ function App() {
           ...(exportViewMode !== "packages" ? ["reportEvidenceManifest", "reportEvidencePackageIndex"] : []),
           ...(exportViewMode === "expert" ? ["exports", "priceQuality"] : [])
         ],
-        admin: ["health", "admin", "adminSettings", "sourceConnectorDiagnostics", "v1CexCredentialTakeover", "jupiterMetadataCache"],
+        admin: ["health", "admin", "adminSettings", "sourceConnectorDiagnostics", "jupiterMetadataCache"],
         ai: ["health", "ai", "localAiYearPackageQa"]
       };
       const loaders = loaderKeysBySection[active].map((key) => allLoaders[key]);
@@ -3869,11 +3861,13 @@ function App() {
       const cockpit = await getApi<Snapshot["cockpit"]>("/api/v1/cockpit/summary");
       const sourcesOverview = await getApi<Snapshot["sourcesOverview"]>("/api/v1/sources/overview");
       const sourceConnectorDiagnostics = await getApi<Snapshot["sourceConnectorDiagnostics"]>("/api/v1/sources/connector-diagnostics");
-      const sourceId = selectedSourceId ?? String(sourcesOverview?.sources?.[0]?.source_id ?? "binance");
-      const [sourceDetail, sourceReconciliation] = await Promise.all([
+      const availableSources = sourcesOverview?.sources ?? [];
+      const rawSourceId = availableSources.find((row) => row.source_id === selectedSourceId)?.source_id ?? availableSources[0]?.source_id;
+      const sourceId = rawSourceId ? String(rawSourceId) : null;
+      const [sourceDetail, sourceReconciliation] = sourceId ? await Promise.all([
         getApi<Snapshot["sourceDetail"]>(`/api/v1/sources/${encodeURIComponent(sourceId)}`),
         getApi<Snapshot["sourceReconciliation"]>(`/api/v1/sources/${encodeURIComponent(sourceId)}/reconciliation`)
-      ]);
+      ]) : [undefined, undefined];
       setSnapshot((current) => ({
         ...current,
         cockpit,
@@ -5187,21 +5181,6 @@ function App() {
     }
   }
 
-  async function importV1CexCredentials() {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await postApi<Record<string, unknown>>("/api/v1/admin/cex-credentials/v1-takeover", {});
-      const imported = Array.isArray(result.imported) ? result.imported.length : 0;
-      const skipped = Array.isArray(result.skipped) ? result.skipped.length : 0;
-      setNotice(`V1-CEX-Credentials Uebernahme: ${imported} uebernommen, ${skipped} nicht uebernehmbar`);
-      await refresh();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "V1-CEX-Credentials konnten nicht uebernommen werden");
-      setLoading(false);
-    }
-  }
-
   async function createAiTask(taskType: string, prompt: string, allowExternal: boolean) {
     if (!prompt.trim()) {
       setError("KI-Prompt darf nicht leer sein");
@@ -5587,7 +5566,6 @@ function App() {
           onSaveJupiterApiKey={saveJupiterApiKey}
           onSearchJupiterTokens={searchJupiterTokens}
           onRefreshJupiterMetadataCache={refreshJupiterMetadataCache}
-          onImportV1CexCredentials={importV1CexCredentials}
           onDeleteAdminSetting={deleteAdminSetting}
           onAddV1Reference={addV1Reference}
           onAddParityDecision={addParityDecision}
@@ -5783,7 +5761,6 @@ function Content({
   onSaveJupiterApiKey,
   onSearchJupiterTokens,
   onRefreshJupiterMetadataCache,
-  onImportV1CexCredentials,
   onDeleteAdminSetting,
   onAddV1Reference,
   onAddParityDecision,
@@ -5906,7 +5883,6 @@ function Content({
   onSaveJupiterApiKey: (apiKey: string) => void;
   onSearchJupiterTokens: (query: string) => void;
   onRefreshJupiterMetadataCache: (limit?: number, force?: boolean) => void;
-  onImportV1CexCredentials: () => void;
   onDeleteAdminSetting: (key: string) => void;
   onAddV1Reference: (payload: Record<string, unknown>) => void;
   onAddParityDecision: (scope: string, decisionStatus: string) => void;
@@ -6461,7 +6437,6 @@ function Content({
           nextAction="Credentials nur aktualisieren, wenn Quelle und Secret sicher bekannt sind."
         />
         <KeyValuePanel title="Admin-Status" data={snapshot.admin ?? {}} />
-        <V1CexCredentialTakeoverPanel report={snapshot.v1CexCredentialTakeover} onImportV1CexCredentials={onImportV1CexCredentials} />
         <AdminCexCredentialForm
           connectorDiagnostics={snapshot.sourceConnectorDiagnostics}
           onSaveCexCredentials={onSaveCexCredentials}
@@ -20414,48 +20389,6 @@ function AdminSettingForm({
   );
 }
 
-function V1CexCredentialTakeoverPanel({
-  report,
-  onImportV1CexCredentials
-}: {
-  report: Snapshot["v1CexCredentialTakeover"];
-  onImportV1CexCredentials: () => void;
-}) {
-  const items = report?.items ?? [];
-  return (
-    <div className="panel">
-      <div className="panelToolbar">
-        <strong>V1-CEX-Credential-Uebernahme</strong>
-        <button type="button" onClick={onImportV1CexCredentials} disabled={(report?.transferable ?? 0) === 0}>
-          <RefreshCcw size={16} />
-          <span>Aus V1 uebernehmen</span>
-        </button>
-      </div>
-      <div className="portfolioSummaryStrip">
-        <Metric title="Uebernehmbar" value={String(report?.transferable ?? 0)} />
-        <Metric title="Blockiert" value={String(report?.blocked ?? 0)} />
-        <Metric title="Stand" value={report?.generated_at ? formatDateTime(report.generated_at) : "-"} />
-      </div>
-      <TablePanel
-        title="V1-Preflight"
-        rows={items.map((item) => ({
-          connector: item.connector_id,
-          status: sourceConnectorStatusLabel(item.status),
-          uebernehmbar: item.can_take_over ? "ja" : "nein",
-          api_key: item.has_api_key ? "vorhanden" : "fehlt",
-          api_secret: item.has_api_secret ? "vorhanden" : "fehlt",
-          passphrase: item.has_passphrase ? "vorhanden" : "-",
-          secret_keys: `${String(item.keys_present ?? 0)}/${String(item.keys_required ?? 0)}`,
-          problem: item.credential_issue,
-          naechster_schritt: item.next_action
-        }))}
-        compact
-        footer={report?.methodology ?? ""}
-      />
-    </div>
-  );
-}
-
 function AdminCexCredentialForm({
   connectorDiagnostics,
   onSaveCexCredentials,
@@ -20475,6 +20408,7 @@ function AdminCexCredentialForm({
   const cexRows = (connectorDiagnostics?.diagnostics ?? []).filter((row) => row.connector_type === "cex");
   const activeDiagnostic = cexRows.find((row) => row.connector_id === connectorId);
   const missingCredentials = cexRows.filter((row) => row.credential_status !== "configured");
+  const configuredCredentials = cexRows.filter((row) => row.credential_status === "configured");
   const orderedRows = [
     ...missingCredentials,
     ...cexRows.filter((row) => row.credential_status === "configured")
@@ -20499,7 +20433,7 @@ function AdminCexCredentialForm({
       <div className="panelToolbar">
         <div>
           <strong>CEX-Credentials speichern</strong>
-          <span>{missingCredentials.length} vorhandene CEX-Quelle(n) brauchen Credentials</span>
+          <span>{configuredCredentials.length} eingerichtet, {missingCredentials.length} nicht eingerichtet</span>
         </div>
         <button
           type="button"
@@ -20511,8 +20445,8 @@ function AdminCexCredentialForm({
         </button>
       </div>
       <div className="connectorSetupNextStep">
-        <span className={`statusPill ${missingCredentials.length > 0 ? "blocked" : "ok"}`}>
-          {missingCredentials.length > 0 ? `${missingCredentials.length} offen` : "vollstaendig"}
+        <span className={`statusPill ${configuredCredentials.length > 0 ? "ok" : "blocked"}`}>
+          {configuredCredentials.length > 0 ? `${configuredCredentials.length} eingerichtet` : "Nicht eingerichtet"}
         </span>
         <div>
           <strong>
@@ -20525,7 +20459,7 @@ function AdminCexCredentialForm({
             Nach dem Speichern sollte direkt `Live abfragen` ausgefuehrt werden, damit Product-Readiness den neuen Snapshot sieht.
           </p>
         </div>
-        <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading || missingCredentials.length > 0}>
+        <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading || configuredCredentials.length === 0}>
           <RefreshCcw size={16} />
           <span>{sourceRefreshLoading ? "Live-Abfrage laeuft" : "Live abfragen"}</span>
         </button>

@@ -232,6 +232,7 @@ def test_admin_cex_credentials_endpoint_saves_without_echoing_secret(tmp_path, m
 
 
 def test_v1_cex_takeover_report_marks_empty_v1_credentials_not_transferable(tmp_path, monkeypatch):
+    monkeypatch.setattr(AdminService, "V1_ADMIN_BASE_URL", "https://legacy.invalid")
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
 
     class Response:
@@ -279,6 +280,7 @@ def test_v1_cex_takeover_report_marks_empty_v1_credentials_not_transferable(tmp_
 
 
 def test_v1_cex_takeover_imports_transferable_credentials_without_echoing(tmp_path, monkeypatch):
+    monkeypatch.setattr(AdminService, "V1_ADMIN_BASE_URL", "https://legacy.invalid")
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     saved: list[CexCredentialWrite] = []
 

@@ -8,7 +8,7 @@ on:
       release_tag:
         description: "Vorhandener Release-Tag (z.B. v0.2.0rc3)"
         required: true
-        default: v0.2.0rc3
+        default: v0.2.0rc4
         type: string
 
 permissions:
@@ -113,8 +113,15 @@ jobs:
         run: |
           docker tag "$LOCAL_IMAGE" "$IMAGE:$VERSION"
           docker tag "$LOCAL_IMAGE" "$IMAGE:$COMMIT_TAG"
-          docker push "$IMAGE:$VERSION"
-          docker push "$IMAGE:$COMMIT_TAG"
+          push_image() {
+            for attempt in 1 2 3; do
+              if docker push "$1"; then return 0; fi
+              if [ "$attempt" -lt 3 ]; then sleep 5; fi
+            done
+            return 1
+          }
+          push_image "$IMAGE:$VERSION"
+          push_image "$IMAGE:$COMMIT_TAG"
       - name: Registry-Digest erfassen
         id: receipt
         env:
@@ -128,7 +135,7 @@ jobs:
       - name: Pruefnachweise archivieren
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ghcr-publication-${{ github.run_id }}
+          name: ghcr-publication-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/publication.json
             ${{ runner.temp }}/secrets.reviewed.json
@@ -176,7 +183,7 @@ jobs:
       - name: Pull-Pruefung archivieren
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ghcr-pull-verification-${{ github.run_id }}
+          name: ghcr-pull-verification-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/pull-metadata.json
             ${{ runner.temp }}/pull-smoke.json

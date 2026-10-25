@@ -1546,13 +1546,15 @@ class PortfolioService:
                         self._connector_errors[connector_id] = (
                             f"V2-{connector_id}-Liveabruf fehlgeschlagen: {exc}"
                         )
-                else:
+                elif self.V1_CONNECTOR_BASE_URL:
                     balances = self._v1_cex_live_balance_snapshots(
                         connector_id,
                         fetched_at,
                     )
                     if not balances:
                         balances = self._v1_cex_live_balances(connector_id)
+                else:
+                    balances = []
             if connector_id in {"jup_wallet", "solana_wallet"}:
                 self._store_solscan_live_prices(fetched_at)
             if isinstance(balances, list):
@@ -1589,6 +1591,8 @@ class PortfolioService:
                         if connector_snapshots
                         else self._connector_errors[connector_id]
                         if self._connector_errors.get(connector_id)
+                        else "API-Zugangsdaten direkt in der V2-Administration hinterlegen."
+                        if missing_configuration and connector_id in self.CEX_REQUIRED_SECRET_KEYS
                         else "Connector ist nicht konfiguriert."
                         if missing_configuration
                         else (
@@ -1685,6 +1689,8 @@ class PortfolioService:
         return value.astimezone(timezone.utc)
 
     def _snapshot_source_for_connector(self, connector_id: str) -> str:
+        if connector_id not in {"jup_wallet", "solana_wallet"} and not self.V1_CONNECTOR_BASE_URL:
+            return f"{connector_id}_api_v2"
         endpoint = (
             "solscan_pro:/account/portfolio"
             if connector_id in {"jup_wallet", "solana_wallet"}
@@ -2132,7 +2138,6 @@ class PortfolioService:
         fetched_at: datetime,
     ) -> list[PortfolioLiveBalanceSnapshot]:
         if not self.V1_CONNECTOR_BASE_URL:
-            self._connector_errors[connector_id] = "V1-Connector-Bridge ist nicht konfiguriert."
             return []
         try:
             with httpx.Client(timeout=8) as client:

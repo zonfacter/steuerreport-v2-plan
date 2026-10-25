@@ -109,12 +109,14 @@ assert all(not row["value"] for row in settings["fields"])
 assert not any(settings["providers"].values())
 assert not settings["restart_required"]
 assert settings["encrypted_secrets_available"]
+legacy=get("/api/v1/admin/cex-credentials/v1-takeover")
+assert not legacy["items"] and legacy["blocked"] == 0 and legacy["transferable"] == 0
 assert not any(row["key"].startswith("secret.") for row in get("/api/v1/admin/settings"))
 assert urllib.request.urlopen("http://127.0.0.1:8010/").status == 200
 assert not any(json.loads(Path("/state/private_profile.json").read_text()).values())
 key=Path("/state/keys/vault.key")
 assert key.stat().st_size == 32 and stat.S_IMODE(key.stat().st_mode) == 0o600
-print(json.dumps({"version":health["app_version"],"database_type":health["database_type"],"configured_accounts":0,"provider_keys":0,"empty_profile":True,"encrypted_vault_ready":True,"frontend_http_status":200}))
+print(json.dumps({"version":health["app_version"],"database_type":health["database_type"],"configured_accounts":0,"provider_keys":0,"empty_profile":True,"encrypted_vault_ready":True,"frontend_http_status":200,"legacy_service_required":False}))
 '''
     result = subprocess.run(["docker", "exec", container, "python", "-c", code], capture_output=True, text=True)
     if result.returncode:
