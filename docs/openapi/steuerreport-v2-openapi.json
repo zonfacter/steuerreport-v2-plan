@@ -90,6 +90,476 @@
         "title": "AdminStatus",
         "type": "object"
       },
+      "AiChange": {
+        "additionalProperties": false,
+        "properties": {
+          "before_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Before Sha256",
+            "type": "string"
+          },
+          "evidence_ref": {
+            "maxLength": 1000,
+            "minLength": 3,
+            "title": "Evidence Ref",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "event",
+              "price"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "patch": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxProperties": 12,
+            "minProperties": 1,
+            "propertyNames": {
+              "maxLength": 64
+            },
+            "title": "Patch",
+            "type": "object"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target_id",
+          "before_sha256",
+          "patch",
+          "reason",
+          "evidence_ref"
+        ],
+        "title": "AiChange",
+        "type": "object"
+      },
+      "AiChangeApply": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "maxLength": 128,
+            "minLength": 2,
+            "title": "Actor",
+            "type": "string"
+          },
+          "confirm": {
+            "const": true,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "evidence_checked": {
+            "const": true,
+            "title": "Evidence Checked",
+            "type": "boolean"
+          },
+          "preview_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Preview Sha256",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preview_sha256",
+          "actor",
+          "rationale",
+          "confirm",
+          "evidence_checked"
+        ],
+        "title": "AiChangeApply",
+        "type": "object"
+      },
+      "AiChangeDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/AiChange"
+            },
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Changes",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "changes"
+        ],
+        "title": "AiChangeDraft",
+        "type": "object"
+      },
+      "AiChangeGenerate": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_external": {
+            "default": false,
+            "title": "Confirm External",
+            "type": "boolean"
+          },
+          "context_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "instruction": {
+            "maxLength": 4000,
+            "minLength": 10,
+            "title": "Instruction",
+            "type": "string"
+          },
+          "provider_revision": {
+            "title": "Provider Revision",
+            "type": "string"
+          },
+          "query": {
+            "$ref": "#/components/schemas/AiDataQuery"
+          },
+          "request_id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "selected_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Selected Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "selected_ids",
+          "context_sha256",
+          "instruction",
+          "provider_revision"
+        ],
+        "title": "AiChangeGenerate",
+        "type": "object"
+      },
+      "AiChangePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "selected_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Selected Indices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "selected_indices"
+        ],
+        "title": "AiChangePreview",
+        "type": "object"
+      },
+      "AiChangeRevert": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "AiChangeRevert",
+        "type": "object"
+      },
+      "AiChangeSet": {
+        "properties": {
+          "approval": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval"
+          },
+          "before": {
+            "items": {
+              "$ref": "#/components/schemas/AiDataRow"
+            },
+            "title": "Before",
+            "type": "array"
+          },
+          "change_set_id": {
+            "title": "Change Set Id",
+            "type": "string"
+          },
+          "configuration_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configuration Sha256"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/AiChangeDraft"
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview"
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "previewed",
+              "applied",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "change_set_id",
+          "status",
+          "draft",
+          "before",
+          "origin",
+          "created_at"
+        ],
+        "title": "AiChangeSet",
+        "type": "object"
+      },
+      "AiDataContext": {
+        "properties": {
+          "context_sha256": {
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AiDataRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "context_sha256",
+          "total",
+          "rows"
+        ],
+        "title": "AiDataContext",
+        "type": "object"
+      },
+      "AiDataQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Asset",
+            "type": "string"
+          },
+          "kind": {
+            "default": "event",
+            "enum": [
+              "event",
+              "price"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "source": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Source",
+            "type": "string"
+          },
+          "year": {
+            "default": 2025,
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "title": "AiDataQuery",
+        "type": "object"
+      },
+      "AiDataRow": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "event",
+              "price"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Provenance",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "kind",
+          "target_id",
+          "revision",
+          "values",
+          "provenance"
+        ],
+        "title": "AiDataRow",
+        "type": "object"
+      },
       "AiModel": {
         "properties": {
           "completion_price_usd_per_token": {
@@ -859,6 +1329,94 @@
           }
         },
         "title": "ApiResponse[AdminStatus]",
+        "type": "object"
+      },
+      "ApiResponse_AiChangeSet_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiChangeSet"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[AiChangeSet]",
+        "type": "object"
+      },
+      "ApiResponse_AiDataContext_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiDataContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[AiDataContext]",
         "type": "object"
       },
       "ApiResponse_AiProbeResult_": {
@@ -12707,6 +13265,54 @@
           }
         },
         "title": "ApiResponse[list[AdminSetting]]",
+        "type": "object"
+      },
+      "ApiResponse_list_AiChangeSet__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AiChangeSet"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[list[AiChangeSet]]",
         "type": "object"
       },
       "ApiResponse_list_AiModel__": {
@@ -76293,7 +76899,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc10"
+    "version": "0.2.0rc11"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -76890,6 +77496,524 @@
           "Administration"
         ],
         "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes": {
+      "get": {
+        "description": "Ai change sets. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "ai_change_sets_api_v1_ai_changes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_AiChangeSet__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ai Change Sets",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "post": {
+        "description": "Create ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "create_ai_change_set_api_v1_ai_changes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChangeDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes/generate": {
+      "post": {
+        "description": "Generate ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "generate_ai_change_set_api_v1_ai_changes_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChangeGenerate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes/{identifier}": {
+      "get": {
+        "description": "Ai change set. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "ai_change_set_api_v1_ai_changes__identifier__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "title": "Identifier",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes/{identifier}/apply": {
+      "post": {
+        "description": "Apply ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "apply_ai_change_set_api_v1_ai_changes__identifier__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "title": "Identifier",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChangeApply"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes/{identifier}/audit.json": {
+      "get": {
+        "description": "Ai change audit. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "operationId": "ai_change_audit_api_v1_ai_changes__identifier__audit_json_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "title": "Identifier",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Change Audit",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes/{identifier}/preview": {
+      "post": {
+        "description": "Preview ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "preview_ai_change_set_api_v1_ai_changes__identifier__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "title": "Identifier",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChangePreview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes/{identifier}/reject": {
+      "post": {
+        "description": "Reject ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "reject_ai_change_set_api_v1_ai_changes__identifier__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "title": "Identifier",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes/{identifier}/revert": {
+      "post": {
+        "description": "Revert ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "revert_ai_change_set_api_v1_ai_changes__identifier__revert_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "title": "Identifier",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChangeRevert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revert Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/changes/{identifier}/revise": {
+      "post": {
+        "description": "Revise ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "revise_ai_change_set_api_v1_ai_changes__identifier__revise_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "title": "Identifier",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChangeDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revise Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/data-context": {
+      "post": {
+        "description": "Ai data context. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "ai_data_context_api_v1_ai_data_context_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiDataQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiDataContext_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Data Context",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

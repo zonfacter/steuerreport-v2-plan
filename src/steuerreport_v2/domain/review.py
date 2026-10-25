@@ -48,6 +48,11 @@ class ReviewService:
 
     def gate(self, price_coverage: PriceCoverageReport | None = None) -> ReviewGate:
         issues: list[ReviewIssue] = []
+        from steuerreport_v2.db.ai_corrections import conflicts
+        with self.store.connect() as con:
+            for kind, target_id, code in conflicts(con):
+                issues.append(ReviewIssue(code=code, severity="high", scope=f"correction:{kind}:{target_id}",
+                                          message="Freigegebene Datenkorrektur stimmt nicht mit dem aktuellen Datenstand ueberein.", blocks_export=True))
         positions = BalanceLedgerBuilder(self.store).positions()
 
         for batch_id, count in self.store.unmapped_raw_object_counts().items():

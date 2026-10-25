@@ -267,13 +267,13 @@ class AiProviderService:
     def _redact(text: str, token: str) -> str:
         return text.replace(token, "[REDACTED]") if token else text
 
-    def complete(self, prompt: str, *, test: bool = False, confirm_external: bool = False, expected_revision: str | None = None) -> dict:
+    def complete(self, prompt: str, *, test: bool = False, confirm_external: bool = False, expected_revision: str | None = None, system_prompt: str = SYSTEM_PROMPT) -> dict:
         if not prompt.strip() or len(prompt) > 32000:
             raise AiProviderError("ai_prompt_invalid")
         config, token = self._connection(expected_revision=expected_revision)
         if config.provider != "local" and not confirm_external:
             raise AiProviderError("ai_task_external_not_confirmed")
-        body = {"model": config.model, "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
+        body = {"model": config.model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
                 "stream": False, config.token_parameter: min(config.max_tokens, config.probe_max_tokens) if test else config.max_tokens}
         if config.provider == "local" and config.thinking == "llamacpp_off":
             body["chat_template_kwargs"] = {"enable_thinking": False}

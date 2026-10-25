@@ -10,8 +10,8 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 INTRO = (
-    "Der KI-Assistent ist ein Textassistent fuer Erklaerungen, Prueffragen und Entwuerfe. Er hilft beim Verstehen und Strukturieren von Informationen, die Sie selbst im Aufgabentext bereitstellen. Er ist kein autonomer Steuerpruefer und keine zweite Berechnungsinstanz.",
-    "Er sieht ausschliesslich den eingegebenen Text und eine feste Systemanweisung. Er liest nicht automatisch die Datenbank, Dateien, Wallets oder Steuerberichte. Ein ausgewaehltes Steuerjahr auf einer anderen Seite wird nicht mitgesendet. Auch eine eingegebene URL wird nicht automatisch geoeffnet.",
+    "Der KI-Bereich bietet Textaufgaben und Datenkorrekturen. Textaufgaben erklaeren und strukturieren bereitgestellte Informationen. Datenkorrekturen verbinden ausgewaehlte Datenbankzeilen mit einem kontrollierten Vorschlags-, Berechnungs- und Freigabeverfahren. Der Assistent ist kein autonomer Steuerpruefer und keine zweite Berechnungsinstanz.",
+    "Bei Textaufgaben sieht das Modell nur den eingegebenen Text und eine feste Systemanweisung. Im Modus Datenkorrekturen kommen ausschliesslich die zuvor angezeigten und ausgewaehlten Transaktions- oder Preiszeilen hinzu. Kein unbeschraenkter Datenbankzugriff: Dateien, Wallets, andere Steuerjahre und eingegebene URLs werden nicht automatisch gelesen.",
     "Jede Aufgabe steht fuer sich. Fruehere Aufgaben und Antworten werden nicht automatisch als Chatverlauf uebermittelt. Fuer eine Folgefrage muessen die benoetigten Angaben erneut im Aufgabentext stehen.",
 )
 CASES = (
@@ -69,7 +69,7 @@ LIMITS = (
     "Keine angeschlossene Websuche und keine selbststaendige Binance-, Bitget-, Helium-, Helius- oder Solscan-Abfrage durch den Assistenten. Andere Funktionen der Anwendung sind davon getrennt.",
     "Kein vollstaendiger FIFO-Lauf, kein garantiert exakter Summenabgleich und keine verlaessliche Feststellung von Gewinn, Bestandsvollstaendigkeit oder steuerlicher Zuordnung durch die Modellantwort.",
     "Keine Erfindung fehlender Anschaffungen, Preise, Wechselkurse oder Belege zulassen. Unbekannte Werte bleiben offen und muessen an Quellen geklaert werden.",
-    "Keine automatischen Buchungen, Loeschungen, Importaenderungen, FIFO-Lot-Aenderungen oder Steuerkorrekturen aus Modellantworten. Die KI hat keine SQL-, Datei- oder Korrekturwerkzeuge.",
+    "Keine ungeprueften Direktbuchungen oder Loeschungen durch Modellantworten. Die KI hat keine SQL-, Datei- oder Shell-Werkzeuge. Nur der ausdruecklich freigegebene Datenkorrekturpfad darf unterstuetzte Felder aktualisieren und anschliessend die fachlichen Auswertungen neu berechnen.",
     "Keine steuerliche oder rechtliche Freigabe. Die Antwort beweist weder die Richtigkeit einer Erklaerung noch eine Pflicht, sie zu berichtigen. Solche Entscheidungen nicht allein auf das Modell stuetzen.",
     "Ein plausibel klingender Satz, eine Belegkennung, ein Link oder ein Hash in der Antwort ist kein Beweis einer Quellenpruefung. Nicht im Eingabetext belegte Aussagen am Original verifizieren.",
 )
@@ -94,6 +94,21 @@ STATUS = (
     "'Abgeschlossen' bedeutet, dass eine sichtbare Antwort empfangen und gespeichert wurde. Es bedeutet nicht, dass die gestellte Sachfrage richtig oder vollstaendig geloest wurde.",
     "Eine Antwort am Tokenlimit kann unvollstaendig sein. Fehlgeschlagene oder nach Serverabbruch noch als laufend angezeigte Aufgaben nicht blind wiederholen; zuerst den Verlauf pruefen. Ein neuer Auftrag kann erneut Kosten oder Kontingent verbrauchen.",
     "Einrichtung und Modellwahl allein starten keine Analyse. Weder beim Oeffnen der Seite noch beim Speichern der Einstellungen wird automatisch ein Steuerbericht an die KI gesendet.",
+    "Bei Datenkorrekturen bedeuten Vorgeschlagen und Vorschau bereit noch keine fachliche Datenbankaenderung. Erst Uebernommen bestaetigt das gemeinsame Speichern der Korrektur, der neu berechneten Auswertungen und des Freigabenachweises. Ein blockierter Export bleibt gesondert zu klaeren.",
+)
+CORRECTIONS = (
+    "Im KI-Bereich den Modus Datenkorrekturen waehlen. Datenart Transaktionen oder Preise, Jahr sowie optional Asset und Quelle festlegen; Daten laden. Die Jahresgrenzen entsprechen Europe/Berlin. Je Seite werden 20 Zeilen angezeigt, hoechstens 25 Zeilen duerfen in einem Auftrag ausgewaehlt werden.",
+    "Unter Datensatz und Freizugebender Datenkontext die genauen Inhalte pruefen: stabile ID, Feldwerte, Quelle und, soweit importiert, Dateiname, Datei-Hash, Rohzeilen-Hash und Zeilennummer. Nur angekreuzte Zeilen werden an das Modell gesendet. Dieser Kontext wird nicht automatisch anonymisiert und kann echte Konten oder Wallet-Adressen enthalten. Zugangsdaten und Rohdaten-Payloads werden nicht aus der Datenbank angehaengt.",
+    "Den Korrekturauftrag mit konkreten, selbst belegten Angaben formulieren. Beispiel: Beim ausgewaehlten Ereignis ist laut meinem Originalbeleg die Ereignisart [RICHTIGE ART] statt [ALTE ART] zu verwenden. Begruende den Vorschlag mit [BELEGSTELLE], ohne Mengen oder Preise zu erfinden. Platzhalter ersetzen. Bei Cloud-Versand Auftrag und ausgewaehlte Daten ausdruecklich freigeben; anschliessend KI-Vorschlaege erstellen. Dieselbe Auftragskennung wird nicht doppelt ausgefuehrt. Ein bewusst neu gestarteter Auftrag kann erneut Kosten verursachen.",
+    "Der Modelltext wird als strukturiertes JSON gegen erlaubte Felder, Datenzeilen, Datentypen und den zuvor gezeigten Stand validiert. Unvollstaendige oder ungueltige Antworten werden nicht als Aenderungen ausgefuehrt. Ein Vorschlag kann auch ueber Manuell vorbereiten ohne Modellaufruf erstellt werden.",
+    "Vorher, Vorschlag, Grund und Belegstelle je Position pruefen. Einzelpositionen abwaehlen oder Vorschlag bearbeiten. Eine Bearbeitung wird als neue Vorschlagsrevision gespeichert, nicht ueber das Original geschrieben. Belegstellen im Modellvorschlag muessen unabhaengig am Original kontrolliert werden.",
+    "Vorschau berechnen erstellt eine private lokale Datenbankkopie und verwendet die bestehenden Berechnungsfunktionen fuer Preise, Bestaende, Flows, FIFO und Derivate. Die Fachdaten der laufenden Datenbank bleiben dabei unveraendert. Anschaffungskosten, Erloese und Gewinne werden vorher/nachher angezeigt; Geldbetraege in der Anzeige haben zwei Dezimalstellen, Exakte Summen behaelt die volle Genauigkeit. Handelsvolumen ist dabei kein Einkommen oder ausgezahltes Geld.",
+    "Steuerzeilen-Aenderungen zeigen die stabilen Ereignis-/Anschaffungsreferenzen, Zeitpunkte, Haltefrist, Pool und Methode. Identische Lot-Aufteilungen werden zusammengefasst; technische Zufalls-IDs gelten nicht als fachliche Aenderung. Die Detaildifferenzen muessen mit den Kosten-, Erloes- und Gewinndifferenzen exakt uebereinstimmen. Andernfalls lautet der Fehler reconciliation_failed und es gibt keine Uebernahme.",
+    "Freigebende Person und Pruefvermerk eintragen. Originalbelege und Auswirkungen selbst geprueft sowie die verbindliche Datenbankuebernahme bestaetigen. Erst Freigegebene Aenderungen uebernehmen aktualisiert Zeilen und abgeleitete Auswertungen gemeinsam in einer Transaktion. Abweichende Datenbank-, Methoden- oder Konfigurationsstaende und eine manipulierte Vorschau sperren die Uebernahme; eine neue Pruefung ist erforderlich.",
+    "Aktualisierbar sind vorhandene Transaktionen: Ereignisart, Zeitpunkt mit expliziter Zeitzone, Asset/Menge, Quote- und Gebuehrenfelder sowie Account/Wallet-Zuordnung. Bei vorhandenen nicht abgeleiteten Preisen sind EUR-Preis und Konfidenz korrigierbar. Ursprung, Rohzeilen-ID und Transaktions-ID bleiben erhalten. Es gibt hier noch keine Erstellung/Loeschung von Transaktionen, keine Importprofil-Aenderung, keinen Connector-Aufruf, keine Einstellungen und keine beliebigen Tabellen-, SQL-, Server- oder Programmcodeaenderungen.",
+    "Freigegebene Korrekturen werden als separate Ueberlagerung gespeichert und bei erneuten Laeufen wieder angewendet. Fehlende oder widersprechende Zielzeilen fuehren zu einem Konflikt und blockieren den Export. Betroffene Quellen/Preise lassen sich nicht einfach entfernen; vorher ist die Ruecknahme zu pruefen. Neue oder geaenderte Quellstaende koennen eine erneute Zuordnung erfordern.",
+    "Audit-JSON herunterladen bewahrt vorherige Zeilen, Herkunft und Quellen-Hashes, Modell-/Konfigurationsstand, Auswahl, Berechnungsvorschau und Freigabe mit SHA256-Nachweis. Ruecknahme vorbereiten erzeugt einen neuen Gegenvorschlag; sie benoetigt wieder Vorschau und Freigabe und darf spaetere Aenderungen nicht ueberschreiben. Rohdateien und abgelegte Steuer-Snapshots werden nicht veraendert.",
+    "Die eingetragene Person ist eine Selbstauskunft: Die Anwendung hat keine globale Anmeldung oder kryptografische Identitaetspruefung. Ein Hash ist keine externe Signatur und keine WORM-Sicherung. Betreiber muessen Zugriffsschutz, Sicherungen und Aufbewahrung selbst absichern. Diese Funktion ersetzt keinen uneingeschraenkten Coding-Agenten wie einen persoenlich betreuten Terminalzugang.",
 )
 
 
@@ -109,8 +124,14 @@ def render() -> dict[str, bytes]:
     for paragraph in INTRO:
         html.append(f"<p>{escape(paragraph)}</p>")
         md.extend([paragraph, ""])
-    html.append("<p class='notice'><strong>Die KI-Antwort ist ein Vorschlag, kein Pruefnachweis.</strong> Import-, FIFO- und Steuerberechnungen werden nicht von der Antwort gesteuert. Massgeblich bleiben Originalbelege, nachvollziehbare Berechnungen und menschliche Pruefung.</p></section>")
-    md.extend(["> Die KI-Antwort ist ein Vorschlag, kein Pruefnachweis. Import-, FIFO- und Steuerberechnungen werden nicht von der Antwort gesteuert. Massgeblich bleiben Originalbelege, nachvollziehbare Berechnungen und menschliche Pruefung.", ""])
+    html.append("<p class='notice'><strong>Die KI-Antwort ist ein Vorschlag, kein Pruefnachweis.</strong> Fachliche Datenbankaenderungen benoetigen eine validierte Vorschau und menschliche Freigabe. Massgeblich bleiben Originalbelege, nachvollziehbare Berechnungen und menschliche Pruefung.</p></section>")
+    md.extend(["> Die KI-Antwort ist ein Vorschlag, kein Pruefnachweis. Fachliche Datenbankaenderungen benoetigen eine validierte Vorschau und menschliche Freigabe. Massgeblich bleiben Originalbelege, nachvollziehbare Berechnungen und menschliche Pruefung.", ""])
+    html.append("<section id='korrekturen'><h2>Datenkorrekturen pruefen und uebernehmen</h2><ol>")
+    md.extend(["## Datenkorrekturen pruefen und uebernehmen", ""])
+    for index, paragraph in enumerate(CORRECTIONS, 1):
+        html.append(f"<li>{escape(paragraph)}</li>")
+        md.extend([f"{index}. {paragraph}", ""])
+    html.append("</ol></section>")
     html.append("<nav aria-label='Inhalt'><ol><li><a href='#einsatz'>Konkrete Einsatzfaelle und Beispielaufgaben</a></li><li><a href='#typen'>Was die Aufgabentypen bedeuten</a></li><li><a href='#grenzen'>Wofuer die KI nicht geeignet ist</a></li><li><a href='#ablauf'>Ein sinnvoller Arbeitsablauf</a></li><li><a href='#datenschutz'>Daten, Modellwahl und Kosten</a></li><li><a href='#status'>Antworten und Status richtig lesen</a></li></ol></nav>")
     html.append("<section id='einsatz'><h2>Konkrete Einsatzfaelle</h2><p>Die folgenden Vorlagen enthalten keine echten Belege oder Transaktionen. Ohne passenden Eingabetext kann das Modell keine Aussagen ueber Ihren Bestand treffen.</p>")
     md.extend(["## Konkrete Einsatzfaelle", "", "Die folgenden Vorlagen enthalten keine echten Belege oder Transaktionen. Ohne passenden Eingabetext kann das Modell keine Aussagen ueber Ihren Bestand treffen.", ""])
@@ -141,8 +162,8 @@ def render() -> dict[str, bytes]:
             html.append(f"<li>{escape(paragraph)}</li>")
             md.extend([f"{str(index) + '.' if numbered else '-'} {paragraph}", ""])
         html.append(f"</{tag}></section>")
-    html.append("<footer><p>Weitere Nachweise und Funktionen: <a href='/benutzerleitfaden.html#pruefen'>Hinweise und Transfers pruefen</a>, <a href='/benutzerleitfaden.html#jahre'>Steuerjahre und Berichte</a>, <a href='/importformate.html'>Importformate und Spaltenlayouts</a>.</p><p>Diese Anleitung beschreibt den implementierten Textassistenten. Sie bestaetigt weder die Qualitaet eines bestimmten Modells noch die Richtigkeit einer einzelnen Antwort.</p></footer></main></body></html>\n")
-    md.extend(["Weitere Anleitung: `frontend/public/benutzerleitfaden.html#pruefen`, `#jahre` und `frontend/public/importformate.html`.", "", "Diese Anleitung beschreibt den implementierten Textassistenten. Sie bestaetigt weder die Qualitaet eines bestimmten Modells noch die Richtigkeit einer einzelnen Antwort.", ""])
+    html.append("<footer><p>Weitere Nachweise und Funktionen: <a href='/benutzerleitfaden.html#pruefen'>Hinweise und Transfers pruefen</a>, <a href='/benutzerleitfaden.html#jahre'>Steuerjahre und Berichte</a>, <a href='/importformate.html'>Importformate und Spaltenlayouts</a>.</p><p>Diese Anleitung beschreibt den implementierten KI-Arbeitsbereich. Sie bestaetigt weder die Qualitaet eines bestimmten Modells noch die Richtigkeit einer einzelnen Antwort.</p></footer></main></body></html>\n")
+    md.extend(["Weitere Anleitung: `frontend/public/benutzerleitfaden.html#pruefen`, `#jahre` und `frontend/public/importformate.html`.", "", "Diese Anleitung beschreibt den implementierten KI-Arbeitsbereich. Sie bestaetigt weder die Qualitaet eines bestimmten Modells noch die Richtigkeit einer einzelnen Antwort.", ""])
     return {"frontend/public/ki-einsatzleitfaden.html": "\n".join(html).encode(), "docs/KI_EINSATZLEITFADEN.md": "\n".join(md).encode()}
 
 

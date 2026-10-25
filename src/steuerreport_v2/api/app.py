@@ -59,6 +59,12 @@ from steuerreport_v2.contracts.ai import (
     LocalAiWalletFifoProvenanceStatus,
     LocalAiYearPackageQaStatus,
 )
+from steuerreport_v2.contracts.ai_changes import (
+    AiChangeApply, AiChangeDraft, AiChangeGenerate, AiChangePreview,
+    AiChangeRevert, AiChangeSet, AiDataContext, AiDataQuery,
+)
+from steuerreport_v2.domain.ai_changes import AiChangeError, AiChangeService
+from steuerreport_v2.db.ai_corrections import CorrectionConflict
 from steuerreport_v2.contracts.audit import AuditExport, ElsterPrepExport
 from steuerreport_v2.contracts.binance_earn import (
     BinanceAssetDividendPreview,
@@ -9082,6 +9088,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             if endpoint in required_refs:
                 files.append((path, factory(), endpoint))
 
+        for correction in AiChangeService(db).year_audits(year):
+            endpoint = f"/api/v1/ai/changes/{correction.change_set_id}/audit.json"
+            required_refs.add(endpoint)
+            files.append((f"01_Audit/ai-change-{correction.change_set_id}.json",
+                          correction.model_dump_json(indent=2).encode("utf-8"), endpoint))
+
         package_files = []
         for path, content, endpoint in files:
             package_files.append(
@@ -9496,6 +9508,67 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/ai/provider")
     def ai_provider_status() -> ApiResponse[AiProviderStatus]:
         return ApiResponse(data=AiProviderService(db).status())
+
+    @app.exception_handler(AiChangeError)
+    async def safe_ai_change_error(_request: Request, exc: AiChangeError):
+        code = str(exc)
+        status = 404 if code == "ai_change_not_found" else 409 if code in {
+            "ai_change_stale", "ai_change_context_stale", "ai_change_state_conflict",
+            "ai_change_preview_required", "ai_change_prepared_mismatch",
+        } else 400
+        return JSONResponse(status_code=status, content={"detail": code})
+
+    @app.exception_handler(CorrectionConflict)
+    async def safe_correction_conflict(_request: Request, exc: CorrectionConflict):
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.post("/api/v1/ai/data-context")
+    def ai_data_context(payload: AiDataQuery) -> ApiResponse[AiDataContext]:
+        return ApiResponse(data=AiChangeService(db).context(payload))
+
+    @app.get("/api/v1/ai/changes")
+    def ai_change_sets() -> ApiResponse[list[AiChangeSet]]:
+        return ApiResponse(data=AiChangeService(db).list())
+
+    @app.post("/api/v1/ai/changes")
+    def create_ai_change_set(payload: AiChangeDraft) -> ApiResponse[AiChangeSet]:
+        return ApiResponse(data=AiChangeService(db).create(payload))
+
+    @app.post("/api/v1/ai/changes/generate")
+    def generate_ai_change_set(payload: AiChangeGenerate) -> ApiResponse[AiChangeSet]:
+        return ApiResponse(data=AiChangeService(db).generate(payload))
+
+    @app.get("/api/v1/ai/changes/{identifier}")
+    def ai_change_set(identifier: str) -> ApiResponse[AiChangeSet]:
+        return ApiResponse(data=AiChangeService(db).get(identifier))
+
+    @app.post("/api/v1/ai/changes/{identifier}/revise")
+    def revise_ai_change_set(identifier: str, payload: AiChangeDraft) -> ApiResponse[AiChangeSet]:
+        return ApiResponse(data=AiChangeService(db).revise(identifier, payload))
+
+    @app.post("/api/v1/ai/changes/{identifier}/preview")
+    def preview_ai_change_set(identifier: str, payload: AiChangePreview) -> ApiResponse[AiChangeSet]:
+        return ApiResponse(data=AiChangeService(db).preview(identifier, payload))
+
+    @app.post("/api/v1/ai/changes/{identifier}/apply")
+    def apply_ai_change_set(identifier: str, payload: AiChangeApply) -> ApiResponse[AiChangeSet]:
+        result = AiChangeService(db).apply(identifier, payload)
+        clear_response_cache()
+        return ApiResponse(data=result)
+
+    @app.post("/api/v1/ai/changes/{identifier}/reject")
+    def reject_ai_change_set(identifier: str) -> ApiResponse[AiChangeSet]:
+        return ApiResponse(data=AiChangeService(db).reject(identifier))
+
+    @app.post("/api/v1/ai/changes/{identifier}/revert")
+    def revert_ai_change_set(identifier: str, payload: AiChangeRevert) -> ApiResponse[AiChangeSet]:
+        return ApiResponse(data=AiChangeService(db).revert(identifier, payload.reason))
+
+    @app.get("/api/v1/ai/changes/{identifier}/audit.json")
+    def ai_change_audit(identifier: str) -> Response:
+        item = AiChangeService(db).get(identifier)
+        return Response(content=item.model_dump_json(indent=2), media_type="application/json",
+                        headers={"Content-Disposition": 'attachment; filename="ai-change-audit.json"'})
 
     @app.put("/api/v1/ai/provider")
     def save_ai_provider(payload: AiProviderWrite) -> ApiResponse[AiProviderStatus]:

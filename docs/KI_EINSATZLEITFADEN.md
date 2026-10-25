@@ -1,14 +1,40 @@
-# KI: Einsatz und Grenzen (0.2.0rc10)
+# KI: Einsatz und Grenzen (0.2.0rc11)
 
 ## Kurz Gesagt
 
-Der KI-Assistent ist ein Textassistent fuer Erklaerungen, Prueffragen und Entwuerfe. Er hilft beim Verstehen und Strukturieren von Informationen, die Sie selbst im Aufgabentext bereitstellen. Er ist kein autonomer Steuerpruefer und keine zweite Berechnungsinstanz.
+Der KI-Bereich bietet Textaufgaben und Datenkorrekturen. Textaufgaben erklaeren und strukturieren bereitgestellte Informationen. Datenkorrekturen verbinden ausgewaehlte Datenbankzeilen mit einem kontrollierten Vorschlags-, Berechnungs- und Freigabeverfahren. Der Assistent ist kein autonomer Steuerpruefer und keine zweite Berechnungsinstanz.
 
-Er sieht ausschliesslich den eingegebenen Text und eine feste Systemanweisung. Er liest nicht automatisch die Datenbank, Dateien, Wallets oder Steuerberichte. Ein ausgewaehltes Steuerjahr auf einer anderen Seite wird nicht mitgesendet. Auch eine eingegebene URL wird nicht automatisch geoeffnet.
+Bei Textaufgaben sieht das Modell nur den eingegebenen Text und eine feste Systemanweisung. Im Modus Datenkorrekturen kommen ausschliesslich die zuvor angezeigten und ausgewaehlten Transaktions- oder Preiszeilen hinzu. Kein unbeschraenkter Datenbankzugriff: Dateien, Wallets, andere Steuerjahre und eingegebene URLs werden nicht automatisch gelesen.
 
 Jede Aufgabe steht fuer sich. Fruehere Aufgaben und Antworten werden nicht automatisch als Chatverlauf uebermittelt. Fuer eine Folgefrage muessen die benoetigten Angaben erneut im Aufgabentext stehen.
 
-> Die KI-Antwort ist ein Vorschlag, kein Pruefnachweis. Import-, FIFO- und Steuerberechnungen werden nicht von der Antwort gesteuert. Massgeblich bleiben Originalbelege, nachvollziehbare Berechnungen und menschliche Pruefung.
+> Die KI-Antwort ist ein Vorschlag, kein Pruefnachweis. Fachliche Datenbankaenderungen benoetigen eine validierte Vorschau und menschliche Freigabe. Massgeblich bleiben Originalbelege, nachvollziehbare Berechnungen und menschliche Pruefung.
+
+## Datenkorrekturen pruefen und uebernehmen
+
+1. Im KI-Bereich den Modus Datenkorrekturen waehlen. Datenart Transaktionen oder Preise, Jahr sowie optional Asset und Quelle festlegen; Daten laden. Die Jahresgrenzen entsprechen Europe/Berlin. Je Seite werden 20 Zeilen angezeigt, hoechstens 25 Zeilen duerfen in einem Auftrag ausgewaehlt werden.
+
+2. Unter Datensatz und Freizugebender Datenkontext die genauen Inhalte pruefen: stabile ID, Feldwerte, Quelle und, soweit importiert, Dateiname, Datei-Hash, Rohzeilen-Hash und Zeilennummer. Nur angekreuzte Zeilen werden an das Modell gesendet. Dieser Kontext wird nicht automatisch anonymisiert und kann echte Konten oder Wallet-Adressen enthalten. Zugangsdaten und Rohdaten-Payloads werden nicht aus der Datenbank angehaengt.
+
+3. Den Korrekturauftrag mit konkreten, selbst belegten Angaben formulieren. Beispiel: Beim ausgewaehlten Ereignis ist laut meinem Originalbeleg die Ereignisart [RICHTIGE ART] statt [ALTE ART] zu verwenden. Begruende den Vorschlag mit [BELEGSTELLE], ohne Mengen oder Preise zu erfinden. Platzhalter ersetzen. Bei Cloud-Versand Auftrag und ausgewaehlte Daten ausdruecklich freigeben; anschliessend KI-Vorschlaege erstellen. Dieselbe Auftragskennung wird nicht doppelt ausgefuehrt. Ein bewusst neu gestarteter Auftrag kann erneut Kosten verursachen.
+
+4. Der Modelltext wird als strukturiertes JSON gegen erlaubte Felder, Datenzeilen, Datentypen und den zuvor gezeigten Stand validiert. Unvollstaendige oder ungueltige Antworten werden nicht als Aenderungen ausgefuehrt. Ein Vorschlag kann auch ueber Manuell vorbereiten ohne Modellaufruf erstellt werden.
+
+5. Vorher, Vorschlag, Grund und Belegstelle je Position pruefen. Einzelpositionen abwaehlen oder Vorschlag bearbeiten. Eine Bearbeitung wird als neue Vorschlagsrevision gespeichert, nicht ueber das Original geschrieben. Belegstellen im Modellvorschlag muessen unabhaengig am Original kontrolliert werden.
+
+6. Vorschau berechnen erstellt eine private lokale Datenbankkopie und verwendet die bestehenden Berechnungsfunktionen fuer Preise, Bestaende, Flows, FIFO und Derivate. Die Fachdaten der laufenden Datenbank bleiben dabei unveraendert. Anschaffungskosten, Erloese und Gewinne werden vorher/nachher angezeigt; Geldbetraege in der Anzeige haben zwei Dezimalstellen, Exakte Summen behaelt die volle Genauigkeit. Handelsvolumen ist dabei kein Einkommen oder ausgezahltes Geld.
+
+7. Steuerzeilen-Aenderungen zeigen die stabilen Ereignis-/Anschaffungsreferenzen, Zeitpunkte, Haltefrist, Pool und Methode. Identische Lot-Aufteilungen werden zusammengefasst; technische Zufalls-IDs gelten nicht als fachliche Aenderung. Die Detaildifferenzen muessen mit den Kosten-, Erloes- und Gewinndifferenzen exakt uebereinstimmen. Andernfalls lautet der Fehler reconciliation_failed und es gibt keine Uebernahme.
+
+8. Freigebende Person und Pruefvermerk eintragen. Originalbelege und Auswirkungen selbst geprueft sowie die verbindliche Datenbankuebernahme bestaetigen. Erst Freigegebene Aenderungen uebernehmen aktualisiert Zeilen und abgeleitete Auswertungen gemeinsam in einer Transaktion. Abweichende Datenbank-, Methoden- oder Konfigurationsstaende und eine manipulierte Vorschau sperren die Uebernahme; eine neue Pruefung ist erforderlich.
+
+9. Aktualisierbar sind vorhandene Transaktionen: Ereignisart, Zeitpunkt mit expliziter Zeitzone, Asset/Menge, Quote- und Gebuehrenfelder sowie Account/Wallet-Zuordnung. Bei vorhandenen nicht abgeleiteten Preisen sind EUR-Preis und Konfidenz korrigierbar. Ursprung, Rohzeilen-ID und Transaktions-ID bleiben erhalten. Es gibt hier noch keine Erstellung/Loeschung von Transaktionen, keine Importprofil-Aenderung, keinen Connector-Aufruf, keine Einstellungen und keine beliebigen Tabellen-, SQL-, Server- oder Programmcodeaenderungen.
+
+10. Freigegebene Korrekturen werden als separate Ueberlagerung gespeichert und bei erneuten Laeufen wieder angewendet. Fehlende oder widersprechende Zielzeilen fuehren zu einem Konflikt und blockieren den Export. Betroffene Quellen/Preise lassen sich nicht einfach entfernen; vorher ist die Ruecknahme zu pruefen. Neue oder geaenderte Quellstaende koennen eine erneute Zuordnung erfordern.
+
+11. Audit-JSON herunterladen bewahrt vorherige Zeilen, Herkunft und Quellen-Hashes, Modell-/Konfigurationsstand, Auswahl, Berechnungsvorschau und Freigabe mit SHA256-Nachweis. Ruecknahme vorbereiten erzeugt einen neuen Gegenvorschlag; sie benoetigt wieder Vorschau und Freigabe und darf spaetere Aenderungen nicht ueberschreiben. Rohdateien und abgelegte Steuer-Snapshots werden nicht veraendert.
+
+12. Die eingetragene Person ist eine Selbstauskunft: Die Anwendung hat keine globale Anmeldung oder kryptografische Identitaetspruefung. Ein Hash ist keine externe Signatur und keine WORM-Sicherung. Betreiber muessen Zugriffsschutz, Sicherungen und Aufbewahrung selbst absichern. Diese Funktion ersetzt keinen uneingeschraenkten Coding-Agenten wie einen persoenlich betreuten Terminalzugang.
 
 ## Konkrete Einsatzfaelle
 
@@ -157,7 +183,7 @@ Diese Aufgabentypen sind derzeit nur organisatorische Kennzeichnungen im Verlauf
 
 - Keine Erfindung fehlender Anschaffungen, Preise, Wechselkurse oder Belege zulassen. Unbekannte Werte bleiben offen und muessen an Quellen geklaert werden.
 
-- Keine automatischen Buchungen, Loeschungen, Importaenderungen, FIFO-Lot-Aenderungen oder Steuerkorrekturen aus Modellantworten. Die KI hat keine SQL-, Datei- oder Korrekturwerkzeuge.
+- Keine ungeprueften Direktbuchungen oder Loeschungen durch Modellantworten. Die KI hat keine SQL-, Datei- oder Shell-Werkzeuge. Nur der ausdruecklich freigegebene Datenkorrekturpfad darf unterstuetzte Felder aktualisieren und anschliessend die fachlichen Auswertungen neu berechnen.
 
 - Keine steuerliche oder rechtliche Freigabe. Die Antwort beweist weder die Richtigkeit einer Erklaerung noch eine Pflicht, sie zu berichtigen. Solche Entscheidungen nicht allein auf das Modell stuetzen.
 
@@ -201,6 +227,8 @@ Diese Aufgabentypen sind derzeit nur organisatorische Kennzeichnungen im Verlauf
 
 - Einrichtung und Modellwahl allein starten keine Analyse. Weder beim Oeffnen der Seite noch beim Speichern der Einstellungen wird automatisch ein Steuerbericht an die KI gesendet.
 
+- Bei Datenkorrekturen bedeuten Vorgeschlagen und Vorschau bereit noch keine fachliche Datenbankaenderung. Erst Uebernommen bestaetigt das gemeinsame Speichern der Korrektur, der neu berechneten Auswertungen und des Freigabenachweises. Ein blockierter Export bleibt gesondert zu klaeren.
+
 Weitere Anleitung: `frontend/public/benutzerleitfaden.html#pruefen`, `#jahre` und `frontend/public/importformate.html`.
 
-Diese Anleitung beschreibt den implementierten Textassistenten. Sie bestaetigt weder die Qualitaet eines bestimmten Modells noch die Richtigkeit einer einzelnen Antwort.
+Diese Anleitung beschreibt den implementierten KI-Arbeitsbereich. Sie bestaetigt weder die Qualitaet eines bestimmten Modells noch die Richtigkeit einer einzelnen Antwort.

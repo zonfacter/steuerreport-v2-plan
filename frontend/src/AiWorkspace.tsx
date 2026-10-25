@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, Bot, Check, Download, LoaderCircle, Play, RefreshCw, Save, Trash2 } from "lucide-react";
 import { API_BASE } from "./api-base";
+import { AiChangesWorkspace } from "./AiChangesWorkspace";
 
 type Config = { provider: "local" | "openrouter" | "cloud"; base_url: string; model: string; max_tokens: number; probe_max_tokens: number; timeout_seconds: number; token_parameter: "max_tokens" | "max_completion_tokens"; thinking: "server_default" | "llamacpp_off" | "ollama_off" };
 type Settings = { config: Config; revision: string; local_enabled: boolean; external_enabled: boolean; api_key_present: boolean; api_key_readable: boolean; encrypted_secrets_available: boolean; configured: boolean; source: string };
@@ -82,6 +83,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
   const [tasks, setTasks] = useState<Task[]>([]);
   const [prompt, setPrompt] = useState("");
   const [taskType, setTaskType] = useState("review");
+  const [workMode, setWorkMode] = useState("text");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -180,6 +182,11 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
       </form>
       {probe && <div role="status" className="aiProbe"><strong>Verbindung erfolgreich: {probe.model}</strong><p>{probe.answer}</p>{probe.truncated && <span>Testantwort am Tokenlimit beendet.</span>}</div>}
       {!configurationOnly && <>
+        <div className="buttonRow" role="tablist" aria-label="KI-Arbeitsmodus">
+          <button type="button" role="tab" aria-selected={workMode === "text"} onClick={() => setWorkMode("text")}><Bot size={16} /> Textaufgaben</button>
+          <button type="button" role="tab" aria-selected={workMode === "changes"} onClick={() => setWorkMode("changes")}><Check size={16} /> Datenkorrekturen</button>
+        </div>
+        {workMode === "changes" ? <AiChangesWorkspace providerRevision={saved.revision} connectionAllowed={connectionAllowed && saved.configured} cloud={cloud} /> : <>
         <form className="aiTaskComposer" onSubmit={(event) => { event.preventDefault(); void act(async () => {
           const task = await api<Task>("/tasks", "POST", { task_type: taskType, prompt, allow_external: cloud && confirmed });
           setTasks(await api<Task[]>("/tasks")); await execute(task, cloud && confirmed);
@@ -205,6 +212,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
             {result.truncated && <p role="status">Antwort am Tokenlimit beendet; unvollstaendig.</p>}
           </article>;
         })}</div>
+        </>}
       </>}
     </>}
   </section>;

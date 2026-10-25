@@ -6601,6 +6601,19 @@ th {
 .userGuideLink { display: flex; align-items: center; gap: 8px; padding: 12px 16px; color: inherit; border-top: 1px solid var(--border, #d6ded9); text-decoration: none; }
 .fileImportWizard { min-width: 0; display: grid; gap: 18px; }
 .aiWorkspace { min-width: 0; display: grid; gap: 18px; }
+.aiChanges { min-width: 0; display: grid; gap: 18px; border-top: 1px solid #c8d4cc; padding-top: 18px; }
+.aiChangesTable { min-width: 0; overflow-x: auto; }
+.aiChangesTable table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+.aiChangesTable th, .aiChangesTable td { text-align: left; vertical-align: top; border-bottom: 1px solid #c8d4cc; padding: 10px 8px; overflow-wrap: anywhere; white-space: normal; overflow: visible; text-overflow: clip; }
+.aiChangesTable th:first-child, .aiChangesTable td:first-child { width: 80px; }
+.aiChangesTable small, .aiChanges small { overflow-wrap: anywhere; }
+.aiChangesEffects { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+.aiEffectTable { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.aiEffectTable th, .aiEffectTable td { vertical-align: top; text-align: left; padding: 8px 4px; overflow-wrap: anywhere; white-space: normal; overflow: visible; text-overflow: clip; border-bottom: 1px solid #c8d4cc; }
+.aiPatchField { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.aiPatchField > label:first-child { flex: 1; }
+.aiWorkspace [role="tab"][aria-selected="true"] { background: #234c3b; color: #fff; }
+@media (max-width: 600px) { .aiChangesEffects { grid-template-columns: minmax(0,1fr); } .aiChangesTable th:first-child, .aiChangesTable td:first-child { width: 52px; } .aiChanges .panelToolbar { flex-wrap: wrap; gap: 8px; } }
 .aiWorkspace h2 { margin: 0; font-size: 20px; }
 .aiWorkspace h3 { margin: 0 0 12px; font-size: 17px; }
 .aiWorkspace form, .aiWorkspace fieldset { min-width: 0; display: grid; gap: 16px; }

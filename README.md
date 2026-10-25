@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc10. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc11. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc10
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc11
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -119,8 +119,10 @@ werden dadurch nicht geloescht oder umgangen.
 
 Der Assistent hilft, **selbst eingegebene** Berichtsauszuege und Hinweise zu
 erklaeren, Importspalten vorzuschlagen, moegliche Auffaelligkeiten in kleinen
-Textausschnitten zu besprechen und Pruefnotizen zu entwerfen. Er liest keine
-Datenbank, Wallet, Datei oder URL automatisch und hat keine Korrekturwerkzeuge.
+Textausschnitten zu besprechen und Pruefnotizen zu entwerfen. Zusaetzlich liest
+der Modus **Datenkorrekturen** ausgewaehlte Transaktions- und Preiszeilen und
+erstellt validierte Vorschlaege fuer echte Datenbankaenderungen. Dateien,
+Wallets, URLs oder beliebige Tabellen werden nicht selbststaendig abgefragt.
 Jede Aufgabe ist unabhaengig; der Verlauf wird nicht als Chatkontext mitgesendet.
 Die vier Aufgabentypen sind Kennzeichnungen, keine getrennten Pruefengines.
 Es gibt keine automatische Anonymisierung des eingegebenen Texts.
@@ -130,8 +132,13 @@ Einsatzfaelle, Eingaben, erwartbare Hilfen, notwendige Gegenpruefungen und
 Beispielaufgaben. Er ist im Assistenten als Leitfaden und separat als
 [HTML](frontend/public/ki-einsatzleitfaden.html) / [PDF](frontend/public/ki-einsatzleitfaden.pdf)
 verfuegbar. Eine Modellantwort ist kein Beleg, kein exakter Summenabgleich
-und keine steuerliche Freigabe. Die fachliche Berechnung wird dadurch nicht
-veraendert.
+und keine steuerliche Freigabe. Datenkorrekturen benoetigen Einzelpruefung,
+eine isoliert berechnete Vorschau und ausdrueckliche menschliche Freigabe.
+Erst danach werden Datensaetze und neu berechnete Auswertungen atomar gespeichert.
+Audit-JSON, Quellen-Hashes, Schutz vor veralteten Staenden, Wiederanwendung
+bei neuen Laeufen und eine getrennt freizugebende Ruecknahme sind enthalten.
+Unterstuetzt sind vorhandene Ereignisse und nicht abgeleitete Preise, nicht
+beliebige SQL-, Datei-, Importprofil- oder Serveraenderungen.
 
 ### Einrichtung
 
@@ -147,8 +154,9 @@ Cloud-Zugriffe bleiben standardmaessig deaktiviert. Modelle werden nur per
 ausdruecklicher Aktion abgefragt. `Verbindung testen` sendet einen neutralen
 Testtext mit begrenzter Antwortlaenge; auch dieser kann beim Anbieter Kosten
 ausloesen. Eine echte Cloud-Aufgabe braucht zusaetzlich eine ausdrueckliche
-Textfreigabe. Die Ausfuehrung nutzt ausschliesslich den eingegebenen Text,
-keinen automatischen Zugriff auf Datenbank, Dateien oder Korrekturwerkzeuge.
+Textfreigabe. Textaufgaben nutzen ausschliesslich den eingegebenen Text.
+Datenkorrekturen senden zusaetzlich die zuvor angezeigten und ausgewaehlten
+Datenzeilen; diese koennen echte Konten und Wallet-Adressen enthalten.
 Ergebnisse sind Review-Hinweise, keine steuerlichen Entscheidungen.
 
 Die Modellliste besitzt eine sichtbare Auswahl und Namens-/ID-Suche.

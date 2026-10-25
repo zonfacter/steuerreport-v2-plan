@@ -93,6 +93,20 @@ class DuckDbStore:
             self._connection_lock.release()
 
     def ensure_schema(self, con: duckdb.DuckDBPyConnection) -> None:
+        con.execute("""create table if not exists ai_change_sets (
+            change_set_id varchar primary key, status varchar not null,
+            data_json varchar not null, created_at timestamp not null
+        )""")
+        con.execute("""create table if not exists ai_change_generations (
+            request_id varchar primary key, request_sha256 varchar not null,
+            status varchar not null, result_id varchar, error_code varchar,
+            created_at timestamp not null
+        )""")
+        con.execute("""create table if not exists ai_correction_overrides (
+            kind varchar not null, target_id varchar not null,
+            original_json varchar not null, corrected_json varchar not null,
+            change_set_id varchar not null, primary key (kind, target_id)
+        )""")
         self._drop_table_if_missing_columns(
             con,
             "tax_lots",
@@ -1018,6 +1032,13 @@ class DuckDbStore:
             ).fetchone()
             if existing is None:
                 return False
+            protected = con.execute("""select 1 from ai_correction_overrides o
+                join canonical_events e on o.kind='event' and o.target_id=e.event_id
+                join raw_objects r on r.raw_object_id=e.raw_object_id
+                where r.batch_id=? and o.original_json <> o.corrected_json limit 1""", [batch_id]).fetchone()
+            if protected:
+                from steuerreport_v2.db.ai_corrections import CorrectionConflict
+                raise CorrectionConflict("ai_correction_target_protected")
             con.execute(
                 """
                 delete from balance_ledger
@@ -1059,6 +1080,12 @@ class DuckDbStore:
 
     def delete_price_points_by_source(self, source: str) -> int:
         with self.connect() as con:
+            protected = con.execute("""select 1 from ai_correction_overrides o join price_ledger p
+                on o.kind='price' and o.target_id=p.price_id where p.source=?
+                and o.original_json <> o.corrected_json limit 1""", [source]).fetchone()
+            if protected:
+                from steuerreport_v2.db.ai_corrections import CorrectionConflict
+                raise CorrectionConflict("ai_correction_target_protected")
             count = con.execute(
                 "select count(*) from price_ledger where source = ?",
                 [source],
@@ -1068,6 +1095,9 @@ class DuckDbStore:
 
     def delete_price_point(self, price_id: str) -> bool:
         with self.connect() as con:
+            if con.execute("select 1 from ai_correction_overrides where kind='price' and target_id=? and original_json <> corrected_json", [price_id]).fetchone():
+                from steuerreport_v2.db.ai_corrections import CorrectionConflict
+                raise CorrectionConflict("ai_correction_target_protected")
             existing = con.execute(
                 "select 1 from price_ledger where price_id = ?",
                 [price_id],
@@ -1584,8 +1614,10 @@ class DuckDbStore:
                 """
             )
             con.unregister("canonical_events_to_insert")
+            from steuerreport_v2.db.ai_corrections import replay
+            corrected_records = replay(con, event_ids=[row[0] for row in rows])
         return [
-            CanonicalEvent(
+            CanonicalEvent.model_validate(corrected_records[row[0]]) if row[0] in corrected_records else CanonicalEvent(
                 event_id=row[0],
                 source=row[1],
                 source_ref=row[2],
