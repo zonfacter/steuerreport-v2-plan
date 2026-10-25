@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc4. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc5. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc4
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc5
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -83,6 +83,24 @@ Nur der Publish-Job erhaelt `packages: write`. Der Pull-Pruefjob hat lediglich
 Leserecht. Beide verwenden den kurzlebigen `GITHUB_TOKEN`, keine persoenlichen
 Registry-Secrets im Quellstand oder Image. Die Nachweise stehen als
 `ghcr-publication-*` und `ghcr-pull-verification-*` bei den Workflow-Artefakten.
+
+## Bedienung Und Import
+
+Der Benutzerleitfaden ist in der Navigation dauerhaft verlinkt und wird als
+[HTML](frontend/public/benutzerleitfaden.html) und
+[PDF](frontend/public/benutzerleitfaden.pdf) mitgeliefert. Er beschreibt
+Einrichtung, Originalexporte, Importfreigabe, Belegspuren, Jahresberichte und
+Sicherungen einschliesslich Grenzen der vorhandenen API-Historienpfade.
+
+Unter `Daten importieren > Dateiimport` koennen mehrere CSV-/Excel-Dateien
+mit Quelle, Blattwahl, Vorschau, Originaldatei-Hash und Dublettenpruefung
+bearbeitet werden. Erst eine ausdrueckliche Freigabe schreibt die Daten und
+startet die vorhandene Pipeline. Der Importverlauf und JSON-Belegspuren
+stehen ohne Expertenmodus bereit. Die CSV-Vorlage enthaelt nur Kopfzeilen.
+
+Technische Versionsvergleiche und Legacy-Cache-Aktionen sind keine
+Benutzernavigation mehr. Bestehende Referenzdaten und fachliche Exportgates
+werden dadurch nicht geloescht oder umgangen.
 
 ## Eigenstaendiger Betrieb
 

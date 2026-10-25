@@ -56,6 +56,8 @@ class FileRawImporter:
             sample_rows=sample_rows,
             can_import=len(missing) == 0 and len(rows) > 0,
             duplicate_batch_id=duplicate.batch_id if duplicate is not None else None,
+            file_sha256=self._file_hash(content, None),
+            import_fingerprint=file_hash,
         )
 
     def import_base64(
@@ -89,6 +91,14 @@ class FileRawImporter:
         filename: str,
         content: bytes,
         sheet_name: str | None = None,
+    ) -> tuple[list[dict[str, str | None]], list[str], str, str | None, list[str]]:
+        try:
+            return self._parse_rows_from_bytes(filename, content, sheet_name)
+        except Exception:
+            raise ValueError("Datei konnte nicht gelesen werden. UTF-8-CSV oder eine gueltige Excel-Datei und das Tabellenblatt pruefen.") from None
+
+    def _parse_rows_from_bytes(
+        self, filename: str, content: bytes, sheet_name: str | None,
     ) -> tuple[list[dict[str, str | None]], list[str], str, str | None, list[str]]:
         suffix = Path(filename).suffix.lower()
         if suffix in {".xlsx", ".xls"}:

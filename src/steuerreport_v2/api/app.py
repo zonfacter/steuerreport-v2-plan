@@ -1696,7 +1696,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def preview_import_assistant(
         payload: ImportAssistantRequest,
     ) -> ApiResponse[ImportAssistantPreview]:
-        preview = ImportAssistantService(db).preview(payload)
+        try:
+            preview = ImportAssistantService(db).preview(payload)
+        except ValueError:
+            return ApiResponse(status="error", errors=[ApiMessage(
+                code="import_assistant_invalid_file",
+                message="Datei nicht lesbar. CSV-Zeichensatz, Excel-Format und Tabellenblatt pruefen.",
+                field="content",
+            )])
         return ApiResponse(
             status="ok" if preview.can_execute else "warning",
             data=preview,

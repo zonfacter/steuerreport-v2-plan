@@ -19,6 +19,7 @@ CASE_MODULES = {
     "property_documents",
 }
 ROOT_FILES = {".env.example", ".gitignore", ".dockerignore", ".gitleaks.toml", "Dockerfile", "compose.yml", "compose.ghcr.yml", "requirements-runtime.lock", "AGENTS.md", "README.md", "pyproject.toml"}
+PUBLIC_DOCUMENTS = {"frontend/public/benutzerleitfaden.html", "frontend/public/benutzerleitfaden.pdf", "frontend/public/import-vorlage.csv"}
 DOCUMENTS = {
     "docs/007_MOBILE_APP_API_INTEGRATION_2026-08-26.md",
     "docs/API_CONTRACTS_V2.md",
@@ -54,6 +55,8 @@ def software_path(name: str) -> bool:
         return False
     if any(part in IGNORED_PARTS or part.endswith(".egg-info") for part in path.parts):
         return False
+    if name in PUBLIC_DOCUMENTS:
+        return True
     if path.suffix.lower() in {".db", ".duckdb", ".wal", ".sqlite", ".sqlite3", ".msg", ".eml", ".pdf", ".xlsx", ".csv", ".key", ".pem", ".pyc"}:
         return False
     if name in ROOT_FILES or name in DOCUMENTS:

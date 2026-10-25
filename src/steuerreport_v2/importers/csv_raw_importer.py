@@ -100,6 +100,8 @@ class CsvRawImporter:
             sample_rows=sample_rows,
             can_import=len(missing) == 0 and row_count > 0,
             duplicate_batch_id=duplicate.batch_id if duplicate is not None else None,
+            file_sha256=file_hash,
+            import_fingerprint=file_hash,
         )
 
     def hash_text(self, content: str) -> str:

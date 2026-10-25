@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { InstallationSettings } from "./InstallationSettings";
+import { FileImportWizard } from "./FileImportWizard";
 import {
   AlertTriangle,
   Archive,
   ArrowRight,
   Bot,
+  BookOpen,
   CalendarDays,
   Database,
   Check,
@@ -3092,8 +3094,9 @@ const navItems: Array<{
   icon: React.ReactNode;
 }> = [
   { id: "dashboard", label: "Uebersicht", description: "Gesamtstatus, naechster Schritt und Live-Datenstand", group: "workflow", icon: <LayoutDashboard size={18} /> },
+  { id: "admin", label: "Einrichtung", description: "Konten, Zugangsdaten und Einstellungen", group: "workflow", icon: <Settings size={18} /> },
   { id: "sources", label: "Quellen & Wallets", description: "Eigene Quellen, Live-Status und Ledger-Abgleich", group: "workflow", icon: <WalletCards size={18} /> },
-  { id: "import", label: "Daten importieren", description: "Daten einlesen, Preflights und Importabdeckung", group: "workflow", icon: <Upload size={18} /> },
+  { id: "import", label: "Daten importieren", description: "Dateien, Historie und Importverlauf", group: "workflow", icon: <Upload size={18} /> },
   { id: "flows", label: "Transaktionen", description: "Geldfluesse, Transferkandidaten und Netto-Fluesse", group: "workflow", icon: <GitBranch size={18} /> },
   { id: "review", label: "Hinweise pruefen", description: "Offene Fachentscheidungen und Belegspuren", group: "workflow", icon: <ClipboardCheck size={18} /> },
   { id: "tax", label: "Steuerjahre", description: "Eingabehilfe, BMF-Status und Jahresbelege", group: "workflow", icon: <ReceiptText size={18} /> },
@@ -3101,8 +3104,6 @@ const navItems: Array<{
   { id: "portfolio", label: "Portfolio & Haltefristen", description: "Bestand, Preisdeckung und steuerfreie Positionen", group: "evidence", icon: <WalletCards size={18} /> },
   { id: "stichtage", label: "Stichtagswerte", description: "Historische Bestands- und Wertansicht", group: "evidence", icon: <CalendarDays size={18} /> },
   { id: "zugewinn", label: "Zugewinndossier", description: "Stichtagswerte, Erbgeld und familienrechtliche Belege", group: "evidence", icon: <Scale size={18} /> },
-  { id: "parity", label: "V1/V2 Pruefung", description: "Paritaet, Referenzen und Diagnose", group: "expert", icon: <Scale size={18} /> },
-  { id: "admin", label: "Administration", description: "Settings, Credentials und Systemstatus", group: "expert", icon: <Settings size={18} /> },
   { id: "ai", label: "Lokale KI", description: "Jahrespaket-QA und KI-Aufgaben", group: "expert", icon: <Bot size={18} /> }
 ];
 
@@ -5463,6 +5464,7 @@ function App() {
             </div>
           ))}
         </nav>
+        <a className="userGuideLink" href="/benutzerleitfaden.html" target="_blank" rel="noreferrer"><BookOpen size={18} /> Benutzerleitfaden</a>
       </aside>
       <section className="workspace">
         <header className="topbar">
@@ -5483,8 +5485,8 @@ function App() {
             </div>
           </div>
           <div className="topbarStatus">
-            <span className={`statusPill ${readinessTone(snapshot.productReadiness?.overall_status ?? "warning")}`}>
-              {snapshot.productReadiness ? readinessLabel(snapshot.productReadiness.overall_status) : "Status laedt"}
+            <span className={`statusPill ${snapshot.productReadiness ? readinessTone(snapshot.productReadiness.overall_status) : snapshot.health ? "ok" : "warning"}`}>
+              {snapshot.productReadiness ? readinessLabel(snapshot.productReadiness.overall_status) : snapshot.health ? "Verbunden" : "Verbinde"}
             </span>
             {snapshot.productReadiness?.next_action ? <em>{snapshot.productReadiness.next_action}</em> : null}
           </div>
@@ -5543,6 +5545,7 @@ function App() {
           serviceRouteEvidenceLoading={serviceRouteEvidenceLoading}
           onRebuildDerivatives={rebuildDerivatives}
           onImportCsv={importCsv}
+          onImportsChanged={refresh}
           onDeleteImportBatch={deleteImportBatch}
           onRunImportBatch={runImportBatch}
           onAddPrice={addPrice}
@@ -5738,6 +5741,7 @@ function Content({
   serviceRouteEvidenceLoading,
   onRebuildDerivatives,
   onImportCsv,
+  onImportsChanged,
   onDeleteImportBatch,
   onRunImportBatch,
   onAddPrice,
@@ -5860,6 +5864,7 @@ function Content({
     contentBase64?: string | null,
     sheetName?: string | null
   ) => void;
+  onImportsChanged: () => void | Promise<void>;
   onDeleteImportBatch: (batchId: string) => void;
   onRunImportBatch: (batchId: string) => void;
   onAddPrice: (asset: string, priceEur: string, pricedAt: string, source: string, confidence: string) => void;
@@ -5982,16 +5987,21 @@ function Content({
       <Stack>
         <div className="taxViewSwitch" role="tablist" aria-label="Import Ansicht">
           <button type="button" className={importViewMode === "assistant" ? "active" : ""} onClick={() => onImportViewModeChange("assistant")}>
-            Assistent
+            Dateiimport
           </button>
           <button type="button" className={importViewMode === "preflight" ? "active" : ""} onClick={() => onImportViewModeChange("preflight")}>
-            Preflights
+            Quellenpruefung
           </button>
           <button type="button" className={importViewMode === "expert" ? "active" : ""} onClick={() => onImportViewModeChange("expert")}>
-            Expertenmodus
+            Erweiterte Importe
           </button>
         </div>
-        <ImportForm onImportCsv={onImportCsv} />
+        {importViewMode === "assistant" ? <FileImportWizard onComplete={onImportsChanged} /> : <ImportForm onImportCsv={onImportCsv} />}
+        <TablePanel title="Importverlauf" rows={(snapshot.imports ?? []).map((row) => ({
+          Datei: row.filename, Quelle: row.source,
+          Status: ({ created: "Angelegt", loaded: "Eingelesen", normalized: "Verarbeitet", failed: "Fehlgeschlagen" } as Record<string, string>)[String(row.status)] ?? row.status,
+          Zeilen: row.raw_object_count, Zeitpunkt: formatDateTime(String(row.created_at ?? "")), "Beleg-ID": row.batch_id,
+        }))} rowActions={[{ label: "Belegspur herunterladen", icon: <FileDown size={16} />, onClick: (row) => onDownload(`/api/v1/import/batches/${encodeURIComponent(String(row["Beleg-ID"]))}/trace.json`) }]} />
         {importViewMode !== "assistant" ? (
           <>
             <ImportCoveragePanel coverage={snapshot.importCoverage} />
@@ -6107,7 +6117,6 @@ function Content({
           <>
             <PriceForm onAddPrice={onAddPrice} />
             <PriceCsvImportForm onImportPriceCsv={onImportPriceCsv} />
-            <V1FxCacheImportForm onImportV1FxCache={onImportV1FxCache} />
             <ExternalPriceBackfillForm onBackfillExternalPrices={onBackfillExternalPrices} />
             <CurrentPortfolioPriceBackfillForm onBackfillCurrentPortfolioPrices={onBackfillCurrentPortfolioPrices} />
             <PriceCoveragePanel
@@ -12560,16 +12569,7 @@ function ParityBlockerFocus({
   onDownload: (path: string) => void;
 }) {
   if (rows.length === 0) {
-    return (
-      <section className="parityBlockerFocus ok">
-        <div>
-          <span className="heroKicker">Parity-Blocker</span>
-          <h3>Keine blockierende Parity-Gruppe offen</h3>
-          <p>Der Legacy-Vergleich verhindert den Export aktuell nicht.</p>
-        </div>
-        <span className="statusPill ok">frei</span>
-      </section>
-    );
+    return null;
   }
   const primary = rows[0];
   const scope = String(primary.scope ?? "");
@@ -12578,11 +12578,10 @@ function ParityBlockerFocus({
     <section className="parityBlockerFocus blocked">
       <div className="parityBlockerHeader">
         <div>
-          <span className="heroKicker">Offener Parity-Blocker</span>
+          <span className="heroKicker">Offene Referenzabweichung</span>
           <h3>{String(primary.year ?? "-")} · {String(primary.asset ?? "-")} · {String(primary.status ?? "-")}</h3>
           <p>
-            Diese Legacy-Vergleichsgruppe blockiert die Export-Readiness, obwohl das Review-Gate frei ist.
-            Fachlich muss entschieden werden, ob V1 falsch war, V2 Daten fehlen, manuelle Evidenz noetig ist oder die Differenz akzeptiert wird.
+            Die aktuelle Auswertung weicht von hinterlegten Referenzwerten ab. Datengrundlage und Belege muessen vor der Freigabe geprueft werden.
           </p>
         </div>
         <span className="statusPill blocked">{rows.length} offen</span>
@@ -12592,8 +12591,8 @@ function ParityBlockerFocus({
         <StatusRow label="Entscheidung" value={String(primary.decision_status ?? "unreviewed")} />
         <StatusRow label="Metriken" value={metrics} />
         <StatusRow label="Issue Count" value={String(primary.issue_count ?? 0)} />
-        <StatusRow label="V1 Summe" value={`${formatCurrency(primary.v1_total_eur)} EUR`} />
-        <StatusRow label="V2 Summe" value={`${formatCurrency(primary.v2_total_eur)} EUR`} />
+        <StatusRow label="Referenzwert" value={`${formatCurrency(primary.v1_total_eur)} EUR`} />
+        <StatusRow label="Aktuelle Auswertung" value={`${formatCurrency(primary.v2_total_eur)} EUR`} />
         <StatusRow label="Absolute Differenz" value={`${formatCurrency(primary.absolute_difference_eur)} EUR`} />
         <StatusRow label="Max. Differenz" value={`${formatCurrency(primary.max_absolute_difference)} EUR`} />
       </div>
@@ -12810,18 +12809,18 @@ function ReportCenterPanel({
       detail: `${reviewGateOpenIssues} offene Review-Issue(s), davon ${reviewGateBlockingIssues} blockierend. Das ist die fachliche Datenpruefung.`
     },
     {
-      label: "V1/V2-Parity",
+      label: "Referenzabgleich",
       status: parityReleaseReady ? "releasebereit" : "blockiert",
       tone: parityReleaseReady ? "ok" : "blocked",
-      detail: `${parityBlockingGroups} blockierende Parity-Gruppe(n). Parity ist Teil der technischen Export-Freigabe.`
+      detail: `${parityBlockingGroups} offene Abweichung(en) zu hinterlegten Referenzwerten.`
     },
     {
       label: "Export-Readiness",
       status: exportAllowed ? "freigegeben" : "blockiert",
       tone: exportAllowed ? "ok" : "blocked",
       detail: exportAllowed
-        ? "Review-Gate und Parity erlauben die finale Exporterzeugung."
-        : "Export bleibt blockiert, solange Review-Gate oder Parity nicht frei sind."
+        ? "Fachpruefung und Referenzabgleich sind freigegeben."
+        : "Fachpruefung oder Referenzabgleich sind noch nicht abgeschlossen."
     },
     {
       label: "Belege",
@@ -19481,12 +19480,11 @@ function ImportForm({
     sheetName?: string | null
   ) => void;
 }) {
-  type ImportMode = "file" | "api" | "onchain" | "v1_cache";
+  type ImportMode = "file" | "api" | "onchain";
   const importModeOptions: Array<{ id: ImportMode; label: string; icon: React.ReactNode }> = [
     { id: "file", label: "Datei", icon: <Upload size={16} /> },
     { id: "api", label: "API", icon: <Database size={16} /> },
-    { id: "onchain", label: "Onchain", icon: <GitBranch size={16} /> },
-    { id: "v1_cache", label: "V1 Cache", icon: <PackageCheck size={16} /> }
+    { id: "onchain", label: "Onchain", icon: <GitBranch size={16} /> }
   ];
   const sourceOptionsByMode: Record<ImportMode, Array<{ value: string; label: string }>> = {
     file: [
@@ -19507,16 +19505,12 @@ function ImportForm({
       { value: "solana_wallet", label: "Solana Wallet" },
       { value: "jup_wallet", label: "Jup Wallet" },
       { value: "helium", label: "Helium Legacy" }
-    ],
-    v1_cache: [
-      { value: "v1_fx_cache", label: "V1 FX-Cache" }
     ]
   };
   const defaultSourceByMode: Record<ImportMode, string> = {
     file: "manual-csv",
     api: "binance",
-    onchain: "solana_wallet",
-    v1_cache: "v1_fx_cache"
+    onchain: "solana_wallet"
   };
   const [importMode, setImportMode] = useState<ImportMode>("file");
   const [source, setSource] = useState("manual-csv");
@@ -19530,7 +19524,7 @@ function ImportForm({
   const [preflightResult, setPreflightResult] = useState<Record<string, unknown> | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [preflightError, setPreflightError] = useState<string | null>(null);
-  const [harvestPath, setHarvestPath] = useState("var/binance_simple_earn_history/20260531T105555Z");
+  const [harvestPath, setHarvestPath] = useState("");
   const [harvestResult, setHarvestResult] = useState<Record<string, unknown> | null>(null);
   const [harvestLoading, setHarvestLoading] = useState(false);
   const [harvestError, setHarvestError] = useState<string | null>(null);

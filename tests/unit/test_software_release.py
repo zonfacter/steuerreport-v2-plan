@@ -31,6 +31,7 @@ def test_release_excludes_case_work_runtime_and_originals():
         "docs/openapi/steuerreport-v2-openapi.json", ".env.example",
         "configs/source_registry.example.json",
         "configs/binance_small_assets_price_evidence_20260710.json",
+        "frontend/public/benutzerleitfaden.pdf", "frontend/public/import-vorlage.csv",
     ):
         assert builder.software_path(name), name
 

@@ -8,7 +8,7 @@ on:
       release_tag:
         description: "Vorhandener Release-Tag (z.B. v0.2.0rc3)"
         required: true
-        default: v0.2.0rc4
+        default: v0.2.0rc5
         type: string
 
 permissions:

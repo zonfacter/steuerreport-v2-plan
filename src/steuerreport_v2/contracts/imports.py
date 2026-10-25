@@ -53,6 +53,8 @@ class CsvImportPreview(BaseModel):
     sample_rows: list[dict[str, str | None]]
     can_import: bool
     duplicate_batch_id: str | None = None
+    file_sha256: str | None = None
+    import_fingerprint: str | None = None
 
 
 ImportAssistantMode = Literal["file", "api", "onchain", "v1_cache"]

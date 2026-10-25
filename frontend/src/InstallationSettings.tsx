@@ -70,7 +70,8 @@ export function InstallationSettings() {
   }, [filename]);
 
   const dirty = settings?.fields.some((field) => field.editable && values[field.key] !== field.value) ?? false;
-  const groups = [...new Set(settings?.fields.map((field) => field.group) ?? [])];
+  const visibleFields = settings?.fields.filter((field) => !["v1_fx_db_file", "v1_connector_base_url"].includes(field.key)) ?? [];
+  const groups = [...new Set(visibleFields.map((field) => field.group))];
   return (
     <section className="installationSettings" aria-label="Installation und Konten">
       <div className="panelToolbar">
@@ -94,7 +95,7 @@ export function InstallationSettings() {
       }}>
         {groups.map((group) => <fieldset key={group} disabled={busy || !settings?.profile_writable}>
           <legend>{group}</legend>
-          <div className="formGrid">{settings?.fields.filter((field) => field.group === group).map((field) => <label key={field.key}>
+          <div className="formGrid">{visibleFields.filter((field) => field.group === group).map((field) => <label key={field.key}>
             {field.label}{!field.editable && <small>Durch Umgebung verwaltet</small>}
             <input type={field.kind === "url" ? "url" : "text"} value={values[field.key] ?? ""} disabled={!field.editable}
               autoComplete="off" spellCheck={false} maxLength={2048} onChange={(event) => setValues({ ...values, [field.key]: event.target.value })} />
