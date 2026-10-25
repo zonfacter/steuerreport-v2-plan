@@ -216,5 +216,3 @@ def test_candidate_events_with_a_single_configured_receiver(tmp_path, monkeypatc
     store = DuckDbStore(tmp_path / "single-receiver.duckdb")
     monkeypatch.setattr(MoonpayReceiptService, "KNOWN_RECEIVER_WALLETS", frozenset({"fixture-receiver"}))
     assert MoonpayReceiptService(store)._candidate_events() == ([], [])
-
-
