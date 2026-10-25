@@ -128,7 +128,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
 
   return <section className="aiWorkspace" aria-label={configurationOnly ? "KI-Einrichtung" : "KI-Assistent"}>
     <div className="panelToolbar"><h2>KI-Einrichtung</h2><div className="buttonRow">
-      <a href="/benutzerleitfaden.html#ki" target="_blank" rel="noreferrer"><BookOpen size={16} /> Leitfaden</a>
+      <a href="/ki-einsatzleitfaden.html" target="_blank" rel="noreferrer"><BookOpen size={16} /> Leitfaden</a>
       <button type="button" className="ghostButton" title="KI-Einstellungen neu laden" aria-label="KI-Einstellungen neu laden" disabled={busy}
         onClick={() => { if (!dirty || window.confirm("Ungespeicherte KI-Einstellungen verwerfen?")) void act(async () => { setSettings(await api<Settings>("/provider")); clearCatalog(); }); }}><RefreshCw size={16} /></button>
     </div></div>

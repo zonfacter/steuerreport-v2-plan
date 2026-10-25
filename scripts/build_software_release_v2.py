@@ -22,12 +22,14 @@ ROOT_FILES = {".env.example", ".gitignore", ".dockerignore", ".gitleaks.toml", "
 PUBLIC_DOCUMENTS = {
     "frontend/public/benutzerleitfaden.html", "frontend/public/benutzerleitfaden.pdf",
     "frontend/public/import-vorlage.csv", "frontend/public/importformate.pdf",
+    "frontend/public/ki-einsatzleitfaden.pdf",
     "frontend/public/import-vorlagen/import-vorlagen.xlsx",
     *(f"frontend/public/import-vorlagen/{source}.csv" for source in (
         "manual-csv", "binance", "bitget", "pionex", "coinbase", "helium", "solana_rpc",
     )),
 }
 DOCUMENTS = {
+    "docs/KI_EINSATZLEITFADEN.md",
     "docs/IMPORTFORMATE.md",
     "docs/007_MOBILE_APP_API_INTEGRATION_2026-08-26.md",
     "docs/API_CONTRACTS_V2.md",

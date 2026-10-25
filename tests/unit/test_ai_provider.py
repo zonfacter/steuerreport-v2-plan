@@ -214,6 +214,25 @@ def test_task_execution_stores_visible_result_without_modifying_tax_tables(setup
     assert len(calls) == 1
 
 
+def test_task_types_are_labels_and_do_not_add_history_files_or_tools(setup, monkeypatch):
+    store, service = setup
+    save(service)
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json=completion())
+
+    transport(monkeypatch, handler)
+    for task_type in ("review", "risk_scan", "import_mapping", "documentation"):
+        task = AiService(store).create_task(AiTaskCreate(task_type=task_type, prompt="Nur dieser synthetische Text."))
+        assert service.execute(task.task_id, AiTaskExecute()).status == "done"
+    assert len(calls) == 4 and all(body == calls[0] for body in calls)
+    assert len(calls[0]["messages"]) == 2
+    assert calls[0]["messages"][1] == {"role": "user", "content": "Nur dieser synthetische Text."}
+    assert not {"task_type", "tools", "files", "history", "context"}.intersection(calls[0])
+
+
 @pytest.mark.parametrize("task_allowed,confirmed", [(False, False), (True, False), (False, True)])
 def test_cloud_requires_global_and_both_per_task_approvals(setup, monkeypatch, task_allowed, confirmed):
     store, service = setup

@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc9. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc10. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc9
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc10
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -114,6 +114,26 @@ Benutzernavigation mehr. Bestehende Referenzdaten und fachliche Exportgates
 werden dadurch nicht geloescht oder umgangen.
 
 ## KI-Einrichtung
+
+### Zweck Und Grenzen
+
+Der Assistent hilft, **selbst eingegebene** Berichtsauszuege und Hinweise zu
+erklaeren, Importspalten vorzuschlagen, moegliche Auffaelligkeiten in kleinen
+Textausschnitten zu besprechen und Pruefnotizen zu entwerfen. Er liest keine
+Datenbank, Wallet, Datei oder URL automatisch und hat keine Korrekturwerkzeuge.
+Jede Aufgabe ist unabhaengig; der Verlauf wird nicht als Chatkontext mitgesendet.
+Die vier Aufgabentypen sind Kennzeichnungen, keine getrennten Pruefengines.
+Es gibt keine automatische Anonymisierung des eingegebenen Texts.
+
+Der [KI-Einsatzleitfaden](docs/KI_EINSATZLEITFADEN.md) beschreibt sechs konkrete
+Einsatzfaelle, Eingaben, erwartbare Hilfen, notwendige Gegenpruefungen und
+Beispielaufgaben. Er ist im Assistenten als Leitfaden und separat als
+[HTML](frontend/public/ki-einsatzleitfaden.html) / [PDF](frontend/public/ki-einsatzleitfaden.pdf)
+verfuegbar. Eine Modellantwort ist kein Beleg, kein exakter Summenabgleich
+und keine steuerliche Freigabe. Die fachliche Berechnung wird dadurch nicht
+veraendert.
+
+### Einrichtung
 
 Unter `Einrichtung > KI-Einrichtung` beziehungsweise `KI-Assistent` werden
 lokale OpenAI-kompatible Server, **OpenRouter** und andere kompatible Cloud-APIs

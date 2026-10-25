@@ -119,6 +119,8 @@ assert not any(row["key"].startswith("secret.") for row in get("/api/v1/admin/se
 assert urllib.request.urlopen("http://127.0.0.1:8010/").status == 200
 assert urllib.request.urlopen("http://127.0.0.1:8010/benutzerleitfaden.html").status == 200
 assert urllib.request.urlopen("http://127.0.0.1:8010/benutzerleitfaden.pdf").read(5) == b"%PDF-"
+assert urllib.request.urlopen("http://127.0.0.1:8010/ki-einsatzleitfaden.html").status == 200
+assert urllib.request.urlopen("http://127.0.0.1:8010/ki-einsatzleitfaden.pdf").read(5) == b"%PDF-"
 assert urllib.request.urlopen("http://127.0.0.1:8010/import-vorlage.csv").read().count(b"\\n") == 1
 assert urllib.request.urlopen("http://127.0.0.1:8010/importformate.html").status == 200
 assert urllib.request.urlopen("http://127.0.0.1:8010/importformate.pdf").read(5) == b"%PDF-"
