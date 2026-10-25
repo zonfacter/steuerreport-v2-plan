@@ -9,9 +9,11 @@ type Context = { context_sha256: string; total: number; rows: Row[] };
 type Change = { kind: Kind; target_id: string; before_sha256: string; patch: Record<string, string | null>; reason: string; evidence_ref: string };
 type Draft = { summary: string; changes: Change[] };
 type Preview = { preview_sha256: string; selected_indices: number[]; before_summary: Record<string, unknown>; after_summary: Record<string, unknown>; tax_line_deltas: unknown[]; reconciliation_status: string; pipeline: { allow_export: boolean; review_issues_open: number; tax_lines: number } };
-type ChangeSet = { change_set_id: string; status: string; draft: Draft; before: Row[]; origin: string; model: string | null; created_at: string; preview: Preview | null; approval: Record<string, unknown> | null; parent_id: string | null };
+type ChangeSet = { change_set_id: string; status: string; draft: Draft; before: Row[]; origin: string; model: string | null; created_at: string; preview: Preview | null; approval: Record<string, unknown> | null; parent_id: string | null; generation?: { agent?: { name: string } } | null };
 const FIELDS: Record<Kind, string[]> = { event: ["event_type", "event_time", "asset", "quantity", "quote_asset", "quote_quantity", "fee_asset", "fee_quantity", "account", "wallet"], price: ["price_eur", "confidence"] };
 const ERRORS: Record<string, string> = {
+  ai_agent_revision_conflict: "Agentenprofile wurden geaendert. Neu laden und Auftrag erneut freigeben.",
+  ai_agent_unavailable: "Agentenrolle fehlt oder ist deaktiviert.", ai_agents_config_invalid: "Agentenprofile sind ungueltig. Einrichtung pruefen.",
   ai_change_storage_insufficient: "Zu wenig freier Speicher fuer eine sichere Berechnungskopie.",
   ai_change_calculation_failed: "Neuberechnung fehlgeschlagen. Es wurden keine Fachdaten geaendert.",
   ai_correction_target_missing: "Eine gespeicherte Korrektur verweist auf eine fehlende Datenzeile. Quellenabgleich erforderlich.",
@@ -73,7 +75,7 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   return value.data as T;
 }
 
-export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud }: { providerRevision: string; connectionAllowed: boolean; cloud: boolean }) {
+export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud, agentId, agentRevision }: { providerRevision: string; connectionAllowed: boolean; cloud: boolean; agentId: string; agentRevision?: string }) {
   const [query, setQuery] = useState<Query>({ kind: "event", year: 2025, asset: "", source: "", offset: 0, limit: 20 });
   const [context, setContext] = useState<Context | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -92,7 +94,7 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud 
   const [notice, setNotice] = useState("");
   const gate = useRef(false);
   useEffect(() => { let live = true; void api<ChangeSet[]>("/changes").then((rows) => { if (live) setHistory(rows); }).catch(() => { if (live) setError("Aenderungsverlauf konnte nicht geladen werden."); }); return () => { live = false; }; }, []);
-  useEffect(() => { setExternal(false); }, [providerRevision]);
+  useEffect(() => { setExternal(false); }, [providerRevision, agentId, agentRevision]);
   const choose = (item: ChangeSet) => { setActive(item); setIndices(item.preview?.selected_indices || item.draft.changes.map((_, index) => index)); setEditing(null); setChecked(false); setConfirmed(false); };
   async function act(action: () => Promise<void>) {
     if (gate.current) return;
@@ -136,7 +138,7 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud 
       {!context.rows.length && <p role="status">Keine passenden Datenzeilen.</p>}
       <form onSubmit={(event) => { event.preventDefault(); if (context) void act(async () => {
         const item = await api<ChangeSet>("/changes/generate", { request_id: crypto.randomUUID().replaceAll("-", ""), query, selected_ids: selected, context_sha256: context.context_sha256,
-          instruction, confirm_external: cloud && external, provider_revision: providerRevision }); choose(item); setExternal(false); await refresh(); setNotice("KI-Vorschlaege erstellt.");
+          instruction, confirm_external: cloud && external, provider_revision: providerRevision, agent_id: agentId, agent_revision: agentRevision }); choose(item); setExternal(false); await refresh(); setNotice("KI-Vorschlaege erstellt.");
       }); }}>
         <label>Korrekturauftrag<textarea aria-label="KI-Korrekturauftrag" rows={4} maxLength={4000} value={instruction} disabled={busy} onChange={(event) => { setInstruction(event.target.value); setExternal(false); }} /></label>
         <details><summary>Freizugebender Datenkontext ({rows.length})</summary><pre>{JSON.stringify(rows, null, 2)}</pre></details>
@@ -151,7 +153,7 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud 
     </select></label>
     {active && <>
       <div className="panelToolbar"><strong>{active.draft.summary}</strong><span>{({ proposed: "Vorgeschlagen", previewed: "Vorschau bereit", applied: "Uebernommen", rejected: "Abgelehnt" } as Record<string, string>)[active.status]}</span></div>
-      <small>{active.model || active.origin} / {active.change_set_id}</small>
+      <small>{active.generation?.agent?.name || active.origin} / {active.model || "manuell"} / {active.change_set_id}</small>
       <div className="aiChangesTable"><table><thead><tr><th>Auswahl</th><th>Feld / Vorher</th><th>Vorschlag</th><th>Grund / Beleg</th></tr></thead><tbody>{active.draft.changes.map((change, index) => {
         const before = active.before[index];
         return <tr key={change.target_id}><td><input type="checkbox" aria-label={`Aenderung ${index + 1} auswaehlen`} checked={indices.includes(index)} disabled={busy || !editable} onChange={(event) => { setIndices(event.target.checked ? [...indices, index] : indices.filter((value) => value !== index)); setChecked(false); setConfirmed(false); }} /><br /><small>{change.target_id}</small></td>

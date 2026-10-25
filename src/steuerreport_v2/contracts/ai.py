@@ -12,6 +12,8 @@ class AiTaskCreate(BaseModel):
     task_type: str = Field(min_length=1, max_length=64)
     prompt: str = Field(min_length=1, max_length=32000)
     allow_external: bool = False
+    agent_id: str | None = Field(default=None, max_length=64)
+    agent_revision: str | None = None
 
 
 class AiTask(BaseModel):

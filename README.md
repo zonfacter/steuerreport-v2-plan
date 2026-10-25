@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc11. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc12. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc11
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc12
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -141,6 +141,23 @@ Unterstuetzt sind vorhandene Ereignisse und nicht abgeleitete Preise, nicht
 beliebige SQL-, Datei-, Importprofil- oder Serveraenderungen.
 
 ### Einrichtung
+
+Sieben konfigurierbare Fachagenten sind enthalten: Koordinator, Import/Quellen,
+Krypto-Forensik, Wallet/FIFO, Steuer/Mining/Rewards, Preise/Stichtag und
+Dokumentation/Audit. Unter `Fachagent > Agentenprofile einrichten` koennen
+Aufgabenbeschreibung und Modell-ID je Anbieter gespeichert werden. Eine leere
+Zuordnung verwendet das Standardmodell der aktiven Verbindung. Alle Rollen
+nutzen die jeweils aktiv konfigurierte Verbindung, keine eigenen versteckten
+Zugangsdaten und keine automatisch wechselnden Anbieter. Es gibt keine
+automatische kostenpflichtige Ersatzwahl oder parallele Agentenkette.
+
+Versioniertes Anwendungswissen beschreibt das echte Datenmodell und die
+zugelassenen Werkzeuge. Rolle, Aufgabenbeschreibung, Wissens-Hash und
+Modellzuordnung werden bei erfolgreichen Aufgaben und Korrekturvorschlaegen
+mitgespeichert. Agenten sind Systemprofile, keine zusaetzlich trainierten
+Modelle; sie erhalten keine zusaetzlichen Schreibrechte oder ungeprueften
+Zugriff auf den gesamten Bestand. GET/PUT `/api/v1/ai/agents` verwaltet die
+Profile ohne Modellaufruf. Geaenderte Profile sperren veraltete Auftraege.
 
 Unter `Einrichtung > KI-Einrichtung` beziehungsweise `KI-Assistent` werden
 lokale OpenAI-kompatible Server, **OpenRouter** und andere kompatible Cloud-APIs

@@ -65,6 +65,8 @@ from steuerreport_v2.contracts.ai_changes import (
 )
 from steuerreport_v2.domain.ai_changes import AiChangeError, AiChangeService
 from steuerreport_v2.db.ai_corrections import CorrectionConflict
+from steuerreport_v2.contracts.ai_agents import AiAgentsStatus, AiAgentsWrite
+from steuerreport_v2.domain.ai_agents import AiAgentError, AiAgentService
 from steuerreport_v2.contracts.audit import AuditExport, ElsterPrepExport
 from steuerreport_v2.contracts.binance_earn import (
     BinanceAssetDividendPreview,
@@ -9521,6 +9523,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.exception_handler(CorrectionConflict)
     async def safe_correction_conflict(_request: Request, exc: CorrectionConflict):
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(AiAgentError)
+    async def safe_ai_agent_error(_request: Request, exc: AiAgentError):
+        return JSONResponse(status_code=409 if str(exc) == "ai_agent_revision_conflict" else 400, content={"detail": str(exc)})
+
+    @app.get("/api/v1/ai/agents")
+    def ai_agents() -> ApiResponse[AiAgentsStatus]:
+        return ApiResponse(data=AiAgentService(db).status())
+
+    @app.put("/api/v1/ai/agents")
+    def save_ai_agents(payload: AiAgentsWrite) -> ApiResponse[AiAgentsStatus]:
+        return ApiResponse(data=AiAgentService(db).save(payload))
 
     @app.post("/api/v1/ai/data-context")
     def ai_data_context(payload: AiDataQuery) -> ApiResponse[AiDataContext]:

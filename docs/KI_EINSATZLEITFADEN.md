@@ -1,4 +1,4 @@
-# KI: Einsatz und Grenzen (0.2.0rc11)
+# KI: Einsatz und Grenzen (0.2.0rc12)
 
 ## Kurz Gesagt
 
@@ -35,6 +35,20 @@ Jede Aufgabe steht fuer sich. Fruehere Aufgaben und Antworten werden nicht autom
 11. Audit-JSON herunterladen bewahrt vorherige Zeilen, Herkunft und Quellen-Hashes, Modell-/Konfigurationsstand, Auswahl, Berechnungsvorschau und Freigabe mit SHA256-Nachweis. Ruecknahme vorbereiten erzeugt einen neuen Gegenvorschlag; sie benoetigt wieder Vorschau und Freigabe und darf spaetere Aenderungen nicht ueberschreiben. Rohdateien und abgelegte Steuer-Snapshots werden nicht veraendert.
 
 12. Die eingetragene Person ist eine Selbstauskunft: Die Anwendung hat keine globale Anmeldung oder kryptografische Identitaetspruefung. Ein Hash ist keine externe Signatur und keine WORM-Sicherung. Betreiber muessen Zugriffsschutz, Sicherungen und Aufbewahrung selbst absichern. Diese Funktion ersetzt keinen uneingeschraenkten Coding-Agenten wie einen persoenlich betreuten Terminalzugang.
+
+## Fachagenten und Anwendungswissen
+
+1. Sieben Fachrollen stehen unter Fachagent bereit: Koordinator, Import- und Quellenpruefung, Krypto-Forensik, Wallet- und FIFO-Pruefung, Steuer-/Mining-/Reward-Pruefung, Preis-/Stichtagspruefung sowie Dokumentation/Audit. Die Auswahl veraendert die fachliche Systemanweisung, nicht die zugelassenen Daten oder Rechte.
+
+2. Agentenprofile einrichten oeffnet Name, Aufgabenbeschreibung, Aktivierung und Agentenmodell. Nach Aenderungen Agentenprofile speichern. Ungespeicherte Profilaenderungen sperren neue Modellauftraege. Eine deaktivierte Rolle kann nicht ausgefuehrt werden.
+
+3. Das Agentenmodell kann aus der geladenen Modellliste gewaehlt oder unter Modell-IDs je Anbieter eingetragen werden. Es gibt getrennte IDs fuer Lokal, OpenRouter und andere Cloud-Anbieter. Leer bedeutet Standardmodell der aktiven Verbindung; Verbindung und globales Standardmodell muessen zuerst eingerichtet sein. Rollen speichern keine eigenen Keys oder Dienstadressen und schalten nicht automatisch zwischen Verbindungen um.
+
+4. Alle Rollen verwenden die aktive lokale oder Cloud-Verbindung samt deren Freigaben und Zeit-/Tokenlimits. Ein manuell zugeordnetes Modell kann kostenpflichtig sein; Preis unbekannt ist nicht Free. Kein automatischer bezahlter Modellwechsel, keine parallele Agentenkette und kein automatisches Delegieren weiterer Modellauftraege.
+
+5. Anwendungswissen ist einsehbar: Datenmodell, unveraenderte Rohquellen, zugelassene Korrekturfelder, Vorschau, Freigabe und Grenzen. Es wird mit der Software versioniert und gemeinsam mit der Rolle an das Modell gegeben. Es enthaelt keine Betreiber-Keys oder vorgegebenen Privatkonten. Es ersetzt weder vollstaendige Belege noch einen unbeschraenkten Blick in den gesamten Bestand.
+
+6. Erfolgreiche Textaufgaben und erstellte KI-Korrekturvorschlaege speichern die verwendete Rolle mit Aufgabenbeschreibung, Wissens-Hash, Profilrevision und Modellzuordnung. Geaenderte Profile sperren veraltete Auftraege. Dies sind Systemprofile fuer vorhandene Modelle, keine zusaetzlich trainierten oder fachlich zertifizierten Modelle.
 
 ## Konkrete Einsatzfaelle
 

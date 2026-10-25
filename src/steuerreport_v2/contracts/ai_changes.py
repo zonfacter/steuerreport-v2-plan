@@ -56,6 +56,8 @@ class AiChangeGenerate(StrictInput):
     instruction: str = Field(min_length=10, max_length=4000)
     confirm_external: bool = False
     provider_revision: str
+    agent_id: str = Field(default="coordinator", max_length=64)
+    agent_revision: str | None = None
 
 
 class AiChangeSet(BaseModel):

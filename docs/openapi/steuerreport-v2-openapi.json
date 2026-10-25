@@ -90,6 +90,132 @@
         "title": "AdminStatus",
         "type": "object"
       },
+      "AgentModels": {
+        "additionalProperties": false,
+        "properties": {
+          "cloud": {
+            "default": "",
+            "maxLength": 256,
+            "title": "Cloud",
+            "type": "string"
+          },
+          "local": {
+            "default": "",
+            "maxLength": 256,
+            "title": "Local",
+            "type": "string"
+          },
+          "openrouter": {
+            "default": "",
+            "maxLength": 256,
+            "title": "Openrouter",
+            "type": "string"
+          }
+        },
+        "title": "AgentModels",
+        "type": "object"
+      },
+      "AiAgentProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "enum": [
+              "coordinator",
+              "import_sources",
+              "crypto_forensics",
+              "wallet_fifo",
+              "tax_rewards",
+              "valuation",
+              "documentation"
+            ],
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "instructions": {
+            "maxLength": 6000,
+            "minLength": 20,
+            "title": "Instructions",
+            "type": "string"
+          },
+          "models": {
+            "$ref": "#/components/schemas/AgentModels"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "instructions"
+        ],
+        "title": "AiAgentProfile",
+        "type": "object"
+      },
+      "AiAgentsStatus": {
+        "properties": {
+          "knowledge": {
+            "additionalProperties": true,
+            "title": "Knowledge",
+            "type": "object"
+          },
+          "knowledge_sha256": {
+            "title": "Knowledge Sha256",
+            "type": "string"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/AiAgentProfile"
+            },
+            "title": "Profiles",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "profiles",
+          "knowledge",
+          "knowledge_sha256"
+        ],
+        "title": "AiAgentsStatus",
+        "type": "object"
+      },
+      "AiAgentsWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/AiAgentProfile"
+            },
+            "maxItems": 7,
+            "minItems": 7,
+            "title": "Profiles",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "profiles"
+        ],
+        "title": "AiAgentsWrite",
+        "type": "object"
+      },
       "AiChange": {
         "additionalProperties": false,
         "properties": {
@@ -226,6 +352,23 @@
       "AiChangeGenerate": {
         "additionalProperties": false,
         "properties": {
+          "agent_id": {
+            "default": "coordinator",
+            "maxLength": 64,
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Revision"
+          },
           "confirm_external": {
             "default": false,
             "title": "Confirm External",
@@ -954,6 +1097,29 @@
       },
       "AiTaskCreate": {
         "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "agent_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Revision"
+          },
           "allow_external": {
             "default": false,
             "title": "Allow External",
@@ -1329,6 +1495,50 @@
           }
         },
         "title": "ApiResponse[AdminStatus]",
+        "type": "object"
+      },
+      "ApiResponse_AiAgentsStatus_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiAgentsStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[AiAgentsStatus]",
         "type": "object"
       },
       "ApiResponse_AiChangeSet_": {
@@ -76899,7 +77109,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc11"
+    "version": "0.2.0rc12"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -77496,6 +77706,74 @@
           "Administration"
         ],
         "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/agents": {
+      "get": {
+        "description": "Ai agents. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "ai_agents_api_v1_ai_agents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiAgentsStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ai Agents",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "put": {
+        "description": "Save ai agents. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "save_ai_agents_api_v1_ai_agents_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiAgentsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiAgentsStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Ai Agents",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

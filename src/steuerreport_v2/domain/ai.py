@@ -20,6 +20,7 @@ from steuerreport_v2.contracts.ai import (
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.admin import AdminService
 from steuerreport_v2.domain.ai_provider import AiProviderError
+from steuerreport_v2.domain.ai_agents import AiAgentService
 
 
 class AiService:
@@ -50,6 +51,10 @@ class AiService:
         self.store = store
 
     def create_task(self, payload: AiTaskCreate) -> AiTask:
+        agent_request = None
+        if payload.agent_id is not None:
+            snapshot, _prompt, _model = AiAgentService(self.store).bundle(payload.agent_id, expected_revision=payload.agent_revision)
+            agent_request = {"agent_id": payload.agent_id, "revision": snapshot["revision"]}
         settings = {setting.key: setting.value_json for setting in AdminService(self.store).list_settings()}
         external_enabled = json.loads(settings.get("ai.external.enabled", "false"))
         if payload.allow_external and not external_enabled:
@@ -65,7 +70,7 @@ class AiService:
         return self.store.create_ai_task(
             payload,
             status="queued",
-            result_json=None,
+            result_json=json.dumps({"agent_request": agent_request}) if agent_request else None,
         )
 
     def list_tasks(self) -> list[AiTask]:

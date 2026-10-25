@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BookOpen, Bot, Check, Download, LoaderCircle, Play, RefreshCw, Save, Trash2 } from "lucide-react";
 import { API_BASE } from "./api-base";
 import { AiChangesWorkspace } from "./AiChangesWorkspace";
+import { AiAgentProfiles, loadAgents, type Agents } from "./AiAgentProfiles";
 
 type Config = { provider: "local" | "openrouter" | "cloud"; base_url: string; model: string; max_tokens: number; probe_max_tokens: number; timeout_seconds: number; token_parameter: "max_tokens" | "max_completion_tokens"; thinking: "server_default" | "llamacpp_off" | "ollama_off" };
 type Settings = { config: Config; revision: string; local_enabled: boolean; external_enabled: boolean; api_key_present: boolean; api_key_readable: boolean; encrypted_secrets_available: boolean; configured: boolean; source: string };
@@ -10,6 +11,8 @@ type Model = { id: string; name: string; is_free?: boolean | null; prompt_price_
 type Probe = { model: string; answer: string; truncated: boolean };
 
 const ERRORS: Record<string, string> = {
+  ai_agent_revision_conflict: "Agentenprofil wurde geaendert. Profile neu laden und Auftrag erneut pruefen.",
+  ai_agent_unavailable: "Agentenrolle fehlt oder ist deaktiviert.", ai_agents_config_invalid: "Agentenprofile sind ungueltig. Einrichtung pruefen.",
   ai_request_invalid: "Bitte Feldwerte und Zahlenbereiche pruefen.",
   ai_url_invalid: "HTTP(S)-API-Adresse ohne Zugangsdaten, Query oder Fragment erforderlich.",
   ai_cloud_https_required: "Cloud-Endpunkte benoetigen HTTPS.",
@@ -59,7 +62,7 @@ async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> 
   } finally { window.clearTimeout(timer); }
 }
 
-function resultOf(task: Task): { answer?: string; error?: string; model?: string; resolved_model?: string; truncated?: boolean } {
+function resultOf(task: Task): { answer?: string; error?: string; model?: string; resolved_model?: string; truncated?: boolean; agent?: { name?: string } } {
   try { return JSON.parse(task.result_json || "{}"); } catch { return {}; }
 }
 
@@ -84,6 +87,9 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
   const [prompt, setPrompt] = useState("");
   const [taskType, setTaskType] = useState("review");
   const [workMode, setWorkMode] = useState("text");
+  const [agents, setAgents] = useState<Agents | null>(null);
+  const [agentId, setAgentId] = useState("coordinator");
+  const [agentsDirty, setAgentsDirty] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -99,6 +105,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
     return () => { active = false; };
   }, [configurationOnly]);
   useEffect(() => { setFreeOnly(config?.provider === "openrouter"); setModelSearch(""); }, [config?.provider]);
+  useEffect(() => { void loadAgents().then(setAgents).catch(() => setError("Agentenprofile konnten nicht geladen werden.")); }, []);
   useEffect(() => {
     if (!tasks.some((task) => task.status === "running")) return;
     const timer = window.setInterval(() => { void api<Task[]>("/tasks").then(setTasks).catch(() => {}); }, 3000);
@@ -181,27 +188,30 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
           <button type="button" disabled={busy || !connectionAllowed || !saved.configured} onClick={() => void act(async () => { setProbe(null); setProbe(await api<Probe>("/provider/test", "POST")); })}>{busy ? <LoaderCircle size={16} /> : <Check size={16} />} Verbindung testen</button></div>
       </form>
       {probe && <div role="status" className="aiProbe"><strong>Verbindung erfolgreich: {probe.model}</strong><p>{probe.answer}</p>{probe.truncated && <span>Testantwort am Tokenlimit beendet.</span>}</div>}
+      {agents && <><label>Fachagent<select aria-label="KI-Fachagent" value={agentId} disabled={busy} onChange={(event) => { setAgentId(event.target.value); setConfirmed(false); }}>
+        {agents.profiles.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.name}{agent.enabled ? "" : " (deaktiviert)"}</option>)}
+      </select></label><AiAgentProfiles value={agents} activeId={agentId} provider={config.provider} models={filteredModels} onSaved={(value) => { setAgents(value); setConfirmed(false); }} onDirty={setAgentsDirty} /></>}
       {!configurationOnly && <>
         <div className="buttonRow" role="tablist" aria-label="KI-Arbeitsmodus">
           <button type="button" role="tab" aria-selected={workMode === "text"} onClick={() => setWorkMode("text")}><Bot size={16} /> Textaufgaben</button>
           <button type="button" role="tab" aria-selected={workMode === "changes"} onClick={() => setWorkMode("changes")}><Check size={16} /> Datenkorrekturen</button>
         </div>
-        {workMode === "changes" ? <AiChangesWorkspace providerRevision={saved.revision} connectionAllowed={connectionAllowed && saved.configured} cloud={cloud} /> : <>
+        {workMode === "changes" ? <AiChangesWorkspace providerRevision={saved.revision} connectionAllowed={connectionAllowed && saved.configured && !agentsDirty && !!agents?.profiles.find((agent) => agent.agent_id === agentId)?.enabled} cloud={cloud} agentId={agentId} agentRevision={agents?.revision} /> : <>
         <form className="aiTaskComposer" onSubmit={(event) => { event.preventDefault(); void act(async () => {
-          const task = await api<Task>("/tasks", "POST", { task_type: taskType, prompt, allow_external: cloud && confirmed });
+          const task = await api<Task>("/tasks", "POST", { task_type: taskType, prompt, allow_external: cloud && confirmed, agent_id: agentId, agent_revision: agents?.revision });
           setTasks(await api<Task[]>("/tasks")); await execute(task, cloud && confirmed);
         }); }}>
           <h3>Neue Aufgabe</h3><label>Aufgabentyp<select value={taskType} disabled={busy} onChange={(event) => setTaskType(event.target.value)}><option value="review">Review</option><option value="risk_scan">Risikopruefung</option><option value="import_mapping">Importzuordnung</option><option value="documentation">Dokumentation</option></select></label>
           <label>Aufgabentext<textarea aria-label="KI-Aufgabentext" rows={6} maxLength={32000} value={prompt} disabled={busy} onChange={(event) => { setPrompt(event.target.value); setConfirmed(false); }} /></label>
           {cloud && <label className="checkboxLabel"><input type="checkbox" checked={confirmed} disabled={busy} onChange={(event) => setConfirmed(event.target.checked)} /> Diesen Text an {config.provider === "openrouter" ? "OpenRouter" : "den Cloud-Anbieter"} senden</label>}
-          <button type="submit" className="primaryButton" disabled={busy || !connectionAllowed || !saved.configured || !prompt.trim() || (cloud && !confirmed)}>{busy ? <LoaderCircle size={16} /> : <Play size={16} />} Aufgabe ausfuehren</button>
+          <button type="submit" className="primaryButton" disabled={busy || !connectionAllowed || !saved.configured || agentsDirty || !agents?.profiles.find((agent) => agent.agent_id === agentId)?.enabled || !prompt.trim() || (cloud && !confirmed)}>{busy ? <LoaderCircle size={16} /> : <Play size={16} />} Aufgabe ausfuehren</button>
         </form>
         <div className="panelToolbar"><h3>Aufgabenverlauf</h3><button type="button" title="Aufgabenverlauf aktualisieren" aria-label="Aufgabenverlauf aktualisieren" disabled={busy} onClick={() => void act(async () => setTasks(await api<Task[]>("/tasks")))}><RefreshCw size={16} /></button></div>
         {!tasks.length && <p>Keine KI-Aufgaben vorhanden.</p>}
         <div className="aiTaskList">{tasks.map((task) => {
           const result = resultOf(task);
           return <article className="aiTask" key={task.task_id}>
-            <div className="panelToolbar"><strong><Bot size={16} /> {task.task_type}</strong><span>{({ queued: "Wartend", running: "Laeuft", done: "Abgeschlossen", failed: "Fehlgeschlagen" } as Record<string, string>)[task.status] || task.status}</span><div className="buttonRow">
+            <div className="panelToolbar"><strong><Bot size={16} /> {result.agent?.name || task.task_type}</strong><span>{({ queued: "Wartend", running: "Laeuft", done: "Abgeschlossen", failed: "Fehlgeschlagen" } as Record<string, string>)[task.status] || task.status}</span><div className="buttonRow">
               {task.status === "queued" && <button type="button" disabled={busy || !connectionAllowed || !saved.configured || (cloud && !task.allow_external)} onClick={() => { if (!cloud || window.confirm("Den gespeicherten Aufgabentext jetzt an den Cloud-Anbieter senden?")) void act(async () => execute(task, cloud)); }} title="Gespeicherte Aufgabe ausfuehren"><Play size={16} /></button>}
               <button type="button" title="KI-Aufgabe entfernen" aria-label="KI-Aufgabe entfernen" disabled={busy || task.status === "running"} onClick={() => { if (window.confirm("Diese KI-Aufgabe samt Ergebnis entfernen?")) void act(async () => { await api(`/tasks/${encodeURIComponent(task.task_id)}`, "DELETE"); setTasks(await api<Task[]>("/tasks")); }); }}><Trash2 size={16} /></button>
             </div></div>

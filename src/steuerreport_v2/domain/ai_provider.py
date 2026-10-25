@@ -267,10 +267,14 @@ class AiProviderService:
     def _redact(text: str, token: str) -> str:
         return text.replace(token, "[REDACTED]") if token else text
 
-    def complete(self, prompt: str, *, test: bool = False, confirm_external: bool = False, expected_revision: str | None = None, system_prompt: str = SYSTEM_PROMPT) -> dict:
+    def complete(self, prompt: str, *, test: bool = False, confirm_external: bool = False, expected_revision: str | None = None, system_prompt: str = SYSTEM_PROMPT, model_override: str | None = None) -> dict:
         if not prompt.strip() or len(prompt) > 32000:
             raise AiProviderError("ai_prompt_invalid")
         config, token = self._connection(expected_revision=expected_revision)
+        if model_override is not None:
+            if not model_override.strip() or len(model_override) > 256 or any(ord(char) < 32 for char in model_override):
+                raise AiProviderError("ai_model_invalid")
+            config.model = model_override
         if config.provider != "local" and not confirm_external:
             raise AiProviderError("ai_task_external_not_confirmed")
         body = {"model": config.model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
@@ -300,6 +304,7 @@ class AiProviderService:
         return AiProbeResult(model=result["resolved_model"], answer=result["answer"], truncated=result["truncated"])
 
     def execute(self, task_id: str, payload: AiTaskExecute) -> AiTask:
+        from steuerreport_v2.domain.ai_agents import AiAgentError, AiAgentService
         task = self.store.get_ai_task(task_id)
         if task is None:
             raise AiProviderError("ai_task_not_found")
@@ -314,10 +319,17 @@ class AiProviderService:
             config = current.config
             if config.provider != "local" and not (task.allow_external and payload.confirm_external):
                 raise AiProviderError("ai_task_external_not_confirmed")
-            result = self.complete(task.prompt, confirm_external=task.allow_external and payload.confirm_external, expected_revision=current.revision)
+            options = {}
+            agent = (json.loads(task.result_json or "{}") or {}).get("agent_request")
+            if agent:
+                snapshot, agent_prompt, model = AiAgentService(self.store).bundle(agent["agent_id"], expected_revision=agent["revision"], provider=config.provider, default_model=config.model)
+                options = {"system_prompt": SYSTEM_PROMPT + agent_prompt, "model_override": model}
+            result = self.complete(task.prompt, confirm_external=task.allow_external and payload.confirm_external, expected_revision=current.revision, **options)
+            if agent:
+                result["agent"] = snapshot
             result["configuration_sha256"] = current.revision
             status = "done"
-        except AiProviderError as exc:
+        except (AiProviderError, AiAgentError) as exc:
             result = {"error": str(exc), "review_only": True}
             status = "failed"
         except Exception:

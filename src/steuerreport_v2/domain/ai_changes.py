@@ -25,6 +25,7 @@ from steuerreport_v2.contracts.review import ReviewDecisionCreate
 from steuerreport_v2.db.ai_corrections import CorrectionConflict, FIELDS, TABLES, digest, encoded, json_text, record, update
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.ai_provider import AiProviderError, AiProviderService
+from steuerreport_v2.domain.ai_agents import AiAgentError, AiAgentService
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.tax_time import reporting_tax_year, reporting_year_sql, reporting_year_utc_bounds
 from steuerreport_v2.paths import PROJECT_ROOT
@@ -260,10 +261,10 @@ class AiChangeService:
         try:
             result = self._generate(request)
         except Exception as exc:
-            code = str(exc) if isinstance(exc, (AiChangeError, AiProviderError)) else "ai_change_generation_failed"
+            code = str(exc) if isinstance(exc, (AiChangeError, AiProviderError, AiAgentError)) else "ai_change_generation_failed"
             with self.store.connect() as con:
                 con.execute("update ai_change_generations set status='failed', error_code=? where request_id=?", [code, request.request_id])
-            if isinstance(exc, (AiChangeError, AiProviderError)):
+            if isinstance(exc, (AiChangeError, AiProviderError, AiAgentError)):
                 raise
             fail("ai_change_generation_failed")
         with self.store.connect() as con:
@@ -278,15 +279,18 @@ class AiChangeService:
         if len(selected) != len(set(request.selected_ids)):
             fail("ai_change_selection_invalid")
         provider = AiProviderService(self.store)
-        if provider.status().revision != request.provider_revision:
+        provider_status = provider.status()
+        if provider_status.revision != request.provider_revision:
             raise AiProviderError("ai_config_revision_conflict")
+        agent, agent_prompt, model = AiAgentService(self.store).bundle(request.agent_id, expected_revision=request.agent_revision,
+                                                                   provider=provider_status.config.provider, default_model=provider_status.config.model)
         prompt = json_text({"instruction": request.instruction, "rows": [row.model_dump() for row in selected],
                             "allowed_fields": {kind: sorted(names) for kind, names in FIELDS.items()},
                             "response_schema": AiChangeDraft.model_json_schema()})
         if len(prompt) > 32000:
             fail("ai_change_context_too_large")
         response = provider.complete(prompt, confirm_external=request.confirm_external,
-                                     expected_revision=request.provider_revision, system_prompt=CHANGE_SYSTEM_PROMPT)
+                                     expected_revision=request.provider_revision, system_prompt=CHANGE_SYSTEM_PROMPT + agent_prompt, model_override=model)
         try:
             if response["truncated"]:
                 fail("ai_change_model_truncated")
@@ -303,8 +307,9 @@ class AiChangeService:
             fail("ai_change_selection_invalid")
         return self.create(draft, origin="model", model=response["resolved_model"], configuration=request.provider_revision,
                            generation={"request_id": request.request_id, "instruction": request.instruction,
+                                       "agent": agent,
                                        "selected_context": [row.model_dump() for row in selected], "query": request.query.model_dump(),
-                                       "system_prompt_sha256": hashlib.sha256(CHANGE_SYSTEM_PROMPT.encode()).hexdigest(),
+                                       "system_prompt_sha256": hashlib.sha256((CHANGE_SYSTEM_PROMPT + agent_prompt).encode()).hexdigest(),
                                        "response_schema_sha256": digest(AiChangeDraft.model_json_schema())})
 
     def revise(self, identifier, draft):
