@@ -18,7 +18,7 @@ CASE_MODULES = {
     "lawyer_disclosure", "legal_email_archive", "legal_tax_documents",
     "property_documents",
 }
-ROOT_FILES = {".env.example", ".gitignore", ".dockerignore", "Dockerfile", "compose.yml", "requirements-runtime.lock", "AGENTS.md", "README.md", "pyproject.toml"}
+ROOT_FILES = {".env.example", ".gitignore", ".dockerignore", ".gitleaks.toml", "Dockerfile", "compose.yml", "compose.ghcr.yml", "requirements-runtime.lock", "AGENTS.md", "README.md", "pyproject.toml"}
 DOCUMENTS = {
     "docs/007_MOBILE_APP_API_INTEGRATION_2026-08-26.md",
     "docs/API_CONTRACTS_V2.md",
@@ -33,6 +33,7 @@ GENERIC_CONFIGS = {
     "configs/legal_research_sources.json",
     "configs/source_registry.example.json",
     "configs/private_profile.example.json",
+    "configs/reviewed_secret_findings.json",
 }
 PRIVATE_SCRIPTS = {
     "build_family_law_disclosure_package_v2.py",

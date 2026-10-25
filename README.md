@@ -5,6 +5,29 @@ Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
 
+### Fertiges Image aus GHCR
+
+Registry: `ghcr.io/zonfacter/steuerreport-v2`, zunaechst privat wie das
+Repository. Zum Anmelden ein GitHub Personal Access Token (classic) mit
+`read:packages` verwenden. Token nur lokal beim Docker-Login eingeben,
+nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
+
+```bash
+docker login ghcr.io -u zonfacter
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc3
+docker compose -f compose.ghcr.yml up -d
+```
+
+Die GHCR-Compose-Datei baut nicht selbst. Mit
+`docker compose -f compose.ghcr.yml pull` wird die konfigurierte Version
+gezogen. `STEUERREPORT_IMAGE` kann stattdessen eine andere ausdrueckliche
+Version oder eine feste `ghcr.io/...@sha256:...`-Referenz setzen.
+Die zusaetzliche Kennung `sha-<vollstaendiger Release-Commit>` bezeichnet
+denselben veroeffentlichten Quellstand. Vorabversionen erhalten kein `latest`.
+Aktuell wird `linux/amd64` gebaut und geprueft, nicht ARM64.
+
+### Lokal aus dem Quellstand bauen
+
 ```bash
 docker compose up -d --build
 ```
@@ -20,6 +43,9 @@ Volume `steuerreport-data`. Das Image laeuft ohne Root, mit schreibgeschuetztem
 Software-Dateisystem und nur einem API-Worker. Die Portfreigabe ist auf
 127.0.0.1 begrenzt. Keine direkte Internetfreigabe; fuer Fernzugriff ist ein
 authentifiziertes TLS-Gateway oder VPN erforderlich.
+Eine gepflegte Docker-Version verwenden: Bei Docker vor 28.0.0 koennen
+localhost-Portfreigaben unter Umstaenden aus demselben Layer-2-Netz
+erreichbar sein. Details: https://docs.docker.com/engine/network/port-publishing/
 
 Konto-/Dateieinstellungen und private Quellenkonfigurationen werden ueber
 die Settingsseite gespeichert; sie ersetzen keine Belege oder fachlichen
@@ -36,6 +62,27 @@ des Secret-Stores ersetzt weder Dateirechte noch Host-/Backup-Verschluesselung.
 `docker compose down` behaelt das Volume, `down -v` loescht es unwiderruflich.
 Kein Schluessel, Profil oder privater Export darf in den Build-Kontext oder
 in ein Image kopiert werden. `.dockerignore` verwendet eine Positivliste.
+
+### Images veroeffentlichen
+
+Der Workflow `Publish GHCR Image` startet bei veroeffentlichten Releases
+oder manuell mit einem vorhandenen Release-Tag. Zuerst muss die vollstaendige
+CI bestehen. Die Docker-Eingaben des Tags muessen mit dem geprueften
+Quellstand uebereinstimmen; README und reine Test-/Workflow-Infrastruktur
+duerfen abweichen. Der Build verwendet ausschliesslich den Release-Commit.
+
+Vor dem Push werden Gitleaks, leere Betreiber-Vorlagen und ein leerer
+Containerstart geprueft. Bekannte Scanner-Fehlalarme sind einzeln an exakte
+Quellzeilen-Hashes gebunden; neue oder geaenderte Funde blockieren den Push.
+Es gibt keine pauschale Ignore-Regel. Bereits vorhandene Versionen werden
+nicht ueberschrieben, sondern nur bei passenden Quell-/Versionslabels erneut
+geprueft. Ein zweiter frischer Runner zieht anschliessend den Registry-Digest
+und prueft Frontend, API und fehlende Betreiberkonten mit neuem Datenvolume.
+
+Nur der Publish-Job erhaelt `packages: write`. Der Pull-Pruefjob hat lediglich
+Leserecht. Beide verwenden den kurzlebigen `GITHUB_TOKEN`, keine persoenlichen
+Registry-Secrets im Quellstand oder Image. Die Nachweise stehen als
+`ghcr-publication-*` und `ghcr-pull-verification-*` bei den Workflow-Artefakten.
 
 ## Native Installation
 

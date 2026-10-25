@@ -1,0 +1,187 @@
+name: Publish GHCR Image
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Vorhandener Release-Tag (z.B. v0.2.0rc3)"
+        required: true
+        default: v0.2.0rc3
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcr-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      version: ${{ steps.resolve.outputs.version }}
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+      digest: ${{ steps.receipt.outputs.digest }}
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+      CHECK_CONTAINER: sr-build-${{ github.run_id }}-${{ github.run_attempt }}
+      LOCAL_IMAGE: sr-build:${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: automation
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Isolierte Docker-Anmeldung vorbereiten
+        run: printf 'DOCKER_CONFIG=%s/docker-auth\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Geprueften Release-Quellstand bestimmen
+        id: resolve
+        run: >-
+          python automation/scripts/container_release_v2.py resolve
+          --repo automation --tag "$RELEASE_TAG" --owner "$GITHUB_REPOSITORY_OWNER"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.resolve.outputs.source_sha }}
+          path: image-source
+          persist-credentials: false
+      - name: Gitleaks mit festgelegter Pruefsumme installieren
+        run: |
+          curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz --output "$RUNNER_TEMP/gitleaks.tar.gz"
+          printf '%s  %s\n' '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' "$RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: Release auf Secrets und Kontodefaults pruefen
+        run: |
+          scanner_exit=0
+          "$RUNNER_TEMP/gitleaks" dir --config automation/.gitleaks.toml --redact=100 --ignore-gitleaks-allow --no-banner --report-format=json --report-path="$RUNNER_TEMP/secrets.raw.json" "$GITHUB_WORKSPACE/image-source" || scanner_exit=$?
+          python automation/scripts/check_release_secrets_v2.py --root image-source --report "$RUNNER_TEMP/secrets.raw.json" --scanner-exit "$scanner_exit" --output "$RUNNER_TEMP/secrets.reviewed.json"
+      - name: An GHCR anmelden
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Vorhandenen Versions-Tag pruefen
+        id: lookup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER_TYPE: ${{ github.event.repository.owner.type }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: >-
+          python automation/scripts/container_release_v2.py lookup
+          --owner "$GITHUB_REPOSITORY_OWNER" --owner-type "$OWNER_TYPE" --version "$VERSION"
+      - name: Image bauen oder unveraenderten vorhandenen Digest pruefen
+        env:
+          IMAGE: ${{ steps.resolve.outputs.image }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          SOURCE_SHA: ${{ steps.resolve.outputs.source_sha }}
+          EXISTING_DIGEST: ${{ steps.lookup.outputs.existing_digest }}
+        run: |
+          if [ -n "$EXISTING_DIGEST" ]; then
+            docker pull "$IMAGE@$EXISTING_DIGEST"
+            docker tag "$IMAGE@$EXISTING_DIGEST" "$LOCAL_IMAGE"
+          else
+            docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" --label "org.opencontainers.image.revision=$SOURCE_SHA" --label "org.opencontainers.image.version=$VERSION" --tag "$LOCAL_IMAGE" image-source
+          fi
+          docker image inspect "$LOCAL_IMAGE" > "$RUNNER_TEMP/built.inspect.json"
+          python automation/scripts/container_release_v2.py verify --local --inspect "$RUNNER_TEMP/built.inspect.json" --image "$IMAGE" --version "$VERSION" --sha "$SOURCE_SHA" --repository "$GITHUB_REPOSITORY" --output "$RUNNER_TEMP/build-metadata.json"
+      - name: Leeren Container vor Veroeffentlichung starten
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          docker run --detach --name "$CHECK_CONTAINER" --read-only --network none --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:size=256m,mode=1777 --mount type=volume,destination=/state "$LOCAL_IMAGE"
+          python automation/scripts/container_release_v2.py smoke --container "$CHECK_CONTAINER" --version "$VERSION" --output "$RUNNER_TEMP/build-smoke.json"
+      - name: Neue Version und Commit-Tag veroeffentlichen
+        if: steps.lookup.outputs.existing_digest == ''
+        env:
+          IMAGE: ${{ steps.resolve.outputs.image }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          COMMIT_TAG: ${{ steps.resolve.outputs.commit_tag }}
+        run: |
+          docker tag "$LOCAL_IMAGE" "$IMAGE:$VERSION"
+          docker tag "$LOCAL_IMAGE" "$IMAGE:$COMMIT_TAG"
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:$COMMIT_TAG"
+      - name: Registry-Digest erfassen
+        id: receipt
+        env:
+          IMAGE: ${{ steps.resolve.outputs.image }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          SOURCE_SHA: ${{ steps.resolve.outputs.source_sha }}
+        run: |
+          docker pull "$IMAGE:$VERSION"
+          docker image inspect "$IMAGE:$VERSION" > "$RUNNER_TEMP/published.inspect.json"
+          python automation/scripts/container_release_v2.py verify --inspect "$RUNNER_TEMP/published.inspect.json" --image "$IMAGE" --version "$VERSION" --sha "$SOURCE_SHA" --repository "$GITHUB_REPOSITORY" --output "$RUNNER_TEMP/publication.json"
+      - name: Pruefnachweise archivieren
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ghcr-publication-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/publication.json
+            ${{ runner.temp }}/secrets.reviewed.json
+            ${{ runner.temp }}/build-smoke.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Testcontainer entfernen
+        if: always()
+        run: docker rm --force --volumes "$CHECK_CONTAINER" || true
+
+  verify-pull:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.publish.outputs.image }}
+      DIGEST: ${{ needs.publish.outputs.digest }}
+      VERSION: ${{ needs.publish.outputs.version }}
+      SOURCE_SHA: ${{ needs.publish.outputs.source_sha }}
+      CHECK_CONTAINER: sr-pull-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Isolierte Docker-Anmeldung vorbereiten
+        run: printf 'DOCKER_CONFIG=%s/docker-auth\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Mit Leserecht an GHCR anmelden
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image auf frischem Runner ziehen und starten
+        run: |
+          docker pull "$IMAGE@$DIGEST"
+          docker image inspect "$IMAGE@$DIGEST" > "$RUNNER_TEMP/pulled.inspect.json"
+          python scripts/container_release_v2.py verify --inspect "$RUNNER_TEMP/pulled.inspect.json" --image "$IMAGE" --version "$VERSION" --sha "$SOURCE_SHA" --repository "$GITHUB_REPOSITORY" --output "$RUNNER_TEMP/pull-metadata.json"
+          docker run --detach --name "$CHECK_CONTAINER" --read-only --network none --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:size=256m,mode=1777 --mount type=volume,destination=/state "$IMAGE@$DIGEST"
+          python scripts/container_release_v2.py smoke --container "$CHECK_CONTAINER" --version "$VERSION" --output "$RUNNER_TEMP/pull-smoke.json"
+      - name: Pull-Pruefung archivieren
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ghcr-pull-verification-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/pull-metadata.json
+            ${{ runner.temp }}/pull-smoke.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Testcontainer entfernen
+        if: always()
+        run: docker rm --force --volumes "$CHECK_CONTAINER" || true
