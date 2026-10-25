@@ -28,10 +28,12 @@ jobs:
       - name: Private account defaults
         run: python scripts/check_private_data_v2.py
       - name: Unit tests
+        env:
+          STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
         run: >-
-          pytest tests/unit -n 2 --dist loadfile -q
+          pytest tests/unit -n 4 --dist loadfile -q
           --basetemp="${RUNNER_TEMP}/steuerreport-tests"
-          -o tmp_path_retention_policy=failed
+          -o tmp_path_retention_policy=all
           -o tmp_path_retention_count=1
       - name: OpenAPI contract drift
         run: python scripts/export_openapi_v2.py --check
