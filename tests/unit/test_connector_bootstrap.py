@@ -26,6 +26,10 @@ def _base58(content):
 @pytest.fixture
 def bootstrap(tmp_path, monkeypatch):
     monkeypatch.delenv(TOKEN_FILE_ENV, raising=False)
+    # Track missing variables too: initialize_state sets defaults directly.
+    for key in ("STEUERREPORT_V2_REQUIRE_ENCRYPTED_SECRETS", "STEUERREPORT_USERTRANSFER_ROOT"):
+        monkeypatch.setenv(key, "")
+        monkeypatch.delenv(key)
     monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", str(tmp_path / "private_profile.json"))
     monkeypatch.setenv("STEUERREPORT_V2_DB", str(tmp_path / "data/test.duckdb"))

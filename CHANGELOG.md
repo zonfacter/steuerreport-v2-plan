@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.2.0rc17 - 2026-10-26
+## 0.2.0rc18 - 2026-10-26
+
+- Enthaelt den Solana-RPC- und Fehlermeldungs-Patch des nicht veroeffentlichten
+  rc17-Kandidaten, mit erneut geprueftem Gesamtstand.
+- Bestehende Test-Isolationsluecke geschlossen: Docker-Bootstrap-Umgebungsvariablen
+  werden in der Fixture zurueckgesetzt und laufen nicht in spaetere CEX-Tests aus.
+  Produktiver Vault-Zwang und Verschluesselung bleiben unveraendert.
+- rc17-Tag bleibt unveraendert; dessen Release-Entwurf wurde nach fuenf Fehlern
+  im lokalen Gesamtlauf zurueckgezogen. Kein produktives rc17-Update.
+
+## 0.2.0rc17 - 2026-10-26 (zurueckgezogener Entwurf)
 
 - Solana-Bestandsabruf verwendet den vorhandenen oeffentlichen oder konfigurierten
   RPC auch ohne Alchemy-Schluessel. Gespeicherte Helius-Zugaenge werden beruecksichtigt.
