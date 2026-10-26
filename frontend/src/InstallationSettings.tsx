@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, Save, Trash2 } from "lucide-react";
 import { API_BASE } from "./api-base";
+import { HelpTip } from "./Help";
 
 type Field = {
   key: string; label: string; group: string; kind: "account" | "path" | "url" | "text";
@@ -75,7 +76,7 @@ export function InstallationSettings() {
   return (
     <section className="installationSettings" aria-label="Installation und Konten">
       <div className="panelToolbar">
-        <h2>Installation und Konten</h2>
+        <div className="pageTitle"><h2>Installation und Konten</h2><HelpTip label="Private Installationseinstellungen">Hier werden eigene Konten, Wallets und Dienstadressen hinterlegt. API-Keys gehoeren in die getrennten Zugangsdatenfelder. Nach Konto- oder Dateiaenderungen die Neustartmeldung beachten; es erfolgt keine automatische Neuberechnung.</HelpTip></div>
         <button type="button" className="ghostButton" title="Einstellungen neu laden" aria-label="Einstellungen neu laden" disabled={busy}
           onClick={() => { if (!dirty || window.confirm("Ungespeicherte Aenderungen verwerfen?")) void act(load); }}><RefreshCw size={16} /></button>
       </div>
@@ -108,7 +109,7 @@ export function InstallationSettings() {
           await request(`/providers/${provider}`, "PUT", { api_key: secret }); setSecret(""); await load(true); setNotice("API-Key verschluesselt gespeichert.");
         });
       }}>
-        <h3>Provider-Zugangsdaten</h3>
+        <div className="pageTitle"><h3>Provider-Zugangsdaten</h3><HelpTip label="Provider und Boersenzugang">Diese Keys gelten fuer die genannten Blockchain-Dienste. Boersen-Zugangsdaten und KI-Verbindungen werden in ihren eigenen Bereichen eingerichtet. Keys werden nur bei verfuegbarem verschluesseltem Vault gespeichert.</HelpTip></div>
         {!settings.encrypted_secrets_available && <p role="status">Verschluesselter Secret-Vault noch nicht eingerichtet.</p>}
         <div className="formGrid"><label>Provider<select value={provider} disabled={busy} onChange={(event) => { setProvider(event.target.value); setSecret(""); }}>
           <option value="solscan">Solscan</option><option value="alchemy">Alchemy</option><option value="jupiter">Jupiter</option><option value="helius">Helius</option>

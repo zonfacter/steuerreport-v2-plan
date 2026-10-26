@@ -18,7 +18,7 @@ CASE_MODULES = {
     "lawyer_disclosure", "legal_email_archive", "legal_tax_documents",
     "property_documents",
 }
-ROOT_FILES = {".env.example", ".gitignore", ".dockerignore", ".gitleaks.toml", "Dockerfile", "compose.yml", "compose.ghcr.yml", "requirements-runtime.lock", "AGENTS.md", "README.md", "pyproject.toml"}
+ROOT_FILES = {".env.example", ".gitignore", ".dockerignore", ".gitleaks.toml", "Dockerfile", "compose.yml", "compose.ghcr.yml", "requirements-runtime.lock", "AGENTS.md", "README.md", "CHANGELOG.md", "pyproject.toml"}
 PUBLIC_DOCUMENTS = {
     "frontend/public/benutzerleitfaden.html", "frontend/public/benutzerleitfaden.pdf",
     "frontend/public/import-vorlage.csv", "frontend/public/importformate.pdf",
@@ -29,6 +29,7 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/UX_PRUEFUNG_2026-10-26.md",
     "docs/KI_EINSATZLEITFADEN.md",
     "docs/IMPORTFORMATE.md",
     "docs/007_MOBILE_APP_API_INTEGRATION_2026-08-26.md",

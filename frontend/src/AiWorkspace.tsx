@@ -3,6 +3,7 @@ import { BookOpen, Bot, Check, Download, LoaderCircle, Play, RefreshCw, Save, Tr
 import { API_BASE } from "./api-base";
 import { AiChangesWorkspace } from "./AiChangesWorkspace";
 import { AiAgentProfiles, loadAgents, type Agents } from "./AiAgentProfiles";
+import { HelpTip } from "./Help";
 
 type Config = { provider: "local" | "openrouter" | "cloud"; base_url: string; model: string; max_tokens: number; probe_max_tokens: number; timeout_seconds: number; token_parameter: "max_tokens" | "max_completion_tokens"; thinking: "server_default" | "llamacpp_off" | "ollama_off" };
 type Settings = { config: Config; revision: string; local_enabled: boolean; external_enabled: boolean; api_key_present: boolean; api_key_readable: boolean; encrypted_secrets_available: boolean; configured: boolean; source: string };
@@ -136,7 +137,8 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
   }
 
   return <section className="aiWorkspace" aria-label={configurationOnly ? "KI-Einrichtung" : "KI-Assistent"}>
-    <div className="panelToolbar"><h2>KI-Einrichtung</h2><div className="buttonRow">
+    <div className="panelToolbar"><h2>{configurationOnly ? "KI-Einrichtung" : "KI-Assistent"}</h2><div className="buttonRow">
+      <HelpTip label="KI-Aufgaben und Datenschutz">Textaufgaben erhalten den eingegebenen Text, nicht automatisch die gesamte Datenbank. Datenkorrekturen verwenden ausgewaehlte Zeilen und benoetigen Vorschau und menschliche Freigabe. Cloud-Inhalte werden nicht automatisch anonymisiert.</HelpTip>
       <a href="/ki-einsatzleitfaden.html" target="_blank" rel="noreferrer"><BookOpen size={16} /> Leitfaden</a>
       <button type="button" className="ghostButton" title="KI-Einstellungen neu laden" aria-label="KI-Einstellungen neu laden" disabled={busy}
         onClick={() => { if (!dirty || window.confirm("Ungespeicherte KI-Einstellungen verwerfen?")) void act(async () => { setSettings(await api<Settings>("/provider")); clearCatalog(); }); }}><RefreshCw size={16} /></button>
@@ -145,11 +147,13 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
     {notice && <p role="status">{notice}</p>}
     {!config && !error && <p role="status">KI-Einstellungen werden geladen.</p>}
     {config && saved && <>
+      <details className="aiConnectionSettings" key={saved.configured ? "configured" : "setup"} open={configurationOnly || !saved.configured ? true : undefined}>
+      <summary>Verbindung und Modelle{saved.configured ? `: ${config.provider === "openrouter" ? "OpenRouter" : config.provider === "local" ? "Lokal" : "Cloud"} / ${saved.config.model}` : ": Einrichtung erforderlich"}</summary>
       <form onSubmit={(event) => { event.preventDefault(); void act(async () => {
         const value = await api<Settings>("/provider", "PUT", { ...config, revision: saved.revision, local_enabled: localEnabled, external_enabled: externalEnabled, api_key: key || null, clear_api_key: clearKey });
         setSettings(value); setNotice("KI-Einstellungen gespeichert.");
       }); }}>
-        <fieldset disabled={busy}><legend>Verbindung</legend><div className="formGrid">
+        <fieldset disabled={busy}><legend>Verbindung <HelpTip label="Verbindung einrichten">Zuerst Anbieter, Adresse, Zugriff und bei Bedarf API-Key speichern. Danach Modelle laden, ein Modell waehlen und erneut speichern. Verbindung testen sendet eine kurze Anfrage und kann Kosten ausloesen.</HelpTip></legend><div className="formGrid">
           <label>Anbieter<select aria-label="KI-Anbieter" value={config.provider} onChange={(event) => {
             const provider = event.target.value as Config["provider"];
             setConfig({ ...config, provider, base_url: provider === "openrouter" ? "https://openrouter.ai/api/v1" : "", model: "", thinking: "server_default", token_parameter: "max_tokens" });
@@ -176,7 +180,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
         <div className="aiChecks"><label className="checkboxLabel"><input type="checkbox" checked={localEnabled} onChange={(event) => setLocalEnabled(event.target.checked)} /> Lokale KI aktivieren</label>
           <label className="checkboxLabel"><input type="checkbox" checked={externalEnabled} onChange={(event) => setExternalEnabled(event.target.checked)} /> Cloud-Zugriffe erlauben</label></div>
         {!saved.encrypted_secrets_available && <p role="status">Verschluesselter Secret-Vault nicht verfuegbar.</p>}
-        <details><summary>Modellparameter</summary><div className="formGrid">
+        <details><summary>Modellparameter</summary><HelpTip label="Token und Zeitlimit">Token begrenzen die Antwortlaenge. Ein zu kleines Limit kann Antworten abschneiden. Das Zeitlimit begrenzt die Wartezeit; nach einem Abbruch zuerst den Aufgabenverlauf pruefen, bevor erneut eine Anfrage gesendet wird.</HelpTip><div className="formGrid">
           <label>Antwortlimit (Token)<input type="number" aria-label="KI-Antwortlimit" min={16} max={16384} value={config.max_tokens} onChange={(event) => setConfig({ ...config, max_tokens: Number(event.target.value) })} /></label>
           <label>Testlimit (Token)<input type="number" min={16} max={2048} value={config.probe_max_tokens} onChange={(event) => setConfig({ ...config, probe_max_tokens: Number(event.target.value) })} /></label>
           <label>Zeitlimit (Sekunden)<input type="number" min={5} max={240} value={config.timeout_seconds} onChange={(event) => setConfig({ ...config, timeout_seconds: Number(event.target.value) })} /></label>
@@ -188,9 +192,10 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
           <button type="button" disabled={busy || !connectionAllowed || !saved.configured} onClick={() => void act(async () => { setProbe(null); setProbe(await api<Probe>("/provider/test", "POST")); })}>{busy ? <LoaderCircle size={16} /> : <Check size={16} />} Verbindung testen</button></div>
       </form>
       {probe && <div role="status" className="aiProbe"><strong>Verbindung erfolgreich: {probe.model}</strong><p>{probe.answer}</p>{probe.truncated && <span>Testantwort am Tokenlimit beendet.</span>}</div>}
+      </details>
       {agents && <><label>Fachagent<select aria-label="KI-Fachagent" value={agentId} disabled={busy} onChange={(event) => { setAgentId(event.target.value); setConfirmed(false); }}>
         {agents.profiles.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.name}{agent.enabled ? "" : " (deaktiviert)"}</option>)}
-      </select></label><AiAgentProfiles value={agents} activeId={agentId} provider={config.provider} models={filteredModels} onSaved={(value) => { setAgents(value); setConfirmed(false); }} onDirty={setAgentsDirty} /></>}
+      </select></label><HelpTip label="Fachagent und Modell">Ein Fachagent ist ein Aufgabenprofil, kein zusaetzlich trainiertes Modell. Ohne eigene Modell-ID erbt er das Modell der aktiven Verbindung. Keine automatische Team-Ausfuehrung und kein automatischer Wechsel auf kostenpflichtige Modelle.</HelpTip><AiAgentProfiles value={agents} activeId={agentId} provider={config.provider} models={filteredModels} onSaved={(value) => { setAgents(value); setConfirmed(false); }} onDirty={setAgentsDirty} /></>}
       {!configurationOnly && <>
         <div className="buttonRow" role="tablist" aria-label="KI-Arbeitsmodus">
           <button type="button" role="tab" aria-selected={workMode === "text"} onClick={() => setWorkMode("text")}><Bot size={16} /> Textaufgaben</button>
@@ -204,6 +209,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
           <h3>Neue Aufgabe</h3><label>Aufgabentyp<select value={taskType} disabled={busy} onChange={(event) => setTaskType(event.target.value)}><option value="review">Review</option><option value="risk_scan">Risikopruefung</option><option value="import_mapping">Importzuordnung</option><option value="documentation">Dokumentation</option></select></label>
           <label>Aufgabentext<textarea aria-label="KI-Aufgabentext" rows={6} maxLength={32000} value={prompt} disabled={busy} onChange={(event) => { setPrompt(event.target.value); setConfirmed(false); }} /></label>
           {cloud && <label className="checkboxLabel"><input type="checkbox" checked={confirmed} disabled={busy} onChange={(event) => setConfirmed(event.target.checked)} /> Diesen Text an {config.provider === "openrouter" ? "OpenRouter" : "den Cloud-Anbieter"} senden</label>}
+          <p className="actionRequirement" role="status">{busy ? "Auftrag wird verarbeitet." : dirty ? "Geaenderte Verbindungseinstellungen zuerst speichern." : !connectionAllowed || !saved.configured ? "Aktivierte Verbindung und Modell zuerst speichern." : agentsDirty ? "Geaenderte Agentenprofile zuerst speichern." : !agents?.profiles.find((agent) => agent.agent_id === agentId)?.enabled ? "Einen aktivierten Fachagenten waehlen." : !prompt.trim() ? "Aufgabentext eingeben." : cloud && !confirmed ? "Vor dem Senden die Cloud-Freigabe bestaetigen." : "Aufgabe bereit zur Ausfuehrung."}</p>
           <button type="submit" className="primaryButton" disabled={busy || !connectionAllowed || !saved.configured || agentsDirty || !agents?.profiles.find((agent) => agent.agent_id === agentId)?.enabled || !prompt.trim() || (cloud && !confirmed)}>{busy ? <LoaderCircle size={16} /> : <Play size={16} />} Aufgabe ausfuehren</button>
         </form>
         <div className="panelToolbar"><h3>Aufgabenverlauf</h3><button type="button" title="Aufgabenverlauf aktualisieren" aria-label="Aufgabenverlauf aktualisieren" disabled={busy} onClick={() => void act(async () => setTasks(await api<Task[]>("/tasks")))}><RefreshCw size={16} /></button></div>

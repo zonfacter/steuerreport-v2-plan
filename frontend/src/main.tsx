@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { InstallationSettings } from "./InstallationSettings";
 import { FileImportWizard } from "./FileImportWizard";
 import { AiWorkspace } from "./AiWorkspace";
+import { HELP_TOPICS, HelpCenter, HelpTip, WorkflowNavigation } from "./Help";
 import {
   AlertTriangle,
   Archive,
@@ -48,6 +49,7 @@ type Section =
   | "tax"
   | "export"
   | "admin"
+  | "help"
   | "ai";
 
 type ApiResponse<T> = {
@@ -3091,7 +3093,7 @@ const navItems: Array<{
   id: Section;
   label: string;
   description: string;
-  group: "workflow" | "evidence" | "expert";
+  group: "workflow" | "evidence" | "support";
   icon: React.ReactNode;
 }> = [
   { id: "dashboard", label: "Uebersicht", description: "Gesamtstatus, naechster Schritt und Live-Datenstand", group: "workflow", icon: <LayoutDashboard size={18} /> },
@@ -3105,7 +3107,8 @@ const navItems: Array<{
   { id: "portfolio", label: "Portfolio & Haltefristen", description: "Bestand, Preisdeckung und steuerfreie Positionen", group: "evidence", icon: <WalletCards size={18} /> },
   { id: "stichtage", label: "Stichtagswerte", description: "Historische Bestands- und Wertansicht", group: "evidence", icon: <CalendarDays size={18} /> },
   { id: "zugewinn", label: "Zugewinndossier", description: "Stichtagswerte, Erbgeld und familienrechtliche Belege", group: "evidence", icon: <Scale size={18} /> },
-  { id: "ai", label: "KI-Assistent", description: "Modelle, Verbindung und Review-Aufgaben", group: "workflow", icon: <Bot size={18} /> }
+  { id: "ai", label: "KI-Assistent", description: "Modelle, Verbindung und Review-Aufgaben", group: "workflow", icon: <Bot size={18} /> },
+  { id: "help", label: "Hilfe & Anleitungen", description: "Arbeitsablaeufe, Antworten und Begriffe", group: "support", icon: <BookOpen size={18} /> }
 ];
 
 const API_BASE = import.meta.env.VITE_API_BASE || window.location.origin;
@@ -3242,8 +3245,11 @@ function App() {
   const [loaderStatuses, setLoaderStatuses] = useState<LoaderStatus[]>([]);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
   const [lastLoadFailureCount, setLastLoadFailureCount] = useState(0);
-  const [showExpertNav, setShowExpertNav] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [helpTopic, setHelpTopic] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("hilfethema");
+    return HELP_TOPICS.some((topic) => topic.id === requested) ? requested! : "all";
+  });
   const refreshRunId = useRef(0);
   const [sourceRefreshLoading, setSourceRefreshLoading] = useState(false);
   const [sourceRegistryRunLoading, setSourceRegistryRunLoading] = useState(false);
@@ -3751,7 +3757,8 @@ function App() {
           ...(exportViewMode === "expert" ? ["exports", "priceQuality"] : [])
         ],
         admin: ["health", "admin", "adminSettings", "sourceConnectorDiagnostics", "jupiterMetadataCache"],
-        ai: ["health", "ai", "localAiYearPackageQa"]
+        ai: ["health", "ai", "localAiYearPackageQa"],
+        help: []
       };
       const loaders = loaderKeysBySection[active].map((key) => allLoaders[key]);
       setLoaderStatuses(loaders.map((loader) => ({ key: loader.key, label: loader.label, status: "pending" })));
@@ -5406,6 +5413,7 @@ function App() {
   }, [active, flowYear, asOfDate, selectedSourceId, selectedTaxYear, taxViewMode, portfolioViewMode, tokenRiskFilter, sourceViewMode, exportViewMode, reviewViewMode, importViewMode]);
 
   function navigateTo(section: Section) {
+    if (section === "help") setHelpTopic("all");
     setActive(section);
     setMobileNavOpen(false);
   }
@@ -5428,44 +5436,28 @@ function App() {
             <X size={20} />
           </button>
         </div>
-        <nav>
-          {(["workflow", "evidence", "expert"] as const).map((group) => (
+        <nav aria-label="Bereiche">
+          {(["workflow", "evidence", "support"] as const).map((group) => (
             <div className="navGroup" key={group}>
-              {group === "expert" && !showExpertNav ? (
-                <button className="expertToggle" type="button" onClick={() => setShowExpertNav(true)}>
-                  <Settings size={18} />
-                  <span>Expertenwerkzeuge anzeigen</span>
-                </button>
-              ) : null}
-              {group === "expert" && !showExpertNav ? null : (
-                <>
               <span className="navGroupLabel">
-                {group === "workflow" ? "Arbeitsablauf" : group === "evidence" ? "Auswertungen" : "Werkzeuge"}
+                {group === "workflow" ? "Arbeitsablauf" : group === "evidence" ? "Auswertungen" : "Hilfe"}
               </span>
               {navItems.filter((item) => item.group === group).map((item) => (
                 <button
                   key={item.id}
-                  className={`${active === item.id ? "active" : ""} ${item.group === "expert" ? "expertNav" : ""}`}
+                  className={active === item.id ? "active" : ""}
                   onClick={() => navigateTo(item.id)}
                   type="button"
                   title={item.description}
+                  aria-current={active === item.id ? "page" : undefined}
                 >
                   {item.icon}
                   <span>{item.label}</span>
                 </button>
               ))}
-              {group === "expert" ? (
-                <button className="expertToggle" type="button" onClick={() => setShowExpertNav(false)}>
-                  <Settings size={18} />
-                  <span>Expertenwerkzeuge ausblenden</span>
-                </button>
-              ) : null}
-                </>
-              )}
             </div>
           ))}
         </nav>
-        <a className="userGuideLink" href="/benutzerleitfaden.html" target="_blank" rel="noreferrer"><BookOpen size={18} /> Benutzerleitfaden</a>
       </aside>
       <section className="workspace">
         <header className="topbar">
@@ -5481,31 +5473,33 @@ function App() {
               <Menu size={20} />
             </button>
             <div>
-              <h1>{activeLabel}</h1>
+              <div className="pageTitle"><h1>{activeLabel}</h1>{active !== "help" && <HelpTip label={activeLabel}>{HELP_TOPICS.find((item) => item.id === active)?.caution ?? activeDescription}</HelpTip>}</div>
               <p>{activeDescription}</p>
             </div>
           </div>
-          <div className="topbarStatus">
+          {active !== "help" && <div className="topbarStatus">
             <span className={`statusPill ${snapshot.productReadiness ? readinessTone(snapshot.productReadiness.overall_status) : snapshot.health ? "ok" : "warning"}`}>
-              {snapshot.productReadiness ? readinessLabel(snapshot.productReadiness.overall_status) : snapshot.health ? "Verbunden" : "Verbinde"}
+              {snapshot.productReadiness ? `Auswertung: ${readinessLabel(snapshot.productReadiness.overall_status)}` : snapshot.health ? "API verbunden" : "Verbinde mit API"}
             </span>
             {snapshot.productReadiness?.next_action ? <em>{snapshot.productReadiness.next_action}</em> : null}
-          </div>
-          <button className="statusButton" type="button" onClick={refresh} disabled={pageLoading}>
+          </div>}
+          {active !== "help" && <div className="buttonRow topbarActions"><a className="ghostButton" href={`?hilfethema=${active}#help`} target="_blank" rel="noreferrer" title="Hilfe in neuem Tab oeffnen; Eingaben bleiben erhalten"><BookOpen size={16} /> Hilfe zum Bereich <ExternalLink size={14} /></a>
+          <button className="statusButton" type="button" title="Angezeigten Datenstand erneut laden; keine Neuberechnung" onClick={refresh} disabled={pageLoading}>
             <RefreshCcw className={pageLoading ? "spin" : ""} size={16} />
             {pageLoading ? "Laedt" : "Aktualisieren"}
-          </button>
+          </button></div>}
         </header>
+        <WorkflowNavigation active={active} />
         {error ? <div className="error">{error}</div> : null}
         {notice ? <div className="notice">{notice}</div> : null}
-        <LoadingStatusPanel
+        {active !== "help" && <LoadingStatusPanel
           loading={pageLoading}
           statuses={loaderStatuses}
           activeLabel={activeLabel}
           lastRefreshAt={lastRefreshAt}
           lastLoadFailureCount={lastLoadFailureCount}
-        />
-        <Content
+        />}
+        {active === "help" ? <HelpCenter key={helpTopic} initialTopic={helpTopic} /> : <Content
           active={active}
           snapshot={snapshot}
           onRebuildFlows={rebuildFlows}
@@ -5617,7 +5611,7 @@ function App() {
           onMinHoldingValueEurChange={setMinHoldingValueEur}
           jupiterTokenQuery={jupiterTokenQuery}
           onJupiterTokenQueryChange={setJupiterTokenQuery}
-        />
+        />}
       </section>
     </main>
   );
@@ -6439,7 +6433,14 @@ function Content({
     return (
       <Stack>
         <InstallationSettings />
+        <AdminCexCredentialForm
+          connectorDiagnostics={snapshot.sourceConnectorDiagnostics}
+          onSaveCexCredentials={onSaveCexCredentials}
+          onRefreshConfiguredSources={onRefreshConfiguredSources}
+          sourceRefreshLoading={sourceRefreshLoading}
+        />
         <AiWorkspace configurationOnly />
+        <details className="advancedSettings"><summary>Technische Diagnose und erweiterte Einstellungen</summary>
         <ToolSafetyPanel
           title="Administration"
           tone="warning"
@@ -6448,12 +6449,6 @@ function Content({
           nextAction="Credentials nur aktualisieren, wenn Quelle und Secret sicher bekannt sind."
         />
         <KeyValuePanel title="Admin-Status" data={snapshot.admin ?? {}} />
-        <AdminCexCredentialForm
-          connectorDiagnostics={snapshot.sourceConnectorDiagnostics}
-          onSaveCexCredentials={onSaveCexCredentials}
-          onRefreshConfiguredSources={onRefreshConfiguredSources}
-          sourceRefreshLoading={sourceRefreshLoading}
-        />
         <JupiterTokenApiPanel
           query={jupiterTokenQuery}
           result={snapshot.jupiterTokenSearch}
@@ -6496,6 +6491,7 @@ function Content({
             }
           ]}
         />
+        </details>
       </Stack>
     );
   }
@@ -21135,9 +21131,21 @@ function KeyValuePanel({ title, data }: { title: string; data: Record<string, un
 }
 
 function Metric({ title, value }: { title: string; value: string }) {
+  const help: Record<string, string> = {
+    "API-Livewert": "Aktueller, von verbundenen Quellen gemeldeter Wert. Er ersetzt weder die historische Ereignisliste noch einen steuerlichen Gewinn.",
+    "Berechneter Ledgerwert": "Aus importierten Ereignissen und verfuegbaren Preisen berechneter Bestandswert. Fehlende Historie oder Preise koennen den Wert beeinflussen.",
+    "Live minus Ledger": "Differenz zwischen gemeldetem Livewert und berechnetem Bestand. Zuerst Zeitpunkte, Produktabdeckung und Quellen pruefen; keine automatische Korrektur.",
+    "Unmatched": "Abgaenge ohne ausreichend zugeordneten Anschaffungsbestand. Die Herkunft muss anhand von Originalbelegen geklaert werden.",
+    "Tax-Lines": "Berechnete steuerliche Ergebnispositionen. Ein Ereignis kann wegen mehrerer Anschaffungs-Lots mehrere Tax-Lines erzeugen.",
+    "FIFO-Lots": "Anschaffungsbestaende mit Zeit, Menge und Kosten. FIFO ordnet Abgaenge den zuerst angeschafften Bestaenden zu.",
+    "Verkaufserloese EUR": "Wert der Veraeusserungen; nicht gleich Gewinn oder tatsaechlicher EUR-Auszahlung auf ein Bankkonto.",
+    "Rewards/Mining": "Separat ausgewiesene Zufluesse. Betriebliche oder private Zuordnung und Bewertung anhand der konkreten Belege fachlich pruefen.",
+    "Steuerfrei archivieren": "In der Auswertung als steuerfrei klassifizierte Ergebnisse. Belege weiterhin aufbewahren; keine Aussage ueber tatsaechliche Bankauszahlungen.",
+    "Derivate": "Separat berechnetes Ergebnis von Derivatepositionen. Nicht mit Handelsvolumen oder einem Wallet-Transfer gleichsetzen."
+  };
   return (
     <div className="metric">
-      <span>{title}</span>
+      <span className="metricLabel">{title}{help[title] && <HelpTip label={title}>{help[title]}</HelpTip>}</span>
       <strong>{value}</strong>
     </div>
   );

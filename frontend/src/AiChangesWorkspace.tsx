@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Download, Pencil, Play, RefreshCw, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { API_BASE } from "./api-base";
+import { HelpTip } from "./Help";
 
 type Kind = "event" | "price";
 type Query = { kind: Kind; year: number; asset: string; source: string; offset: number; limit: number };
@@ -116,12 +117,12 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud,
   }
 
   return <section className="aiChanges" aria-label="KI-Datenkorrekturen">
-    <h3>Datenkorrekturen</h3>
+    <div className="pageTitle"><h3>Datenkorrekturen</h3><HelpTip label="Korrektur und Freigabe">Lade und waehle zuerst Datenzeilen. Vorschlag und Berechnungsvorschau aendern die Finanzdaten noch nicht. Erst die ausdrueckliche menschliche Freigabe uebernimmt die geprueften Positionen. Eine Ruecknahme benoetigt erneut Vorschau und Freigabe.</HelpTip></div>
     {error && <p role="alert" className="error">{error}</p>}
     {notice && <p role="status">{notice}</p>}
     {busy && <p role="status">Auftrag wird verarbeitet.</p>}
     <form onSubmit={(event) => { event.preventDefault(); void act(() => load()); }}>
-      <fieldset disabled={busy}><legend>Datenauswahl</legend><div className="formGrid">
+      <fieldset disabled={busy}><legend>Datenauswahl <HelpTip label="Auswahl und Filter">Das Jahr bezieht sich auf Europe/Berlin. Asset und Quelle filtern exakt; lasse sie fuer alle Werte leer. Es werden nur ausgewaehlte Zeilen an die KI gesendet, hoechstens 25 pro Vorschlag.</HelpTip></legend><div className="formGrid">
         <label>Datenart<select aria-label="Korrektur-Datenart" value={query.kind} onChange={(event) => queryField({ kind: event.target.value as Kind })}><option value="event">Transaktionen</option><option value="price">Preise</option></select></label>
         <label>Jahr<input aria-label="Korrektur-Jahr" type="number" min={2000} max={2100} value={query.year} onChange={(event) => queryField({ year: Number(event.target.value) })} /></label>
         <label>Asset<input aria-label="Korrektur-Asset" value={query.asset} onChange={(event) => queryField({ asset: event.target.value })} /></label>
@@ -143,6 +144,7 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud,
         <label>Korrekturauftrag<textarea aria-label="KI-Korrekturauftrag" rows={4} maxLength={4000} value={instruction} disabled={busy} onChange={(event) => { setInstruction(event.target.value); setExternal(false); }} /></label>
         <details><summary>Freizugebender Datenkontext ({rows.length})</summary><pre>{JSON.stringify(rows, null, 2)}</pre></details>
         {cloud && <label className="checkboxLabel"><input type="checkbox" checked={external} disabled={busy} onChange={(event) => setExternal(event.target.checked)} /> Auftrag und ausgewaehlte Daten an den KI-Anbieter senden</label>}
+        <p className="actionRequirement" role="status">{busy ? "Auftrag wird verarbeitet." : !selected.length ? "Mindestens eine Datenzeile auswaehlen." : selected.length > 25 ? "Hoechstens 25 Datenzeilen auswaehlen." : !connectionAllowed ? "Fuer KI-Vorschlaege zuerst Verbindung und Fachagent einrichten; manuelles Vorbereiten ist weiterhin moeglich." : instruction.trim().length < 10 ? "Korrekturauftrag mit mindestens zehn Zeichen ergaenzen." : cloud && !external ? "Datenkontext pruefen und die Cloud-Uebermittlung freigeben." : "Auswahl bereit fuer einen Korrekturvorschlag."}</p>
         <div className="buttonRow"><button type="submit" disabled={busy || !connectionAllowed || !selected.length || selected.length > 25 || instruction.trim().length < 10 || (cloud && !external)}><Play size={16} /> KI-Vorschlaege erstellen</button>
           <button type="button" disabled={busy || !selected.length || selected.length > 25} onClick={manual}><Pencil size={16} /> Manuell vorbereiten</button></div>
       </form>
@@ -188,6 +190,7 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud,
       <label>Pruefvermerk<textarea aria-label="Korrektur-Pruefvermerk" required minLength={10} maxLength={2000} value={rationale} disabled={busy} onChange={(event) => setRationale(event.target.value)} /></label>
       {editable ? <><label className="checkboxLabel"><input type="checkbox" checked={checked} disabled={busy} onChange={(event) => setChecked(event.target.checked)} /> Originalbelege und Auswirkungen selbst geprueft</label>
         <label className="checkboxLabel"><input type="checkbox" checked={confirmed} disabled={busy} onChange={(event) => setConfirmed(event.target.checked)} /> Ausgewaehlte Aenderungen verbindlich in die Datenbank uebernehmen</label>
+        <p className="actionRequirement" role="status">{busy ? "Auftrag wird verarbeitet." : editing ? "Zuerst die bearbeitete Vorschlagsrevision speichern." : !previewMatches ? "Berechnungsvorschau fuer die aktuelle Auswahl erstellen und pruefen." : actor.trim().length < 2 ? "Freigebende Person mit mindestens zwei Zeichen eintragen." : rationale.trim().length < 10 ? "Pruefvermerk mit mindestens zehn Zeichen ergaenzen." : !checked || !confirmed ? "Belegpruefung und verbindliche Uebernahme ausdruecklich bestaetigen." : "Bereit zur verbindlichen Uebernahme. Datenbank und Auswertungen werden geaendert."}</p>
         <button type="submit" className="primaryButton" disabled={busy || !previewMatches || !checked || !confirmed || actor.trim().length < 2 || rationale.trim().length < 10 || !!editing}><Check size={16} /> Freigegebene Aenderungen uebernehmen</button></>
         : <button type="button" disabled={busy || rationale.trim().length < 10} onClick={() => void act(async () => { choose(await api<ChangeSet>(`/changes/${active.change_set_id}/revert`, { reason: rationale })); await refresh(); })}><RotateCcw size={16} /> Ruecknahme vorbereiten</button>}
     </form>}

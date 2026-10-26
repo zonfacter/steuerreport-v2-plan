@@ -1,6 +1,6 @@
 # Steuerreport V2
 
-Version 0.2.0rc12. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc13. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 ## Docker-Installation
@@ -14,7 +14,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc12
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc13
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -86,11 +86,28 @@ Registry-Secrets im Quellstand oder Image. Die Nachweise stehen als
 
 ## Bedienung Und Import
 
-Der Benutzerleitfaden ist in der Navigation dauerhaft verlinkt und wird als
+Unter **Hilfe & Anleitungen** (`/#help`) stehen durchsuchbare Arbeitsablaeufe,
+haeufige Fragen, Begriffserklaerungen sowie alle HTML-/PDF-Leitfaeden bereit.
+`Hilfe zum Bereich` oeffnet das passende Thema in einem neuen Tab, ohne
+ungespeicherte Eingaben im Arbeitsbereich zu verwerfen. Der Hilfeeinstieg
+benoetigt keine API-Verbindung und loest keine Modellanfrage aus.
+Die Ablaufleiste bietet Orientierung, bestaetigt aber keine erledigten
+Pruefungen. Auf schmalen Bildschirmen ist sie aufklappbar. Fragezeichen-Hilfen
+funktionieren per Hover, Tastaturfokus und Touch; Escape schliesst sie.
+Import und KI-Aufgaben zeigen die jeweils fehlende Voraussetzung direkt an.
+Technische Administration und bereits eingerichtete KI-Verbindungen sind
+eingeklappt, bleiben aber ausdruecklich zugaenglich.
+
+Der Benutzerleitfaden wird als
 [HTML](frontend/public/benutzerleitfaden.html) und
 [PDF](frontend/public/benutzerleitfaden.pdf) mitgeliefert. Er beschreibt
 Einrichtung, Originalexporte, Importfreigabe, Belegspuren, Jahresberichte und
 Sicherungen einschliesslich Grenzen der vorhandenen API-Historienpfade.
+
+Reproduzierbarer Browser-Smoke-Test mit synthetischen Daten (kein echter
+Import, keine Modellanfrage): `python scripts/check_ux_browser_v2.py
+--base-url http://localhost:5174`. Dafuer separat Playwright und Chromium
+installieren. Testbelege und Screenshots landen in `artifacts/ux-browser/`.
 
 Unter `Daten importieren > Dateiimport` koennen mehrere CSV-/Excel-Dateien
 mit Quelle, Blattwahl, Vorschau, Originaldatei-Hash und Dublettenpruefung

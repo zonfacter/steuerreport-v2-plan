@@ -43,6 +43,21 @@ Diese Fehler duerfen nicht zurueckkommen:
 
 ## Definition of Done
 
+Bei beauftragten produktiven Updates gehoeren GitHub und Deployment zusammen:
+
+- Eigene Aenderungen mit konsistenter Software-, Frontend- und Compose-Version
+  committen und auf GitHub pushen; keine unbeteiligten Aenderungen mitnehmen.
+- `CHANGELOG.md` pflegen und einen neuen unveraenderlichen Versions-Tag
+  erstellen; vorhandene Tags niemals verschieben.
+- Einen GitHub Draft Release mit Aenderungen, Grenzen und Pruefnachweisen
+  erstellen oder aktualisieren. Veroeffentlichung aus dem Entwurfsstatus nur
+  nach entsprechendem Auftrag; ein Image kann per Workflow-Dispatch separat
+  fuer einen vorhandenen Tag gebaut und geprueft werden.
+- Vor Containerwechsel Datenvolume, Einstellungen und Secrets sichern,
+  Rollback ermoeglichen und nachher Daten-/Konfigurationserhalt sowie den
+  bestehenden produktiven Zugriff pruefen. Keine neue Vorschau-URL als
+  Ersatz fuer ein ausdruecklich beauftragtes produktives Update verwenden.
+
 Eine Aenderung ist erst fertig, wenn:
 
 - Tests oder nachvollziehbare Smoke Checks ausgefuehrt wurden.

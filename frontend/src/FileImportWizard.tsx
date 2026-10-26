@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, ClipboardCheck, Download, FileDown, FolderOpen, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { API_BASE } from "./api-base";
+import { HelpTip } from "./Help";
 
 type Profile = { source: string; label: string };
 type Preview = {
@@ -127,12 +128,14 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
 
   return <section className="fileImportWizard" aria-label="Dateiimport">
     <div className="panelToolbar"><h2>Dateien importieren</h2><div className="buttonRow">
+      <HelpTip label="Importquelle und Dateiformat">Die Quelle bestimmt Spalten und Bedeutung der Buchungen. CSV, XLSX und XLS werden nur mit passendem Layout verarbeitet. Erst pruefen und die Vorschau kontrollieren; die Pruefung allein importiert noch keine Datei.</HelpTip>
       <a href="/benutzerleitfaden.html#import" target="_blank" rel="noreferrer" className="ghostButton"><FileDown size={16} /> Leitfaden</a>
       <a href={`/importformate.html${source ? `#${source}` : ""}`} target="_blank" rel="noreferrer" className="ghostButton"><FileDown size={16} /> Formate &amp; Spalten</a>
       <a href={source ? `/import-vorlagen/${source}.csv` : "/import-vorlage.csv"} download className="ghostButton"><Download size={16} /> CSV-Vorlage</a>
       <a href="/import-vorlagen/import-vorlagen.xlsx" download className="ghostButton"><Download size={16} /> Excel-Vorlagen</a>
     </div></div>
     <ol className="importStages" aria-label="Importfortschritt">{["Dateien", "Pruefung", "Freigabe", "Ergebnis"].map((label, index) => <li key={label} aria-current={stage === index + 1 ? "step" : undefined} className={stage > index + 1 ? "complete" : ""}><span>{stage > index + 1 ? <Check size={15} /> : index + 1}</span>{label}</li>)}</ol>
+    <p className="actionRequirement" role="status">{busy ? "Dateivorgang wird verarbeitet." : !source ? "Zuerst die Quelle fuer deine Dateien waehlen." : !items.length ? "Dateien auswaehlen oder hierher ziehen." : ready.length && !approved ? "Vorschau und Warnungen pruefen, dann die geprueften Dateien freigeben." : ready.length ? "Freigegebene Dateien sind bereit fuer den Import." : imported.length === items.length ? "Import abgeschlossen. Ergebnis und offene Hinweise pruefen." : items.some((item) => ["error", "blocked"].includes(item.status)) ? "Dateihinweise klaeren oder betroffene Dateien aus der Auswahl entfernen." : "Dateien pruefen und danach die Vorschau kontrollieren."}</p>
     {error && <p role="alert" className="error">{error}</p>}
     <div className="importSelection"><label>Quelle<select aria-label="Importquelle" value={source} disabled={busy || imported.length > 0} onChange={(event) => { generation.current += 1; setSource(event.target.value); setApproved(false); setItems((rows) => rows.map((row) => fileProblem(row.file) ? row : ({ ...row, status: "pending", preview: undefined, error: undefined }))); }}>
       <option value="">Quelle auswaehlen</option>{profiles.map((profile) => <option key={profile.source} value={profile.source}>{profile.label}</option>)}
