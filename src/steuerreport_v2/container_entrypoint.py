@@ -9,9 +9,12 @@ from pathlib import Path
 def initialize_state() -> None:
     os.umask(0o077)
     state = Path(os.environ.get("STEUERREPORT_STATE_DIR", str(Path.home() / ".local/share/steuerreport")))
+    profile = Path(os.environ.get("STEUERREPORT_PRIVATE_PROFILE", str(state / "private_profile.json")))
+    database = Path(os.environ.get("STEUERREPORT_V2_DB", str(state / "data/steuerreport_v2.duckdb")))
+    key_file = Path(os.environ.get("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(state / "keys/vault.key")))
+    fresh_installation = not any(path.exists() for path in (profile, database, key_file))
     for name in ("data", "var", "imports", "configs", "keys"):
         (state / name).mkdir(parents=True, exist_ok=True, mode=0o700)
-    profile = Path(os.environ.get("STEUERREPORT_PRIVATE_PROFILE", str(state / "private_profile.json")))
     profile.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         with profile.open("x", encoding="utf-8") as handle:
@@ -21,7 +24,6 @@ def initialize_state() -> None:
     os.environ.setdefault("STEUERREPORT_PRIVATE_PROFILE", str(profile))
     os.environ.setdefault("STEUERREPORT_V2_DB", str(state / "data/steuerreport_v2.duckdb"))
     os.environ.setdefault("STEUERREPORT_USERTRANSFER_ROOT", str(state / "imports"))
-    key_file = Path(os.environ.get("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(state / "keys/vault.key")))
     key_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         descriptor = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -37,6 +39,9 @@ def initialize_state() -> None:
     from steuerreport_v2.domain.secret_vault import load_vault_key
     if load_vault_key() is None:
         raise RuntimeError("existing_secret_vault_key_invalid; restore_original_key_without_overwriting")
+    if fresh_installation and "STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE" not in os.environ:
+        from steuerreport_v2.domain.connector_bootstrap import initialize_token
+        initialize_token()
 
 
 def main() -> None:

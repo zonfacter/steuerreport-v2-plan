@@ -24,6 +24,7 @@ def test_release_excludes_case_work_runtime_and_originals():
         "frontend/public/import-vorlagen/private.csv",
         "frontend/public/import-vorlagen/private.xlsx",
         "configs/source_registry.json", "configs/solana_v1_ownership_scope.json",
+        "src/steuerreport_v2/connector-setup.token", "frontend/public/operator.token",
     ):
         assert not builder.software_path(name), name
     for name in (

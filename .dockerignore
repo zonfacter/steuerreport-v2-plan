@@ -26,6 +26,7 @@
 **/__pycache__
 **/*.pyc
 **/*.key
+**/*.token
 **/*.pem
 **/*.duckdb
 **/.env

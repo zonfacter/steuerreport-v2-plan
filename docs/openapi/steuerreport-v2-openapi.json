@@ -79853,7 +79853,7 @@
     "securitySchemes": {
       "ConnectorSetupBearer": {
         "bearerFormat": "local setup token",
-        "description": "Lokaler Administrator-Token aus STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE; niemals in einer App speichern.",
+        "description": "Lokaler Administrator-Token aus STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE oder der ausdruecklich vorbereiteten privaten Datei keys/connector-setup.token. Bootstrap nur lokal; keine Token-Ausgabe ueber die Web-API. Niemals in App-Storage speichern.",
         "scheme": "bearer",
         "type": "http"
       },
@@ -79869,7 +79869,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc14"
+    "version": "0.2.0rc15"
   },
   "openapi": "3.1.0",
   "paths": {

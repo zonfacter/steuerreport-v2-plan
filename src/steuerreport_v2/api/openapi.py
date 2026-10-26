@@ -218,7 +218,9 @@ def configure_openapi_routes(app: FastAPI) -> None:
                     "bearerFormat": "local setup token",
                     "description": (
                         "Lokaler Administrator-Token aus "
-                        "STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE; niemals in einer App speichern."
+                        "STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE oder der ausdruecklich vorbereiteten "
+                        "privaten Datei keys/connector-setup.token. Bootstrap nur lokal; keine Token-Ausgabe "
+                        "ueber die Web-API. Niemals in App-Storage speichern."
                     ),
                 },
                 "MobileConnectorBearer": {

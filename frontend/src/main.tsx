@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
+import { ConnectorSetupSettings } from "./ConnectorSetupSettings";
 import { ConnectionSettings, RequestLimitSettings, useAdminEnvironment } from "./ConnectionSettings";
 import { FileImportWizard } from "./FileImportWizard";
 import { AiWorkspace } from "./AiWorkspace";
@@ -6452,6 +6453,7 @@ function Content({
     return (
       <Stack>
         <InstallationSettings />
+        <ConnectorSetupSettings />
         <DataProviderSettings />
         <ConnectionSettings />
         <RequestLimitSettings />

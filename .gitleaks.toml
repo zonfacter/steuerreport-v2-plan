@@ -9,3 +9,10 @@ description = "Helius UUID API key in an RPC URL or named configuration"
 regex = '''(?i)(?:helius[^\r\n]{0,160}?api[-_]?key|HELIUS_API_KEY|api-key)\s*[=:]\s*["']?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'''
 secretGroup = 1
 keywords = ["helius", "api-key", "HELIUS_API_KEY"]
+
+[[rules]]
+id = "connector-bootstrap-password-file"
+description = "Private generated connector setup password must never be committed"
+path = '''(?:^|/)connector-setup\.token$'''
+regex = '''(?m)^([A-Za-z0-9_-]{64})\r?$'''
+secretGroup = 1

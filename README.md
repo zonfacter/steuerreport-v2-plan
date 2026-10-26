@@ -1,9 +1,10 @@
 # Steuerreport V2
 
-Version 0.2.0rc14. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc15. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc14](docs/RELEASE_0.2.0rc14.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc15](docs/RELEASE_0.2.0rc15.md) ·
+[Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
 
@@ -19,7 +20,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc14
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc15
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -43,6 +44,25 @@ Ist der Port belegt: `STEUERREPORT_PORT=18010 docker
 compose up -d --build`. Das Image enthaelt keine Betreiberkonten,
 Originalimporte oder Zugangsdaten. Neue Installationen starten leer.
 
+### Geschuetzte Wallet-Einrichtung
+
+Unter **Einrichtung > Wallet-Eigentumsnachweis** stehen Status und lokale
+Bootstrap-Befehle. Neue Docker-Installationen bereiten ein privates zufaelliges
+Connector-Einrichtungspasswort vor. Bestehende Installationen werden durch ein
+Update nicht automatisch freigeschaltet. Fuer sie bewusst in der Betreiberkonsole:
+
+```sh
+docker compose -f compose.ghcr.yml exec steuerreport python -m steuerreport_v2.connector_setup init
+docker compose -f compose.ghcr.yml exec steuerreport python -m steuerreport_v2.connector_setup show-token
+```
+
+Die zweite Aktion zeigt das Passwort nur in einer privaten interaktiven Konsole.
+Es wird nie von der Web-API zurueckgegeben. Unter **Quellen & Wallets > Quelle
+hinzufuegen > Solana-Wallet** in das maskierte Feld **Connector-Setup-Token**
+einfuegen. Wallet-Nachricht signieren und den vorhandenen Signaturnachweis pruefen;
+keine Seed-Phrase, Wallet-Private-Keys oder Boersen-Handelsrechte anfordern.
+Details, native/manuelle Installation und Fehlerhilfe: [Inbetriebnahme](docs/INBETRIEBNAHME.md).
+
 DuckDB, private Konfigurationen, Importe, Artefakte und der automatisch
 erzeugte Verschluesselungsschluessel liegen ausschliesslich im separaten
 Volume `steuerreport-data`. Das Image laeuft ohne Root, mit schreibgeschuetztem
@@ -61,7 +81,8 @@ Services diese Werte beim Start laden, ist anschliessend
 Provider-Keys (Solscan, Alchemy, Jupiter, Helius) und CEX-Credentials sind bereits
 ohne Neustart nutzbar. Provider-Keys werden nicht zurueckgegeben.
 
-Vor Updates das vollstaendige Volume einschliesslich `keys/vault.key`
+Vor Updates das vollstaendige Volume einschliesslich `keys/vault.key` und
+gegebenenfalls `keys/connector-setup.token`
 sichern. Der Schluessel darf nicht verloren gehen oder ersetzt werden.
 Das Volume und seine Sicherungen enthalten private Daten; die Verschluesselung
 des Secret-Stores ersetzt weder Dateirechte noch Host-/Backup-Verschluesselung.

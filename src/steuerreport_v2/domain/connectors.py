@@ -5,12 +5,12 @@ import hashlib
 import hmac
 import json
 import os
-from pathlib import Path
 import secrets
 from uuid import uuid4
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from nacl.bindings import crypto_core_ed25519_is_valid_point
+from nacl.exceptions import BadSignatureError
+from nacl.signing import VerifyKey
 
 from steuerreport_v2.contracts.connectors import (
     ConnectorCatalogEntry,
@@ -28,6 +28,7 @@ from steuerreport_v2.contracts.connectors import (
     WalletOwnershipVerificationResult,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.connector_bootstrap import read_token
 from steuerreport_v2.domain.mobile_documents import MobileDocumentInboxService
 from steuerreport_v2.domain.secret_vault import secret_vault_status
 from steuerreport_v2.domain.secrets import secret_metadata
@@ -57,14 +58,7 @@ class ConnectorAccessPolicy:
     PUBLIC_BASE_URL_ENV = "STEUERREPORT_V2_PUBLIC_BASE_URL"
 
     def setup_token(self) -> str:
-        configured = os.environ.get(self.TOKEN_FILE_ENV, "").strip()
-        if not configured:
-            return ""
-        path = Path(configured).expanduser()
-        try:
-            return path.read_text(encoding="utf-8").strip()
-        except OSError:
-            return ""
+        return read_token()
 
     def authorize(self, authorization: str | None) -> None:
         expected = self.setup_token()
@@ -512,13 +506,10 @@ class ConnectorService:
         try:
             public_key = decode_base58(wallet_address)
             signature_bytes = decode_base58(signature)
-            if len(public_key) != 32 or len(signature_bytes) != 64:
-                raise InvalidSignature
-            Ed25519PublicKey.from_public_bytes(public_key).verify(
-                signature_bytes,
-                message.encode("utf-8"),
-            )
-        except (InvalidSignature, ValueError) as exc:
+            if len(public_key) != 32 or len(signature_bytes) != 64 or not crypto_core_ed25519_is_valid_point(public_key):
+                raise BadSignatureError
+            VerifyKey(public_key).verify(message.encode("utf-8"), signature_bytes)
+        except (BadSignatureError, ValueError) as exc:
             self._update_challenge_status(str(row[0]), "failed", checked_at)
             raise ValueError("wallet_signature_invalid") from exc
 
@@ -800,7 +791,7 @@ class ConnectorService:
             decoded = decode_base58(address)
         except ValueError as exc:
             raise ValueError("invalid_solana_wallet_address") from exc
-        if len(decoded) != 32:
+        if len(decoded) != 32 or not crypto_core_ed25519_is_valid_point(decoded):
             raise ValueError("invalid_solana_wallet_address")
 
     @staticmethod

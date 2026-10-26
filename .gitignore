@@ -14,6 +14,7 @@ imports/
 !.env.example
 *.pem
 *.key
+*.token
 private_profile.json
 private_profile.*.json
 !configs/private_profile.example.json

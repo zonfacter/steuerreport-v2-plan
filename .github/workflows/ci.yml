@@ -82,6 +82,9 @@ jobs:
       - name: Review context browser checks against actual isolated backend
         working-directory: .
         run: python scripts/check_review_backend_browser_v2.py
+      - name: Protected wallet setup against actual isolated backend
+        working-directory: .
+        run: python scripts/check_wallet_setup_browser_v2.py
       - name: UX browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

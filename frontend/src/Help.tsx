@@ -16,9 +16,10 @@ export const HELP_TOPICS = [
     "Importiere die vollstaendige Historie einschliesslich der Anschaffungen vor dem gewaehlten Steuerjahr.",
     "Pruefe offene Hinweise und danach das jeweilige Steuerjahr. Erstelle erst anschliessend die Berichte."
   ], caution: "Die Ablaufleiste dient der Orientierung. Sie bestaetigt weder Vollstaendigkeit noch eine steuerliche Freigabe." },
-  { id: "admin", title: "Konten, Wallets und Zugangsdaten einrichten", keywords: "einrichtung api key secret vault neustart docker", steps: [
+  { id: "admin", title: "Konten, Wallets und Zugangsdaten einrichten", keywords: "einrichtung api key secret vault neustart docker connector setup token schreibfreigabe passwort", steps: [
     "Trage ausschliesslich eigene Konten und Wallets unter Einrichtung ein. Verwende fuer Boersen nach Moeglichkeit reine Lesezugriffe ohne Handels- oder Auszahlungsrechte.",
     "Speichere API-Keys im vorgesehenen Zugangsdatenbereich, nicht in Kontonamen, Dienstadressen oder JSON-Belegtexten.",
+    "Für Wallet-Nachweise den Bereich Wallet-Eigentumsnachweis prüfen. Neue Docker-Installationen bereiten das Einrichtungspasswort vor; bestehende Installationen brauchen den ausdrücklichen lokalen init-Befehl. show-token zeigt es nur in der privaten interaktiven Serverkonsole, niemals über die Web-API. Danach in Connector-Setup-Token einfügen und die Wallet-Nachricht signieren.",
     "Beachte die Rueckmeldung nach dem Speichern: Konto- und Dateizuordnungen koennen einen API- oder Container-Neustart erfordern. Bestehende Auswertungen werden dadurch nicht automatisch neu berechnet."
   ], caution: "Erweiterte Quellen- und Belegkonfiguration sowie technische Einstellungen nur mit gepruefter Zuordnung aendern." },
   { id: "sources", title: "Quellen und Live-Abgleich verstehen", keywords: "wallet boerse binance bitget api verbindung snapshot", steps: [

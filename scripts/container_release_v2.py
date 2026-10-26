@@ -117,6 +117,12 @@ assert settings["encrypted_secrets_available"]
 connections=get("/api/v1/admin/connections")
 assert not connections["connections"] and not connections["legacy_connections"]
 assert connections["vault_ready"]
+catalog=get("/api/v1/connectors/catalog")
+assert catalog["security"]["auth_mode"] == "setup_token"
+connector_password=Path("/state/keys/connector-setup.token")
+assert stat.S_IMODE(connector_password.stat().st_mode) == 0o600
+assert len(connector_password.read_text().strip()) == 64
+assert connector_password.read_text().strip() not in json.dumps(catalog)
 limits=get("/api/v1/admin/request-limits")
 assert limits["default_profile"]["requests_per_second"] == 1
 assert limits["default_profile"]["requests_per_minute"] == 30

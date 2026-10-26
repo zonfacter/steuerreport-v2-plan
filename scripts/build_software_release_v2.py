@@ -29,6 +29,8 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc15.md",
+    "docs/INBETRIEBNAHME.md",
     "docs/RELEASE_0.2.0rc14.md",
     "docs/UX_BEDIENKONZEPT_2026-10-26.md",
     "docs/UX_REVIEW_KORREKTUREN_2026-10-26.md",
@@ -74,7 +76,7 @@ def software_path(name: str) -> bool:
         return False
     if name in PUBLIC_DOCUMENTS:
         return True
-    if path.suffix.lower() in {".db", ".duckdb", ".wal", ".sqlite", ".sqlite3", ".msg", ".eml", ".pdf", ".xlsx", ".csv", ".key", ".pem", ".pyc"}:
+    if path.suffix.lower() in {".db", ".duckdb", ".wal", ".sqlite", ".sqlite3", ".msg", ".eml", ".pdf", ".xlsx", ".csv", ".key", ".pem", ".token", ".pyc"}:
         return False
     if name in ROOT_FILES or name in DOCUMENTS:
         return True

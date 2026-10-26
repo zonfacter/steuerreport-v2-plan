@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0rc15 - 2026-10-26
+
+- Geschuetzte lokale Connector-Inbetriebnahme mit zufaelligem Passwort in einer
+  privaten Datei, idempotenter Aktivierung und ausdruecklicher Konsolenanzeige.
+- Neue Docker-Installationen werden vorbereitet; bestehende Installationen
+  werden nicht durch ein Update still freigeschaltet. Vorhandene Keys bleiben erhalten.
+- Eigener Bereich Wallet-Eigentumsnachweis unter Einrichtung mit Status,
+  lokalen Bootstrap-Befehlen und klarer Trennung vom Boersen-/Wallet-Passwort.
+- Konkrete Hilfe statt der pauschalen Connector-Schreibfreigabe-Meldung;
+  Passwort vor Challenge erforderlich, Authentifizierungsfehler nachvollziehbar.
+- Inbetriebnahme und HTML-/PDF-Benutzerleitfaden ergaenzt. Kein Einrichtungspasswort
+  ueber Web-API, URL, Browser-Storage oder Export; keine anonyme Freischaltung.
+- Strikte Ed25519-Schluessel- und Signaturpruefung mit PyNaCl/libsodium;
+  ungueltige beziehungsweise schwache Punkte werden auch bei alten Challenges abgewiesen.
+- Wallet-Signatur, Quellenregistry und steuerliche Freigaben bleiben unveraendert.
+
 ## 0.2.0rc14 - 2026-10-26
 
 - API-Einrichtung nach Installation, Datenanbietern, eigenen Verbindungen,
