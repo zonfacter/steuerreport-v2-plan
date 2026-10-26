@@ -63,7 +63,7 @@ export function SourceWorkspace({ technical, onTechnical }: { technical: ReactNo
     {sync && <ActionConfirm title={`${sync.label} synchronisieren`} effect="Diese Aktion fragt den externen Anbieter ab und speichert neue Bestands-Snapshots, Abrufprotokolle und gegebenenfalls Solana-Preise. Sie importiert in diesem bestehenden Abrufpfad keine Transaktionshistorie und berechnet keine Steuerjahre neu. Anbieterlimits und mögliche API-Kosten beachten." command={async () => {
       const result = await readApi<{ connector_results: { status: string; message: string }[] }>(`/api/v1/workspace/sources/${sync.ref}/sync`, undefined, {});
       const failedRows = result.connector_results.filter((row) => !success.has(row.status));
-      if (failedRows.length) throw new Error("Abruf nicht erfolgreich. Der vorherige erfolgreiche Datenstand bleibt erhalten. Hinweise zur Quelle prüfen.");
+      if (failedRows.length) throw new Error(`${failedRows.some((row) => row.status === "missing_configuration") ? "Abruf nicht eingerichtet. Wallet-Zuordnung und Datenanbieter unter Einrichtung prüfen." : "Anbieterabruf fehlgeschlagen. Konkreten Fehler unter Hinweise / Abgleich prüfen; gegebenenfalls RPC-Endpunkt und Abruflimits unter Einrichtung prüfen."} ${sync.last_success_at ? "Der vorherige erfolgreiche Datenstand bleibt erhalten." : "Für diese Quelle liegt noch kein erfolgreicher Bestandsabruf vor."}`);
       return "Abruf abgeschlossen. Gespeicherten Datenstand und Abgleich prüfen.";
     }} onDone={() => { resource.reload(); window.dispatchEvent(new Event("steuerreport:refresh")); }} onClose={() => setSync(null)} />}
   </section>;
@@ -118,6 +118,7 @@ function SourceIssues({ detail }: { detail: SourceDetail }) {
       <button type="button" onClick={() => navigateView("review", { source: source.ref, detail: "", page: 1 })}><ClipboardCheck size={16} /> Review-Aufgaben dieser Quelle</button>
     </section>
     <dl className="wsFacts"><div><dt>Letzter erfolgreicher Datenstand</dt><dd>{timestamp(source.last_success_at)}</dd></div><div><dt>Letzter Versuch</dt><dd>{source.last_attempt ? label(source.last_attempt.status, "Abrufproblem prüfen") : "Noch kein Abruf"}</dd></div></dl>
+    {failed(source) && <div role="note" className="wsWarning"><p>{source.last_attempt?.message || "Der Anbieterabruf ist fehlgeschlagen. Datenanbieter und Abruflimits prüfen."}</p><p>{source.last_success_at ? "Der vorherige erfolgreiche Datenstand bleibt erhalten." : "Noch kein erfolgreicher Bestandsabruf vorhanden; unbekannter Bestand ist kein Nullbestand."}</p><a className="wsButton" href="#admin"><Save size={16} /> Datenanbieter und RPC einrichten</a></div>}
     <details className="wsTechnical"><summary>Technischer Quellenabgleich</summary><pre>{JSON.stringify(detail.valuation?.reconciliation || source, null, 2)}</pre></details>
   </>;
 }

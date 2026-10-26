@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0rc17 - 2026-10-26
+
+- Solana-Bestandsabruf verwendet den vorhandenen oeffentlichen oder konfigurierten
+  RPC auch ohne Alchemy-Schluessel. Gespeicherte Helius-Zugaenge werden beruecksichtigt.
+- Nur vollstaendige RPC-Antworten koennen einen leeren Bestand bestaetigen;
+  fehlerhafte Teilantworten ersetzen keinen erfolgreichen historischen Stand.
+- RPC-Fehler enthalten keine Zugangsdaten, sensiblen Pfade oder Anbieter-Freitexte.
+- Quellen zeigen den konkreten letzten Fehler und einen Einrichtungseinstieg.
+  Ohne vorherigen Erfolg wird kein angeblich erhaltener Erfolgsstand behauptet.
+- Bestehende Abruflimits, Import-, Quellenfreigabe-, Steuer- und FIFO-Regeln bleiben
+  unveraendert. Tests nur mit simulierten Anbietern und synthetischen Daten.
+
 ## 0.2.0rc16 - 2026-10-26
 
 - Oeffentliche Solana-Adressen im normalen Quelle-hinzufuegen-Ablauf speichern:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import ExitStack
+from decimal import Decimal
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
@@ -12,6 +13,7 @@ from pathlib import Path
 import socket
 import tempfile
 from threading import Thread
+from unittest.mock import patch
 from urllib.parse import urlparse
 
 from cryptography.hazmat.primitives import serialization
@@ -89,7 +91,8 @@ def main():
                 route.continue_()
                 return
             allowed_post = {"/api/v1/activity/query", "/api/v1/workspace/review/query", "/api/v1/workspace/wallets", "/api/v1/connectors/wallet/challenges", "/api/v1/connectors/wallet/verifications"}
-            assert request.method == "GET" or request.method == "POST" and parsed.path in allowed_post
+            source_sync = parsed.path.startswith("/api/v1/workspace/sources/") and parsed.path.endswith("/sync")
+            assert request.method == "GET" or request.method == "POST" and (parsed.path in allowed_post or source_sync)
             headers = {"Content-Type": "application/json"}
             if request.headers.get("authorization"):
                 headers["Authorization"] = request.headers["authorization"]
@@ -178,6 +181,48 @@ def main():
         assert row.status == "ownership_verified_pending_registry"
         assert row.tax_activation == "review_required"
         assert row.connection_id == saved.connection_id
+        panel.get_by_role("button", name="Fertig", exact=True).click()
+
+        from steuerreport_v2.domain.portfolio import PortfolioService
+        stack.enter_context(patch.object(PortfolioService, "PRIMARY_SOLANA_WALLET", address))
+        stack.enter_context(patch.object(PortfolioService, "V1_CONNECTOR_BASE_URL", ""))
+        rpc_state = {"valid": False, "calls": 0}
+        def rpc(_service, method, params, timeout_seconds):
+            assert params[0] == address and timeout_seconds == 45
+            rpc_state["calls"] += 1
+            return {"value": (1_250_000_000 if rpc_state["valid"] else None) if method == "getBalance" else []}
+        stack.enter_context(patch.object(PortfolioService, "_solana_rpc", rpc))
+
+        def sync_wallet():
+            page.goto(base + "/#sources")
+            page.get_by_role("button", name="Ansicht aktualisieren", exact=True).click()
+            page.get_by_role("button", name=row.display_label, exact=True).click()
+            page.get_by_role("dialog").get_by_role("button", name="Quelle synchronisieren", exact=True).click()
+            page.get_by_role("dialog").get_by_role("button", name="Bestätigen und starten", exact=True).click()
+        sync_wallet()
+        expect(page.get_by_role("alert")).to_contain_text("noch kein erfolgreicher Bestandsabruf")
+        assert "vorherige erfolgreiche" not in page.get_by_role("alert").inner_text()
+        for width in (390, 1440):
+            page.set_viewport_size({"width": width, "height": 1000})
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.screenshot(path=str(args.output / f"synthetic-rpc-first-failure-{width}.png"), animations="disabled")
+        page.get_by_role("dialog").get_by_role("button", name="Abbrechen", exact=True).click()
+        page.get_by_role("dialog").get_by_role("tab", name="Hinweise / Abgleich", exact=True).click()
+        expect(page.get_by_role("dialog").get_by_text("Solana-Liveabruf fehlgeschlagen: getBalance: unvollstaendige oder ungueltige RPC-Antwort", exact=True)).to_be_visible()
+        expect(page.get_by_role("dialog").get_by_role("link", name="Datenanbieter und RPC einrichten")).to_have_attribute("href", "#admin")
+        page.screenshot(path=str(args.output / "synthetic-rpc-concrete-error-1440.png"), animations="disabled")
+        page.get_by_role("dialog").get_by_role("button", name="Details schließen", exact=True).click()
+        rpc_state["valid"] = True
+        sync_wallet()
+        expect(page.get_by_role("dialog").get_by_role("status")).to_contain_text("Abruf abgeschlossen")
+        page.get_by_role("dialog").get_by_role("button", name="Schließen", exact=True).click()
+        page.get_by_role("dialog").get_by_role("button", name="Details schließen", exact=True).click()
+        rpc_state["valid"] = False
+        sync_wallet()
+        expect(page.get_by_role("alert")).to_contain_text("Der vorherige erfolgreiche Datenstand bleibt erhalten")
+        assert "noch kein erfolgreicher" not in page.get_by_role("alert").inner_text()
+        assert rpc_state["calls"] == 5
+        assert PortfolioService(store)._stored_live_balance_snapshots("solana_wallet") == {"SOL": Decimal("1.25")}
         with store.connect() as connection:
             for name in ("canonical_events", "balance_ledger", "tax_lots", "tax_lines"):
                 assert connection.execute(f"select count(*) from {name}").fetchone()[0] == 0
@@ -187,6 +232,8 @@ def main():
                   "public_address_without_token_or_signature": True, "public_address_persisted_after_reload": True,
                   "duplicate_address_idempotent": True, "proof_upgrades_same_connection": True,
                   "real_ed25519_signature_verified": True, "tax_activation": "review_required", "financial_rows_written": 0,
+                  "rpc_first_failure_not_reported_as_previous_success": True, "rpc_concrete_error_and_setup_link": True,
+                  "rpc_retry_recovers_and_preserves_snapshot_on_later_failure": True, "rpc_responses_mocked": True,
                   "viewports": [390, 768, 1280, 1440], "external_requests": 0, "javascript_errors": errors,
                   "calls": calls}
         (args.output / "verification.json").write_text(json.dumps(result, indent=2) + "\n")

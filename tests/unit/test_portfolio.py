@@ -1537,6 +1537,7 @@ def test_portfolio_snapshot_excludes_stale_expected_zero_ledger_fallback(tmp_pat
 
 def test_portfolio_reconciliation_refresh_warns_when_connectors_return_no_snapshots(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    monkeypatch.setattr(PortfolioService, "_solana_rpc_wallet_balances", lambda _self, _wallet: {})
     for key in (
         "secret.cex.binance.api_key",
         "secret.cex.binance.api_secret",

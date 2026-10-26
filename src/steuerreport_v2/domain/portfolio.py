@@ -91,7 +91,7 @@ class PortfolioService:
     FAIRSPOT_STAKING_WALLET = private_value('staking_route_wallet', '')
     KNOWN_JUP_WALLET = private_value('secondary_solana_wallet', '')
     PRIMARY_SOLANA_WALLET = private_value('primary_solana_wallet', '')
-    SOLANA_RPC_URL = private_value("solana_rpc_url") or "https://api.mainnet-beta.solana.com"
+    SOLANA_RPC_URL = private_value("solana_rpc_url") or "https://api.mainnet.solana.com"
     SOLANA_RPC_URLS = [
         SOLANA_RPC_URL,
         "https://api.mainnet-beta.solana.com",
@@ -1515,20 +1515,16 @@ class PortfolioService:
             missing_configuration = False
             snapshot_source = self._snapshot_source_for_connector(connector_id)
             if connector_id == "jup_wallet":
-                missing_configuration = not bool(
-                    self._alchemy_api_key() or self.V1_CONNECTOR_BASE_URL or self._solscan_api_key()
-                )
+                missing_configuration = not bool(self.KNOWN_JUP_WALLET)
                 try:
-                    balances, snapshot_source = self._live_solana_wallet_balances(self.KNOWN_JUP_WALLET)
+                    balances, snapshot_source = self._live_solana_wallet_balances(self.KNOWN_JUP_WALLET) if not missing_configuration else ({}, snapshot_source)
                 except Exception as exc:
                     balances = {}
                     self._connector_errors[connector_id] = f"Solana-Liveabruf fehlgeschlagen: {exc}"
             elif connector_id == "solana_wallet":
-                missing_configuration = not bool(
-                    self._alchemy_api_key() or self.V1_CONNECTOR_BASE_URL or self._solscan_api_key()
-                )
+                missing_configuration = not bool(self.PRIMARY_SOLANA_WALLET)
                 try:
-                    balances, snapshot_source = self._live_solana_wallet_balances(self.PRIMARY_SOLANA_WALLET)
+                    balances, snapshot_source = self._live_solana_wallet_balances(self.PRIMARY_SOLANA_WALLET) if not missing_configuration else ({}, snapshot_source)
                 except Exception as exc:
                     balances = {}
                     self._connector_errors[connector_id] = f"Solana-Liveabruf fehlgeschlagen: {exc}"
@@ -1593,7 +1589,7 @@ class PortfolioService:
                         if self._connector_errors.get(connector_id)
                         else "API-Zugangsdaten direkt in der V2-Administration hinterlegen."
                         if missing_configuration and connector_id in self.CEX_REQUIRED_SECRET_KEYS
-                        else "Connector ist nicht konfiguriert."
+                        else "Keine Profilwallet fuer diesen Abruf eingerichtet. Einrichtung und Quellenzuordnung pruefen."
                         if missing_configuration
                         else (
                             "Connector bestaetigte einen leeren Bestand; vorherige "
@@ -1619,13 +1615,13 @@ class PortfolioService:
 
     def _live_solana_wallet_balances(self, wallet_address: str) -> tuple[dict[str, Decimal], str]:
         rpc_error: Exception | None = None
-        if self._alchemy_api_key():
-            try:
-                balances = self._solana_rpc_wallet_balances(wallet_address)
-                if balances:
-                    return balances, "solana_rpc:getBalance+getTokenAccountsByOwner"
-            except Exception as exc:
-                rpc_error = exc
+        try:
+            balances = self._solana_rpc_wallet_balances(wallet_address)
+            # A complete RPC response with no positions is a confirmed empty
+            # balance, not a reason to query another paid provider.
+            return balances, "solana_rpc:getBalance+getTokenAccountsByOwner"
+        except Exception as exc:
+            rpc_error = exc
 
         balances = self._v1_solana_wallet_balances(wallet_address)
         if balances:
@@ -1867,19 +1863,30 @@ class PortfolioService:
                     response.raise_for_status()
                     payload = response.json()
                     if isinstance(payload, dict) and payload.get("error"):
-                        errors.append(f"{self._redacted_solana_rpc_url(rpc_url)}: {payload['error']}")
+                        error = payload["error"]
+                        code = error.get("code") if isinstance(error, dict) else None
+                        errors.append(f"{self._redacted_solana_rpc_url(rpc_url)}: RPC-Fehler {code if type(code) is int else 'ohne Code'}")
                         continue
-                    return payload.get("result") if isinstance(payload, dict) else None
+                    if not isinstance(payload, dict) or payload.get("result") is None:
+                        errors.append(f"{self._redacted_solana_rpc_url(rpc_url)}: unvollstaendige RPC-Antwort")
+                        continue
+                    return payload["result"]
                 except Exception as exc:
-                    errors.append(f"{self._redacted_solana_rpc_url(rpc_url)}: {exc}")
+                    response = getattr(exc, "response", None)
+                    status = getattr(response, "status_code", None)
+                    reason = f"HTTP {status}" if type(status) is int else type(exc).__name__
+                    errors.append(f"{self._redacted_solana_rpc_url(rpc_url)}: {reason}")
                     continue
-        raise RuntimeError("; ".join(errors[-3:]))
+        raise RuntimeError("RPC-Abruf fehlgeschlagen. Einrichtung / Datenanbieter und Abruflimits pruefen. " + "; ".join(errors[-3:]))
 
     def _solana_rpc_urls(self) -> list[str]:
         urls: list[str] = []
         alchemy_key = self._alchemy_api_key()
         if alchemy_key:
             urls.append(f"https://solana-mainnet.g.alchemy.com/v2/{alchemy_key}")
+        helius_key = resolve_secret_value(self.store, "secret.helius.api_key")
+        if helius_key:
+            urls.append("https://mainnet.helius-rpc.com/?" + urllib.parse.urlencode({"api-key": helius_key}))
         for env_key in ("SOLANA_RPC_URL", "SOLANA_RPC_URLS"):
             value = os.environ.get(env_key, "").strip()
             if not value:
@@ -1906,10 +1913,10 @@ class PortfolioService:
         return ""
 
     def _redacted_solana_rpc_url(self, rpc_url: str) -> str:
-        marker = "alchemy.com/v2/"
-        if marker in rpc_url:
-            return rpc_url.split(marker, 1)[0] + marker + "***"
-        return rpc_url
+        parsed = urllib.parse.urlsplit(rpc_url)
+        if parsed.hostname == "solana-mainnet.g.alchemy.com":
+            return "https://solana-mainnet.g.alchemy.com/v2/***"
+        return f"{parsed.scheme}://{parsed.hostname or 'rpc'}/"
 
     def _solana_transaction_rows(
         self,
@@ -2062,10 +2069,10 @@ class PortfolioService:
             [wallet_address, {"commitment": "finalized"}],
             timeout_seconds=45,
         )
-        if isinstance(native, dict):
-            lamports = self._decimal_from_payload(native.get("value"))
-            if lamports:
-                balances["SOL"] = lamports / Decimal("1000000000")
+        if not isinstance(native, dict) or type(native.get("value")) is not int or native["value"] < 0:
+            raise ValueError("getBalance: unvollstaendige oder ungueltige RPC-Antwort")
+        if native["value"]:
+            balances["SOL"] = Decimal(native["value"]) / Decimal("1000000000")
 
         for program_id in self.SOLANA_TOKEN_PROGRAM_IDS:
             payload = self._solana_rpc(
@@ -2079,10 +2086,10 @@ class PortfolioService:
             )
             rows = payload.get("value") if isinstance(payload, dict) else None
             if not isinstance(rows, list):
-                continue
+                raise ValueError("getTokenAccountsByOwner: unvollstaendige RPC-Antwort")
             for row in rows:
                 if not isinstance(row, dict):
-                    continue
+                    raise ValueError("getTokenAccountsByOwner: ungueltiger Kontoeintrag")
                 account = row.get("account") if isinstance(row.get("account"), dict) else {}
                 data = account.get("data") if isinstance(account.get("data"), dict) else {}
                 parsed = data.get("parsed") if isinstance(data.get("parsed"), dict) else {}
@@ -2093,8 +2100,13 @@ class PortfolioService:
                     if isinstance(info.get("tokenAmount"), dict)
                     else {}
                 )
-                quantity = self._decimal_from_payload(token_amount.get("uiAmountString"))
-                if not mint or not quantity:
+                try:
+                    quantity = Decimal(token_amount["uiAmountString"])
+                except (KeyError, TypeError, InvalidOperation):
+                    raise ValueError("getTokenAccountsByOwner: Tokenmenge fehlt oder ist ungueltig") from None
+                if not mint or not quantity.is_finite() or quantity < 0:
+                    raise ValueError("getTokenAccountsByOwner: ungueltige Tokenposition")
+                if not quantity:
                     continue
                 asset = self._solana_asset_for_mint(mint)
                 balances[asset] = balances.get(asset, Decimal("0")) + quantity

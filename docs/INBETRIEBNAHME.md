@@ -47,6 +47,23 @@ Der neue lokale Schreibvertrag `POST /api/v1/workspace/wallets` akzeptiert nur
 Er verwendet denselben lokalen Host-/Origin-Schutz wie die bestehende Einrichtung;
 dies ist keine globale Benutzeranmeldung. Demo-/Testvorschauen bleiben schreibgesperrt.
 
+## Solana-Bestandsabruf und Datenanbieter
+
+Der Bestandsabruf der bereits zugeordneten Profilwallets nutzt den vorgesehenen
+oeffentlichen beziehungsweise konfigurierten Solana-RPC auch ohne Alchemy-Key.
+Ein gespeicherter Alchemy- oder Helius-Zugang wird serverseitig beruecksichtigt;
+private Schluessel ausschliesslich im Provider-Key-Feld speichern. Die RPC-URL
+im Profil bleibt geheimnisfrei. Oeffentliche RPCs koennen zeitweise begrenzen
+oder Anfragen ablehnen; fuer regelmaessigen Betrieb einen geeigneten eigenen
+Anbieter einrichten. Beim Abruf wird die oeffentliche Adresse an diesen gesendet.
+
+**Hinweise / Abgleich** zeigt den letzten konkreten Fehler und einen Einstieg
+zur Einrichtung. Ohne ersten erfolgreichen Abruf ist der Bestand unbekannt,
+nicht 0,00 EUR. Unvollstaendige RPC-Antworten gelten nicht als Nullbestand.
+Ein spaeterer Fehler loescht keinen zuvor erfolgreichen historischen Stand.
+Abruflimits bleiben aktiv; keine Historienimporte oder Steuerneuberechnung.
+Weitere Beobachtungsadressen erhalten durch diesen Patch keinen neuen Connector.
+
 ## Optionales Connector-Einrichtungspasswort
 
 Dieses Passwort schuetzt die vorhandenen Connector-Administrationsfunktionen,
