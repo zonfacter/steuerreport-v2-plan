@@ -1,6 +1,6 @@
 # Changelog
 
-## Unveröffentlicht - Bedienkonzept
+## 0.2.0rc14 - 2026-10-26
 
 - API-Einrichtung nach Installation, Datenanbietern, eigenen Verbindungen,
   Abrufsteuerung und KI getrennt; Demo-Modus ausdrücklich schreibgeschützt.
@@ -38,7 +38,12 @@
 - Synthetische Browserabnahme in vier Bildschirmbreiten, isolierte Vorschau
   ohne Betreiberprofil oder externe Verbindungen und dokumentierte Übergabe.
 - Keine Änderung der Steuer-/FIFO-/Ownership-Regeln und keine Änderung
-  historischer Nutzerdaten. Kein Deployment, Tag, Push oder Release in diesem Auftrag.
+  historischer Nutzerdaten. Versionierter Release mit Docker-Image;
+  vorhandene Datenvolumes und Vault-Schlüssel bleiben beim Update erhalten.
+- Anbieterreferenzen in Docker und Software-ZIP eingeschlossen; der Image-Smoke-Test
+  prüft auch Mehrkonten-, Limit- und Anbieterreferenz-Endpunkte einer leeren Installation.
+- Grenzen: kein automatischer Sync-Zeitplan, keine Tages-/Monatsabrechnungsbudgets,
+  kein eigener persistierter Jobstatus für Anbieterpausen und keine Mehrhost-Koordination.
 
 ## 0.2.0rc13 - 2026-10-26
 

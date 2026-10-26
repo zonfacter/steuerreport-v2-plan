@@ -81,6 +81,21 @@ def test_resolver_rejects_tag_version_mismatch(release_repo):
         load_script("container_release_v2").resolve_release(root, "v0.2.0rc4", "example")
 
 
+def test_provider_references_are_packaged_and_part_of_release_source_check(release_repo):
+    root, git = release_repo
+    script = load_script("container_release_v2")
+    repository = Path(__file__).resolve().parents[2]
+    name = "configs/provider_request_references.json"
+    assert "!" + name in (repository / ".dockerignore").read_text().splitlines()
+    assert name in script.IMAGE_INPUTS
+    (root / "configs").mkdir()
+    (root / name).write_text('{"providers": []}\n')
+    git("add", ".")
+    git("commit", "--quiet", "-m", "Changed provider references")
+    with pytest.raises(ValueError, match="runtime_differs"):
+        script.resolve_release(root, "v0.2.0rc3", "example")
+
+
 def image_inspect():
     return [{
         "Id": "sha256:" + "0" * 64, "Os": "linux", "Architecture": "amd64",

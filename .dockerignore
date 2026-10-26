@@ -12,6 +12,7 @@
 !configs/legal_research_sources.json
 !configs/source_registry.example.json
 !configs/private_profile.example.json
+!configs/provider_request_references.json
 !frontend/
 !frontend/package.json
 !frontend/package-lock.json

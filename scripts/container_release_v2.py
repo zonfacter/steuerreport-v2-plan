@@ -21,6 +21,7 @@ IMAGE_INPUTS = (
     "configs/binance_small_assets_price_evidence_20260710.json",
     "configs/legal_research_sources.json", "configs/source_registry.example.json",
     "configs/private_profile.example.json",
+    "configs/provider_request_references.json",
 )
 TAG = re.compile(r"v(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)\Z")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -113,6 +114,18 @@ assert all(not row["value"] for row in settings["fields"])
 assert not any(settings["providers"].values())
 assert not settings["restart_required"]
 assert settings["encrypted_secrets_available"]
+connections=get("/api/v1/admin/connections")
+assert not connections["connections"] and not connections["legacy_connections"]
+assert connections["vault_ready"]
+limits=get("/api/v1/admin/request-limits")
+assert limits["default_profile"]["requests_per_second"] == 1
+assert limits["default_profile"]["requests_per_minute"] == 30
+assert not limits["scheduler_enabled"]
+assert not get("/api/v1/admin/request-limits/status")["groups"]
+assert not Path("/state/request_limits").exists()
+references=get("/api/v1/admin/provider-references")
+assert {row["provider"] for row in references["providers"]} >= {"binance", "bitget", "solscan", "helius", "ai_openrouter"}
+assert get("/api/v1/admin/request-limits/endpoints")["http"]
 legacy=get("/api/v1/admin/cex-credentials/v1-takeover")
 assert not legacy["items"] and legacy["blocked"] == 0 and legacy["transferable"] == 0
 assert not any(row["key"].startswith("secret.") for row in get("/api/v1/admin/settings"))

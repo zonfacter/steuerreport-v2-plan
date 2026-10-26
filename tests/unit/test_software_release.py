@@ -32,6 +32,7 @@ def test_release_excludes_case_work_runtime_and_originals():
         "tests/unit/test_tax_filing_audit.py", "frontend/package-lock.json",
         "docs/openapi/steuerreport-v2-openapi.json", ".env.example",
         "configs/source_registry.example.json",
+        "configs/provider_request_references.json",
         "configs/binance_small_assets_price_evidence_20260710.json",
         "frontend/public/benutzerleitfaden.pdf", "frontend/public/import-vorlage.csv",
         "frontend/public/importformate.pdf", "docs/IMPORTFORMATE.md",

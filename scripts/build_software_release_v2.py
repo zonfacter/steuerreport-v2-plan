@@ -29,6 +29,11 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc14.md",
+    "docs/UX_BEDIENKONZEPT_2026-10-26.md",
+    "docs/UX_REVIEW_KORREKTUREN_2026-10-26.md",
+    "docs/UX_REVIEW_R1_2026-10-26.md",
+    "docs/API_EINRICHTUNG_ABRUFLIMITS_2026-10-26.md",
     "docs/UX_PRUEFUNG_2026-10-26.md",
     "docs/KI_EINSATZLEITFADEN.md",
     "docs/IMPORTFORMATE.md",
@@ -46,6 +51,7 @@ GENERIC_CONFIGS = {
     "configs/source_registry.example.json",
     "configs/private_profile.example.json",
     "configs/reviewed_secret_findings.json",
+    "configs/provider_request_references.json",
 }
 PRIVATE_SCRIPTS = {
     "build_family_law_disclosure_package_v2.py",

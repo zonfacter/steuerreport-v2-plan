@@ -1,20 +1,25 @@
 # Steuerreport V2
 
-Version 0.2.0rc13. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc14. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
+
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc14](docs/RELEASE_0.2.0rc14.md) ·
+[GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
+[Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
 
 ## Docker-Installation
 
 ### Fertiges Image aus GHCR
 
-Registry: `ghcr.io/zonfacter/steuerreport-v2`, zunaechst privat wie das
-Repository. Zum Anmelden ein GitHub Personal Access Token (classic) mit
+Registry: `ghcr.io/zonfacter/steuerreport-v2`. Das Repository ist oeffentlich;
+die Sichtbarkeit des Containerpakets wird bei GitHub separat verwaltet.
+Fuer ein privates Paket ein GitHub Personal Access Token (classic) mit
 `read:packages` verwenden. Token nur lokal beim Docker-Login eingeben,
 nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc13
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc14
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -32,8 +37,9 @@ Aktuell wird `linux/amd64` gebaut und geprueft, nicht ARM64.
 docker compose up -d --build
 ```
 
-Danach http://127.0.0.1:8010 oeffnen und **Administration > Installation und
-Konten** einrichten. Ist der Port belegt: `STEUERREPORT_PORT=18010 docker
+Danach http://127.0.0.1:8010 oeffnen und **Einrichtung** oeffnen:
+Installation, Datenanbieter, eigene Verbindungen, Abrufsteuerung und KI.
+Ist der Port belegt: `STEUERREPORT_PORT=18010 docker
 compose up -d --build`. Das Image enthaelt keine Betreiberkonten,
 Originalimporte oder Zugangsdaten. Neue Installationen starten leer.
 
@@ -86,10 +92,13 @@ Registry-Secrets im Quellstand oder Image. Die Nachweise stehen als
 
 ## Bedienung Und Import
 
-Das neue Bedienkonzept wird auf dem Arbeitsbranch entwickelt, nicht automatisch
-veröffentlicht oder in einen laufenden Container übernommen. Implementierung,
-URL-Schema, Aktionswirkungen, Tests und die Abnahmematrix A01–A24 stehen in der
+Das neue Bedienkonzept ist ab 0.2.0rc14 Bestandteil von `main` und des Images.
+Implementierung, URL-Schema, Aktionswirkungen, Tests und die Abnahmematrix A01–A24 stehen in der
 [UX-Übergabe](docs/UX_BEDIENKONZEPT_2026-10-26.md).
+Mehrkonten, Vault und serverseitige Limits sind in der
+[API-Einrichtungsdokumentation](docs/API_EINRICHTUNG_ABRUFLIMITS_2026-10-26.md)
+beschrieben. Automatische Sync-Zeitplaene, Tages-/Monatsbudgets und verteilte
+Mehrhost-Koordination sind noch nicht enthalten.
 
 Unter **Hilfe & Anleitungen** (`/#help`) stehen durchsuchbare Arbeitsablaeufe,
 haeufige Fragen, Begriffserklaerungen sowie alle HTML-/PDF-Leitfaeden bereit.
