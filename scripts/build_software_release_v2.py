@@ -32,6 +32,7 @@ DOCUMENTS = {
     "docs/RELEASE_0.2.0rc16.md",
     "docs/RELEASE_0.2.0rc17.md",
     "docs/RELEASE_0.2.0rc18.md",
+    "docs/RELEASE_0.2.0rc19.md",
     "docs/RELEASE_0.2.0rc15.md",
     "docs/INBETRIEBNAHME.md",
     "docs/RELEASE_0.2.0rc14.md",

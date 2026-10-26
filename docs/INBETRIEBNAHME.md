@@ -49,6 +49,16 @@ dies ist keine globale Benutzeranmeldung. Demo-/Testvorschauen bleiben schreibge
 
 ## Solana-Bestandsabruf und Datenanbieter
 
+Nach erfolgreichem Abruf unter **Quellen & Wallets → Quelle → Bestaende** die
+gespeicherten Tokenmengen lesen. Sie erscheinen auch ohne Transaktionshistorie
+oder EUR-Preise. Das Dashboard bietet einen direkten Einstieg. Fehlender EUR-Preis
+bedeutet unbekannten Wert, nicht Nullbestand; 0 importierte Ereignisse bedeutet
+nicht, dass der Bestandsabruf fehlgeschlagen ist. Eine Historie muss separat
+importiert werden. Keine Anschaffungswerte aus heutigen Bestaenden ableiten.
+
+Nach Aenderung der Profil-RPC-URL den angezeigten Neustarthinweis beachten.
+Speicherung allein aendert eine bereits laufende Runtime-Konfiguration nicht.
+
 Der Bestandsabruf der bereits zugeordneten Profilwallets nutzt den vorgesehenen
 oeffentlichen beziehungsweise konfigurierten Solana-RPC auch ohne Alchemy-Key.
 Ein gespeicherter Alchemy- oder Helius-Zugang wird serverseitig beruecksichtigt;

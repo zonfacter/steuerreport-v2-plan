@@ -1,5 +1,24 @@
 # API Contracts V2
 
+## Gespeicherter Wallet-Bestand ohne Historie
+
+`GET /api/v1/workspace/sources` liefert bei explizit zugeordneten Profilwallets
+optional `live_assets_count`, `live_unpriced_assets_count`, `live_value_eur` und
+`live_balance_status`. Ein fehlender EUR-Wert ist `null`, nicht 0 oder eine
+unvollstaendige Teilsumme. Fehlender Abruf hat keine Live-Zusammenfassung.
+
+`GET /api/v1/workspace/sources/{ref}` ergaenzt `live_balance` mit `fetched_at`,
+`status` (`available` oder `confirmed_empty`), `assets`, `unpriced_assets_count`,
+`value_eur` und `sources`. Asset-Zeilen enthalten Menge, optionalen EUR-Preis/-Wert,
+Preisquelle, Kurszeitpunkt und Preisstatus. Mengen und Werte bleiben Decimal-Strings.
+`confirmed_empty` ist eine erfolgreiche ausdrueckliche Leerbestaetigung; bei
+Fehlern wird der letzte erfolgreiche Snapshot mit separatem `last_attempt` gelesen.
+
+Dieser rein lesende Vertrag uebernimmt keine Tokenmengen in Canonical Events,
+Ledger oder Tax Lines. Bestehende `valuation` bleibt getrennt erreichbar. Andere
+Beobachtungsadressen erben keine profilgebundenen Connector-Snapshots. Kein RPC-,
+Kursanbieter-, Historienimport- oder Neuberechnungsaufruf beim Oeffnen.
+
 ## Vollstaendige Endpoint-Referenz
 
 Dieses Dokument beschreibt wichtige API-Contracts fachlich. Die vollstaendige

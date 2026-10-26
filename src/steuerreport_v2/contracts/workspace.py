@@ -95,6 +95,10 @@ class WorkspaceSource(BaseModel):
     value_eur: Decimal | None = None
     value_basis: str = "unavailable"
     ledger_value_eur: Decimal | None = None
+    live_assets_count: int | None = None
+    live_unpriced_assets_count: int | None = None
+    live_value_eur: Decimal | None = None
+    live_balance_status: Literal["available", "confirmed_empty"] | None = None
     events_count: int = 0
     imports_count: int = 0
     issues_count: int = 0
@@ -128,9 +132,29 @@ class WorkspaceReviewItem(BaseModel):
     context_note: str = "Keine eindeutige Quellenzuordnung vorhanden."
 
 
+class WorkspaceLiveAsset(BaseModel):
+    asset: str
+    quantity: Decimal
+    price_eur: Decimal | None = None
+    value_eur: Decimal | None = None
+    price_source: str | None = None
+    priced_at: datetime | None = None
+    price_status: str = "missing"
+
+
+class WorkspaceLiveBalance(BaseModel):
+    fetched_at: datetime
+    status: Literal["available", "confirmed_empty"]
+    assets: list[WorkspaceLiveAsset] = Field(default_factory=list)
+    value_eur: Decimal | None = None
+    unpriced_assets_count: int = 0
+    sources: list[str] = Field(default_factory=list)
+
+
 class WorkspaceSourceDetail(BaseModel):
     source: WorkspaceSource
     valuation: SourceDetail | None = None
+    live_balance: WorkspaceLiveBalance | None = None
     evidence: dict[str, object] = Field(default_factory=dict)
     review_tasks: list[WorkspaceReviewItem] = Field(default_factory=list)
     review_tasks_limit: int = 50

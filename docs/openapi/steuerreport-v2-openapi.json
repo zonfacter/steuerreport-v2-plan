@@ -79340,6 +79340,131 @@
         "title": "WalletOwnershipVerificationResult",
         "type": "object"
       },
+      "WorkspaceLiveAsset": {
+        "properties": {
+          "asset": {
+            "title": "Asset",
+            "type": "string"
+          },
+          "price_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Eur"
+          },
+          "price_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Source"
+          },
+          "price_status": {
+            "default": "missing",
+            "title": "Price Status",
+            "type": "string"
+          },
+          "priced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priced At"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "value_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Eur"
+          }
+        },
+        "required": [
+          "asset",
+          "quantity"
+        ],
+        "title": "WorkspaceLiveAsset",
+        "type": "object"
+      },
+      "WorkspaceLiveBalance": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceLiveAsset"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "confirmed_empty"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unpriced_assets_count": {
+            "default": 0,
+            "title": "Unpriced Assets Count",
+            "type": "integer"
+          },
+          "value_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Eur"
+          }
+        },
+        "required": [
+          "fetched_at",
+          "status"
+        ],
+        "title": "WorkspaceLiveBalance",
+        "type": "object"
+      },
       "WorkspaceReviewItem": {
         "properties": {
           "account": {
@@ -79677,6 +79802,55 @@
             ],
             "title": "Legacy Source Id"
           },
+          "live_assets_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Assets Count"
+          },
+          "live_balance_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "available",
+                  "confirmed_empty"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Balance Status"
+          },
+          "live_unpriced_assets_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Unpriced Assets Count"
+          },
+          "live_value_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Value Eur"
+          },
           "ownership_status": {
             "default": "not_assessed",
             "title": "Ownership Status",
@@ -79770,6 +79944,16 @@
             "additionalProperties": true,
             "title": "Evidence",
             "type": "object"
+          },
+          "live_balance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceLiveBalance"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "review_tasks": {
             "items": {
@@ -79977,7 +80161,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc18"
+    "version": "0.2.0rc19"
   },
   "openapi": "3.1.0",
   "paths": {

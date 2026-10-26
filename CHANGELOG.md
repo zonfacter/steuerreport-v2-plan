@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0rc19 - 2026-10-26
+
+- Gespeicherte Solana-Bestandspositionen erscheinen auch ohne importierte Historie
+  und ohne EUR-Preise unter Quellen / Bestaende, mit Datenstand und Abrufbezug.
+- Quellenliste zeigt Positionen und fehlende Bewertungen getrennt von Ereignissen.
+  Dashboard fuehrt direkt zum Anbieterbestand; unbekannter Live-Wert ist nicht 0 EUR.
+- Neue optionale lesende Felder live_balance und Live-Zusammenfassung. Vollstaendig
+  bestaetigte Leerbestaende bleiben von fehlenden oder unbewerteten Daten getrennt.
+- Bestehender Erfolgsstand bleibt nach fehlgeschlagenem Versuch sichtbar; keine
+  Uebertragung des Profilwallet-Snapshots auf andere Beobachtungsadressen.
+- Keine neuen Anbieterabrufe durch die Ansicht, keine Umwandlung von Snapshots
+  in Transaktionen, Eigentums-, FIFO- oder Steuerfreigaben.
+
 ## 0.2.0rc18 - 2026-10-26
 
 - Enthaelt den Solana-RPC- und Fehlermeldungs-Patch des nicht veroeffentlichten

@@ -190,7 +190,11 @@ def main():
         def rpc(_service, method, params, timeout_seconds):
             assert params[0] == address and timeout_seconds == 45
             rpc_state["calls"] += 1
-            return {"value": (1_250_000_000 if rpc_state["valid"] else None) if method == "getBalance" else []}
+            if method == "getBalance":
+                return {"value": 1_250_000_000 if rpc_state["valid"] else None}
+            tokens = [{"account": {"data": {"parsed": {"info": {"mint": f"synthetic-token-mint-{index:02}",
+                "tokenAmount": {"uiAmountString": "2.123456789012345678"}}}}}} for index in range(17)]
+            return {"value": tokens if params[1]["programId"] == PortfolioService.SOLANA_TOKEN_PROGRAM_IDS[0] else []}
         stack.enter_context(patch.object(PortfolioService, "_solana_rpc", rpc))
 
         def sync_wallet():
@@ -216,13 +220,40 @@ def main():
         sync_wallet()
         expect(page.get_by_role("dialog").get_by_role("status")).to_contain_text("Abruf abgeschlossen")
         page.get_by_role("dialog").get_by_role("button", name="Schließen", exact=True).click()
+        panel = page.get_by_role("dialog")
+        panel.get_by_role("tab", name="Bestände", exact=True).click()
+        balance = panel.get_by_role("region", name="Gespeicherter Wallet-Anbieterbestand")
+        expect(balance.locator("tbody tr")).to_have_count(18)
+        expect(balance.get_by_text("EUR-Preis fehlt", exact=True)).to_have_count(18)
+        expect(balance).to_contain_text("18 Positionen ohne EUR-Bewertung")
+        expect(panel.get_by_text("Noch keine Transaktionshistorie importiert.", exact=False)).to_be_visible()
+        for width in (390, 768, 1280, 1440):
+            page.set_viewport_size({"width": width, "height": 1000})
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.screenshot(path=str(args.output / f"synthetic-unpriced-wallet-holdings-{width}.png"), animations="disabled")
+        page.get_by_role("dialog").get_by_role("button", name="Details schließen", exact=True).click()
+        page.goto(base + "/#dashboard")
+        overview = page.get_by_role("region", name="Gespeicherte Wallet-Bestände")
+        expect(overview).to_contain_text("18 Bestandspositionen")
+        expect(overview).to_contain_text("Noch nicht verfügbar")
+        live_summary = page.locator(".wsSummaryLine").filter(has_text="Gespeicherter Live-Vergleich")
+        expect(live_summary).to_contain_text("Noch nicht verfügbar")
+        assert "0,00 EUR" not in live_summary.inner_text()
+        for width in (390, 768, 1280, 1440):
+            page.set_viewport_size({"width": width, "height": 1000})
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.screenshot(path=str(args.output / f"synthetic-unpriced-wallet-dashboard-{width}.png"), animations="disabled")
+        overview.get_by_role("button", name="Anbieterbestand ansehen").click()
+        expect(page.get_by_role("dialog").get_by_role("tab", name="Bestände", exact=True)).to_have_attribute("aria-selected", "true")
+        expect(page.get_by_role("dialog").locator("tbody tr")).to_have_count(18)
         page.get_by_role("dialog").get_by_role("button", name="Details schließen", exact=True).click()
         rpc_state["valid"] = False
         sync_wallet()
         expect(page.get_by_role("alert")).to_contain_text("Der vorherige erfolgreiche Datenstand bleibt erhalten")
         assert "noch kein erfolgreicher" not in page.get_by_role("alert").inner_text()
         assert rpc_state["calls"] == 5
-        assert PortfolioService(store)._stored_live_balance_snapshots("solana_wallet") == {"SOL": Decimal("1.25")}
+        balances = PortfolioService(store)._stored_live_balance_snapshots("solana_wallet")
+        assert len(balances) == 18 and balances["SOL"] == Decimal("1.25")
         with store.connect() as connection:
             for name in ("canonical_events", "balance_ledger", "tax_lots", "tax_lines"):
                 assert connection.execute(f"select count(*) from {name}").fetchone()[0] == 0
@@ -234,6 +265,8 @@ def main():
                   "real_ed25519_signature_verified": True, "tax_activation": "review_required", "financial_rows_written": 0,
                   "rpc_first_failure_not_reported_as_previous_success": True, "rpc_concrete_error_and_setup_link": True,
                   "rpc_retry_recovers_and_preserves_snapshot_on_later_failure": True, "rpc_responses_mocked": True,
+                  "eighteen_unpriced_positions_visible_without_history": True, "unknown_eur_not_displayed_as_zero": True,
+                  "dashboard_links_directly_to_saved_wallet_holdings": True,
                   "viewports": [390, 768, 1280, 1440], "external_requests": 0, "javascript_errors": errors,
                   "calls": calls}
         (args.output / "verification.json").write_text(json.dumps(result, indent=2) + "\n")

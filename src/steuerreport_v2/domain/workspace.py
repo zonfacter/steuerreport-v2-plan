@@ -16,6 +16,7 @@ from steuerreport_v2.contracts.workspace import (
     ActivityDetail, ActivityExport, ActivityPage, ActivityQuery, ActivityRow, WorkspaceSource,
     WorkspaceSourceDetail, WorkspaceSources, WorkspaceStatus,
     WorkspaceReviewQuery, WorkspaceReviewItem, WorkspaceReviewPage,
+    WorkspaceLiveAsset, WorkspaceLiveBalance,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.connectors import ConnectorService
@@ -158,6 +159,9 @@ class WorkspaceService:
             if existing:
                 existing.item.ref = source_ref("wallet:" + address)
                 existing.item.wallet_address = address
+                if connector_id:
+                    existing.item.connector_id = connector_id
+                    existing.item.can_sync = bool(diagnostic and diagnostic.credential_status in {"configured", "not_required"})
                 if connection:
                     existing.item.label = connection.display_label
                     existing.item.connection_status = status
@@ -232,7 +236,56 @@ class WorkspaceService:
                 value_basis="stored_live_snapshot" if diagnostic and diagnostic.last_snapshot_at else "unavailable",
                 can_sync=connector.connector_id in SYNC_CONNECTORS,
             ), "lower(e.source)=lower(?)", [connector.connector_id]))
+        for scope in scopes:
+            live = self._wallet_live_balance(scope.item, portfolio)
+            if live is None:
+                continue
+            scope.item.live_assets_count = len(live.assets)
+            scope.item.live_unpriced_assets_count = live.unpriced_assets_count
+            scope.item.live_value_eur = live.value_eur
+            scope.item.live_balance_status = live.status
+            scope.item.last_success_at = live.fetched_at
+            scope.item.freshness = "stale" if (datetime.now(UTC) - live.fetched_at).days > SourceService.LIVE_STALE_AFTER_DAYS else "fresh"
+            if scope.item.legacy_source_id is None:
+                scope.item.value_basis = "stored_live_snapshot"
+                scope.item.value_eur = live.value_eur
+                scope.item.price_issues_count = sum(asset.price_status == "missing" for asset in live.assets)
+                scope.item.issues_count += scope.item.price_issues_count
         return sorted(scopes, key=lambda scope: (scope.item.label.casefold(), scope.item.ref))
+
+    def _wallet_live_balance(self, source: WorkspaceSource, portfolio: PortfolioService) -> WorkspaceLiveBalance | None:
+        # Connector-wide snapshots only belong to their explicitly configured
+        # profile wallet, never to every saved observation address.
+        wallets = {"solana_wallet": portfolio.PRIMARY_SOLANA_WALLET, "jup_wallet": portfolio.KNOWN_JUP_WALLET}
+        connector = source.connector_id
+        if not source.wallet_address or wallets.get(connector) != source.wallet_address:
+            return None
+        status, fetched_at = portfolio._latest_live_connector_anchor(connector)
+        if fetched_at is None:
+            return None
+        with self.store.connect() as con:
+            rows = [] if status == "empty_response" else con.execute(
+                "select asset, sum(quantity), list(distinct source) from portfolio_live_balance_snapshots where connector_id=? and fetched_at=? group by asset order by asset",
+                [connector, fetched_at],
+            ).fetchall()
+        if not rows and status != "empty_response":
+            return None
+        prices = portfolio._latest_prices()
+        assets = []
+        sources = set()
+        for asset, quantity, origins in rows:
+            sources.update(origin for origin in origins if origin)
+            receipt = asset in portfolio.NON_VALUED_LIVE_RECEIPT_ASSETS
+            fiat = fiat_price_point(asset)
+            price = None if receipt else fiat or prices.get(asset.upper())
+            assets.append(WorkspaceLiveAsset(asset=asset, quantity=quantity,
+                price_eur=price.price_eur if price else None, value_eur=quantity * price.price_eur if price else None,
+                price_source=price.source if price else None, priced_at=utc(price.priced_at) if price else None,
+                price_status="excluded_receipt" if receipt else "fiat" if fiat else SourceService(self.store)._price_status(price.priced_at if price else None)))
+        unpriced = sum(asset.value_eur is None for asset in assets)
+        return WorkspaceLiveBalance(fetched_at=utc(fetched_at), status="confirmed_empty" if status == "empty_response" else "available",
+            assets=assets, value_eur=None if unpriced else sum((asset.value_eur for asset in assets), Decimal("0")),
+            unpriced_assets_count=unpriced, sources=sorted(sources))
 
     def sources(self) -> WorkspaceSources:
         scopes = self.source_scopes()
@@ -263,7 +316,8 @@ class WorkspaceService:
         evidence = scope.registry.model_dump(mode="json") if scope.registry else {"ownership": "not_assessed", "note": "Import oder API-Konfiguration bestaetigt nicht automatisch Eigentum oder steuerliche Aktivierung."}
         if scope.item.wallet_address:
             evidence["wallet_address"] = scope.item.wallet_address
-        return WorkspaceSourceDetail(source=scope.item.model_copy(update={"ref": ref}), valuation=valuation, evidence=evidence,
+        return WorkspaceSourceDetail(source=scope.item.model_copy(update={"ref": ref}), valuation=valuation,
+                                     live_balance=self._wallet_live_balance(scope.item, PortfolioService(self.store)), evidence=evidence,
                                      review_tasks=[item for item in reviews if scope.item.ref in item.candidate_source_refs][:50])
 
     def _attach_review(self, scopes: list[SourceScope]) -> list[WorkspaceReviewItem]:
