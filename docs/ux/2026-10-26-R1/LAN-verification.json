@@ -1,0 +1,60 @@
+{
+  "status": "bestanden",
+  "preview_url": "http://192.168.2.122:18014/",
+  "controlled_delay_of_actual_response": true,
+  "source_and_return_loading": true,
+  "same_review_url": true,
+  "only_read_queries": true,
+  "javascript_errors": [],
+  "calls": [
+    {
+      "method": "GET",
+      "path": "v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "v1/workspace/sources"
+    },
+    {
+      "method": "GET",
+      "path": "v1/workspace/sources/s_50a5ee17cb005388e7f3"
+    },
+    {
+      "method": "POST",
+      "path": "v1/workspace/review/query"
+    },
+    {
+      "method": "POST",
+      "path": "v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "v1/workspace/status?year=2025"
+    },
+    {
+      "method": "GET",
+      "path": "v1/workspace/sources"
+    },
+    {
+      "method": "GET",
+      "path": "v1/activity/assets"
+    },
+    {
+      "method": "POST",
+      "path": "v1/activity/query"
+    },
+    {
+      "method": "POST",
+      "path": "v1/workspace/review/query"
+    },
+    {
+      "method": "POST",
+      "path": "v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "v1/workspace/status?year=2025"
+    }
+  ],
+  "synthetic": true
+}

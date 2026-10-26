@@ -134,7 +134,8 @@ class WorkspaceFixture:
             route.fulfill(content_type="text/csv", body=output.getvalue(), headers={"X-Export-Row-Count": str(len(rows))})
             return True
         elif path == "/api/v1/workspace/review/query":
-            items = [] if self.fresh or body.get("search") or body.get("category") not in (None, "evidence") or body.get("source_ref") == OTHER else [self.review_item()]
+            items = [] if self.fresh or body.get("search") or body.get("category") not in (None, self.review_item()["task"]["category"]) or body.get("source_ref") == OTHER else [self.review_item()]
+            items = [item for item in items if not body.get("task_id") or item["task"]["task_id"] == body["task_id"]]
             data = dict(items=items, total=len(items), unfiltered_total=0 if self.fresh else 1, blocking_total=0 if self.fresh else 1, page=1, pages=1, page_size=body.get("page_size", 25), generated_at=STAMP)
         elif path == "/api/v1/portfolio/snapshot":
             data = dict(total_value_eur="0" if self.zero or self.fresh else "1200", positions=[] if self.fresh else [{}], asset_summary=[] if self.fresh else [{"asset": "SOL", "quantity": "10", "value_eur": "0" if self.zero else "1200", "price_status": "available", "priced_at_latest": STAMP, "price_sources": ["synthetic"]}], missing_price_assets=[])

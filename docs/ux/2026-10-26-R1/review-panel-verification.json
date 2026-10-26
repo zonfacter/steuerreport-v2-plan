@@ -1,0 +1,70 @@
+{
+  "status": "bestanden",
+  "source_entry_delayed": true,
+  "return_delayed": true,
+  "task_outside_list_filter": true,
+  "filter_context_preserved": true,
+  "missing_only_after_success": true,
+  "error_distinct_with_retry": true,
+  "task_switch_stale_reply_ignored": true,
+  "transient_false_states": 0,
+  "all_api_responses_synthetic": true,
+  "javascript_errors": [],
+  "external_requests": [],
+  "screenshots": [
+    {
+      "file": "R1-source-loading-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "review?size=10&status=high&detail=review-demo&category=price",
+      "data": "synthetic"
+    },
+    {
+      "file": "R1-source-loading-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "review?size=10&status=high&detail=review-demo&category=price",
+      "data": "synthetic"
+    },
+    {
+      "file": "R1-return-ready-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "review?size=10&status=high&detail=review-demo&category=price",
+      "data": "synthetic"
+    },
+    {
+      "file": "R1-missing-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "review?detail=review-missing",
+      "data": "synthetic"
+    },
+    {
+      "file": "R1-error-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "review?detail=review-demo",
+      "data": "synthetic"
+    },
+    {
+      "file": "R1-retry-ready-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "review?detail=review-demo",
+      "data": "synthetic"
+    }
+  ]
+}

@@ -2,6 +2,10 @@
 
 ## Unveröffentlicht - Bedienkonzept
 
+- Nachprüfung R1: Aufgabenpanel unterscheidet initiales Laden, API-Fehler mit
+  Wiederholen und bestätigten Leertreffer. ID-Abfrage bleibt unabhängig von der
+  Listenseite; Filter und Rückweg bleiben erhalten. Kontrollierte Verzögerungs-,
+  Fehler- und Aufgabenwechseltests im bestehenden Browserlauf ergänzt.
 - Review-Nacharbeit: kontobezogene Aufgaben in Quellenliste, Abgleichfilter und
   Quellendetail konsistent verknüpft; Quellen-/Bewertungshinweise bleiben getrennt.
 - Direkter Absprung zur betroffenen Konto-/Asset-Ledgeransicht mit Rückweg zur

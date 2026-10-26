@@ -8,6 +8,7 @@ import json
 from playwright.sync_api import expect
 
 from ux_workspace_fixtures import SOURCE, WorkspaceFixture
+from check_review_panel_browser_v2 import check_review_panel
 
 
 def check_workspace(browser, base_url: str, output: Path):
@@ -323,4 +324,5 @@ def check_workspace(browser, base_url: str, output: Path):
     (output / "workspace-verification.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     context.unroute_all(behavior="ignoreErrors")
     context.close()
+    result["review_panel"] = check_review_panel(browser, base_url, output)
     return result
