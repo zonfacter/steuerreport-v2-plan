@@ -5,6 +5,7 @@ import { FileImportWizard } from "./FileImportWizard";
 import { AiWorkspace } from "./AiWorkspace";
 import { HELP_TOPICS, HelpCenter, HelpTip, WorkflowNavigation } from "./Help";
 import { DashboardWorkspace } from "./workspace/DashboardWorkspace";
+import { EnvironmentNotice } from "./workspace/EnvironmentNotice";
 import { SourceWorkspace } from "./workspace/SourceWorkspace";
 import { ActivityWorkspace } from "./workspace/Transactions";
 import { ReviewWorkspace } from "./workspace/ReviewWorkspace";
@@ -5483,6 +5484,7 @@ function App() {
         </nav>
       </aside>
       <section className="workspace">
+        <EnvironmentNotice enabled={active !== "help"} />
         <header className="topbar">
           <div className="topbarTitle">
             <button

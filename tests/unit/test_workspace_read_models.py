@@ -11,6 +11,7 @@ import pytest
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
+from steuerreport_v2.contracts.workspace import WorkspaceReviewQuery
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.workspace import ActivityService, WorkspaceService
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
@@ -268,3 +269,121 @@ def test_expected_zero_policy_is_not_a_confirmed_zero_and_failed_retry_keeps_suc
     row = next(row for row in service.sources().sources if row.connector_id == "pionex")
     assert row.value_eur == 0 and row.last_success_at == now
     assert row.last_attempt.status == "fetch_failed"
+
+
+@pytest.fixture
+def negative_context(tmp_path):
+    from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+    from steuerreport_v2.importers.raw_normalizer import RawNormalizer
+    store = DuckDbStore(tmp_path / "context.duckdb")
+    batch = CsvRawImporter(store).import_text(source="manual-csv", filename="synthetic-original.csv", content=(
+        "time,asset,amount,type,account\n"
+        "2025-01-02T10:00:00Z,EUR,-10,withdrawal,alpha-account\n"
+        "2025-01-02T10:00:00Z,EUR,50,deposit,beta-account\n"
+    ))
+    RawNormalizer(store).normalize_batch(batch.batch_id)
+    BalanceLedgerBuilder(store).rebuild()
+    return store, TestClient(create_app(store)), batch
+
+
+def test_negative_account_is_linked_consistently_in_source_review_and_filtered_ledger(negative_context):
+    store, client, _batch = negative_context
+    before = fingerprint(store)
+    page = client.post("/api/v1/workspace/review/query", json={}).json()["data"]
+    task = next(item for item in page["items"] if item["task"]["decision_status"] == "negative_balance")
+    assert task["account"] == "alpha-account" and task["task"]["asset"] == "EUR"
+    assert task["context_status"] == "matched" and task["source_ref"]
+    assert task["account_ref"].startswith("a_") and "alpha" not in task["account_ref"]
+    sources = client.get("/api/v1/workspace/sources").json()["data"]["sources"]
+    source = next(row for row in sources if row["ref"] == task["source_ref"])
+    assert source["issues_count"] == 0  # Native valuation hints stay a separate set.
+    assert source["review_tasks_count"] == source["blocking_review_tasks_count"] == 1
+    assert source["review_reconciliation_tasks_count"] == 1
+    other = next(row for row in sources if row["ref"] != source["ref"])
+    assert other["review_tasks_count"] == 0
+    detail = client.get("/api/v1/workspace/sources/" + source["ref"]).json()["data"]
+    assert detail["source"] == source
+    assert [item["task"]["task_id"] for item in detail["review_tasks"]] == [task["task"]["task_id"]]
+    filtered = client.post("/api/v1/workspace/review/query", json={"source_ref": source["ref"]}).json()["data"]
+    assert filtered["total"] == 1
+    ledger = client.post("/api/v1/activity/query", json={"mode": "ledger", "source_ref": source["ref"], "account_ref": task["account_ref"], "asset": "EUR"}).json()["data"]
+    assert ledger["total"] == 1 and ledger["account_label"] == "alpha-account"
+    assert ledger["rows"][0]["ledger_account"] == "alpha-account"
+    assert ledger["rows"][0]["ledger_asset"] == "EUR"
+    assert Decimal(ledger["rows"][0]["ledger_quantity"]) == -10
+    assert fingerprint(store) == before
+
+
+def test_real_synthetic_funding_import_clears_context_everywhere_without_accepting_decision(negative_context):
+    from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+    from steuerreport_v2.importers.raw_normalizer import RawNormalizer
+    store, client, original = negative_context
+    task = client.post("/api/v1/workspace/review/query", json={}).json()["data"]["items"][0]
+    ref = task["source_ref"]
+    # Actual disposable data correction through the existing import/ledger path,
+    # not a mocked empty task list or a documentary review acceptance.
+    funding = CsvRawImporter(store).import_text(source="manual-csv", filename="synthetic-funding.csv", content=(
+        "time,asset,amount,type,account\n"
+        "2025-01-01T10:00:00Z,EUR,20,deposit,alpha-account\n"
+    ))
+    RawNormalizer(store).normalize_batch(funding.batch_id)
+    BalanceLedgerBuilder(store).rebuild()
+    sources = client.get("/api/v1/workspace/sources").json()["data"]["sources"]
+    source = next(row for row in sources if row["ref"] == ref)
+    assert source["review_tasks_count"] == source["review_reconciliation_tasks_count"] == source["blocking_review_tasks_count"] == 0
+    detail = client.get("/api/v1/workspace/sources/" + ref).json()["data"]
+    assert detail["review_tasks"] == []
+    assert client.post("/api/v1/workspace/review/query", json={"task_id": task["task"]["task_id"]}).json()["data"]["total"] == 0
+    assert store.list_review_decisions() == []
+    assert store.get_import_batch(original.batch_id).file_hash == original.file_hash
+
+
+def test_review_resolution_preserves_ambiguity_and_ignores_translated_labels(negative_context):
+    from steuerreport_v2.domain.review import ReviewService
+    from steuerreport_v2.domain.workspace import SourceScope
+    store, _client, _batch = negative_context
+    service = WorkspaceService(store)
+    scopes = service.source_scopes()
+    task = next(task for task in ReviewService(store).tasks(limit=None).tasks if task.decision_status == "negative_balance")
+    matched = service._review_items([task], scopes)[0]
+    scope = next(scope for scope in scopes if scope.item.ref == matched.source_ref)
+    scope.item.label = "A renamed display label"
+    assert service._review_items([task], scopes)[0].source_ref == matched.source_ref
+    duplicate = SourceScope(scope.item.model_copy(update={"ref": "s_" + "f" * 20}), scope.predicate, scope.parameters)
+    ambiguous = service._review_items([task], [*scopes, duplicate])[0]
+    assert ambiguous.context_status == "ambiguous" and ambiguous.source_ref is None
+    assert len(ambiguous.candidate_source_refs) == 2
+    service._attach_review([*scopes, duplicate])
+    assert scope.item.ambiguous_review_tasks_count == scope.item.blocking_review_tasks_count == 1
+    missing = task.model_copy(update={"scope": "account:missing-account:asset:EUR", "evidence_refs": []})
+    unresolved = service._review_items([missing], scopes)[0]
+    assert unresolved.context_status == "unresolved" and unresolved.source_ref is None
+    combined = task.model_copy(update={"evidence_refs": ["account:beta-account:asset:EUR"]})
+    multiple = service._review_items([combined], scopes)[0]
+    assert multiple.context_status == "ambiguous" and multiple.account_ref is None
+    assert len(multiple.candidate_source_refs) == 2
+    partial = task.model_copy(update={"evidence_refs": ["account:missing-account:asset:EUR"]})
+    assert service._review_items([partial], scopes)[0].context_status == "ambiguous"
+
+
+def test_source_task_preview_is_bounded_with_complete_counts(negative_context, monkeypatch):
+    from steuerreport_v2.domain.review import ReviewService
+    store, _client, _batch = negative_context
+    summary = ReviewService(store).tasks(limit=None)
+    task = next(task for task in summary.tasks if task.decision_status == "negative_balance")
+    tasks = [task.model_copy(update={"task_id": f"synthetic-task-{index:03d}"}) for index in range(51)]
+    monkeypatch.setattr(ReviewService, "tasks", lambda *_args, **_kwargs: summary.model_copy(update={"tasks": tasks, "open_tasks": 51, "blocking_tasks": 51}))
+    service = WorkspaceService(store)
+    source = next(row for row in service.sources().sources if row.review_tasks_count)
+    detail = service.source(source.ref)
+    assert source.review_tasks_count == source.blocking_review_tasks_count == 51
+    assert len(detail.review_tasks) == detail.review_tasks_limit == 50
+    page = service.review_page(WorkspaceReviewQuery(source_ref=source.ref, page=3, page_size=25))
+    assert page.total == 51 and len(page.items) == 1
+
+
+def test_workspace_environment_is_explicit_and_readonly(workspace):
+    store, client, _events = workspace
+    before = fingerprint(store)
+    assert client.get("/api/v1/workspace/environment").json()["data"] == {"synthetic_preview": False, "read_only": False}
+    assert fingerprint(store) == before

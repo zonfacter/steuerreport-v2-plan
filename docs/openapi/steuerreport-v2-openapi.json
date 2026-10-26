@@ -109,6 +109,17 @@
       },
       "ActivityPage": {
         "properties": {
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
           "generated_at": {
             "format": "date-time",
             "title": "Generated At",
@@ -171,6 +182,18 @@
       "ActivityQuery": {
         "additionalProperties": false,
         "properties": {
+          "account_ref": {
+            "anyOf": [
+              {
+                "pattern": "^a_[a-f0-9]{20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Ref"
+          },
           "asset": {
             "anyOf": [
               {
@@ -77725,6 +77748,56 @@
       },
       "WorkspaceReviewItem": {
         "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "account_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Ref"
+          },
+          "candidate_source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Source Refs",
+            "type": "array"
+          },
+          "context_label": {
+            "default": "Fachliche Pr\u00fcfung",
+            "title": "Context Label",
+            "type": "string"
+          },
+          "context_note": {
+            "default": "Keine eindeutige Quellenzuordnung vorhanden.",
+            "title": "Context Note",
+            "type": "string"
+          },
+          "context_status": {
+            "default": "unresolved",
+            "enum": [
+              "matched",
+              "ambiguous",
+              "unresolved",
+              "global"
+            ],
+            "title": "Context Status",
+            "type": "string"
+          },
           "event_ids": {
             "items": {
               "type": "string"
@@ -77868,6 +77941,18 @@
             "title": "Search",
             "type": "string"
           },
+          "source_ref": {
+            "anyOf": [
+              {
+                "pattern": "^s_[a-f0-9]{20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
           "task_id": {
             "anyOf": [
               {
@@ -77899,6 +77984,16 @@
       },
       "WorkspaceSource": {
         "properties": {
+          "ambiguous_review_tasks_count": {
+            "default": 0,
+            "title": "Ambiguous Review Tasks Count",
+            "type": "integer"
+          },
+          "blocking_review_tasks_count": {
+            "default": 0,
+            "title": "Blocking Review Tasks Count",
+            "type": "integer"
+          },
           "can_sync": {
             "default": false,
             "title": "Can Sync",
@@ -77993,6 +78088,16 @@
             "title": "Ownership Status",
             "type": "string"
           },
+          "price_issues_count": {
+            "default": 0,
+            "title": "Price Issues Count",
+            "type": "integer"
+          },
+          "reconciliation_issues_count": {
+            "default": 0,
+            "title": "Reconciliation Issues Count",
+            "type": "integer"
+          },
           "reconciliation_status": {
             "default": "not_assessed",
             "title": "Reconciliation Status",
@@ -78001,6 +78106,16 @@
           "ref": {
             "title": "Ref",
             "type": "string"
+          },
+          "review_reconciliation_tasks_count": {
+            "default": 0,
+            "title": "Review Reconciliation Tasks Count",
+            "type": "integer"
+          },
+          "review_tasks_count": {
+            "default": 0,
+            "title": "Review Tasks Count",
+            "type": "integer"
           },
           "source_type": {
             "title": "Source Type",
@@ -78050,6 +78165,18 @@
             "additionalProperties": true,
             "title": "Evidence",
             "type": "object"
+          },
+          "review_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceReviewItem"
+            },
+            "title": "Review Tasks",
+            "type": "array"
+          },
+          "review_tasks_limit": {
+            "default": 50,
+            "title": "Review Tasks Limit",
+            "type": "integer"
           },
           "source": {
             "$ref": "#/components/schemas/WorkspaceSource"
@@ -98048,6 +98175,31 @@
         "summary": "Transfer Candidates",
         "tags": [
           "Transactions"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/environment": {
+      "get": {
+        "description": "Workspace environment. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "workspace_environment_api_v1_workspace_environment_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_str__bool__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Workspace Environment",
+        "tags": [
+          "Cockpit"
         ],
         "x-data-effect": "read-only",
         "x-long-running": false,

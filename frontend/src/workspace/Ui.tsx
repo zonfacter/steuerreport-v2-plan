@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown, LoaderCircle, Search, X } from "lucide-react";
 import { HelpTip } from "../Help";
-import { type Resource, timestamp } from "./resource";
+import { compactQuantity, type Resource, timestamp } from "./resource";
 
 export const LABELS: Record<string, string> = {
   known_wallet_missing_import: "Wallet bekannt — Transaktionen noch nicht importiert", missing_live_anchor: "Noch kein aktueller Vergleichsbestand verfügbar",
@@ -22,8 +22,12 @@ export const LABELS: Record<string, string> = {
 };
 export function label(value?: string | null, fallback = "Details prüfen") { return value ? LABELS[value] || fallback : "Noch nicht geprüft"; }
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "warning" | "danger" | "ok" }) { return <span className={`wsBadge ${tone}`}>{children}</span>; }
+export function ExactQuantity({ value }: { value: string | null | undefined }) {
+  const compact = compactQuantity(value);
+  return /[…<>]/.test(compact) ? <details className="wsQuantity"><summary aria-label={`Exakten Mengenwert anzeigen: ${compact}`}>{compact}</summary><code>{value}</code></details> : <span title={value || undefined}>{compact}</span>;
+}
 export function ResourceNotice<T>({ resource, label: name = "Daten" }: { resource: Resource<T>; label?: string }) {
-  if (resource.status === "initial" || resource.status === "loading") return <div className="wsResource" role="status"><LoaderCircle size={16} className="spin" /> {name} werden geladen.{resource.data !== undefined && <span>Vorheriger Stand vom {timestamp(resource.updatedAt)} bleibt sichtbar.</span>}</div>;
+  if (resource.status === "initial" || resource.status === "loading") return <div className="wsResource" role="status"><LoaderCircle size={16} className="spin" /> {name}: Ladevorgang läuft.{resource.data !== undefined && <span>Vorheriger Stand vom {timestamp(resource.updatedAt)} bleibt sichtbar.</span>}</div>;
   if (resource.status === "error") return <div className="wsResource error" role="alert"><AlertCircle size={17} /><span>{name}: {resource.error}{resource.data !== undefined && ` Vorheriger Stand vom ${timestamp(resource.updatedAt)} bleibt sichtbar und ist veraltet.`}</span><button type="button" onClick={resource.reload}>Erneut versuchen</button></div>;
   return null;
 }

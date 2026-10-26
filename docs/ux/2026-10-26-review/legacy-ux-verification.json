@@ -1,0 +1,15 @@
+{
+  "all_api_responses_synthetic": true,
+  "real_api_calls": 0,
+  "real_model_calls": 0,
+  "help_without_api": true,
+  "search_and_context_links": true,
+  "document_links_verified": true,
+  "context_help_preserves_unsaved_workspace": true,
+  "keyboard_hover_and_touch_tooltips": true,
+  "guided_import_preview_no_execution": true,
+  "ai_setup_collapsed_when_configured": true,
+  "cloud_task_requires_explicit_consent": true,
+  "desktop_mobile_320_390_1440_no_overflow": true,
+  "javascript_errors": []
+}

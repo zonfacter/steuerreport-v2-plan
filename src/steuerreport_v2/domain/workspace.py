@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from steuerreport_v2.contracts.events import CanonicalEvent
 from steuerreport_v2.contracts.sources import SourceDetail
+from steuerreport_v2.contracts.review import ReviewTask
 from steuerreport_v2.contracts.workspace import (
     ActivityDetail, ActivityExport, ActivityPage, ActivityQuery, ActivityRow, WorkspaceSource,
     WorkspaceSourceDetail, WorkspaceSources, WorkspaceStatus,
@@ -44,6 +45,10 @@ def naive_utc(value):
 
 def source_ref(key: str) -> str:
     return "s_" + hashlib.sha256(key.encode()).hexdigest()[:20]
+
+
+def account_ref(account: str) -> str:
+    return "a_" + hashlib.sha256(account.encode()).hexdigest()[:20]
 
 
 @dataclass
@@ -96,6 +101,8 @@ class WorkspaceService:
                 freshness=row.live_freshness, value_eur=value, value_basis=row.value_basis if value is not None else "unavailable",
                 ledger_value_eur=row.ledger_value_eur if not ledger_unpriced else None, imports_count=row.import_batches,
                 issues_count=row.open_price_issues + row.open_reconciliation_issues,
+                price_issues_count=row.open_price_issues,
+                reconciliation_issues_count=row.open_reconciliation_issues,
                 reconciliation_status=row.current_status,
                 can_sync=connector in SYNC_CONNECTORS and bool(diagnostic) and diagnostic.credential_status in {"configured", "not_required"},
                 warning=row.display_warning,
@@ -191,13 +198,18 @@ class WorkspaceService:
 
     def sources(self) -> WorkspaceSources:
         scopes = self.source_scopes()
+        self._attach_review(scopes)
         with self.store.connect() as con:
             count = con.execute("select count(*) from canonical_events").fetchone()[0]
         return WorkspaceSources(generated_at=datetime.now(UTC), sources=[scope.item for scope in scopes], events_count=count,
                                 methodology="Eigene importierte, registrierte oder konfigurierte Quellen; kein Anbieter-Katalog. Werte und Gates aus vorhandenen Services. Keine externe Abfrage und keine Aenderung der Ownership- oder Steuerregeln.")
 
     def source(self, ref: str) -> WorkspaceSourceDetail:
-        scope = self.scope(ref)
+        scopes = self.source_scopes()
+        scope = next((row for row in scopes if row.item.ref == ref), None)
+        if scope is None:
+            raise LookupError("workspace_source_not_found")
+        reviews = self._attach_review(scopes)
         valuation = None
         if scope.item.legacy_source_id:
             groups = PortfolioService(self.store).source_overview().groups
@@ -211,7 +223,74 @@ class WorkspaceService:
                     full_accounts=[row.account for row in group.accounts],
                     methodology="Bestehende Bewertung. Ereignisse werden ausschliesslich separat paginiert geladen; kein Vollscan der Ereignisliste fuer diesen Detailaufruf.")
         evidence = scope.registry.model_dump(mode="json") if scope.registry else {"ownership": "not_assessed", "note": "Import oder API-Konfiguration bestaetigt nicht automatisch Eigentum oder steuerliche Aktivierung."}
-        return WorkspaceSourceDetail(source=scope.item, valuation=valuation, evidence=evidence)
+        return WorkspaceSourceDetail(source=scope.item, valuation=valuation, evidence=evidence,
+                                     review_tasks=[item for item in reviews if ref in item.candidate_source_refs][:50])
+
+    def _attach_review(self, scopes: list[SourceScope]) -> list[WorkspaceReviewItem]:
+        items = self._review_items(ReviewService(self.store).tasks(limit=None).tasks, scopes)
+        for scope in scopes:
+            matched = [item for item in items if item.source_ref == scope.item.ref]
+            related = [item for item in items if scope.item.ref in item.candidate_source_refs]
+            scope.item.review_tasks_count = len(matched)
+            scope.item.blocking_review_tasks_count = sum(item.task.blocks_export for item in related)
+            scope.item.ambiguous_review_tasks_count = sum(item.context_status == "ambiguous" for item in related)
+            scope.item.review_reconciliation_tasks_count = sum(item.task.category == "reconciliation" for item in related)
+        return items
+
+    def _review_items(self, tasks: list[ReviewTask], scopes: list[SourceScope]) -> list[WorkspaceReviewItem]:
+        """Resolve exact account/source/event identities; never guess from task prose."""
+        items = []
+        with self.store.connect() as con:
+            accounts = {}
+            sources = {}
+            for scope in scopes:
+                rows = con.execute(f"select distinct e.account, e.wallet, e.source from canonical_events e where {scope.predicate}", scope.parameters).fetchall()
+                accounts[scope.item.ref] = {value for row in rows for value in row[:2] if value}
+                sources[scope.item.ref] = {row[2] for row in rows}
+                if scope.registry:
+                    for identifier in scope.registry.identifiers:
+                        if identifier.kind == "canonical_source":
+                            sources[scope.item.ref].add(identifier.value)
+                        elif identifier.kind != "canonical_source_prefix":
+                            accounts[scope.item.ref].add(identifier.value)
+            for task in tasks:
+                identities = [task.scope, *task.evidence_refs]
+                account_ids = {identity.removeprefix("account:").rsplit(":asset:", 1)[0] for identity in identities if identity.startswith("account:")}
+                account = next(iter(account_ids)) if len(account_ids) == 1 else None
+                candidates = [value.removeprefix("canonical:").removeprefix("event:") for value in identities]
+                event_rows = con.execute("select event_id, account, wallet, source from canonical_events where event_id in (select unnest(?)) or raw_object_id in (select unnest(?)) order by event_id", [candidates, candidates]).fetchall()
+                matches = set()
+                incomplete = False
+                if account_ids:
+                    matches = {ref for ref, values in accounts.items() if account_ids.intersection(values)}
+                    incomplete = any(not any(account_id in values for values in accounts.values()) for account_id in account_ids)
+                elif event_rows:
+                    for scope in scopes:
+                        found = con.execute(f"select 1 from canonical_events e where ({scope.predicate}) and e.event_id in (select unnest(?)) limit 1", [*scope.parameters, [row[0] for row in event_rows]]).fetchone()
+                        if found:
+                            matches.add(scope.item.ref)
+                else:
+                    # source_group is a structured identifier from the existing rule,
+                    # unlike a translated title or the technical producer review_gate.
+                    for scope in scopes:
+                        if task.source_group and (task.source_group in sources[scope.item.ref]
+                                                  or SourceService.source_id(task.source_group) == scope.item.legacy_source_id):
+                            matches.add(scope.item.ref)
+                        elif task.source in sources[scope.item.ref]:
+                            matches.add(scope.item.ref)
+                status = "matched" if len(matches) == 1 and not incomplete else "ambiguous" if matches else "unresolved"
+                resolved = next(iter(matches)) if status == "matched" else None
+                label = f"Konto {account}" if account else "Mehrere Konten" if len(account_ids) > 1 else next((scope.item.label for scope in scopes if scope.item.ref == resolved), "Fachliche Prüfung")
+                if task.asset:
+                    label += f" · Asset {task.asset}"
+                items.append(WorkspaceReviewItem(task=task, event_ids=[row[0] for row in event_rows[:20]], source_ref=resolved,
+                    candidate_source_refs=sorted(matches), account=account, account_ref=account_ref(account) if account else None,
+                    context_status=status, context_label=label,
+                    context_note="Über gespeicherte Konto-/Quellen- oder Ereignis-IDs zugeordnet." if resolved else
+                    "Nicht alle Kontobezüge lassen sich einer Quelle zuordnen. Zuordnung vor einer Entscheidung prüfen." if incomplete and matches else
+                    "Mehrere Quellen passen zu den gespeicherten IDs. Zuordnung vor einer Entscheidung prüfen." if matches else
+                    "Keine eindeutige Zuordnung zu einer eigenen Quelle belegt. Vorbereitete Liste prüfen; keine Quelle wird geraten."))
+        return items
 
     def scope(self, ref: str) -> SourceScope:
         scope = next((row for row in self.source_scopes() if row.item.ref == ref), None)
@@ -251,7 +330,7 @@ class WorkspaceService:
             next_section=next_section, next_action=next_action,
             dimensions={"data": "Historie vorhanden — Abdeckung prüfen" if events else "Noch keine Transaktionshistorie",
                         "calculation": "Veraltet" if stale else "Berechnungsstand vorhanden" if calculation else "Noch nicht berechnet",
-                        "review": f"{review.issues_open} offene Hinweise" if review.issues_open else "Keine Gate-Hinweise im geprüften Datenstand" if events else "Noch nicht prüfbar",
+                        "review": ("1 offener Hinweis" if review.issues_open == 1 else f"{review.issues_open} offene Hinweise") if review.issues_open else "Keine Gate-Hinweise im geprüften Datenstand" if events else "Noch nicht prüfbar",
                         "year": "Freigegeben" if final else "Jahresbestätigung / Belege prüfen",
                         "export": "Final verfügbar" if final else "Nur Vorschau" if preview else "Noch nicht verfügbar"})
 
@@ -265,16 +344,18 @@ class WorkspaceService:
                  and (not query.search.strip() or query.search.strip().casefold() in " ".join([task.title, task.detail, task.source, task.scope, task.asset or ""]).casefold())]
         pages = max(1, (len(tasks) + query.page_size - 1) // query.page_size)
         page = min(query.page, pages)
-        selected = tasks[(page - 1) * query.page_size:page * query.page_size]
         scopes = self.source_scopes()
-        items = []
-        with self.store.connect() as con:
-            for task in selected:
-                candidates = [value.removeprefix("canonical:").removeprefix("event:") for value in [*task.evidence_refs, task.scope]]
-                event_ids = [row[0] for row in con.execute("select event_id from canonical_events where event_id in (select unnest(?)) or raw_object_id in (select unnest(?)) order by event_id limit 20", [candidates, candidates]).fetchall()]
-                source = next((scope for scope in scopes if scope.item.label in {task.source, task.source_group}), None)
-                items.append(WorkspaceReviewItem(task=task, event_ids=event_ids, source_ref=source.item.ref if source else None))
-        return WorkspaceReviewPage(generated_at=summary.generated_at, items=items, total=len(tasks), page=page, pages=pages,
+        if query.source_ref:
+            resolved = self._review_items(tasks, scopes)
+            filtered = [item for item in resolved if query.source_ref in item.candidate_source_refs]
+            pages = max(1, (len(filtered) + query.page_size - 1) // query.page_size)
+            page = min(query.page, pages)
+            items = filtered[(page - 1) * query.page_size:page * query.page_size]
+            total = len(filtered)
+        else:
+            items = self._review_items(tasks[(page - 1) * query.page_size:page * query.page_size], scopes)
+            total = len(tasks)
+        return WorkspaceReviewPage(generated_at=summary.generated_at, items=items, total=total, page=page, pages=pages,
                                    page_size=query.page_size, blocking_total=summary.blocking_tasks, unfiltered_total=summary.open_tasks)
 
 
@@ -299,9 +380,17 @@ class ActivityService:
             scope = WorkspaceService(self.store).scope(query.source_ref)
             clauses.append("(" + scope.predicate + ")")
             parameters.extend(scope.parameters)
+        if query.account_ref:
+            columns = ["l.account"] if query.mode == "ledger" else ["e.account", "e.wallet"]
+            clauses.append("(" + " or ".join(f"('a_' || substr(sha256({column}), 1, 20))=?" for column in columns) + ")")
+            parameters.extend([query.account_ref] * len(columns))
         if query.asset:
-            clauses.append("(upper(e.asset)=upper(?) or upper(e.quote_asset)=upper(?) or upper(e.fee_asset)=upper(?))")
-            parameters.extend([query.asset] * 3)
+            if query.mode == "ledger" and query.account_ref:
+                clauses.append("upper(l.asset)=upper(?)")
+                parameters.append(query.asset)
+            else:
+                clauses.append("(upper(e.asset)=upper(?) or upper(e.quote_asset)=upper(?) or upper(e.fee_asset)=upper(?))")
+                parameters.extend([query.asset] * 3)
         if query.event_type:
             clauses.append("e.event_type=?")
             parameters.append(query.event_type)
@@ -324,12 +413,16 @@ class ActivityService:
             extra = "l.asset, l.delta_quantity, l.account"
         direction = "desc" if query.sort == "newest" else "asc"
         with self.store.connect() as con:
+            account_label = None
+            if query.account_ref:
+                account_row = con.execute("select account from (select account from balance_ledger union select account from canonical_events union select wallet as account from canonical_events) where ('a_' || substr(sha256(account),1,20))=? limit 1", [query.account_ref]).fetchone()
+                account_label = account_row[0] if account_row else None
             total = con.execute(f"select count(*) from {base} where {where}", parameters).fetchone()[0]
             pages = max(1, (total + query.page_size - 1) // query.page_size)
             page = min(query.page, pages)
             rows = con.execute(f"select {row_id}, {EVENT_COLUMNS}, {HINT}, {CORRECTED}, {extra} from {base} where {where} order by e.event_time {direction}, {row_id} asc limit ? offset ?",
                                [*parameters, query.page_size, (page - 1) * query.page_size]).fetchall()
-        return ActivityPage(generated_at=datetime.now(UTC), total=total, pages=pages, page=page, page_size=query.page_size, mode=query.mode,
+        return ActivityPage(generated_at=datetime.now(UTC), total=total, pages=pages, page=page, page_size=query.page_size, mode=query.mode, account_label=account_label,
                             rows=[self.row(row) for row in rows])
 
     @staticmethod

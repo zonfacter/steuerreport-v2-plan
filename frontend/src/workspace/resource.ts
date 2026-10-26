@@ -68,3 +68,29 @@ export function timestamp(value?: string | null): string {
   const date = new Date(utc);
   return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "long", timeZone: "Europe/Berlin" }).format(date) : "Zeitpunkt unbekannt";
 }
+
+export function priceReference(row: { asset: string; price_status?: string; priced_at_latest?: string | null; price_sources?: string[] }) {
+  const sources = row.price_sources || [];
+  if (row.asset.toUpperCase() === "EUR" && sources.includes("fiat:EUR")) {
+    return { label: "EUR-Referenzwert", source: "Fester Wert: 1 EUR = 1 EUR" };
+  }
+  const instant = row.priced_at_latest && (/(?:Z|[+-]\d\d:\d\d)$/.test(row.priced_at_latest) ? row.priced_at_latest : row.priced_at_latest + "Z");
+  const epoch = instant && new Date(instant).getTime() === 0;
+  return {
+    label: !row.priced_at_latest ? "Preiszeitpunkt nicht verfügbar" : epoch && row.price_status === "fiat" ? "Technischer Referenzwert, kein Kurszeitpunkt" : timestamp(row.priced_at_latest),
+    source: sources.length ? "Bewertungsquelle in Details" : "Quelle nicht hinterlegt"
+  };
+}
+
+export function compactQuantity(value: string | null | undefined, places = 8): string {
+  const canonical = canonicalDecimal(value);
+  if (canonical === null) return "Nicht verfügbar";
+  const [whole, raw = ""] = canonical.split(".");
+  const fraction = raw.replace(/0+$/, "");
+  const truncated = fraction.length > places;
+  if (truncated && BigInt(whole) === 0n && /^0+$/.test(fraction.slice(0, places))) {
+    return `${whole.startsWith("-") ? "> -" : "< "}0,${"0".repeat(places - 1)}1`;
+  }
+  const integer = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return integer + (fraction ? "," + fraction.slice(0, places) : "") + (truncated ? "…" : "");
+}

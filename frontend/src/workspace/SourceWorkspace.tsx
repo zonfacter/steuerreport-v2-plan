@@ -5,8 +5,9 @@ import { HelpTip } from "../Help";
 import { ActivityWorkspace } from "./Transactions";
 import { navigateView, useViewState } from "./view-state";
 import { compareAmounts, money, readApi, timestamp, useDebounced, useResource } from "./resource";
-import { ActionConfirm, Badge, DetailPanel, Empty, label, ListTools, Pager, ResourceNotice, RowMenu, TabPanel, Tabs } from "./Ui";
+import { ActionConfirm, Badge, DetailPanel, Empty, ExactQuantity, label, ListTools, Pager, ResourceNotice, RowMenu, TabPanel, Tabs } from "./Ui";
 import type { Source, SourceDetail, SourceList } from "./types";
+import { ContextNote, openLedgerContext, reviewTaskCount, ReviewReturn, sourceHasHints } from "./ReviewContext";
 
 const success = new Set(["refreshed", "empty_response", "success", "ok"]);
 const fileProviders = new Set(["manual-csv", "binance", "bitget", "pionex", "coinbase", "helium", "solana_rpc"]);
@@ -23,39 +24,41 @@ export function SourceWorkspace({ technical, onTechnical }: { technical: ReactNo
       : view.status === "setup" ? ["missing", "not_configured", "ownership_verified_pending_registry"].includes(source.connection_status)
       : view.status === "failed" ? failed(source)
       : view.status === "stale" ? source.freshness === "stale"
-      : view.status === "reconciliation" ? source.issues_count > 0 || !!source.warning : true
-  ))).sort((a, b) => view.sort === "value" ? compareAmounts(b.value_eur, a.value_eur) || a.label.localeCompare(b.label, "de") : view.sort === "issues" ? b.issues_count - a.issues_count || a.label.localeCompare(b.label, "de") : a.label.localeCompare(b.label, "de"));
+      : view.status === "review" ? reviewTaskCount(source) > 0
+      : view.status === "reconciliation" ? (source.reconciliation_issues_count || 0) > 0 || (source.review_reconciliation_tasks_count || 0) > 0 || !!source.warning : true
+  ))).sort((a, b) => view.sort === "value" ? compareAmounts(b.value_eur, a.value_eur) || a.label.localeCompare(b.label, "de") : view.sort === "issues" ? (b.issues_count + reviewTaskCount(b)) - (a.issues_count + reviewTaskCount(a)) || a.label.localeCompare(b.label, "de") : a.label.localeCompare(b.label, "de"));
   const pages = Math.max(1, Math.ceil(rows.length / view.size));
   const page = Math.min(view.page, pages);
   useEffect(() => { if (resource.status === "ready" && page !== view.page) set({ page }, true); }, [page, view.page, resource.status]);
   const filtered = !!search || !!view.status;
   const open = (source: Source, detailTab = "overview") => set({ detail: source.ref, detailTab, detailPage: 1 });
   return <section className="wsPage" aria-label="Eigene Quellen">
+    <ReviewReturn task={view.task} />
     <div className="wsPageActions"><button type="button" className="wsPrimary" onClick={() => setAdding(true)}><Plus size={17} /> Quelle hinzufügen</button><a className="wsButton" href="#import"><Upload size={16} /> Dateien importieren</a></div>
     <ResourceNotice resource={resource} label="Eigene Quellen" />
-    {resource.data && <div className="wsSummaryLine"><span>{all.length} eigene Quellen</span><span>{resource.data.events_count} kanonische Ereignisse</span><span>{all.filter(failed).length} fehlgeschlagene letzte Abrufe</span><HelpTip label="Getrennte Quellenzustände">Einrichtung, letzter erfolgreicher Bestand, jüngster Abrufversuch und fachlicher Abgleich sind getrennte Zustände. Eine Dateiquelle benötigt nicht zwangsläufig einen API-Zugang. Ein bestätigter Nullbestand ist etwas anderes als ein fehlender Vergleichsbestand.</HelpTip></div>}
+    {resource.data && <div className="wsSummaryLine"><span>{all.length} {all.length === 1 ? "eigene Quelle" : "eigene Quellen"}</span><span>{resource.data.events_count} {resource.data.events_count === 1 ? "kanonisches Ereignis" : "kanonische Ereignisse"}</span><span>{all.filter(failed).length} {all.filter(failed).length === 1 ? "fehlgeschlagener letzter Abruf" : "fehlgeschlagene letzte Abrufe"}</span><HelpTip label="Getrennte Quellenzustände">Einrichtung, letzter erfolgreicher Bestand, jüngster Abrufversuch und fachlicher Abgleich sind getrennte Zustände. Eine Dateiquelle benötigt nicht zwangsläufig einen API-Zugang. Ein bestätigter Nullbestand ist etwas anderes als ein fehlender Vergleichsbestand.</HelpTip></div>}
     <Tabs name="Quellenbereich" active={view.tab} items={[{ id: "list", label: "Eigene Quellen" }, { id: "expert", label: "Expertenmodus" }]} onChange={(tab) => set({ tab })} />
     <TabPanel name="Quellenbereich" active={view.tab}>{view.tab === "expert" ? <div className="wsTechnical"><EarnPreview />{technical}</div> : <>
       <ListTools search={search} onSearch={setSearch} chips={view.status ? [{ label: statusLabel(view.status), remove: () => set({ status: "" }) }] : []} onReset={reset}>
-        <label>Status<select aria-label="Quellenstatus" value={view.status} onChange={(event) => set({ status: event.target.value })}><option value="">Alle Zustände</option>{["configured", "setup", "failed", "stale", "reconciliation"].map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
+        <label>Status<select aria-label="Quellenstatus" value={view.status} onChange={(event) => set({ status: event.target.value })}><option value="">Alle Zustände</option>{["configured", "setup", "failed", "stale", "reconciliation", "review"].map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
         <label>Sortierung<select aria-label="Quellen sortieren" value={view.sort} onChange={(event) => set({ sort: event.target.value })}><option value="name">Name A–Z</option><option value="value">Höchster bekannter Wert zuerst</option><option value="issues">Offene Hinweise zuerst</option></select></label>
       </ListTools>
       {resource.status === "ready" && !all.length ? <Empty title="Noch keine eigene Quelle eingerichtet">Füge eine verwendete Börse oder Wallet hinzu oder importiere deren Originaldateien. Ein leerer Anbieter-Katalog ist kein geprüftes Portfolio.</Empty>
         : resource.data && !rows.length ? <Empty title="Keine passenden Quellen" filtered={filtered} onReset={reset} />
           : <div className="wsSourceList" aria-label="Quellenliste">{rows.slice((page - 1) * view.size, page * view.size).map((source) => <article key={source.ref} className="wsSourceRow">
-            <div className="wsSourceIdentity"><Wallet size={22} aria-hidden="true" /><div><button type="button" className="wsTextButton" onClick={() => open(source)}>{source.label}</button><small>{label(source.source_type, "Importierte Quelle")} · {source.events_count} Ereignisse</small><Badge>{label(source.connection_status)}</Badge></div></div>
+            <div className="wsSourceIdentity"><Wallet size={22} aria-hidden="true" /><div><button type="button" className="wsTextButton" onClick={() => open(source)}>{source.label}</button><small>{label(source.source_type, "Importierte Quelle")} · {source.events_count} {source.events_count === 1 ? "Ereignis" : "Ereignisse"}</small><Badge>{label(source.connection_status)}</Badge></div></div>
             <div className="wsSourceDates"><small>Letzter erfolgreicher Abruf</small><span>{timestamp(source.last_success_at)}</span>{failed(source) && <span className="wsWarning">Neuer Versuch fehlgeschlagen · {timestamp(source.last_attempt?.attempted_at)}</span>}{source.freshness === "stale" && <Badge tone="warning">Datenstand veraltet</Badge>}</div>
-            <div className="wsSourceValue"><strong>{money(source.value_eur)}</strong><small>{label(source.value_basis, "Bewertungsbasis prüfen")}</small><span>{source.issues_count} fachliche Hinweise{source.warning ? " · Abgleich prüfen" : ""}</span></div>
-            <div className="wsSourceActions"><button type="button" disabled={resource.stale} onClick={() => source.issues_count || source.warning ? open(source, "issues") : source.can_sync ? setSync(source) : open(source, source.events_count ? "overview" : "settings")}>
-              {source.issues_count || source.warning ? <ClipboardCheck size={16} /> : source.can_sync ? <RefreshCw size={16} /> : <ArrowRight size={16} />}
-              {source.issues_count || source.warning ? "Hinweise prüfen" : source.can_sync ? "Synchronisieren" : source.events_count ? "Details" : "Einrichten"}</button>
+            <div className="wsSourceValue"><strong>{money(source.value_eur)}</strong><small>{label(source.value_basis, "Bewertungsbasis prüfen")}</small><span>{source.issues_count} {source.issues_count === 1 ? "Quellen-/Bewertungshinweis" : "Quellen-/Bewertungshinweise"}</span><span>{reviewTaskCount(source)} {reviewTaskCount(source) === 1 ? "Review-Aufgabe" : "Review-Aufgaben"} · {source.blocking_review_tasks_count || 0} blockierend{source.ambiguous_review_tasks_count ? " · Zuordnung prüfen" : ""}</span></div>
+            <div className="wsSourceActions"><button type="button" disabled={resource.stale} onClick={() => sourceHasHints(source) ? open(source, "issues") : source.can_sync ? setSync(source) : open(source, source.events_count ? "overview" : "settings")}>
+              {sourceHasHints(source) ? <ClipboardCheck size={16} /> : source.can_sync ? <RefreshCw size={16} /> : <ArrowRight size={16} />}
+              {sourceHasHints(source) ? "Hinweise prüfen" : source.can_sync ? "Synchronisieren" : source.events_count ? "Details" : "Einrichten"}</button>
               <RowMenu><button type="button" onClick={() => open(source, "transactions")}>Transaktionen öffnen</button><button type="button" onClick={() => open(source, "settings")}>Einstellungen und Belege</button><a href="#import">Dateien importieren</a></RowMenu>
             </div>
           </article>)}</div>}
       {resource.data && <Pager total={rows.length} page={page} pages={pages} size={view.size} onPage={(page) => set({ page })} onSize={(size) => set({ size })} />}
     </>}</TabPanel>
     {adding && <AddSource onClose={() => setAdding(false)} onSaved={() => resource.reload()} />}
-    {view.detail && !sync && <SourcePanel sourceRef={view.detail} tab={view.detailTab} setTab={(detailTab) => set({ detailTab })} onClose={() => set({ detail: "", detailTab: "overview", detailPage: 1 })} onSync={setSync} />}
+    {view.detail && !sync && <SourcePanel returnTask={view.task} sourceRef={view.detail} tab={view.detailTab} setTab={(detailTab) => set({ detailTab })} onClose={() => set({ detail: "", detailTab: "overview", detailPage: 1 })} onSync={setSync} />}
     {sync && <ActionConfirm title={`${sync.label} synchronisieren`} effect="Diese Aktion fragt den externen Anbieter ab und speichert neue Bestands-Snapshots, Abrufprotokolle und gegebenenfalls Solana-Preise. Sie importiert in diesem bestehenden Abrufpfad keine Transaktionshistorie und berechnet keine Steuerjahre neu. Anbieterlimits und mögliche API-Kosten beachten." command={async () => {
       const result = await readApi<{ connector_results: { status: string; message: string }[] }>(`/api/v1/workspace/sources/${sync.ref}/sync`, undefined, {});
       const failedRows = result.connector_results.filter((row) => !success.has(row.status));
@@ -65,27 +68,55 @@ export function SourceWorkspace({ technical, onTechnical }: { technical: ReactNo
   </section>;
 }
 
-function statusLabel(status: string) { return ({ configured: "Eingerichtet / importiert", setup: "Einrichtung erforderlich", failed: "Abruf fehlgeschlagen", stale: "Daten veraltet", reconciliation: "Abgleich offen" } as Record<string, string>)[status] || "Alle Zustände"; }
+function statusLabel(status: string) { return ({ configured: "Eingerichtet / importiert", setup: "Einrichtung erforderlich", failed: "Abruf fehlgeschlagen", stale: "Daten veraltet", reconciliation: "Abgleich offen", review: "Mit Review-Aufgaben" } as Record<string, string>)[status] || "Alle Zustände"; }
 
 function EarnPreview() {
   const [open, setOpen] = useState(false), [data, setData] = useState<unknown>();
   return <details><summary>Binance Earn: ausdrücklicher externer Vorschauabruf</summary><p>Dieser vorhandene GET-Endpunkt fragt den Anbieter ab. Er läuft nicht beim Öffnen dieser Ansicht. Zeitraum ab 01.01.2025, höchstens zwei Seiten / 500 Datensätze; kein Historienimport oder fachliche Freigabe.</p><button type="button" onClick={() => setOpen(true)}><RefreshCw size={16} /> Externen Earn-Abruf prüfen</button>{data !== undefined && <pre>{JSON.stringify(data, null, 2)}</pre>}{open && <ActionConfirm title="Externen Earn-Abruf bestätigen" effect="Fragt Binance mit vorhandenen Leserechten ab. Anbieterlimits und mögliche Kosten beachten. Kein Import und keine automatische Klassifizierung." command={async () => { setData(await readApi("/api/v1/sources/binance/earn-history-api-preview?since=2025-01-01&max_pages=2&max_records=500")); return "Vorschau empfangen. Datensätze und Anbietergrenzen prüfen."; }} onDone={() => {}} onClose={() => setOpen(false)} />}</details>;
 }
 
-function SourcePanel({ sourceRef, tab, setTab, onClose, onSync }: { sourceRef: string; tab: string; setTab: (tab: string) => void; onClose: () => void; onSync: (source: Source) => void }) {
+function SourcePanel({ sourceRef, tab, setTab, onClose, onSync, returnTask }: { sourceRef: string; tab: string; setTab: (tab: string) => void; onClose: () => void; onSync: (source: Source) => void; returnTask: string }) {
   const resource = useResource<SourceDetail>("source-detail:" + sourceRef, (signal) => readApi(`/api/v1/workspace/sources/${sourceRef}`, signal));
   const detail = resource.data?.source.ref === sourceRef ? resource.data : undefined;
   const active = ["overview", "holdings", "transactions", "issues", "settings"].includes(tab) ? tab : "overview";
   return <DetailPanel title={detail?.source.label || "Quellendetail"} onClose={onClose}>
+    <ReviewReturn task={returnTask} />
     <ResourceNotice resource={resource} label="Quellendetail" />
     {detail && <><Tabs name="Quellendetail" active={active} onChange={setTab} items={[{ id: "overview", label: "Übersicht" }, { id: "holdings", label: "Bestände" }, { id: "transactions", label: "Transaktionen" }, { id: "issues", label: "Hinweise / Abgleich" }, { id: "settings", label: "Einstellungen" }]} /><TabPanel name="Quellendetail" active={active}>
       {active === "overview" && <><dl className="wsFacts"><div><dt>Bestandswert</dt><dd>{money(detail.source.value_eur)}</dd></div><div><dt>Bewertungsbasis</dt><dd>{label(detail.source.value_basis)}</dd></div><div><dt>Letzter erfolgreicher Abruf</dt><dd>{timestamp(detail.source.last_success_at)}</dd></div><div><dt>Letzter Versuch</dt><dd>{detail.source.last_attempt ? `${label(detail.source.last_attempt.status, "Abrufstatus in technischen Details prüfen")} · ${timestamp(detail.source.last_attempt.attempted_at)}` : "Noch kein Abrufversuch"}</dd></div><div><dt>Eigentumsprüfung</dt><dd>{label(detail.source.ownership_status)}</dd></div></dl><div className="wsActionFooter">{detail.source.can_sync && <button type="button" disabled={resource.stale} onClick={() => onSync(detail.source)}><RefreshCw size={16} /> Quelle synchronisieren</button>}<button type="button" onClick={() => setTab("transactions")}><ArrowRight size={16} /> Transaktionen prüfen</button></div></>}
-      {active === "holdings" && <>{detail.valuation?.assets.length ? <div className="wsTableScroll"><table><thead><tr><th>Asset</th><th>Menge</th><th>Wert / Basis</th></tr></thead><tbody>{detail.valuation.assets.map((row) => <tr key={row.asset}><td>{row.asset}</td><td>{row.quantity}</td><td>{row.price_status === "missing" ? "Preis fehlt" : money(row.value_eur)}<small>{label(detail.source.value_basis)}</small></td></tr>)}</tbody></table></div> : <Empty title={detail.source.last_success_at && compareAmounts(detail.source.value_eur, "0") === 0 ? "Bestand mit 0,00 EUR bestätigt" : "Keine bewertbaren Bestände verfügbar"}>Fehlende Bestands- oder Preisdaten sind kein bestätigter Nullbestand.</Empty>}</>}
+      {active === "holdings" && <>{detail.valuation?.assets.length ? <div className="wsTableScroll"><table><thead><tr><th>Asset</th><th>Menge</th><th>Wert / Basis</th></tr></thead><tbody>{detail.valuation.assets.map((row) => <tr key={row.asset}><td>{row.asset}</td><td><ExactQuantity value={row.quantity} /></td><td>{row.price_status === "missing" ? "Preis fehlt" : money(row.value_eur)}<small>{label(detail.source.value_basis)}</small></td></tr>)}</tbody></table></div> : <Empty title={detail.source.last_success_at && compareAmounts(detail.source.value_eur, "0") === 0 ? "Bestand mit 0,00 EUR bestätigt" : "Keine bewertbaren Bestände verfügbar"}>Fehlende Bestands- oder Preisdaten sind kein bestätigter Nullbestand.</Empty>}</>}
       {active === "transactions" && <ActivityWorkspace embeddedSource={sourceRef} />}
-      {active === "issues" && <><div className="wsInlineWarning"><strong>{detail.source.issues_count} Hinweise im Quellenabgleich</strong><p>{detail.source.warning || (detail.source.issues_count ? "Abweichungen anhand von Bestand, Preisen und Originalbelegen klären." : "Kein Quellenhinweis gemeldet. Dies ersetzt keine Jahresfreigabe oder Vollständigkeitsprüfung.")}</p></div><dl className="wsFacts"><div><dt>Letzter erfolgreicher Datenstand</dt><dd>{timestamp(detail.source.last_success_at)}</dd></div><div><dt>Letzter Versuch</dt><dd>{detail.source.last_attempt ? label(detail.source.last_attempt.status, "Abrufproblem prüfen") : "Noch kein Abruf"}</dd></div></dl><a className="wsButton" href="#review"><ClipboardCheck size={16} /> Fachliche Aufgaben öffnen</a><details className="wsTechnical"><summary>Technischer Quellenabgleich</summary><pre>{JSON.stringify(detail.valuation?.reconciliation || detail.source, null, 2)}</pre></details></>}
+      {active === "issues" && <SourceIssues detail={detail} />}
       {active === "settings" && <><p>Eigentumsnachweis, Speicherung von Zugangsdaten und steuerliche Quellenaktivierung sind getrennte Schritte.</p><div className="wsActionFooter"><a className="wsButton" href="#admin"><Save size={16} /> Einrichtung öffnen</a><a className="wsButton" href="#import"><Upload size={16} /> Originaldateien importieren</a></div><details className="wsTechnical"><summary>Eigentum, Abdeckung und Belegpfade</summary><pre>{JSON.stringify(detail.evidence, null, 2)}</pre></details><details className="wsTechnical"><summary>Kontenzuordnung und Bewertungsmethode</summary><pre>{JSON.stringify({ accounts: detail.valuation?.full_accounts, evidence: detail.valuation?.evidence_refs, methodology: detail.valuation?.methodology }, null, 2)}</pre></details></>}
     </TabPanel></>}
   </DetailPanel>;
+}
+
+function SourceIssues({ detail }: { detail: SourceDetail }) {
+  const source = detail.source;
+  const tasks = detail.review_tasks || [];
+  return <>
+    <section aria-label="Quellen- und Bewertungshinweise">
+      <strong>{source.issues_count} {source.issues_count === 1 ? "Quellen-/Bewertungshinweis" : "Quellen-/Bewertungshinweise"}</strong>
+      <p>{source.warning || (source.issues_count ? "Bestands- und Bewertungsabweichungen anhand der Originalbelege prüfen." : "Kein zusätzlicher Quellen-/Bewertungshinweis gemeldet. Zugeordnete Review-Aufgaben werden getrennt angezeigt.")}</p>
+    </section>
+    <section aria-label="Zugeordnete Review-Aufgaben">
+      <h3>{reviewTaskCount(source)} {reviewTaskCount(source) === 1 ? "Review-Aufgabe" : "Review-Aufgaben"}</h3>
+      <p>{source.blocking_review_tasks_count || 0} blockierend{source.ambiguous_review_tasks_count ? ` · ${source.ambiguous_review_tasks_count} mit mehrdeutiger Zuordnung` : ""}. Keine automatische fachliche Bestätigung.</p>
+      {tasks.length < reviewTaskCount(source) && <p>{tasks.length} von {reviewTaskCount(source)} Aufgaben angezeigt. Die vollständige gefilterte Liste bleibt über „Review-Aufgaben dieser Quelle“ erreichbar.</p>}
+      {tasks.map((item) => <article className="wsTaskRow" key={item.task.task_id}>
+        <div><strong>{item.task.title}</strong><p>{item.task.detail}</p><ContextNote item={item} />{item.task.blocks_export && <Badge tone="danger">Blockiert das Fach-Gate</Badge>}</div>
+        <div className="wsActionFooter">
+          {item.account_ref && <button type="button" onClick={() => openLedgerContext(item)}><ArrowRight size={16} /> {item.task.asset || "Betroffenen"} Ledger prüfen</button>}
+          <button type="button" onClick={() => navigateView("review", { detail: item.task.task_id })}><ClipboardCheck size={16} /> Review-Aufgabe öffnen</button>
+        </div>
+      </article>)}
+      {!tasks.length && <p>Keine eindeutig oder möglicherweise zugeordnete Review-Aufgabe im abgefragten Stand. Globale Aufgaben und Jahresfreigaben bleiben separat zu prüfen.</p>}
+      <button type="button" onClick={() => navigateView("review", { source: source.ref, detail: "", page: 1 })}><ClipboardCheck size={16} /> Review-Aufgaben dieser Quelle</button>
+    </section>
+    <dl className="wsFacts"><div><dt>Letzter erfolgreicher Datenstand</dt><dd>{timestamp(source.last_success_at)}</dd></div><div><dt>Letzter Versuch</dt><dd>{source.last_attempt ? label(source.last_attempt.status, "Abrufproblem prüfen") : "Noch kein Abruf"}</dd></div></dl>
+    <details className="wsTechnical"><summary>Technischer Quellenabgleich</summary><pre>{JSON.stringify(detail.valuation?.reconciliation || source, null, 2)}</pre></details>
+  </>;
 }
 
 type Catalog = { security: { connector_writes_enabled: boolean; auth_mode: string; vault: { configured: boolean } }; connectors: { connector_id: string; label: string; category: string; availability: string; connection_status: string; limitation: string | null }[] };

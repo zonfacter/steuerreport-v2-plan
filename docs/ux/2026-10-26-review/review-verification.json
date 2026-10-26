@@ -1,0 +1,213 @@
+{
+  "F1": "bestanden",
+  "F2": "bestanden",
+  "F3": "bestanden",
+  "browser_api_calls_readonly": [
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources/s_50a5ee17cb005388e7f3"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/status"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/activity/assets"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/activity/query"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/status"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources/s_50a5ee17cb005388e7f3"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/activity/assets"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/activity/query"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/status"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/portfolio/snapshot"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/cockpit/summary"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/sources/s_50a5ee17cb005388e7f3"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace/review/query"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/status"
+    }
+  ],
+  "browser_reads_preserve_database": true,
+  "actual_backend": true,
+  "actual_disposable_funding_import": true,
+  "review_decisions_written": 0,
+  "original_hashes_preserved": true,
+  "source_ref": "s_50a5ee17cb005388e7f3",
+  "javascript_errors": [],
+  "screenshots": [
+    {
+      "file": "F1-sources-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "sources?status=reconciliation",
+      "data": "synthetic",
+      "backend": "actual FastAPI"
+    },
+    {
+      "file": "F1-source-issues-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "sources?status=reconciliation&detail=s_50a5ee17cb005388e7f3&detailTab=issues",
+      "data": "synthetic",
+      "backend": "actual FastAPI"
+    },
+    {
+      "file": "F1-source-issues-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "sources?status=reconciliation&detail=s_50a5ee17cb005388e7f3&detailTab=issues",
+      "data": "synthetic",
+      "backend": "actual FastAPI"
+    },
+    {
+      "file": "F2-context-ledger-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "flows?tab=ledger&asset=EUR&source=s_50a5ee17cb005388e7f3&account=a_50a5ee17cb005388e7f3&task=review_task_58b7a1eb2b335f7c",
+      "data": "synthetic",
+      "backend": "actual FastAPI"
+    },
+    {
+      "file": "F2-context-ledger-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "flows?tab=ledger&asset=EUR&source=s_50a5ee17cb005388e7f3&account=a_50a5ee17cb005388e7f3&task=review_task_58b7a1eb2b335f7c",
+      "data": "synthetic",
+      "backend": "actual FastAPI"
+    },
+    {
+      "file": "F3-dashboard-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "dashboard",
+      "data": "synthetic",
+      "backend": "actual FastAPI"
+    },
+    {
+      "file": "F3-dashboard-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "dashboard",
+      "data": "synthetic",
+      "backend": "actual FastAPI"
+    },
+    {
+      "file": "F1-after-funding-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "sources?detail=s_50a5ee17cb005388e7f3&detailTab=issues",
+      "data": "synthetic",
+      "backend": "actual FastAPI"
+    }
+  ],
+  "financial_release": false
+}

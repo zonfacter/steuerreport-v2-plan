@@ -63,7 +63,9 @@ jobs:
         run: npm run build
       - name: URL state and exact amount checks
         working-directory: .
-        run: node scripts/check_workspace_state_v2.cjs
+        run: |
+          node scripts/check_workspace_state_v2.cjs
+          TZ=Europe/Berlin node scripts/check_workspace_state_v2.cjs
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -74,10 +76,18 @@ jobs:
       - name: Guided UX browser checks with synthetic data
         working-directory: .
         run: python scripts/check_ux_browser_v2.py
+      - name: Install backend for isolated review browser regression
+        working-directory: .
+        run: python -m pip install -c requirements-runtime.lock -e '.[dev]'
+      - name: Review context browser checks against actual isolated backend
+        working-directory: .
+        run: python scripts/check_review_backend_browser_v2.py
       - name: UX browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ux-browser-evidence
-          path: artifacts/ux-browser/
+          path: |
+            artifacts/ux-browser/
+            artifacts/ux-review-fixes/
           if-no-files-found: ignore

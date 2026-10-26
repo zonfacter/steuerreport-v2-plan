@@ -21,6 +21,7 @@ class ActivityQuery(BaseModel):
     start: date | None = None
     end: date | None = None
     source_ref: str | None = Field(default=None, pattern=r"^s_[a-f0-9]{20}$")
+    account_ref: str | None = Field(default=None, pattern=r"^a_[a-f0-9]{20}$")
     asset: str | None = Field(default=None, max_length=128)
     event_type: EventType | None = None
     hint: Literal["all", "present", "none"] = "all"
@@ -55,6 +56,7 @@ class ActivityPage(BaseModel):
     pages: int
     mode: Literal["events", "ledger"]
     timezone: str = "Europe/Berlin"
+    account_label: str | None = None
     hint_scope: str = "Unbekannter Ereignistyp, fehlender Rohbeleg oder nicht zugeordneter FIFO-Abgang; keine vollstaendige Review-Freigabe."
 
 
@@ -95,6 +97,12 @@ class WorkspaceSource(BaseModel):
     events_count: int = 0
     imports_count: int = 0
     issues_count: int = 0
+    price_issues_count: int = 0
+    reconciliation_issues_count: int = 0
+    review_tasks_count: int = 0
+    blocking_review_tasks_count: int = 0
+    review_reconciliation_tasks_count: int = 0
+    ambiguous_review_tasks_count: int = 0
     reconciliation_status: str = "not_assessed"
     can_sync: bool = False
     warning: str | None = None
@@ -107,10 +115,24 @@ class WorkspaceSources(BaseModel):
     methodology: str
 
 
+class WorkspaceReviewItem(BaseModel):
+    task: ReviewTask
+    event_ids: list[str] = Field(default_factory=list)
+    source_ref: str | None = None
+    candidate_source_refs: list[str] = Field(default_factory=list)
+    account: str | None = None
+    account_ref: str | None = None
+    context_status: Literal["matched", "ambiguous", "unresolved", "global"] = "unresolved"
+    context_label: str = "Fachliche Prüfung"
+    context_note: str = "Keine eindeutige Quellenzuordnung vorhanden."
+
+
 class WorkspaceSourceDetail(BaseModel):
     source: WorkspaceSource
     valuation: SourceDetail | None = None
     evidence: dict[str, object] = Field(default_factory=dict)
+    review_tasks: list[WorkspaceReviewItem] = Field(default_factory=list)
+    review_tasks_limit: int = 50
 
 
 class WorkspaceStatus(BaseModel):
@@ -141,14 +163,9 @@ class WorkspaceReviewQuery(BaseModel):
     category: ReviewTaskCategory | None = None
     priority: ReviewTaskPriority | None = None
     year: int | None = Field(default=None, ge=2000, le=2100)
+    source_ref: str | None = Field(default=None, pattern=r"^s_[a-f0-9]{20}$")
     page: int = Field(default=1, ge=1, le=1_000_000)
     page_size: Literal[10, 25, 50, 100] = 25
-
-
-class WorkspaceReviewItem(BaseModel):
-    task: ReviewTask
-    event_ids: list[str] = Field(default_factory=list)
-    source_ref: str | None = None
 
 
 class WorkspaceReviewPage(BaseModel):

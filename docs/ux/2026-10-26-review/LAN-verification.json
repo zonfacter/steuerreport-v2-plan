@@ -1,0 +1,13 @@
+{
+  "preview_url": "http://192.168.2.122:18014/",
+  "F1": "bestanden",
+  "F2": "bestanden",
+  "F3": "bestanden",
+  "only_read_queries": true,
+  "javascript_errors": [],
+  "synthetic": true,
+  "viewports": [
+    1440,
+    390
+  ]
+}

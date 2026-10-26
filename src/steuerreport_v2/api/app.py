@@ -1610,6 +1610,11 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     ) -> ApiResponse[list[CanonicalEvent]]:
         return ApiResponse(data=db.list_canonical_events(batch_id=batch_id))
 
+    @app.get("/api/v1/workspace/environment")
+    def workspace_environment(request: Request) -> ApiResponse[dict[str, bool]]:
+        sandbox = getattr(request.app.state, "ux_sandbox", False) is True
+        return ApiResponse(data={"synthetic_preview": sandbox, "read_only": sandbox})
+
     @app.get("/api/v1/workspace/sources")
     def workspace_sources() -> ApiResponse[WorkspaceSources]:
         return ApiResponse(data=WorkspaceService(db).sources())

@@ -2,6 +2,14 @@
 
 ## Unveröffentlicht - Bedienkonzept
 
+- Review-Nacharbeit: kontobezogene Aufgaben in Quellenliste, Abgleichfilter und
+  Quellendetail konsistent verknüpft; Quellen-/Bewertungshinweise bleiben getrennt.
+- Direkter Absprung zur betroffenen Konto-/Asset-Ledgeransicht mit Rückweg zur
+  Review-Aufgabe; mehrdeutige Zuordnungen werden nicht automatisch entschieden.
+- Fester EUR-Referenzwert statt technischem Epochendatum; kompakte Mengen mit
+  exaktem aufklappbarem Wert, sprachliche Korrekturen und Testumgebungshinweis.
+- Ergänzende F1–F3-Browserprüfung gegen das echte Backend mit isolierter
+  synthetischer Datenbank, einschließlich tatsächlichem Testimport und Hashprüfung.
 - Eigene Quellen statt Anbieter-Katalog als Einstieg, geführtes Hinzufügen,
   Quellendetail mit Beständen, Transaktionen, Abgleich und Einstellungen.
 - Paginierte Transaktionen und Ledger, beleggebundene Details sowie CSV-Export

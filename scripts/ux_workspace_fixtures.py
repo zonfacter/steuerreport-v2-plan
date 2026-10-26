@@ -39,10 +39,16 @@ class WorkspaceFixture:
                       connection_status="configured", ownership_status="not_assessed", freshness="stale", last_success_at="2026-10-24T08:00:00Z",
                       last_attempt={"status": "fetch_failed", "attempted_at": STAMP}, value_eur="0.000000000000000000" if self.zero else "1250.00",
                       ledger_value_eur="1200.00", value_basis="stored_live_snapshot", events_count=45, imports_count=1, issues_count=0,
-                      reconciliation_status="review", can_sync=True, warning=None)
+                      reconciliation_status="review", can_sync=True, warning=None,
+                      price_issues_count=0, reconciliation_issues_count=0, review_tasks_count=1,
+                      blocking_review_tasks_count=1, review_reconciliation_tasks_count=0, ambiguous_review_tasks_count=0)
         other = {**source, "ref": OTHER, "label": "Demo-Dateiquelle", "connector_id": None, "source_type": "import", "can_sync": False,
-                 "connection_status": "imported", "freshness": "missing", "last_success_at": None, "last_attempt": None, "value_eur": None, "value_basis": "unavailable", "events_count": 0}
+                 "connection_status": "imported", "freshness": "missing", "last_success_at": None, "last_attempt": None, "value_eur": None, "value_basis": "unavailable", "events_count": 0, "review_tasks_count": 0, "blocking_review_tasks_count": 0}
         return [source, other]
+
+    def review_item(self):
+        task = dict(task_id="review-demo", title="Originalbeleg prüfen", priority="high", category="evidence", detail="Der Quellennachweis muss geprüft werden.", source="synthetic", source_group=None, scope="evt-000", asset="SOL", blocks_export=True, tax_year=2025, action_label="Beleg prüfen", action_path=None, evidence_refs=["raw-000"], decision_status=None)
+        return dict(task=task, event_ids=["evt-000"], source_ref=SOURCE, candidate_source_refs=[SOURCE], account=None, account_ref=None, context_status="matched", context_label="Demo-Börse · Asset SOL", context_note="Über die gespeicherte Ereignis-ID zugeordnet.")
 
     def status(self, year):
         return dict(generated_at=STAMP, year=year, events_count=0 if self.fresh else 45, year_events_count=0 if self.fresh else 45,
@@ -95,7 +101,9 @@ class WorkspaceFixture:
         if path in self.fail:
             self.send(route, {}, 503)
             return True
-        if path == "/api/v1/workspace/sources":
+        if path == "/api/v1/workspace/environment":
+            data = {"synthetic_preview": True, "read_only": True}
+        elif path == "/api/v1/workspace/sources":
             data = dict(generated_at=STAMP, sources=self.sources(), events_count=0 if self.fresh else 45, methodology="Synthetic")
         elif path.startswith("/api/v1/workspace/sources/") and path.endswith("/sync"):
             data = {"connector_results": [{"status": "fetch_failed" if self.sync_failed else "refreshed", "message": "Synthetic"}]}
@@ -104,7 +112,7 @@ class WorkspaceFixture:
             if not source:
                 self.send(route, {}, 404)
                 return True
-            data = dict(source=source, evidence={"ownership": "not_assessed", "source": "synthetic"}, valuation={"assets": [{"asset": "SOL", "quantity": "10", "value_eur": source["value_eur"], "price_status": "available"}], "full_accounts": ["synthetic-account"], "reconciliation": {}, "evidence_refs": ["synthetic.csv"], "methodology": "Synthetic"})
+            data = dict(source=source, review_tasks=[self.review_item()] if source["ref"] == SOURCE else [], evidence={"ownership": "not_assessed", "source": "synthetic"}, valuation={"assets": [{"asset": "SOL", "quantity": "10", "value_eur": source["value_eur"], "price_status": "available"}], "full_accounts": ["synthetic-account"], "reconciliation": {}, "evidence_refs": ["synthetic.csv"], "methodology": "Synthetic"})
         elif path == "/api/v1/workspace/status":
             data = self.status(int(parse_qs(urlparse(route.request.url).query).get("year", [2025])[0]))
         elif path == "/api/v1/activity/query":
@@ -126,8 +134,7 @@ class WorkspaceFixture:
             route.fulfill(content_type="text/csv", body=output.getvalue(), headers={"X-Export-Row-Count": str(len(rows))})
             return True
         elif path == "/api/v1/workspace/review/query":
-            task = dict(task_id="review-demo", title="Originalbeleg prüfen", priority="high", category="evidence", detail="Der Quellennachweis muss geprüft werden.", source="synthetic", source_group=None, scope="evt-000", asset="SOL", blocks_export=True, tax_year=2025, action_label="Beleg prüfen", action_path=None, evidence_refs=["raw-000"], decision_status=None)
-            items = [] if self.fresh or body.get("search") or body.get("category") not in (None, "evidence") else [{"task": task, "event_ids": ["evt-000"], "source_ref": SOURCE}]
+            items = [] if self.fresh or body.get("search") or body.get("category") not in (None, "evidence") or body.get("source_ref") == OTHER else [self.review_item()]
             data = dict(items=items, total=len(items), unfiltered_total=0 if self.fresh else 1, blocking_total=0 if self.fresh else 1, page=1, pages=1, page_size=body.get("page_size", 25), generated_at=STAMP)
         elif path == "/api/v1/portfolio/snapshot":
             data = dict(total_value_eur="0" if self.zero or self.fresh else "1200", positions=[] if self.fresh else [{}], asset_summary=[] if self.fresh else [{"asset": "SOL", "quantity": "10", "value_eur": "0" if self.zero else "1200", "price_status": "available", "priced_at_latest": STAMP, "price_sources": ["synthetic"]}], missing_price_assets=[])
