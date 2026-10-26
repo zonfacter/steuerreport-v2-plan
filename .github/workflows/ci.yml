@@ -61,6 +61,9 @@ jobs:
         run: npm ci
       - name: Build frontend
         run: npm run build
+      - name: URL state and exact amount checks
+        working-directory: .
+        run: node scripts/check_workspace_state_v2.cjs
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"

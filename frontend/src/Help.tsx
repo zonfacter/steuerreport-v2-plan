@@ -12,7 +12,7 @@ export const WORKFLOW = [
 
 export const HELP_TOPICS = [
   { id: "dashboard", title: "Uebersicht und erster Einstieg", keywords: "start beginnen neu status", steps: [
-    "Beginne mit Einrichtung: eigene Konten und Wallets zuordnen und benoetigte Datenquellen einrichten.",
+    "Beginne unter Quellen & Wallets mit Quelle hinzufügen. Der Anbieter-Katalog wird erst dort geöffnet; Einrichtung enthält die weiterführende Konfiguration.",
     "Importiere die vollstaendige Historie einschliesslich der Anschaffungen vor dem gewaehlten Steuerjahr.",
     "Pruefe offene Hinweise und danach das jeweilige Steuerjahr. Erstelle erst anschliessend die Berichte."
   ], caution: "Die Ablaufleiste dient der Orientierung. Sie bestaetigt weder Vollstaendigkeit noch eine steuerliche Freigabe." },
@@ -22,7 +22,8 @@ export const HELP_TOPICS = [
     "Beachte die Rueckmeldung nach dem Speichern: Konto- und Dateizuordnungen koennen einen API- oder Container-Neustart erfordern. Bestehende Auswertungen werden dadurch nicht automatisch neu berechnet."
   ], caution: "Erweiterte Quellen- und Belegkonfiguration sowie technische Einstellungen nur mit gepruefter Zuordnung aendern." },
   { id: "sources", title: "Quellen und Live-Abgleich verstehen", keywords: "wallet boerse binance bitget api verbindung snapshot", steps: [
-    "Pruefe fuer jede verwendete Plattform und Wallet, ob die Quelle eingerichtet ist und welche Historie vorliegt.",
+    "Die Liste enthält eigene importierte, registrierte oder konfigurierte Quellen. Suche, Quellenstatus und Sortierung grenzen sie ein. Öffne eine Quelle für Bestände, Transaktionen, Hinweise und Einstellungen.",
+    "Quelle hinzufügen führt durch Anbieter, Eingabeart, Pflichtfelder und Zusammenfassung. Zugangsdaten werden erst nach Bestätigung gespeichert; Dateiimporte bleiben im Importassistenten ausdrücklich freizugeben. Ein Wallet-Eigentumsnachweis aktiviert keine steuerliche Quelle.",
     "Unterscheide den aktuellen API-Bestand vom aus importierten Ereignissen berechneten Bestand. Ein aktueller Snapshot ersetzt keine historische Transaktionsliste.",
     "Untersuche Differenzen anhand fehlender Zeitraeume, offener Orders, Earn-Produkte und interner Transfers, bevor du Daten korrigierst."
   ], caution: "Ein erfolgreicher Verbindungscheck beweist nicht, dass die Quelle alle historischen Geschaefte liefert." },
@@ -32,7 +33,9 @@ export const HELP_TOPICS = [
     "Gib nur gepruefte Dateien frei und starte den Import ausdruecklich. Kontrolliere danach das Ergebnis und die Belegspur; bearbeite offene Hinweise."
   ], caution: "Die Dateiendung allein reicht nicht. Dublettenpruefungen ersetzen keinen fachlichen Abgleich ueberlappender Quellen; referenzierte Vergleichsdaten duerfen Bestaende nicht doppelt erhoehen." },
   { id: "flows", title: "Transaktionen, Transfers und Geldfluesse", keywords: "eur einzahlung auszahlung volumen swap einkommen", steps: [
-    "Waehle das passende Jahr und verfolge die Herkunft und das Ziel einer Bewegung.",
+    "Transaktionen zeigt kanonische Ereignisse, Ledger deren einzelne Buchungsbewegungen. Geldflüsse und Transferkandidaten bleiben eigene Tabs; unterschiedliche Zeilenzahlen sind nicht automatisch Datenverlust.",
+    "Filtere nach Jahr, Datum (Europe/Berlin), Quelle, Asset, Typ oder Datenhinweis. Suche bleibt ausschließlich im Arbeitsspeicher dieses Tabs und wird beim Neuladen geleert; andere Listenfilter und Seiten bleiben in der URL erhalten.",
+    "Öffne Ereignisdetails für Originaldatei, Hash, Originalzeile, Ledger, FIFO-Lot und vorhandene Änderungshistorie. Exportieren unterscheidet alle Filterergebnisse, Auswahl und vollständige Historie; CSV bleibt auf 25.000 Zeilen je Export begrenzt.",
     "Gleiche Transfers zwischen eigenen Wallets und Boersen nach Transaktions-ID, Zeit, Menge und Gebuehren ab.",
     "Unterscheide tatsaechliche EUR-Ein- und Auszahlungen, interne Transfers und Handels- beziehungsweise Swapvolumen."
   ], caution: "Handelsvolumen ist weder Einkommen noch ausgezahltes Geld. Gewinn oder Verlust ist eine separate Berechnung." },
@@ -47,7 +50,8 @@ export const HELP_TOPICS = [
     "Kontrolliere fehlende Anschaffungen, Preisabdeckung und die verwendete Methode. Vergleiche vorhandene Abgabestaende mit der aktuellen Auswertung."
   ], caution: "Die Softwareauswertung ist keine individuelle steuerliche Freigabe. Insbesondere betriebliche Zuordnung und Korrekturen bereits abgegebener Erklaerungen fachlich pruefen lassen." },
   { id: "export", title: "Berichte und pruefbare Belege exportieren", keywords: "pdf zip csv json download bericht anlagen finanzamt manifest hash", steps: [
-    "Pruefe den Exportstatus und seine offenen Voraussetzungen in Berichte & Belege.",
+    "Prüfe das gemeinsame Steuerjahr und die getrennten Voraussetzungen für Datenabdeckung, Berechnung, Review, Jahresbestätigung und Export. Eine Vorschau ist keine finale Jahresfreigabe.",
+    "Jahresvorschau, Jahrescheckliste und Jahres-Belegpaket beziehen sich auf das gewählte Jahr, nicht auf Filter der Transaktionsliste. Die globalen PDF-Werkzeuge sind gesondert gekennzeichnet. Das ZIP-Paket speichert einen lokalen Cache und verlangt eine Bestätigung.",
     "Waehle den passenden Bericht oder das Jahres-Belegpaket. Nutze PDF fuer die Leseansicht und strukturierte Dateien fuer die Nachpruefung.",
     "Bewahre Bericht, Quelldateien und Manifest gemeinsam auf. Kontrolliere Jahr, Methode und Erstellungsstand vor einer Weitergabe."
   ], caution: "Ein heruntergeladenes Dokument beweist fuer sich allein weder Vollstaendigkeit noch eine steuerliche oder rechtliche Freigabe." },

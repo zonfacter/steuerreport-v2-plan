@@ -16,17 +16,21 @@ from threading import Thread
 from urllib.parse import urlparse
 
 from playwright.sync_api import expect, sync_playwright
+from check_workspace_browser_v2 import check_workspace
+from ux_workspace_fixtures import WorkspaceFixture
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", help="Ohne Angabe wird frontend/dist lokal auf einem freien Port bereitgestellt.")
     parser.add_argument("--browser-executable")
+    parser.add_argument("--workspace-only", action="store_true", help="Nur die neuen A01-A23-Browserabläufe prüfen.")
     parser.add_argument("--output", type=Path, default=Path("artifacts/ux-browser"))
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     api_requests: list[tuple[str, str]] = []
     errors: list[str] = []
+    workspace = WorkspaceFixture()
     config = {"provider": "openrouter", "base_url": "https://openrouter.ai/api/v1",
               "model": "example/test:free", "max_tokens": 1024, "probe_max_tokens": 32,
               "timeout_seconds": 60, "token_parameter": "max_tokens", "thinking": "server_default"}
@@ -39,6 +43,8 @@ def main() -> None:
                             "enabled": True, "models": {"local": "", "openrouter": "", "cloud": ""}} for role in roles]}
 
     def mock(route):
+        if workspace.handle(route):
+            return
         path = urlparse(route.request.url).path
         method = route.request.method
         api_requests.append((method, path))
@@ -95,6 +101,10 @@ def main() -> None:
             args.base_url = f"http://127.0.0.1:{server.server_port}"
         playwright = stack.enter_context(sync_playwright())
         browser = playwright.chromium.launch(headless=True, executable_path=args.browser_executable)
+        if args.workspace_only:
+            check_workspace(browser, args.base_url, args.output)
+            browser.close()
+            return
         context = browser.new_context(viewport={"width": 1440, "height": 1000})
         # Every API is intercepted, including accidental model calls or writes.
         context.route("**/api/**", mock)
@@ -176,12 +186,9 @@ def main() -> None:
 
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.goto(args.base_url + "/#dashboard", wait_until="networkidle")
-        metrics = page.get_by_role("region", name="Wichtigste Kennzahlen")
-        metrics.get_by_role("button", name="Hilfe: API-Livewert", exact=True).click()
-        expect(page.get_by_role("tooltip")).to_contain_text("steuerlichen Gewinn")
-        metrics.get_by_role("button", name="Hilfe: Berechneter Ledgerwert", exact=True).focus()
+        page.get_by_role("button", name="Hilfe: Live und berechnet sind getrennte Größen", exact=True).focus()
         expect(page.get_by_role("tooltip")).to_have_count(1)
-        expect(page.get_by_role("tooltip")).to_contain_text("Fehlende Historie")
+        expect(page.get_by_role("tooltip")).to_contain_text("nicht zum Ledgerwert addiert")
         page.keyboard.press("Escape")
         for width in (1440, 390, 320):
             page.set_viewport_size({"width": width, "height": 1000 if width == 1440 else 844})
@@ -223,10 +230,10 @@ def main() -> None:
         expect(mobile.get_by_role("tooltip")).to_be_visible()
         mobile.get_by_role("button", name="Hilfe: Daten importieren", exact=True).tap()
         expect(mobile.get_by_role("tooltip")).to_have_count(0)
-        mobile.get_by_role("button", name="Navigation oeffnen", exact=True).tap()
+        mobile.get_by_role("button", name="Navigation öffnen", exact=True).tap()
         mobile.get_by_role("button", name="Hilfe & Anleitungen", exact=True).tap()
         expect(mobile.get_by_role("heading", name="Hilfe & Anleitungen", exact=True)).to_be_visible()
-        expect(mobile.get_by_role("button", name="Navigation oeffnen", exact=True)).to_have_attribute("aria-expanded", "false")
+        expect(mobile.get_by_role("button", name="Navigation öffnen", exact=True)).to_have_attribute("aria-expanded", "false")
         # Setup must be visible for a new installation, but diagnostics stay optional.
         provider["configured"] = False
         provider["config"] = {**config, "model": ""}
@@ -254,6 +261,8 @@ def main() -> None:
                   "desktop_mobile_320_390_1440_no_overflow": True, "javascript_errors": errors}
         (args.output / "verification.json").write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result, indent=2))
+        acceptance = check_workspace(browser, args.base_url, args.output)
+        print(json.dumps({"workspace_scenarios": len(acceptance["scenarios"]), "external_requests": acceptance["external_requests"]}))
         browser.close()
 
 

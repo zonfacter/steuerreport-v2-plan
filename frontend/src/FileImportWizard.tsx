@@ -61,6 +61,9 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
   const fileInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     let mounted = true;
+    const preferred = window.sessionStorage.getItem("steuerreport:import-source-once");
+    window.sessionStorage.removeItem("steuerreport:import-source-once");
+    if (preferred && SOURCES.has(preferred)) setSource(preferred);
     void api<Profile[]>("/api/v1/import/profiles").then((rows) => { if (mounted) setProfiles(rows.filter((row) => SOURCES.has(row.source))); })
       .catch(() => { if (mounted) setError("Importquellen konnten nicht geladen werden."); });
     return () => { mounted = false; generation.current += 1; };

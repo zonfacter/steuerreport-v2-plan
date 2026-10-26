@@ -1,5 +1,22 @@
 # Changelog
 
+## Unveröffentlicht - Bedienkonzept
+
+- Eigene Quellen statt Anbieter-Katalog als Einstieg, geführtes Hinzufügen,
+  Quellendetail mit Beständen, Transaktionen, Abgleich und Einstellungen.
+- Paginierte Transaktionen und Ledger, beleggebundene Details sowie CSV-Export
+  mit ausdrücklich gewähltem Umfang. `#flows` und die Flussansichten bleiben erhalten.
+- Gemeinsame Filter-, URL-, Lade-/Fehler- und Detailmuster; vertrauliche Suche
+  bleibt im Arbeitsspeicher. Dashboard, Review und Jahresberichte aufgeräumt.
+- Konservative zentrale Jahresstatusanzeige auf Basis bestehender Fach-Gates;
+  Null, unbekannt, leer und laufende Prüfung werden nicht gleichgesetzt.
+- Bestätigung externer Abrufe/Neuberechnung, Sperre paralleler zentraler
+  Vorgänge, korrekte Kennzeichnung des schreibenden ZIP-Cache-Endpunkts.
+- Synthetische Browserabnahme in vier Bildschirmbreiten, isolierte Vorschau
+  ohne Betreiberprofil oder externe Verbindungen und dokumentierte Übergabe.
+- Keine Änderung der Steuer-/FIFO-/Ownership-Regeln und keine Änderung
+  historischer Nutzerdaten. Kein Deployment, Tag, Push oder Release in diesem Auftrag.
+
 ## 0.2.0rc13 - 2026-10-26
 
 ### Benutzerfuehrung und Hilfe

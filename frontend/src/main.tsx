@@ -4,6 +4,12 @@ import { InstallationSettings } from "./InstallationSettings";
 import { FileImportWizard } from "./FileImportWizard";
 import { AiWorkspace } from "./AiWorkspace";
 import { HELP_TOPICS, HelpCenter, HelpTip, WorkflowNavigation } from "./Help";
+import { DashboardWorkspace } from "./workspace/DashboardWorkspace";
+import { SourceWorkspace } from "./workspace/SourceWorkspace";
+import { ActivityWorkspace } from "./workspace/Transactions";
+import { ReviewWorkspace } from "./workspace/ReviewWorkspace";
+import { YearWorkspace } from "./workspace/YearWorkspace";
+import { navigateView, useViewState } from "./workspace/view-state";
 import {
   AlertTriangle,
   Archive,
@@ -21,6 +27,8 @@ import {
   LayoutDashboard,
   LockKeyhole,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   PackageCheck,
   ReceiptText,
   RefreshCcw,
@@ -35,6 +43,7 @@ import {
   X
 } from "lucide-react";
 import "./styles.css";
+import "./workspace/workspace.css";
 
 type Section =
   | "dashboard"
@@ -3093,29 +3102,29 @@ const navItems: Array<{
   id: Section;
   label: string;
   description: string;
-  group: "workflow" | "evidence" | "support";
+  group: "overview" | "data" | "work" | "finish" | "analysis" | "management";
   icon: React.ReactNode;
 }> = [
-  { id: "dashboard", label: "Uebersicht", description: "Gesamtstatus, naechster Schritt und Live-Datenstand", group: "workflow", icon: <LayoutDashboard size={18} /> },
-  { id: "admin", label: "Einrichtung", description: "Konten, Zugangsdaten und Einstellungen", group: "workflow", icon: <Settings size={18} /> },
-  { id: "sources", label: "Quellen & Wallets", description: "Eigene Quellen, Live-Status und Ledger-Abgleich", group: "workflow", icon: <WalletCards size={18} /> },
-  { id: "import", label: "Daten importieren", description: "Dateien, Historie und Importverlauf", group: "workflow", icon: <Upload size={18} /> },
-  { id: "flows", label: "Transaktionen", description: "Geldfluesse, Transferkandidaten und Netto-Fluesse", group: "workflow", icon: <GitBranch size={18} /> },
-  { id: "review", label: "Hinweise pruefen", description: "Offene Fachentscheidungen und Belegspuren", group: "workflow", icon: <ClipboardCheck size={18} /> },
-  { id: "tax", label: "Steuerjahre", description: "Eingabehilfe, BMF-Status und Jahresbelege", group: "workflow", icon: <ReceiptText size={18} /> },
-  { id: "export", label: "Berichte & Belege", description: "Report-Center, Finanzamtspakete und CSV/ZIP/PDF", group: "workflow", icon: <FileDown size={18} /> },
-  { id: "portfolio", label: "Portfolio & Haltefristen", description: "Bestand, Preisdeckung und steuerfreie Positionen", group: "evidence", icon: <WalletCards size={18} /> },
-  { id: "stichtage", label: "Stichtagswerte", description: "Historische Bestands- und Wertansicht", group: "evidence", icon: <CalendarDays size={18} /> },
-  { id: "zugewinn", label: "Zugewinndossier", description: "Stichtagswerte, Erbgeld und familienrechtliche Belege", group: "evidence", icon: <Scale size={18} /> },
-  { id: "ai", label: "KI-Assistent", description: "Modelle, Verbindung und Review-Aufgaben", group: "workflow", icon: <Bot size={18} /> },
-  { id: "help", label: "Hilfe & Anleitungen", description: "Arbeitsablaeufe, Antworten und Begriffe", group: "support", icon: <BookOpen size={18} /> }
+  { id: "dashboard", label: "Übersicht", description: "Bestände, Arbeitsgrundlage und nächster Schritt", group: "overview", icon: <LayoutDashboard size={18} /> },
+  { id: "sources", label: "Quellen & Wallets", description: "Eigene Quellen, Datenstände und Abgleich", group: "data", icon: <WalletCards size={18} /> },
+  { id: "flows", label: "Transaktionen", description: "Ereignisse, Ledger, Geldflüsse und Transferkandidaten", group: "data", icon: <GitBranch size={18} /> },
+  { id: "import", label: "Daten importieren", description: "Quellenübergreifende Dateien, Prüfung und Importverlauf", group: "data", icon: <Upload size={18} /> },
+  { id: "review", label: "Hinweise prüfen", description: "Konkrete Aufgaben, Belege und Fachentscheidungen", group: "work", icon: <ClipboardCheck size={18} /> },
+  { id: "tax", label: "Steuerjahre", description: "Jahreswerte, Berechnungsstand und Freigabevoraussetzungen", group: "finish", icon: <ReceiptText size={18} /> },
+  { id: "export", label: "Berichte & Belege", description: "Jahresvorschau, Belegpakete und klarer Exportumfang", group: "finish", icon: <FileDown size={18} /> },
+  { id: "portfolio", label: "Portfolio & Haltefristen", description: "Bestand, Preisabdeckung und steuerfreie Positionen", group: "analysis", icon: <WalletCards size={18} /> },
+  { id: "stichtage", label: "Stichtagswerte", description: "Historische Bestands- und Wertansicht", group: "analysis", icon: <CalendarDays size={18} /> },
+  { id: "zugewinn", label: "Zugewinndossier", description: "Stichtagswerte, Kapitalherkunft und Belege", group: "analysis", icon: <Scale size={18} /> },
+  { id: "admin", label: "Einrichtung", description: "Konten, Zugangsdaten und Einstellungen", group: "management", icon: <Settings size={18} /> },
+  { id: "ai", label: "KI-Assistent", description: "Modelle, Verbindung und geprüfte Korrekturvorschläge", group: "management", icon: <Bot size={18} /> },
+  { id: "help", label: "Hilfe & Anleitungen", description: "Arbeitsabläufe, Antworten und Begriffe", group: "management", icon: <BookOpen size={18} /> }
 ];
 
 const API_BASE = import.meta.env.VITE_API_BASE || window.location.origin;
 const API_TIMEOUT_MS = 60_000;
 
 function sectionFromLocation(): Section {
-  const candidate = window.location.hash.replace(/^#\/?/, "") as Section;
+  const candidate = window.location.hash.replace(/^#\/?/, "").split("?")[0] as Section;
   return navItems.some((item) => item.id === candidate) ? candidate : "dashboard";
 }
 
@@ -3238,7 +3247,11 @@ async function putApi<T>(path: string, payload: unknown): Promise<T> {
 }
 
 function App() {
-  const [active, setActive] = useState<Section>(() => sectionFromLocation());
+  const { view: routeView } = useViewState("dashboard", true);
+  const active = routeView.section as Section;
+  const setActive = (section: Section) => navigateView(section);
+  const managed = ["dashboard", "sources", "flows", "review", "tax", "export"].includes(active);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(false);
@@ -3297,36 +3310,51 @@ function App() {
   );
 
   useEffect(() => {
-    const expectedHash = `#${active}`;
-    if (window.location.hash !== expectedHash) {
-      window.location.hash = active;
-    }
-  }, [active]);
-
+    if (routeView.year !== "all") setSelectedTaxYear(routeView.year);
+    if (active === "flows") setFlowYear(routeView.year);
+    if (active === "tax") setTaxViewMode(routeView.tab as TaxViewMode);
+    if (active === "export") setExportViewMode(routeView.tab as ExportViewMode);
+    if (active === "review") setReviewViewMode(routeView.tab as ReviewViewMode);
+    if (active === "import") setImportViewMode(routeView.tab as ImportViewMode);
+    if (active === "portfolio") setPortfolioViewMode(routeView.tab as PortfolioViewMode);
+  }, [routeView]);
   useEffect(() => {
-    const handleHashChange = () => {
-      setActive(sectionFromLocation());
-      setMobileNavOpen(false);
-    };
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+    setMobileNavOpen(false);
+    const frame = window.requestAnimationFrame(() => document.getElementById("page-heading")?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [active]);
 
   useEffect(() => {
     if (!mobileNavOpen) {
       return undefined;
     }
     const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const workspace = document.querySelector<HTMLElement>(".workspace");
+    if (workspace) workspace.inert = true;
+    const navigation = document.getElementById("main-navigation");
+    const focusNavigation = () => Array.from(navigation?.querySelectorAll<HTMLButtonElement>("button") || []).find((button) => button.getClientRects().length > 0)?.focus({ preventScroll: true });
+    const focusFrame = window.requestAnimationFrame(focusNavigation);
+    navigation?.addEventListener("transitionend", focusNavigation, { once: true });
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMobileNavOpen(false);
+      }
+      if (event.key === "Tab") {
+        const controls = Array.from(navigation?.querySelectorAll<HTMLElement>("button:not(:disabled), a[href]") || []).filter((element) => element.getClientRects().length > 0);
+        if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
+        if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
       }
     };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
+      window.cancelAnimationFrame(focusFrame);
+      navigation?.removeEventListener("transitionend", focusNavigation);
+      if (workspace) workspace.inert = false;
       window.removeEventListener("keydown", closeOnEscape);
+      if (previousFocus?.isConnected && (document.activeElement === document.body || document.activeElement?.closest("#main-navigation"))) previousFocus.focus({ preventScroll: true });
     };
   }, [mobileNavOpen]);
 
@@ -3334,7 +3362,8 @@ function App() {
     window.localStorage.setItem("steuerreport:selected-tax-year", selectedTaxYear);
   }, [selectedTaxYear]);
 
-  async function refresh() {
+  async function refresh(notifyWorkspace = true) {
+    if (notifyWorkspace) window.dispatchEvent(new Event("steuerreport:refresh"));
     const runId = refreshRunId.current + 1;
     refreshRunId.current = runId;
     setPageLoading(true);
@@ -3691,25 +3720,15 @@ function App() {
         ...(taxViewMode === "expert" ? taxExpertLoaderKeys : [])
       ];
       const loaderKeysBySection: Record<Section, string[]> = {
-        dashboard: [
-          "health",
-          "cockpit",
-          "productReadiness",
-          "taxYearsSummary",
-          "taxPaymentOverview",
-          "taxYearFilingMatrix",
-          "taxFilingClosureOverview"
-        ],
-        sources: [
+        dashboard: [],
+        sources: sourceViewMode === "expert" ? [
           "health",
           "connectorCatalog",
           "sourcesOverview",
           "sourceConnectorDiagnostics",
           "sourceRegistry",
-          ...(sourceViewMode !== "overview"
-            ? ["sourceDetail", "sourceReconciliation", "sourceReconciliationEvidence", "binanceEarnHistoryPreflight", "binanceEarnHistoryApiPreview"]
-            : []),
-        ],
+          "sourceDetail", "sourceReconciliation", "sourceReconciliationEvidence", "binanceEarnHistoryPreflight",
+        ] : [],
         import: [
           "health",
           "imports",
@@ -3734,28 +3753,28 @@ function App() {
         ],
         stichtage: ["health", "portfolioAsOf", "portfolioValueHistory", "priceCoverage"],
         zugewinn: ["health", "divorceEqualization", "divorceValuationRun", "asOfCutoffPriceGate", "asOfPriceGate"],
-        flows: ["health", "flows", "transferCandidates"],
-        review: [
+        flows: routeView.tab === "flows" ? ["health", "flows"] : routeView.tab === "transfers" ? ["health", "transferCandidates"] : [],
+        review: reviewViewMode !== "tasks" ? [
           "health",
           "review",
           "reviewTasks",
           "jupiterRiskReview",
           "reviewDecisions",
-          ...(reviewViewMode !== "tasks" ? ["reviewEvidenceTraces", "reviewDecisionSuggestions", "blockpitSolanaPreflight"] : []),
+          "reviewEvidenceTraces", "reviewDecisionSuggestions", "blockpitSolanaPreflight",
           ...(reviewViewMode === "expert" ? ["priceCoverage", "priceQuality", "priceManualReview", "priceStablecoinFxReview", "priceStablecoinFxAnchorPreview", "priceSolscanSignatureReview", "priceBinanceNormalizerReview", "priceEventQuoteEvidenceReview", "priceRequirements"] : [])
-        ],
+        ] : [],
         parity: ["health", "parity", "parityDiagnostics", "parityReleaseReadiness", "parityReferences", "hntFifoProvenance"],
-        tax: taxLoaderKeys,
-        export: [
+        tax: taxViewMode !== "guided" ? taxLoaderKeys : [],
+        export: exportViewMode !== "packages" ? [
           "health",
           "reportCenter",
           "exportReadiness",
           "parityReleaseReadiness",
           "review",
           "reviewDecisions",
-          ...(exportViewMode !== "packages" ? ["reportEvidenceManifest", "reportEvidencePackageIndex"] : []),
+          "reportEvidenceManifest", "reportEvidencePackageIndex",
           ...(exportViewMode === "expert" ? ["exports", "priceQuality"] : [])
-        ],
+        ] : [],
         admin: ["health", "admin", "adminSettings", "sourceConnectorDiagnostics", "jupiterMetadataCache"],
         ai: ["health", "ai", "localAiYearPackageQa"],
         help: []
@@ -3771,6 +3790,7 @@ function App() {
         const startedAt = performance.now();
         try {
           const value = await loader.load();
+          if (refreshRunId.current !== runId) return value;
           const durationMs = performance.now() - startedAt;
           setLoaderStatuses((current) =>
             refreshRunId.current === runId
@@ -3861,6 +3881,7 @@ function App() {
   }
 
   async function refreshConfiguredSources() {
+    if (sourceRefreshLoading || !window.confirm("Alle konfigurierten Quellen extern abfragen? Speichert Bestands-Snapshots, Abrufprotokolle und gegebenenfalls Preise. Kein Historienimport. Anbieterlimits und mögliche Kosten beachten.")) return;
     setSourceRefreshLoading(true);
     setError(null);
     setNotice(null);
@@ -5409,8 +5430,8 @@ function App() {
   }
 
   useEffect(() => {
-    void refresh();
-  }, [active, flowYear, asOfDate, selectedSourceId, selectedTaxYear, taxViewMode, portfolioViewMode, tokenRiskFilter, sourceViewMode, exportViewMode, reviewViewMode, importViewMode]);
+    void refresh(false);
+  }, [active, flowYear, asOfDate, selectedSourceId, selectedTaxYear, taxViewMode, portfolioViewMode, tokenRiskFilter, sourceViewMode, exportViewMode, reviewViewMode, importViewMode, routeView.tab]);
 
   function navigateTo(section: Section) {
     if (section === "help") setHelpTopic("all");
@@ -5419,9 +5440,9 @@ function App() {
   }
 
   return (
-    <main className="shell" aria-busy={pageLoading}>
+    <main className={`shell ${navCollapsed ? "navCollapsed" : ""}`} aria-busy={pageLoading}>
       <button
-        aria-label="Navigation schliessen"
+        aria-label="Navigation schließen"
         className={`mobileNavBackdrop ${mobileNavOpen ? "open" : ""}`}
         onClick={() => setMobileNavOpen(false)}
         type="button"
@@ -5432,15 +5453,16 @@ function App() {
             <strong>Steuerreport Cockpit</strong>
             <span>BMF/FIFO · Portfolio · Belege</span>
           </div>
-          <button className="sidebarClose" type="button" onClick={() => setMobileNavOpen(false)} title="Navigation schliessen">
+          <button className="desktopNavToggle" type="button" aria-label={navCollapsed ? "Navigation erweitern" : "Navigation reduzieren"} title={navCollapsed ? "Navigation erweitern" : "Navigation reduzieren"} onClick={() => setNavCollapsed(!navCollapsed)}>{navCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}</button>
+          <button className="sidebarClose" type="button" onClick={() => setMobileNavOpen(false)} title="Navigation schließen">
             <X size={20} />
           </button>
         </div>
         <nav aria-label="Bereiche">
-          {(["workflow", "evidence", "support"] as const).map((group) => (
+          {(["overview", "data", "work", "finish", "analysis", "management"] as const).map((group) => (
             <div className="navGroup" key={group}>
               <span className="navGroupLabel">
-                {group === "workflow" ? "Arbeitsablauf" : group === "evidence" ? "Auswertungen" : "Hilfe"}
+                {{ overview: "Überblick", data: "Daten", work: "Bearbeitung", finish: "Abschluss", analysis: "Auswertungen", management: "Verwaltung" }[group]}
               </span>
               {navItems.filter((item) => item.group === group).map((item) => (
                 <button
@@ -5449,6 +5471,7 @@ function App() {
                   onClick={() => navigateTo(item.id)}
                   type="button"
                   title={item.description}
+                  aria-label={item.label}
                   aria-current={active === item.id ? "page" : undefined}
                 >
                   {item.icon}
@@ -5465,7 +5488,7 @@ function App() {
             <button
               aria-controls="main-navigation"
               aria-expanded={mobileNavOpen}
-              aria-label="Navigation oeffnen"
+              aria-label="Navigation öffnen"
               className="mobileNavToggle"
               onClick={() => setMobileNavOpen(true)}
               type="button"
@@ -5473,26 +5496,27 @@ function App() {
               <Menu size={20} />
             </button>
             <div>
-              <div className="pageTitle"><h1>{activeLabel}</h1>{active !== "help" && <HelpTip label={activeLabel}>{HELP_TOPICS.find((item) => item.id === active)?.caution ?? activeDescription}</HelpTip>}</div>
+              <div className="pageTitle"><h1 id="page-heading" tabIndex={-1}>{activeLabel}</h1>{active !== "help" && <HelpTip label={activeLabel}>{HELP_TOPICS.find((item) => item.id === active)?.caution ?? activeDescription}</HelpTip>}</div>
               <p>{activeDescription}</p>
             </div>
           </div>
-          {active !== "help" && <div className="topbarStatus">
+          {!managed && active !== "help" && <div className="topbarStatus">
             <span className={`statusPill ${snapshot.productReadiness ? readinessTone(snapshot.productReadiness.overall_status) : snapshot.health ? "ok" : "warning"}`}>
               {snapshot.productReadiness ? `Auswertung: ${readinessLabel(snapshot.productReadiness.overall_status)}` : snapshot.health ? "API verbunden" : "Verbinde mit API"}
             </span>
             {snapshot.productReadiness?.next_action ? <em>{snapshot.productReadiness.next_action}</em> : null}
           </div>}
           {active !== "help" && <div className="buttonRow topbarActions"><a className="ghostButton" href={`?hilfethema=${active}#help`} target="_blank" rel="noreferrer" title="Hilfe in neuem Tab oeffnen; Eingaben bleiben erhalten"><BookOpen size={16} /> Hilfe zum Bereich <ExternalLink size={14} /></a>
-          <button className="statusButton" type="button" title="Angezeigten Datenstand erneut laden; keine Neuberechnung" onClick={refresh} disabled={pageLoading}>
+          {["dashboard", "tax", "export"].includes(active) && <label className="wsYearContext">Steuerjahr<select aria-label="Gemeinsames Steuerjahr" value={routeView.year} onChange={(event) => navigateView(active, { year: event.target.value, page: 1 })}>{Array.from({ length: 12 }, (_, index) => String(2020 + index)).map((year) => <option key={year}>{year}</option>)}{(Number(routeView.year) < 2020 || Number(routeView.year) > 2031) && <option>{routeView.year}</option>}</select></label>}
+          <button className="statusButton" type="button" title="Vorhandene Daten erneut lesen; kein Anbieterabruf und keine fachliche Neuberechnung" onClick={() => void refresh()} disabled={pageLoading}>
             <RefreshCcw className={pageLoading ? "spin" : ""} size={16} />
-            {pageLoading ? "Laedt" : "Aktualisieren"}
+            {pageLoading ? "Wird geladen" : "Ansicht aktualisieren"}
           </button></div>}
         </header>
-        <WorkflowNavigation active={active} />
+        {!managed && <WorkflowNavigation active={active} />}
         {error ? <div className="error">{error}</div> : null}
         {notice ? <div className="notice">{notice}</div> : null}
-        {active !== "help" && <LoadingStatusPanel
+        {!managed && active !== "help" && <LoadingStatusPanel
           loading={pageLoading}
           statuses={loaderStatuses}
           activeLabel={activeLabel}
@@ -5502,6 +5526,8 @@ function App() {
         {active === "help" ? <HelpCenter key={helpTopic} initialTopic={helpTopic} /> : <Content
           active={active}
           snapshot={snapshot}
+          legacyLoading={pageLoading || loaderStatuses.length === 0}
+          legacyFailures={lastLoadFailureCount}
           onRebuildFlows={rebuildFlows}
           onRebuildTax={rebuildTax}
           onRunWalletFifoParallel={runWalletFifoParallel}
@@ -5584,21 +5610,21 @@ function App() {
           sourceViewMode={sourceViewMode}
           onSourceViewModeChange={setSourceViewMode}
           selectedTaxYear={selectedTaxYear}
-          onSelectedTaxYearChange={setSelectedTaxYear}
+          onSelectedTaxYearChange={(year) => navigateView(active, { year })}
           taxViewMode={taxViewMode}
-          onTaxViewModeChange={setTaxViewMode}
+          onTaxViewModeChange={(tab) => navigateView("tax", { tab })}
           portfolioViewMode={portfolioViewMode}
-          onPortfolioViewModeChange={setPortfolioViewMode}
+          onPortfolioViewModeChange={(tab) => navigateView("portfolio", { tab })}
           tokenRiskFilter={tokenRiskFilter}
           onTokenRiskFilterChange={setTokenRiskFilter}
           exportViewMode={exportViewMode}
-          onExportViewModeChange={setExportViewMode}
+          onExportViewModeChange={(tab) => navigateView("export", { tab })}
           reviewViewMode={reviewViewMode}
-          onReviewViewModeChange={setReviewViewMode}
+          onReviewViewModeChange={(tab) => navigateView("review", { tab })}
           importViewMode={importViewMode}
-          onImportViewModeChange={setImportViewMode}
+          onImportViewModeChange={(tab) => navigateView("import", { tab })}
           flowYear={flowYear}
-          onFlowYearChange={setFlowYear}
+          onFlowYearChange={(year) => navigateView("flows", { year })}
           asOfDate={asOfDate}
           onAsOfDateChange={setAsOfDate}
           divorceCutoffDate={divorceCutoffDate}
@@ -5698,6 +5724,8 @@ function LoadingStatusPanel({
 function Content({
   active,
   snapshot,
+  legacyLoading,
+  legacyFailures,
   onRebuildFlows,
   onRebuildTax,
   onRunWalletFifoParallel,
@@ -5810,6 +5838,8 @@ function Content({
 }: {
   active: Section;
   snapshot: Snapshot;
+  legacyLoading: boolean;
+  legacyFailures: number;
   onRebuildFlows: () => void;
   onRebuildTax: () => void;
   onRunWalletFifoParallel: () => void;
@@ -5932,28 +5962,12 @@ function Content({
   onJupiterTokenQueryChange: (query: string) => void;
 }) {
   if (active === "dashboard") {
-    return (
-      <CockpitDashboard
-        summary={snapshot.cockpit}
-        readiness={snapshot.productReadiness}
-        database={snapshot.health}
-        taxYearsSummary={snapshot.taxYearsSummary}
-        taxPaymentOverview={snapshot.taxPaymentOverview}
-        taxYearFilingMatrix={snapshot.taxYearFilingMatrix}
-        taxFilingClosureOverview={snapshot.taxFilingClosureOverview}
-        selectedTaxYear={selectedTaxYear}
-        onSelectedTaxYearChange={onSelectedTaxYearChange}
-        onDownload={onDownload}
-        onNavigate={onNavigate}
-        onRebuildPipeline={onRebuildPipeline}
-        onRefreshConfiguredSources={onRefreshConfiguredSources}
-        sourceRefreshLoading={sourceRefreshLoading}
-      />
-    );
+    return <DashboardWorkspace />;
   }
 
   if (active === "sources") {
     return (
+      <SourceWorkspace onTechnical={(enabled) => onSourceViewModeChange(enabled ? "expert" : "overview")} technical={<LegacyGate loading={legacyLoading} failures={legacyFailures}>
         <SourcesPage
           overview={snapshot.sourcesOverview}
           connectorCatalog={snapshot.connectorCatalog}
@@ -5974,6 +5988,7 @@ function Content({
           sourceViewMode={sourceViewMode}
           onSourceViewModeChange={onSourceViewModeChange}
         />
+      </LegacyGate>} />
     );
   }
 
@@ -6175,25 +6190,24 @@ function Content({
   }
   if (active === "flows") {
     return (
-      <Stack>
+      <ActivityWorkspace flows={<LegacyGate loading={legacyLoading} failures={legacyFailures}><Stack>
         <FlowSankeyPanel
           flows={snapshot.flows}
           flowYear={flowYear}
           onFlowYearChange={onFlowYearChange}
           onRebuildFlows={onRebuildFlows}
         />
-        <TransferCandidatesPanel report={snapshot.transferCandidates} />
         <TablePanel
           title="Sankey-Netto-Kanten"
           rows={snapshot.flows?.edges ?? []}
           footer={`Fehlende Preise: ${(snapshot.flows?.missing_price_assets ?? []).join(", ") || "keine"}`}
         />
-      </Stack>
+      </Stack></LegacyGate>} transfers={<LegacyGate loading={legacyLoading} failures={legacyFailures}><TransferCandidatesPanel report={snapshot.transferCandidates} /></LegacyGate>} />
     );
   }
   if (active === "review") {
     return (
-      <Stack>
+      <ReviewWorkspace onMode={onReviewViewModeChange} technical={<LegacyGate loading={legacyLoading} failures={legacyFailures}><Stack>
         <ReviewPanel
           review={snapshot.review}
           reviewTasks={snapshot.reviewTasks}
@@ -6210,7 +6224,7 @@ function Content({
         {reviewViewMode !== "tasks" ? <BlockpitSolanaPreflightPanel report={snapshot.blockpitSolanaPreflight} /> : null}
         {reviewViewMode === "expert" ? <SolscanTokenPreflightPanel report={snapshot.solscanTokenPreflight} /> : null}
         {reviewViewMode === "expert" ? <WalletMonthlyPreflightPanel report={snapshot.walletMonthlyPreflight} /> : null}
-      </Stack>
+      </Stack></LegacyGate>} />
     );
   }
   if (active === "parity") {
@@ -6230,6 +6244,7 @@ function Content({
   }
   if (active === "tax") {
     return (
+      <YearWorkspace kind="tax" onMode={(mode) => onTaxViewModeChange(mode as TaxViewMode)} technical={<LegacyGate loading={legacyLoading} failures={legacyFailures}>
       <TaxPanel
         taxSummary={snapshot.taxSummary}
         taxHoldingPeriods={snapshot.taxHoldingPeriods}
@@ -6345,6 +6360,7 @@ function Content({
         onSavePriorFilingDeclaredAmounts={onSavePriorFilingDeclaredAmounts}
         onDownload={onDownload}
       />
+      </LegacyGate>} />
     );
   }
   if (active === "zugewinn") {
@@ -6388,7 +6404,7 @@ function Content({
   }
   if (active === "export") {
     return (
-      <Stack>
+      <YearWorkspace kind="export" onMode={(mode) => onExportViewModeChange(mode as ExportViewMode)} technical={<LegacyGate loading={legacyLoading} failures={legacyFailures}><Stack>
         <ReportCenterPanel
           center={snapshot.reportCenter}
           evidenceManifest={snapshot.reportEvidenceManifest}
@@ -6426,7 +6442,7 @@ function Content({
             footer={`Report-Center: ${formatDateTime(snapshot.reportCenter?.generated_at)} | Pakete: ${snapshot.reportCenter?.packages_count ?? snapshot.exports?.length ?? 0}`}
           />
         ) : null}
-      </Stack>
+      </Stack></LegacyGate>} />
     );
   }
   if (active === "admin") {
@@ -6505,6 +6521,12 @@ function Content({
 
 function Stack({ children }: { children: React.ReactNode }) {
   return <div className="stack">{children}</div>;
+}
+
+function LegacyGate({ children, loading, failures }: { children: React.ReactNode; loading: boolean; failures: number }) {
+  if (loading) return <div className="wsResource" role="status">Technische Datenpakete werden geladen. Noch kein fachliches Ergebnis für diesen Bereich.</div>;
+  if (failures) return <div className="wsResource error" role="alert">{failures} technische Datenpakete konnten nicht gelesen werden. Standardansichten bleiben nutzbar. Mit „Ansicht aktualisieren“ erneut versuchen; fehlende Ergebnisse werden nicht als Null oder Freigabe dargestellt.</div>;
+  return <>{children}</>;
 }
 
 function ToolSafetyPanel({

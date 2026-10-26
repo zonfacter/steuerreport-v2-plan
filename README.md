@@ -86,6 +86,11 @@ Registry-Secrets im Quellstand oder Image. Die Nachweise stehen als
 
 ## Bedienung Und Import
 
+Das neue Bedienkonzept wird auf dem Arbeitsbranch entwickelt, nicht automatisch
+veröffentlicht oder in einen laufenden Container übernommen. Implementierung,
+URL-Schema, Aktionswirkungen, Tests und die Abnahmematrix A01–A24 stehen in der
+[UX-Übergabe](docs/UX_BEDIENKONZEPT_2026-10-26.md).
+
 Unter **Hilfe & Anleitungen** (`/#help`) stehen durchsuchbare Arbeitsablaeufe,
 haeufige Fragen, Begriffserklaerungen sowie alle HTML-/PDF-Leitfaeden bereit.
 `Hilfe zum Bereich` oeffnet das passende Thema in einem neuen Tab, ohne
