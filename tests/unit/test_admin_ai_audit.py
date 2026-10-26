@@ -21,10 +21,22 @@ from steuerreport_v2.domain.admin import AdminService
 from steuerreport_v2.domain.ai import AiService
 from steuerreport_v2.domain.audit import AuditService
 from steuerreport_v2.domain.sources import SourceService
+from steuerreport_v2.domain.secret_vault import (
+    KEY_FILE_ENV, decode_secret_setting, is_encrypted_envelope,
+)
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
+
+
+@pytest.fixture
+def admin_vault(tmp_path, monkeypatch):
+    key = tmp_path / "admin-test-vault.key"
+    key.write_bytes(bytes(range(32)))
+    key.chmod(0o600)
+    monkeypatch.setenv(KEY_FILE_ENV, str(key))
+    return key
 
 
 def _seed_clean_store(tmp_path):
@@ -127,7 +139,7 @@ def test_admin_settings_endpoint_warns_for_missing_delete(tmp_path):
     assert body["status"] == "warning"
 
 
-def test_admin_service_saves_cex_credentials_in_v2_secret_store(tmp_path, monkeypatch):
+def test_admin_service_saves_cex_credentials_in_v2_secret_store(tmp_path, monkeypatch, admin_vault):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
 
     def fake_diagnostics(_self):
@@ -163,15 +175,16 @@ def test_admin_service_saves_cex_credentials_in_v2_secret_store(tmp_path, monkey
     assert result.status == "ok"
     assert result.credential_status == "configured"
     stored = {setting.key: setting.value_json for setting in store.list_admin_settings()}
-    assert json.loads(stored["secret.cex.binance.api_key"]) == "api-key"
-    assert json.loads(stored["secret.cex.binance.api_secret"]) == "api-secret"
+    assert all(is_encrypted_envelope(value) for value in stored.values())
+    assert decode_secret_setting("secret.cex.binance.api_key", stored["secret.cex.binance.api_key"]) == "api-key"
+    assert decode_secret_setting("secret.cex.binance.api_secret", stored["secret.cex.binance.api_secret"]) == "api-secret"
     assert {setting.key: setting.value_json for setting in AdminService(store).list_settings()} == {
         "secret.cex.binance.api_key": '"***"',
         "secret.cex.binance.api_secret": '"***"',
     }
 
 
-def test_admin_cex_credentials_endpoint_rejects_missing_secret(tmp_path):
+def test_admin_cex_credentials_endpoint_rejects_missing_secret(tmp_path, admin_vault):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     client = TestClient(create_app(store))
 
@@ -186,7 +199,7 @@ def test_admin_cex_credentials_endpoint_rejects_missing_secret(tmp_path):
     assert body["errors"][0]["code"] == "cex_credentials_save_failed"
 
 
-def test_admin_cex_credentials_endpoint_saves_without_echoing_secret(tmp_path, monkeypatch):
+def test_admin_cex_credentials_endpoint_saves_without_echoing_secret(tmp_path, monkeypatch, admin_vault):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
 
     monkeypatch.setattr(
@@ -246,7 +259,7 @@ def test_v1_cex_takeover_report_marks_empty_v1_credentials_not_transferable(tmp_
                 "errors": [],
             }
 
-    monkeypatch.setattr("steuerreport_v2.domain.admin.httpx.post", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr("steuerreport_v2.domain.external_http.managed_post", lambda *_args, **_kwargs: Response())
     monkeypatch.setattr(
         SourceService,
         "connector_diagnostics",
@@ -295,7 +308,7 @@ def test_v1_cex_takeover_imports_transferable_credentials_without_echoing(tmp_pa
                 "errors": [],
             }
 
-    monkeypatch.setattr("steuerreport_v2.domain.admin.httpx.post", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr("steuerreport_v2.domain.external_http.managed_post", lambda *_args, **_kwargs: Response())
     monkeypatch.setattr(
         SourceService,
         "connector_diagnostics",

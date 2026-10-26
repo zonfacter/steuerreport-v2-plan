@@ -10,6 +10,7 @@ import textwrap
 import time
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from pathlib import Path
 from typing import Any
 
@@ -186,7 +187,7 @@ def call_llm(prompt: str, *, max_tokens: int = 2600, timeout: int = 1800) -> tup
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with managed_urlopen(request, timeout=timeout) as response:
             data = json.loads(response.read().decode("utf-8"))
         content = data["choices"][0]["message"].get("content") or ""
         return content or "Leere Modellantwort.", "ok"

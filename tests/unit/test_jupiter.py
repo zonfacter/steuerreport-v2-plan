@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 import sqlite3
+import os
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.admin import AdminSettingWrite
@@ -81,7 +82,7 @@ def test_jupiter_token_search_maps_api_response(tmp_path, monkeypatch):
             assert params == {"query": "JUP"}
             return FakeResponse()
 
-    monkeypatch.setattr("steuerreport_v2.domain.jupiter.httpx.Client", FakeClient)
+    monkeypatch.setattr("steuerreport_v2.domain.jupiter.managed_client", FakeClient)
 
     result = JupiterTokenService(store).search("JUP")
 
@@ -115,8 +116,13 @@ def test_jupiter_token_search_api_route(tmp_path, monkeypatch):
     assert response.data.status == "missing_api_key"
 
 
-def test_jupiter_api_key_endpoint_writes_secret_without_echo(tmp_path):
+def test_jupiter_api_key_endpoint_writes_secret_without_echo(tmp_path, monkeypatch):
     from steuerreport_v2.contracts.admin import ApiKeyWrite
+    from steuerreport_v2.domain.secret_vault import is_encrypted_envelope, decode_secret_setting
+
+    keyfile = tmp_path / "jupiter-vault.key"
+    keyfile.write_bytes(os.urandom(32))
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(keyfile))
 
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
 
@@ -132,7 +138,9 @@ def test_jupiter_api_key_endpoint_writes_secret_without_echo(tmp_path):
     stored = {
         setting.key: setting.value_json for setting in store.list_admin_settings()
     }
-    assert stored["secret.jupiter.api_key"] == '"dummy-jupiter-no-echo"'
+    assert is_encrypted_envelope(stored["secret.jupiter.api_key"])
+    assert "dummy-jupiter-no-echo" not in stored["secret.jupiter.api_key"]
+    assert decode_secret_setting("secret.jupiter.api_key", stored["secret.jupiter.api_key"]) == "dummy-jupiter-no-echo"
     assert "dummy-jupiter-no-echo" not in str(response.data)
 
 

@@ -3738,6 +3738,226 @@
         "title": "ApiResponse[CoinbaseValuationDecisionResult]",
         "type": "object"
       },
+      "ApiResponse_ConnectionJob_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ConnectionJob]",
+        "type": "object"
+      },
+      "ApiResponse_ConnectionJobs_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionJobs"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ConnectionJobs]",
+        "type": "object"
+      },
+      "ApiResponse_ConnectionList_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ConnectionList]",
+        "type": "object"
+      },
+      "ApiResponse_ConnectionSnapshots_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionSnapshots"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ConnectionSnapshots]",
+        "type": "object"
+      },
+      "ApiResponse_Connection_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Connection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[Connection]",
+        "type": "object"
+      },
       "ApiResponse_ConnectorCatalogReport_": {
         "properties": {
           "data": {
@@ -7784,6 +8004,94 @@
           }
         },
         "title": "ApiResponse[ReportCenterStatus]",
+        "type": "object"
+      },
+      "ApiResponse_RequestLimitsConfig_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequestLimitsConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[RequestLimitsConfig]",
+        "type": "object"
+      },
+      "ApiResponse_RequestLimitsStatus_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequestLimitsStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[RequestLimitsStatus]",
         "type": "object"
       },
       "ApiResponse_ReviewDecision_": {
@@ -25578,6 +25886,530 @@
         "title": "CoinbaseValuationDecisionResult",
         "type": "object"
       },
+      "Connection": {
+        "properties": {
+          "account": {
+            "default": "",
+            "title": "Account",
+            "type": "string"
+          },
+          "budget_group": {
+            "default": "ip:global",
+            "title": "Budget Group",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "credentials": {
+            "$ref": "#/components/schemas/CredentialMetadata"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "last_test_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test At"
+          },
+          "origin": {
+            "default": "manual",
+            "title": "Origin",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "binance",
+              "bitget",
+              "coinbase",
+              "pionex"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "subaccount": {
+            "default": "",
+            "title": "Subaccount",
+            "type": "string"
+          },
+          "tax_source_activated": {
+            "const": false,
+            "default": false,
+            "title": "Tax Source Activated",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "label",
+          "credentials",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Connection",
+        "type": "object"
+      },
+      "ConnectionAction": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_balance_snapshot": {
+            "default": false,
+            "title": "Confirm Balance Snapshot",
+            "type": "boolean"
+          },
+          "confirm_external_request": {
+            "const": true,
+            "title": "Confirm External Request",
+            "type": "boolean"
+          },
+          "deadline_seconds": {
+            "default": 120,
+            "maximum": 300.0,
+            "minimum": 1.0,
+            "title": "Deadline Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "confirm_external_request"
+        ],
+        "title": "ConnectionAction",
+        "type": "object"
+      },
+      "ConnectionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Account",
+            "type": "string"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "api_secret": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Secret"
+          },
+          "budget_group": {
+            "default": "ip:global",
+            "pattern": "^(ip:global|budget:[a-z0-9_-]{1,48})$",
+            "title": "Budget Group",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "origin": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "api",
+              "import"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "passphrase": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passphrase"
+          },
+          "provider": {
+            "enum": [
+              "binance",
+              "bitget",
+              "coinbase",
+              "pionex"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "subaccount": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Subaccount",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "label"
+        ],
+        "title": "ConnectionCreate",
+        "type": "object"
+      },
+      "ConnectionJob": {
+        "properties": {
+          "action": {
+            "enum": [
+              "test",
+              "sync"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "cancel_requested": {
+            "default": false,
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "effect": {
+            "enum": [
+              "read_only_connection_test",
+              "connection_balance_snapshot"
+            ],
+            "title": "Effect",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "binance",
+              "bitget",
+              "coinbase",
+              "pionex"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "slot_reserved": {
+            "default": false,
+            "description": "Worker-Platz noch reserviert; auch nach Deadline bis zum Abschluss moeglich. Keine HTTP-Parallelitaetsmessung.",
+            "title": "Slot Reserved",
+            "type": "boolean"
+          },
+          "snapshot_count": {
+            "default": 0,
+            "title": "Snapshot Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "connection_id",
+          "provider",
+          "action",
+          "status",
+          "created_at",
+          "updated_at",
+          "deadline_at",
+          "effect"
+        ],
+        "title": "ConnectionJob",
+        "type": "object"
+      },
+      "ConnectionJobs": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionJob"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "max_active": {
+            "default": 4,
+            "title": "Max Active",
+            "type": "integer"
+          },
+          "max_retained": {
+            "default": 100,
+            "title": "Max Retained",
+            "type": "integer"
+          }
+        },
+        "title": "ConnectionJobs",
+        "type": "object"
+      },
+      "ConnectionList": {
+        "properties": {
+          "automatic_migration": {
+            "const": false,
+            "default": false,
+            "title": "Automatic Migration",
+            "type": "boolean"
+          },
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/Connection"
+            },
+            "title": "Connections",
+            "type": "array"
+          },
+          "legacy_connections": {
+            "items": {
+              "$ref": "#/components/schemas/LegacyConnection"
+            },
+            "title": "Legacy Connections",
+            "type": "array"
+          },
+          "vault_ready": {
+            "title": "Vault Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "vault_ready"
+        ],
+        "title": "ConnectionList",
+        "type": "object"
+      },
+      "ConnectionSnapshots": {
+        "properties": {
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/PortfolioLiveBalanceSnapshot"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          },
+          "tax_source_activated": {
+            "const": false,
+            "default": false,
+            "title": "Tax Source Activated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connection_id"
+        ],
+        "title": "ConnectionSnapshots",
+        "type": "object"
+      },
+      "ConnectionUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "api_secret": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Secret"
+          },
+          "budget_group": {
+            "anyOf": [
+              {
+                "pattern": "^(ip:global|budget:[a-z0-9_-]{1,48})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Group"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "passphrase": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passphrase"
+          },
+          "subaccount": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subaccount"
+          }
+        },
+        "title": "ConnectionUpdate",
+        "type": "object"
+      },
       "ConnectorCatalogEntry": {
         "properties": {
           "auth_method": {
@@ -25971,6 +26803,58 @@
           "status"
         ],
         "title": "ConnectorVaultStatus",
+        "type": "object"
+      },
+      "CredentialMetadata": {
+        "properties": {
+          "encrypted": {
+            "default": false,
+            "title": "Encrypted",
+            "type": "boolean"
+          },
+          "has_api_key": {
+            "default": false,
+            "title": "Has Api Key",
+            "type": "boolean"
+          },
+          "has_api_secret": {
+            "default": false,
+            "title": "Has Api Secret",
+            "type": "boolean"
+          },
+          "has_passphrase": {
+            "default": false,
+            "title": "Has Passphrase",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "missing",
+              "incomplete",
+              "configured",
+              "unavailable",
+              "invalid"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "CredentialMetadata",
         "type": "object"
       },
       "CrossCexTransferDecisionLayer": {
@@ -33989,6 +34873,11 @@
       },
       "InstallationSettings": {
         "properties": {
+          "demo_mode": {
+            "default": false,
+            "title": "Demo Mode",
+            "type": "boolean"
+          },
           "encrypted_secrets_available": {
             "title": "Encrypted Secrets Available",
             "type": "boolean"
@@ -33999,6 +34888,17 @@
             },
             "title": "Fields",
             "type": "array"
+          },
+          "profile_issue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Issue"
           },
           "profile_writable": {
             "title": "Profile Writable",
@@ -34018,6 +34918,28 @@
           "revision": {
             "title": "Revision",
             "type": "string"
+          },
+          "server_time_utc": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Time Utc"
+          },
+          "storage_checks": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Storage Checks",
+            "type": "array"
           }
         },
         "required": [
@@ -35020,6 +35942,63 @@
         "title": "JupiterTokenSearchResult",
         "type": "object"
       },
+      "LegacyConnection": {
+        "properties": {
+          "budget_group": {
+            "const": "ip:global",
+            "default": "ip:global",
+            "title": "Budget Group",
+            "type": "string"
+          },
+          "credentials": {
+            "$ref": "#/components/schemas/CredentialMetadata"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "origin": {
+            "const": "legacy",
+            "default": "legacy",
+            "title": "Origin",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "binance",
+              "bitget",
+              "coinbase",
+              "pionex"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "tax_source_activated": {
+            "const": false,
+            "default": false,
+            "title": "Tax Source Activated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "label",
+          "credentials"
+        ],
+        "title": "LegacyConnection",
+        "type": "object"
+      },
       "LegacyHeliumOverviewReport": {
         "properties": {
           "asset": {
@@ -35921,6 +36900,25 @@
           "status"
         ],
         "title": "LegalSourceCheck",
+        "type": "object"
+      },
+      "LimitsWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/RequestLimitsConfig"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "config",
+          "expected_revision"
+        ],
+        "title": "LimitsWrite",
         "type": "object"
       },
       "LocalAiAssetFifoCorrectionCandidate": {
@@ -44963,6 +45961,163 @@
         "title": "ProductReadinessSource",
         "type": "object"
       },
+      "ProviderCeiling": {
+        "additionalProperties": false,
+        "description": "Vom Betreiber aus seinem Plan uebertragene Obergrenze, nicht verifiziert.\n\nDie Referenz wird NICHT aufgerufen. Eine URL beweist keine Vertragstreue;\ndeshalb keine vorgebliche offizielle Domain-Allowlist/Herstellerempfehlung.\nUnbekannte Dimensionen bleiben None. Rollierende 1s/60s-Grenzen sind nur\nfuer dazu passende Anbietersemantik geeignet (z.B. kein 10s-CU-Ersatz).",
+        "properties": {
+          "checked_date": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "Checked Date",
+            "type": "string"
+          },
+          "declared_by_operator": {
+            "const": true,
+            "default": true,
+            "title": "Declared By Operator",
+            "type": "boolean"
+          },
+          "independently_verified": {
+            "const": false,
+            "default": false,
+            "title": "Independently Verified",
+            "type": "boolean"
+          },
+          "plan": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9 ._:+-]{0,79}$",
+            "title": "Plan",
+            "type": "string"
+          },
+          "requests_per_minute": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Minute"
+          },
+          "requests_per_second": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Second"
+          },
+          "scope": {
+            "enum": [
+              "provider",
+              "ip",
+              "account",
+              "api_key",
+              "project",
+              "endpoint_group",
+              "combination"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "source_url": {
+            "maxLength": 1024,
+            "minLength": 12,
+            "title": "Source Url",
+            "type": "string"
+          },
+          "weighted_cost_per_minute": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weighted Cost Per Minute"
+          }
+        },
+        "required": [
+          "source_url",
+          "checked_date",
+          "scope",
+          "plan"
+        ],
+        "title": "ProviderCeiling",
+        "type": "object"
+      },
+      "ProviderObservation": {
+        "additionalProperties": false,
+        "description": "Nur tatsaechlich vom Adapter gelesene Header; keine berechnete Restquote.",
+        "properties": {
+          "last_observed_at": {
+            "minimum": 0.0,
+            "title": "Last Observed At",
+            "type": "number"
+          },
+          "last_rate_limit_at": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rate Limit At"
+          },
+          "remaining_requests": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Requests"
+          },
+          "reset_at": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset At"
+          },
+          "used_weight_1m": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Weight 1M"
+          }
+        },
+        "required": [
+          "last_observed_at"
+        ],
+        "title": "ProviderObservation",
+        "type": "object"
+      },
       "ProviderSecretWrite": {
         "additionalProperties": false,
         "properties": {
@@ -45646,6 +46801,348 @@
           "primary_action"
         ],
         "title": "ReportYearCard",
+        "type": "object"
+      },
+      "RequestLimitGroupStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Reasons",
+            "type": "array"
+          },
+          "cost_last_minute": {
+            "title": "Cost Last Minute",
+            "type": "integer"
+          },
+          "group": {
+            "pattern": "^(provider|ip|project|account|endpoint|budget):[a-z0-9][a-z0-9_.:-]{0,63}$",
+            "title": "Group",
+            "type": "string"
+          },
+          "in_flight": {
+            "title": "In Flight",
+            "type": "integer"
+          },
+          "next_start_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Start At"
+          },
+          "paused_until": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused Until"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/RequestLimitProfile"
+          },
+          "provider_ceiling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderCeiling"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "requests_last_minute": {
+            "title": "Requests Last Minute",
+            "type": "integer"
+          },
+          "requests_last_second": {
+            "title": "Requests Last Second",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group",
+          "profile",
+          "requests_last_second",
+          "requests_last_minute",
+          "cost_last_minute",
+          "in_flight",
+          "queued",
+          "paused_until",
+          "next_start_at",
+          "blocking_reasons"
+        ],
+        "title": "RequestLimitGroupStatus",
+        "type": "object"
+      },
+      "RequestLimitProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "backoff_base_seconds": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 300.0,
+            "title": "Backoff Base Seconds",
+            "type": "number"
+          },
+          "backoff_max_seconds": {
+            "default": 30.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 3600.0,
+            "title": "Backoff Max Seconds",
+            "type": "number"
+          },
+          "burst": {
+            "default": 1,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Burst",
+            "type": "integer"
+          },
+          "cost_unit": {
+            "const": "local_units",
+            "default": "local_units",
+            "title": "Cost Unit",
+            "type": "string"
+          },
+          "jitter_ratio": {
+            "default": 0.2,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Jitter Ratio",
+            "type": "number"
+          },
+          "job_deadline_seconds": {
+            "default": 300.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 86400.0,
+            "title": "Job Deadline Seconds",
+            "type": "number"
+          },
+          "manufacturer_limit_verified": {
+            "const": false,
+            "default": false,
+            "title": "Manufacturer Limit Verified",
+            "type": "boolean"
+          },
+          "max_concurrency": {
+            "default": 1,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Concurrency",
+            "type": "integer"
+          },
+          "max_retries": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Max Retries",
+            "type": "integer"
+          },
+          "origin": {
+            "const": "local_conservative",
+            "default": "local_conservative",
+            "title": "Origin",
+            "type": "string"
+          },
+          "requests_per_minute": {
+            "default": 30,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Requests Per Minute",
+            "type": "integer"
+          },
+          "requests_per_second": {
+            "default": 1,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Requests Per Second",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "default": 30.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 3600.0,
+            "title": "Timeout Seconds",
+            "type": "number"
+          },
+          "weighted_cost_per_minute": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weighted Cost Per Minute"
+          }
+        },
+        "title": "RequestLimitProfile",
+        "type": "object"
+      },
+      "RequestLimitsConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "default_profile": {
+            "$ref": "#/components/schemas/RequestLimitProfile"
+          },
+          "endpoint_costs": {
+            "maxProperties": 1000,
+            "patternProperties": {
+              "^[a-z][a-z0-9_-]{0,47}$": {
+                "patternProperties": {
+                  "^[a-zA-Z][a-zA-Z0-9_.:-]{0,63}$": {
+                    "maximum": 100000000.0,
+                    "minimum": 1.0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "title": "Endpoint Costs",
+            "type": "object"
+          },
+          "group_profiles": {
+            "maxProperties": 1000,
+            "patternProperties": {
+              "^(provider|ip|project|account|endpoint|budget):[a-z0-9][a-z0-9_.:-]{0,63}$": {
+                "$ref": "#/components/schemas/RequestLimitProfile"
+              }
+            },
+            "title": "Group Profiles",
+            "type": "object"
+          },
+          "provider_ceilings": {
+            "maxProperties": 1000,
+            "patternProperties": {
+              "^[a-z][a-z0-9_-]{0,47}$": {
+                "$ref": "#/components/schemas/ProviderCeiling"
+              }
+            },
+            "title": "Provider Ceilings",
+            "type": "object"
+          },
+          "provider_groups": {
+            "maxProperties": 1000,
+            "patternProperties": {
+              "^[a-z][a-z0-9_-]{0,47}$": {
+                "items": {
+                  "pattern": "^(provider|ip|project|account|endpoint|budget):[a-z0-9][a-z0-9_.:-]{0,63}$",
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "title": "Provider Groups",
+            "type": "object"
+          },
+          "revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scheduler_enabled": {
+            "const": false,
+            "default": false,
+            "title": "Scheduler Enabled",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "title": "RequestLimitsConfig",
+        "type": "object"
+      },
+      "RequestLimitsStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "clock_rollback": {
+            "title": "Clock Rollback",
+            "type": "boolean"
+          },
+          "concurrency_recovery": {
+            "const": "explicit_release_only",
+            "default": "explicit_release_only",
+            "title": "Concurrency Recovery",
+            "type": "string"
+          },
+          "config_revision": {
+            "title": "Config Revision",
+            "type": "integer"
+          },
+          "coordination_scope": {
+            "const": "host_local_flock_shared_volume",
+            "default": "host_local_flock_shared_volume",
+            "title": "Coordination Scope",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/RequestLimitGroupStatus"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "manufacturer_telemetry_available": {
+            "default": false,
+            "title": "Manufacturer Telemetry Available",
+            "type": "boolean"
+          },
+          "observed_at": {
+            "title": "Observed At",
+            "type": "number"
+          },
+          "provider_observations": {
+            "patternProperties": {
+              "^[a-z][a-z0-9_-]{0,47}$": {
+                "$ref": "#/components/schemas/ProviderObservation"
+              }
+            },
+            "title": "Provider Observations",
+            "type": "object"
+          },
+          "recovery_hint": {
+            "default": "Abgestuerzte Worker geben aktive Leases nicht automatisch frei. Erst alle alten Worker und HTTP-Aufrufe nachweislich beenden; Wiederherstellung administrativ unter exklusivem Zugriff pruefen. Konfiguration, Startbuchungen und Pausen erhalten; nur nachweislich verwaiste aktive Lease-IDs gezielt bereinigen. Niemals die Zustandsdatei loeschen. Kein automatischer Reset oder Ablauf.",
+            "title": "Recovery Hint",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "config_revision",
+          "observed_at",
+          "clock_rollback",
+          "groups"
+        ],
+        "title": "RequestLimitsStatus",
         "type": "object"
       },
       "ReviewDecision": {
@@ -78655,6 +80152,411 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/admin/connections": {
+      "get": {
+        "description": "Connections. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "connections_api_v1_admin_connections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConnectionList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Connections",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "post": {
+        "description": "Create. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "create_api_v1_admin_connections_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Connection_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/connections/jobs": {
+      "get": {
+        "description": "Jobs. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "jobs_api_v1_admin_connections_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConnectionJobs_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Jobs",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/connections/jobs/{job_id}/cancel": {
+      "post": {
+        "description": "Cancel. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "cancel_api_v1_admin_connections_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConnectionJob_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/connections/{connection_id}": {
+      "put": {
+        "description": "Update. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "update_api_v1_admin_connections__connection_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Connection_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/connections/{connection_id}/credentials": {
+      "delete": {
+        "description": "Delete credentials. Der Aufruf loescht den im Pfad bezeichneten lokalen Datensatz. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "delete_credentials_api_v1_admin_connections__connection_id__credentials_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Connection_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Credentials",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "delete",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/connections/{connection_id}/snapshots": {
+      "get": {
+        "description": "Snapshots. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "snapshots_api_v1_admin_connections__connection_id__snapshots_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConnectionSnapshots_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Snapshots",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/connections/{connection_id}/sync": {
+      "post": {
+        "description": "Sync. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "sync_api_v1_admin_connections__connection_id__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConnectionJob_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/connections/{connection_id}/test": {
+      "post": {
+        "description": "Test. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "test_api_v1_admin_connections__connection_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConnectionJob_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/admin/database": {
       "get": {
         "description": "Database status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -78989,6 +80891,149 @@
           "Administration"
         ],
         "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/provider-references": {
+      "get": {
+        "description": "References. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "references_api_v1_admin_provider_references_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "References",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/request-limits": {
+      "get": {
+        "description": "Read limits. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "read_limits_api_v1_admin_request_limits_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequestLimitsConfig_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Limits",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "put": {
+        "description": "Write limits. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "write_limits_api_v1_admin_request_limits_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LimitsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequestLimitsConfig_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Limits",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/request-limits/endpoints": {
+      "get": {
+        "description": "Endpoints. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "endpoints_api_v1_admin_request_limits_endpoints_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Endpoints",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/request-limits/status": {
+      "get": {
+        "description": "Status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "status_api_v1_admin_request_limits_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequestLimitsStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

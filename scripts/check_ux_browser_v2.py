@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 from playwright.sync_api import expect, sync_playwright
 from check_workspace_browser_v2 import check_workspace
+from check_admin_browser_v2 import check_admin
 from ux_workspace_fixtures import WorkspaceFixture
 
 
@@ -245,11 +246,13 @@ def main() -> None:
         expect(page.get_by_text("Aktivierte Verbindung und Modell zuerst speichern.", exact=True)).to_be_visible()
         page.goto(args.base_url + "/#admin", wait_until="networkidle")
         expect(page.get_by_text("Technische Diagnose und erweiterte Einstellungen", exact=True)).to_be_visible()
-        expect(page.get_by_role("heading", name="Installation und Konten", exact=True)).to_be_visible()
-        expect(page.get_by_text("CEX-Credentials speichern", exact=True)).to_be_visible()
-        assert page.locator(".advancedSettings").get_attribute("open") is None
+        expect(page.get_by_role("heading", name="Installation", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Eigene Verbindungen", exact=True)).to_be_visible()
+        expect(page.get_by_text("CEX-Credentials speichern", exact=True)).not_to_be_visible()
+        technical = page.locator("details.advancedSettings").filter(has=page.get_by_text("Technische Diagnose und erweiterte Einstellungen", exact=True))
+        assert technical.get_attribute("open") is None
         page.get_by_text("Technische Diagnose und erweiterte Einstellungen", exact=True).click()
-        assert page.locator(".advancedSettings").get_attribute("open") is not None
+        assert technical.get_attribute("open") is not None
         assert not errors, errors
         writes = [entry for entry in api_requests if entry[0] != "GET"]
         assert writes == [("POST", "/api/v1/import/assistant/preview")], writes
@@ -263,6 +266,7 @@ def main() -> None:
         print(json.dumps(result, indent=2))
         acceptance = check_workspace(browser, args.base_url, args.output)
         print(json.dumps({"workspace_scenarios": len(acceptance["scenarios"]), "external_requests": acceptance["external_requests"]}))
+        check_admin(browser, args.base_url, args.output / "admin")
         browser.close()
 
 

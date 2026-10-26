@@ -48,7 +48,7 @@ def test_solscan_balance_change_fetch_uses_cache_without_live_request(tmp_path, 
     def fail_urlopen(*_args, **_kwargs):
         raise AssertionError("network must not be called when cache is available")
 
-    monkeypatch.setattr(importer.urllib.request, "urlopen", fail_urlopen)
+    monkeypatch.setattr(importer, "managed_urlopen", fail_urlopen)
 
     rows, meta = importer._fetch_balance_changes(
         "wallet-1",
@@ -103,7 +103,7 @@ def test_solscan_balance_change_fetch_honors_request_limit(tmp_path, monkeypatch
         requested_urls.append(request.full_url)
         return FakeResponse()
 
-    monkeypatch.setattr(importer.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(importer, "managed_urlopen", fake_urlopen)
 
     rows, meta = importer._fetch_balance_changes(
         "wallet-1",

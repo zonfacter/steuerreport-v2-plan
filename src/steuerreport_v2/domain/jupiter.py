@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.jupiter import (
     JupiterTokenAudit,
@@ -73,7 +73,7 @@ class JupiterTokenService:
                 ),
             )
 
-        with httpx.Client(timeout=20) as client:
+        with managed_client(timeout=20) as client:
             response = client.get(
                 self.SEARCH_URL,
                 headers={"x-api-key": api_key},

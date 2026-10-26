@@ -10,6 +10,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -322,7 +323,7 @@ def call_llm(prompt: str) -> tuple[str, str]:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=1800) as response:
+        with managed_urlopen(request, timeout=1800) as response:
             payload = json.loads(response.read().decode("utf-8"))
         return payload["choices"][0]["message"]["content"], "ok"
     except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as exc:

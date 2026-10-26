@@ -20,7 +20,7 @@ def no_legacy(*args, **kwargs):
 def test_unconfigured_legacy_preflight_is_inactive_and_has_no_side_effects(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "standalone.duckdb")
     monkeypatch.setattr(AdminService, "V1_ADMIN_BASE_URL", "")
-    monkeypatch.setattr("steuerreport_v2.domain.admin.httpx.post", no_legacy)
+    monkeypatch.setattr("steuerreport_v2.domain.external_http.managed_post", no_legacy)
     before = store.list_admin_settings()
     client = TestClient(create_app(store))
     response = client.get("/api/v1/admin/cex-credentials/v1-takeover")

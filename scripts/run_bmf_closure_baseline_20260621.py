@@ -6,6 +6,7 @@ import json
 import socket
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -126,12 +127,12 @@ def main() -> int:
 
 
 def fetch_json(api_base: str, path: str) -> dict[str, Any]:
-    with urllib.request.urlopen(f"{api_base}{path}", timeout=180) as response:
+    with managed_urlopen(f"{api_base}{path}", timeout=180) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def fetch_bytes(api_base: str, path: str) -> bytes:
-    with urllib.request.urlopen(f"{api_base}{path}", timeout=240) as response:
+    with managed_urlopen(f"{api_base}{path}", timeout=240) as response:
         return response.read()
 
 

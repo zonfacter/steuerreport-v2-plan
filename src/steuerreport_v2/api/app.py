@@ -7,6 +7,9 @@ from steuerreport_v2.paths import configured_import_path, PROJECT_ROOT
 from steuerreport_v2.private_settings import private_config_path, private_value
 from steuerreport_v2.contracts.installation import InstallationSettings, InstallationSettingsWrite, PrivateConfigDocument, PrivateConfigWrite, ProviderSecretWrite
 from steuerreport_v2.domain.installation import InstallationSettingsError, InstallationSettingsService
+from steuerreport_v2.api.connections import build_connections_router
+from steuerreport_v2.api.request_limits import build_request_limits_router
+from steuerreport_v2.domain.external_http import outbound_scope
 
 import csv
 import gzip
@@ -724,15 +727,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
         origin = request.headers.get("origin")
         if origin and origin != str(request.base_url).rstrip("/") and origin not in cors_origins:
             return Response(status_code=403)
-        return await call_next(request)
+        with outbound_scope():
+            return await call_next(request)
     db = store or DuckDbStore()
+    app.include_router(build_connections_router(db))
+    app.include_router(build_request_limits_router())
     workspace_operation_lock = Lock()
     installation = InstallationSettingsService(db)
 
     @app.get("/api/v1/admin/installation")
-    def read_installation() -> ApiResponse[InstallationSettings]:
+    def read_installation(request: Request) -> ApiResponse[InstallationSettings]:
         try:
-            return ApiResponse(data=installation.read())
+            return ApiResponse(data=installation.read().model_copy(update={"demo_mode": getattr(request.app.state, "ux_sandbox", False) is True}))
         except InstallationSettingsError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from None
 
@@ -9600,6 +9606,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def safe_ai_validation(request: Request, exc: RequestValidationError):
+        if request.url.path.startswith("/api/v1/admin/"):
+            return JSONResponse(status_code=422, content={"detail": "admin_request_invalid"})
         if request.url.path.startswith("/api/v1/ai/"):
             return JSONResponse(status_code=422, content={"detail": "ai_request_invalid"})
         if request.url.path.startswith(("/api/v1/activity/", "/api/v1/workspace/")):

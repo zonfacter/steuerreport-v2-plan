@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 from threading import RLock
@@ -90,10 +91,30 @@ class InstallationSettingsService:
         return data, hashlib.sha256(content).hexdigest()
 
     def _writable(self) -> bool:
-        if self.path is None or self.path.is_symlink():
-            return False
-        # No UI action may create a profile inside the software checkout.
-        return not self.path.resolve().is_relative_to(PROJECT_ROOT.resolve())
+        return self._profile_issue() is None
+
+    def _profile_issue(self) -> str | None:
+        if self.path is None:
+            return "profile_disabled"
+        if self.path.is_symlink():
+            return "profile_symlink"
+        if self.path.resolve().is_relative_to(PROJECT_ROOT.resolve()):
+            return "profile_inside_software"
+        path = self.path if self.path.exists() else self.path.parent
+        while not path.exists() and path != path.parent:
+            path = path.parent
+        try:
+            if not path.stat().st_mode & 0o222 or not os.access(path, os.W_OK):
+                return "profile_permission_denied"
+            if path == self.path and (not self.path.parent.stat().st_mode & 0o222 or not os.access(self.path.parent, os.W_OK)):
+                return "profile_parent_permission_denied"
+            if os.statvfs(path).f_flag & getattr(os, "ST_RDONLY", 1):
+                return "profile_readonly_filesystem"
+            if self.path.exists() and not self.path.is_file():
+                return "profile_not_regular_file"
+        except OSError:
+            return "profile_storage_unavailable"
+        return None
 
     def read(self) -> InstallationSettings:
         profile, revision = self._read()
@@ -115,7 +136,25 @@ class InstallationSettingsService:
                               or any(self.read_config(name).revision != revision for name, revision in self.active_configs.items())),
             profile_writable=self._writable(), encrypted_secrets_available=load_vault_key() is not None,
             providers=providers,
+            profile_issue=self._profile_issue(), server_time_utc=datetime.now(timezone.utc),
+            storage_checks=self.storage_checks(),
         )
+
+    def storage_checks(self) -> list[dict[str, str]]:
+        issue = self._profile_issue()
+        outside = not self.store.path.resolve().is_relative_to(PROJECT_ROOT.resolve())
+        key = load_vault_key()
+        return [
+            {"code": "private_profile", "status": "blocked" if issue else "ready",
+             "label": "Privates Profil", "detail": issue or "Profil liegt außerhalb der Software; Speicherberechtigung vorhanden.",
+             "action": "STEUERREPORT_PRIVATE_PROFILE auf eine eigene Datei im persistenten Datenvolume setzen; nur dem Dienstbenutzer gezielt Zugriff geben." if issue else "Änderungen werden atomar gespeichert; nach Pfadänderungen Neustarthinweis beachten."},
+            {"code": "separate_database", "status": "ready" if outside else "blocked",
+             "label": "Getrennter Datenpfad", "detail": "Datenbank außerhalb der Software." if outside else "Datenbank liegt im Softwareverzeichnis.",
+             "action": "STEUERREPORT_V2_DB und STEUERREPORT_STATE_DIR auf ein persistentes Datenvolume setzen. Keine bestehende Datenbank überschreiben."},
+            {"code": "encrypted_vault", "status": "ready" if key is not None else "blocked",
+             "label": "Verschlüsselung", "detail": "Vault-Schlüssel lesbar; Secret-Speicherung erfolgt verschlüsselt." if key is not None else "Vault-Schlüssel fehlt oder ist nicht lesbar.",
+             "action": "STEUERREPORT_V2_SECRET_VAULT_KEY_FILE auf die dauerhaft gesicherte 32-Byte-Schlüsseldatei setzen. Schlüssel getrennt von der Datenbank sichern; keinen neuen Schlüssel über einen bestehenden schreiben."},
+        ]
 
     def write(self, payload: InstallationSettingsWrite) -> InstallationSettings:
         if not self._writable():

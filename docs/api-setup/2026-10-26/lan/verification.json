@@ -1,0 +1,131 @@
+{
+  "only_get_requests": true,
+  "javascript_errors": [],
+  "external_provider_calls": 0,
+  "synthetic": true,
+  "screenshots": [
+    {
+      "file": "admin-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "#admin",
+      "data": "synthetic"
+    },
+    {
+      "file": "admin-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#admin",
+      "data": "synthetic"
+    },
+    {
+      "file": "admin-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 1000
+      },
+      "route": "#admin",
+      "data": "synthetic"
+    },
+    {
+      "file": "admin-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "route": "#admin",
+      "data": "synthetic"
+    }
+  ],
+  "api_calls": [
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/installation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/installation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/connections"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/connections/jobs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/request-limits"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/request-limits/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/provider-references"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/request-limits/endpoints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/provider"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/agents"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/settings"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/sources/connector-diagnostics"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/sources/jupiter/tokens/metadata-cache"
+    }
+  ],
+  "blocked_requests": []
+}

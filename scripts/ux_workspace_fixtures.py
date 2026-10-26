@@ -103,6 +103,20 @@ class WorkspaceFixture:
             return True
         if path == "/api/v1/workspace/environment":
             data = {"synthetic_preview": True, "read_only": True}
+        elif path == "/api/v1/admin/connections":
+            data = {"connections": [], "legacy_connections": [], "vault_ready": False, "automatic_migration": False}
+        elif path == "/api/v1/admin/connections/jobs":
+            data = {"jobs": [], "max_active": 4, "max_retained": 100}
+        elif path == "/api/v1/admin/request-limits":
+            data = {"schema_version": 1, "revision": 0, "scheduler_enabled": False, "group_profiles": {}, "provider_groups": {}, "endpoint_costs": {}, "provider_ceilings": {}, "default_profile": {
+                "origin": "local_conservative", "manufacturer_limit_verified": False, "cost_unit": "local_units", "requests_per_second": 1, "requests_per_minute": 30, "burst": 1, "max_concurrency": 1, "weighted_cost_per_minute": None,
+                "timeout_seconds": 30, "max_retries": 2, "backoff_base_seconds": 1, "backoff_max_seconds": 30, "jitter_ratio": 0.2, "job_deadline_seconds": 300}}
+        elif path == "/api/v1/admin/request-limits/status":
+            data = {"schema_version": 1, "config_revision": 0, "observed_at": 1793000000, "clock_rollback": False, "groups": [], "provider_observations": {}, "manufacturer_telemetry_available": False, "coordination_scope": "host_local_flock_shared_volume", "concurrency_recovery": "explicit_release_only"}
+        elif path == "/api/v1/admin/request-limits/endpoints":
+            data = {"fallback": "default", "unit": "local_units", "http": [{"id": "account", "path": "/api/v3/account"}], "rpc": [{"id": "rpc_gettransaction", "method": "getTransaction"}]}
+        elif path == "/api/v1/admin/provider-references":
+            data = {"checked_at": "2026-10-26", "automatic_plan_detection": False, "providers": []}
         elif path == "/api/v1/workspace/sources":
             data = dict(generated_at=STAMP, sources=self.sources(), events_count=0 if self.fresh else 45, methodology="Synthetic")
         elif path.startswith("/api/v1/workspace/sources/") and path.endswith("/sync"):

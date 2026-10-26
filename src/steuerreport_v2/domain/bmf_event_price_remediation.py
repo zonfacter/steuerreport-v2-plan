@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.bmf_event_evidence import (
     BmfFifoEventEvidenceRunRequest,
@@ -113,7 +114,7 @@ class BmfEventPriceRemediationService:
         fx_requests = 0
 
         timeout = max(3, min(request.timeout_seconds, 60))
-        with httpx.Client(
+        with managed_client(
             timeout=timeout,
             headers={"user-agent": "steuerreport-v2/0.1"},
         ) as client:

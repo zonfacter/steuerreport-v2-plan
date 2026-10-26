@@ -1,0 +1,21 @@
+{
+  "preview": "synthetic-read-only",
+  "preview_port": 18014,
+  "production_unchanged": true,
+  "production_image": "sha256:c70f7ae9b5881bf50d9a0f9ca0aec4ad8a66e6c2fa76e45a8c974c3f9e20f28a",
+  "production_started_at": "2026-10-26T08:11:33.393887534Z",
+  "old_preview_database_sha256": "6a6533a765366290248468c154b6746f135949ab10cb9cb9d40e3a14a5ca7853",
+  "previous_api_preview_database_sha256": "3097b3657ecdb7bb42946b3695e89255083b410a3d531b7385f19f740292dacc",
+  "final_preview_database_sha256": "74cac93165265634c47d548e6f410ae74ca245c13bade36635c92102b3fa05c8",
+  "existing_preview_hashes_unchanged": true,
+  "final_preview_reads_preserve_database": true,
+  "status_get_http": 200,
+  "demo_settings_put_http": 403,
+  "real_provider_requests": 0,
+  "preview_database_hashes": {
+    "review": "6a6533a765366290248468c154b6746f135949ab10cb9cb9d40e3a14a5ca7853",
+    "sha256_settings": "aab7ec3d31548ba409cc10ab8948998221cfef870ca7c91b5930b970c3ade29c",
+    "sha256_settings_final": "3097b3657ecdb7bb42946b3695e89255083b410a3d531b7385f19f740292dacc",
+    "sha256_settings_verified": "74cac93165265634c47d548e6f410ae74ca245c13bade36635c92102b3fa05c8"
+  }
+}

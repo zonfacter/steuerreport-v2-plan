@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.blockpit_solana import (
     BlockpitSolanaClassPreflight,
@@ -410,7 +410,7 @@ class BlockpitSolanaPreflightService:
         skipped = 0
         failed = 0
         price_points: list[PricePointCreate] = []
-        with httpx.Client(
+        with managed_client(
             timeout=timeout_seconds,
             headers={"user-agent": "steuerreport-v2/0.1"},
         ) as client:

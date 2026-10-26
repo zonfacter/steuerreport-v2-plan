@@ -9,6 +9,7 @@ import os
 import textwrap
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -249,7 +250,7 @@ def json_safe(value: Any) -> Any:
 
 
 def fetch_api(path: str) -> dict[str, Any]:
-    with urllib.request.urlopen(f"{API_BASE}{path}", timeout=180) as response:
+    with managed_urlopen(f"{API_BASE}{path}", timeout=180) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -319,7 +320,7 @@ def call_llm(prompt: str) -> tuple[str, str]:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=2400) as response:
+        with managed_urlopen(request, timeout=2400) as response:
             data = json.loads(response.read().decode("utf-8"))
         content = data["choices"][0]["message"].get("content") or ""
         return content or "Leere Modellantwort.", "ok"

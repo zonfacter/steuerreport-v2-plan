@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -206,7 +207,7 @@ def _fetch_balance_changes(
         url = f"{PortfolioService.SOLSCAN_PRO_BASE_URL.rstrip('/')}/account/balance_change?{urllib.parse.urlencode(params)}"
         request = urllib.request.Request(url, headers={"token": key, "accept": "application/json"})
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with managed_urlopen(request, timeout=30) as response:
                 requests_used += 1
                 payload = json.loads(response.read().decode("utf-8", errors="replace"))
         except urllib.error.HTTPError as exc:

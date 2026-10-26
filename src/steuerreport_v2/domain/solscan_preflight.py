@@ -4,6 +4,7 @@ from steuerreport_v2.private_settings import private_value
 
 import csv
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
 import json
 import time
 from collections import defaultdict
@@ -324,7 +325,7 @@ class SolscanPreflightService:
         verified = 0
         failed = 0
         rate_limited = 0
-        with httpx.Client(timeout=max(3, min(request.timeout_seconds, 60))) as client:
+        with managed_client(timeout=max(3, min(request.timeout_seconds, 60))) as client:
             delay_seconds = max(Decimal("0"), min(request.delay_seconds, Decimal("10")))
             for index, signature in enumerate(selected):
                 if index > 0 and delay_seconds > 0:

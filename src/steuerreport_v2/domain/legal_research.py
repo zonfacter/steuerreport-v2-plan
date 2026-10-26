@@ -15,6 +15,7 @@ from urllib.parse import urljoin, urlparse
 from xml.etree import ElementTree
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.legal_research import (
     LegalDiscoveryHit,
@@ -115,7 +116,7 @@ class LegalResearchService:
         config = self.config()
         if self.client is not None:
             return self._run(config, self.client)
-        with httpx.Client(
+        with managed_client(provider="legal",
             timeout=httpx.Timeout(45.0, connect=15.0),
             follow_redirects=True,
             headers={"User-Agent": self.USER_AGENT, "Accept": "*/*"},

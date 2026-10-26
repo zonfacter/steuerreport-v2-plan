@@ -12,6 +12,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -320,7 +321,7 @@ def _rpc(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with managed_urlopen(request, timeout=30) as response:
             if stats is not None:
                 stats["requests"] += 1
             payload = json.loads(response.read().decode("utf-8", errors="replace"))

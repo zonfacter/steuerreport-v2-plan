@@ -1,0 +1,11 @@
+{
+  "identifier_set_size": 132,
+  "scope": "worktree plus every local Git object, including unreachable objects; optional recursively expanded archives",
+  "counts": {
+    "working_files": 576,
+    "git_objects": 2975,
+    "archive_files": 0
+  },
+  "findings": [],
+  "private_identifier_occurrences": 0
+}

@@ -8,6 +8,7 @@ import hmac
 import json
 import secrets
 import time
+from collections.abc import Callable
 from urllib.parse import urlencode
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -26,25 +27,60 @@ class CexBalanceService:
     PIONEX_BASE_URL = "https://api.pionex.com"
     COINBASE_BASE_URL = "https://api.coinbase.com"
 
-    def __init__(self, store: DuckDbStore, *, timeout_seconds: int = 20) -> None:
+    def __init__(
+        self, store: DuckDbStore, *, timeout_seconds: int = 20,
+        connection_id: str | None = None,
+    ) -> None:
         self.store = store
         self.timeout_seconds = timeout_seconds
+        self.connection_id = connection_id
 
     def fetch(
         self,
         connector_id: str,
         fetched_at: datetime,
+        *,
+        connection_id: str | None = None,
     ) -> list[PortfolioLiveBalanceSnapshot]:
+        if connection_id is not None:
+            return CexBalanceService(
+                self.store, timeout_seconds=self.timeout_seconds,
+                connection_id=connection_id,
+            ).fetch(connector_id, fetched_at)
         connector = connector_id.strip().lower()
-        if connector == "binance":
-            return self._binance_snapshots(fetched_at)
-        if connector == "bitget":
-            return self._bitget_snapshots(fetched_at)
-        if connector == "pionex":
-            return self._pionex_snapshots(fetched_at)
-        if connector == "coinbase":
-            return self._coinbase_snapshots(fetched_at)
-        raise ValueError(f"unsupported_cex_connector:{connector}")
+        handlers = {
+            "binance": self._binance_snapshots, "bitget": self._bitget_snapshots,
+            "pionex": self._pionex_snapshots, "coinbase": self._coinbase_snapshots,
+        }
+        if connector not in handlers:
+            raise ValueError("unsupported_cex_connector")
+        rows = handlers[connector](fetched_at)
+        if self.connection_id is not None:
+            rows = [row.model_copy(update={
+                "snapshot_id": f"connection:{self.connection_id}:{row.snapshot_id}",
+                "source": f"{row.source}:connection:{self.connection_id}",
+            }) for row in rows]
+        return rows
+
+    def test_connection(self, connector_id: str) -> None:
+        """Ein authentifizierter Lesezugriff; keine Historie und kein Snapshot."""
+        key, secret, passphrase = self._credentials(connector_id)
+        if connector_id == "binance":
+            body = self._binance_get("/api/v3/account", key, secret, {"omitZeroBalances": "true"})
+            valid = isinstance(body, dict) and isinstance(body.get("balances"), list)
+        elif connector_id == "bitget":
+            body = self._bitget_get("/api/v2/spot/account/assets", key, secret, passphrase, {"assetType": "hold_only"})
+            valid = isinstance(body, dict) and body.get("code") == "00000" and isinstance(body.get("data"), list)
+        elif connector_id == "pionex":
+            body = self._pionex_get("/api/v1/account/balances", key, secret)
+            valid = isinstance(body, dict) and body.get("result") is True and isinstance(body.get("data"), dict)
+        elif connector_id == "coinbase":
+            body = self._coinbase_get("/api/v3/brokerage/accounts", key, secret, {"limit": "1"})
+            valid = isinstance(body, dict) and isinstance(body.get("accounts"), list)
+        else:
+            raise ValueError("unsupported_cex_connector")
+        if not valid:
+            raise RuntimeError("cex_connection_response_invalid")
 
     def _binance_snapshots(
         self,
@@ -140,9 +176,7 @@ class CexBalanceService:
             {"assetType": "hold_only"},
         )
         if not isinstance(payload, dict) or str(payload.get("code") or "") != "00000":
-            raise RuntimeError(
-                f"bitget_balance_api_error:{str(payload.get('code') if isinstance(payload, dict) else '')}"
-            )
+            raise RuntimeError("bitget_balance_api_error")
         items = payload.get("data")
         if not isinstance(items, list):
             raise RuntimeError("bitget_balance_rows_missing")
@@ -180,9 +214,7 @@ class CexBalanceService:
             api_secret,
         )
         if not isinstance(payload, dict) or payload.get("result") is not True:
-            raise RuntimeError(
-                f"pionex_balance_api_error:{str(payload.get('code') if isinstance(payload, dict) else '')}"
-            )
+            raise RuntimeError("pionex_balance_api_error")
         data = payload.get("data")
         items = data.get("balances") if isinstance(data, dict) else None
         if not isinstance(items, list):
@@ -260,6 +292,10 @@ class CexBalanceService:
         return self._snapshots("coinbase", "coinbase_api_v2", fetched_at, rows)
 
     def _credentials(self, connector_id: str) -> tuple[str, str, str]:
+        if self.connection_id is not None:
+            from steuerreport_v2.domain.connections import ConnectionService
+
+            return ConnectionService(self.store).credentials(self.connection_id, connector_id)
         api_key = resolve_secret_value(
             self.store,
             f"secret.cex.{connector_id}.api_key",
@@ -285,20 +321,15 @@ class CexBalanceService:
         api_secret: str,
         params: dict[str, str],
     ) -> object:
-        signed = {
-            **params,
-            "timestamp": str(int(time.time() * 1000)),
-            "recvWindow": "5000",
-        }
-        query = urlencode(signed)
-        signature = hmac.new(
-            api_secret.encode("utf-8"),
-            query.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
+        def sign(request: httpx.Request) -> None:
+            signed = {**params, "timestamp": str(int(time.time() * 1000)), "recvWindow": "5000"}
+            query = urlencode(signed)
+            signature = hmac.new(api_secret.encode(), query.encode(), hashlib.sha256).hexdigest()
+            request.url = httpx.URL(f"{self.BINANCE_BASE_URL}{path}?{query}&signature={signature}")
+            request.headers["X-MBX-APIKEY"] = api_key
+
         return self._get_json(
-            f"{self.BINANCE_BASE_URL}{path}?{query}&signature={signature}",
-            {"X-MBX-APIKEY": api_key},
+            f"{self.BINANCE_BASE_URL}{path}", {}, signer=sign,
         )
 
     def _bitget_get(
@@ -311,24 +342,17 @@ class CexBalanceService:
     ) -> object:
         query = urlencode(params)
         request_path = path if not query else f"{path}?{query}"
-        timestamp = str(int(time.time() * 1000))
-        prehash = f"{timestamp}GET{request_path}"
-        signature = base64.b64encode(
-            hmac.new(
-                api_secret.encode("utf-8"),
-                prehash.encode("utf-8"),
-                hashlib.sha256,
-            ).digest()
-        ).decode("ascii")
-        return self._get_json(
-            f"{self.BITGET_BASE_URL}{request_path}",
-            {
-                "ACCESS-KEY": api_key,
-                "ACCESS-SIGN": signature,
-                "ACCESS-TIMESTAMP": timestamp,
-                "ACCESS-PASSPHRASE": passphrase,
+        def sign(request: httpx.Request) -> None:
+            timestamp = str(int(time.time() * 1000))
+            signature = base64.b64encode(hmac.new(api_secret.encode(), f"{timestamp}GET{request_path}".encode(), hashlib.sha256).digest()).decode("ascii")
+            request.headers.update({
+                "ACCESS-KEY": api_key, "ACCESS-SIGN": signature,
+                "ACCESS-TIMESTAMP": timestamp, "ACCESS-PASSPHRASE": passphrase,
                 "Content-Type": "application/json",
-            },
+            })
+
+        return self._get_json(
+            f"{self.BITGET_BASE_URL}{request_path}", {}, signer=sign,
         )
 
     def _pionex_get(
@@ -337,19 +361,14 @@ class CexBalanceService:
         api_key: str,
         api_secret: str,
     ) -> object:
-        params = {"timestamp": str(int(time.time() * 1000))}
-        signing_query = "&".join(f"{key}={params[key]}" for key in sorted(params))
-        signature = hmac.new(
-            api_secret.encode("utf-8"),
-            f"GET{path}?{signing_query}".encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
+        def sign(request: httpx.Request) -> None:
+            query = urlencode({"timestamp": str(int(time.time() * 1000))})
+            request.url = httpx.URL(f"{self.PIONEX_BASE_URL}{path}?{query}")
+            request.headers["PIONEX-KEY"] = api_key
+            request.headers["PIONEX-SIGNATURE"] = hmac.new(api_secret.encode(), f"GET{path}?{query}".encode(), hashlib.sha256).hexdigest()
+
         return self._get_json(
-            f"{self.PIONEX_BASE_URL}{path}?{urlencode(params)}",
-            {
-                "PIONEX-KEY": api_key,
-                "PIONEX-SIGNATURE": signature,
-            },
+            f"{self.PIONEX_BASE_URL}{path}", {}, signer=sign,
         )
 
     def _coinbase_get(
@@ -361,10 +380,12 @@ class CexBalanceService:
     ) -> object:
         query = urlencode(params)
         request_path = path if not query else f"{path}?{query}"
-        token = self._coinbase_jwt("GET", path, api_key, api_secret)
+        def sign(request: httpx.Request) -> None:
+            token = self._coinbase_jwt("GET", path, api_key, api_secret)
+            request.headers["Authorization"] = f"Bearer {token}"
+
         return self._get_json(
-            f"{self.COINBASE_BASE_URL}{request_path}",
-            {"Authorization": f"Bearer {token}"},
+            f"{self.COINBASE_BASE_URL}{request_path}", {}, signer=sign,
         )
 
     @classmethod
@@ -416,16 +437,26 @@ class CexBalanceService:
     def _base64url(value: bytes) -> str:
         return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
-    def _get_json(self, url: str, headers: dict[str, str]) -> object:
-        with httpx.Client(timeout=self.timeout_seconds) as client:
-            response = client.get(url, headers=headers)
-            try:
+    def _get_json(
+        self, url: str, headers: dict[str, str], *,
+        signer: Callable[[httpx.Request], None] | None = None,
+    ) -> object:
+        try:
+            from steuerreport_v2.domain.external_http import managed_client, request_signer
+        except ImportError:
+            raise RuntimeError("external_http_unavailable") from None
+        try:
+            with request_signer(signer), managed_client(timeout=self.timeout_seconds) as client:
+                response = client.get(url, headers=headers)
                 response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                raise RuntimeError(
-                    f"cex_balance_http_error:{response.status_code}"
-                ) from exc
-            return response.json()
+                return response.json()
+        except httpx.HTTPStatusError as exc:
+            code = "cex_authentication_failed" if exc.response.status_code in {401, 403} else "cex_provider_request_failed"
+            raise RuntimeError(code) from None
+        except httpx.TimeoutException:
+            raise RuntimeError("cex_request_timeout") from None
+        except (httpx.RequestError, ValueError):
+            raise RuntimeError("cex_provider_request_failed") from None
 
     @staticmethod
     def _snapshots(

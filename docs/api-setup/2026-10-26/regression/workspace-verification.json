@@ -1,0 +1,476 @@
+{
+  "scenarios": {
+    "A01": {
+      "status": "bestanden",
+      "evidence": "Frisches Konto: Setup, kein scheinbarer Bestand und keine finale Freigabe."
+    },
+    "A02": {
+      "status": "bestanden",
+      "evidence": "Statusantwort kontrolliert zurückgehalten; kein vorläufiger Erfolg."
+    },
+    "A03": {
+      "status": "bestanden",
+      "evidence": "Bekannte Null und unbekannter Wert nebeneinander, ohne Gleichsetzung."
+    },
+    "A04": {
+      "status": "bestanden",
+      "evidence": "Teilfehler mit Wiederholen, altem Datenstand und nutzbaren übrigen Bereichen."
+    },
+    "A05": {
+      "status": "bestanden",
+      "evidence": "Vorheriger Erfolg mit Zeitstempel und fehlgeschlagener jüngster Versuch sichtbar."
+    },
+    "A06": {
+      "status": "bestanden",
+      "evidence": "Quellenstatus, Sortierung und verzögerte Suche mit nachvollziehbarer Trefferzahl."
+    },
+    "A07": {
+      "status": "bestanden",
+      "evidence": "Keine Treffer mit Filter-zurücksetzen; danach wieder beide Quellen."
+    },
+    "A08": {
+      "status": "bestanden",
+      "evidence": "Liste Seite 2 → Originalbeleg → Schließen erhält Seite, Filter und Fokus."
+    },
+    "A09": {
+      "status": "bestanden",
+      "evidence": "URL erhält Asset, Sortierung, Seitengröße und Seite bei Neuladen; Suchtext bleibt aus URL."
+    },
+    "A10": {
+      "status": "bestanden",
+      "evidence": "Zurück/Vorwärts stellt passende gefilterte Ergebnisse ohne Navigationsschleife her."
+    },
+    "A11": {
+      "status": "bestanden",
+      "evidence": "Fehlende Pflichtfelder blockieren; kein Credential-Speichern, Import oder Aktivieren durch Einrichtungsschritte."
+    },
+    "A12": {
+      "status": "bestanden",
+      "evidence": "22 kanonische Ereignisse vs. 44 Ledger-Bewegungen getrennt beschriftet."
+    },
+    "A13": {
+      "status": "bestanden",
+      "evidence": "Serverseitige Filter, Sortierung, Seitenwechsel und Filterwechsel-Reset stimmen mit URL überein."
+    },
+    "A14": {
+      "status": "bestanden",
+      "evidence": "Aufgabe zeigt Auswirkung, Rohbelegreferenz und direkte Verknüpfung zum nachgewiesenen Ereignis."
+    },
+    "A15": {
+      "status": "bestanden",
+      "evidence": "Leeres Review-Gate bleibt von offener Jahresbestätigung getrennt; keine finale Abgabe."
+    },
+    "A16": {
+      "status": "bestanden",
+      "evidence": "Ansicht aktualisieren und alle bisherigen Ansichtswechsel ohne Exchange-Sync oder Neuberechnung."
+    },
+    "A17": {
+      "status": "bestanden",
+      "evidence": "Nur gemocktes Testsystem: bestätigter Sync mit Doppelstart-Sperre/Fehler und ausdrücklich bestätigte Neuberechnung."
+    },
+    "A18": {
+      "status": "bestanden",
+      "evidence": "CSV enthält alle 22 gefilterten Zeilen, nicht nur Seite; Originalpräzision, Browserbereitstellung statt falscher Speicherbestätigung."
+    },
+    "A19": {
+      "status": "bestanden",
+      "evidence": "Ausgefüllte Passwortfelder bleiben über dauerhafte Labels auffindbar und nach Tab erhalten."
+    },
+    "A20": {
+      "status": "bestanden",
+      "evidence": "Detailpanel: Initialfokus, Tab-Umlauf, Escape und Fokusrückgabe geprüft."
+    },
+    "A21": {
+      "status": "bestanden",
+      "evidence": "390/768/1280/1440: neue Hauptansichten und Panels ohne Seitenoverflow; mobile Navigation schließt nach Auswahl."
+    },
+    "A22": {
+      "status": "bestanden",
+      "evidence": "Registry und technische Quelleninformationen im Expertenmodus erreichbar; kein automatischer externer Earn-Abruf."
+    },
+    "A23": {
+      "status": "bestanden",
+      "evidence": "#flows weiterhin erreichbar, Transaktionen als Einstieg, Geldflüsse und Transferkandidaten erhalten."
+    },
+    "A24": {
+      "status": "separat zu prüfen",
+      "evidence": "Bestehende Fachtests werden im Backend-Testlauf geprüft, nicht mit UI-Mocks."
+    }
+  },
+  "javascript_errors": [],
+  "external_requests": [],
+  "all_api_responses_synthetic": true,
+  "out_of_order_search": true,
+  "screenshots": [
+    {
+      "file": "dashboard-fresh-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "#dashboard",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "dashboard-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#dashboard",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "sources-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#sources",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "sources-detail-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#sources?detail=s_aaaaaaaaaaaaaaaaaaaa",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "flows-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#flows",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "flows-detail-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#flows?detail=evt-044",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "review-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#review",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "review-detail-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#review?detail=review-demo",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "tax-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#tax",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "export-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "#export",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "dashboard-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#dashboard",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "sources-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#sources",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "sources-detail-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#sources?detail=s_aaaaaaaaaaaaaaaaaaaa",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "flows-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#flows",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "flows-detail-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#flows?detail=evt-044",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "review-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#review",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "review-detail-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#review?detail=review-demo",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "tax-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#tax",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "export-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 844
+      },
+      "route": "#export",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "dashboard-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#dashboard",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "sources-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#sources",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "sources-detail-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#sources?detail=s_aaaaaaaaaaaaaaaaaaaa",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "flows-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#flows",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "flows-detail-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#flows?detail=evt-044",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "review-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#review",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "review-detail-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#review?detail=review-demo",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "tax-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#tax",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "export-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "route": "#export",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "dashboard-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#dashboard",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "sources-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#sources",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "sources-detail-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#sources?detail=s_aaaaaaaaaaaaaaaaaaaa",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "flows-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#flows",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "flows-detail-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#flows?detail=evt-044",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "review-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#review",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "review-detail-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#review?detail=review-demo",
+      "full_page": false,
+      "data": "synthetic"
+    },
+    {
+      "file": "tax-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#tax",
+      "full_page": true,
+      "data": "synthetic"
+    },
+    {
+      "file": "export-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "#export",
+      "full_page": true,
+      "data": "synthetic"
+    }
+  ]
+}

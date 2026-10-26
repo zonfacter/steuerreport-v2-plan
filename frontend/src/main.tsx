@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { InstallationSettings } from "./InstallationSettings";
+import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
+import { ConnectionSettings, RequestLimitSettings, useAdminEnvironment } from "./ConnectionSettings";
 import { FileImportWizard } from "./FileImportWizard";
 import { AiWorkspace } from "./AiWorkspace";
 import { HELP_TOPICS, HelpCenter, HelpTip, WorkflowNavigation } from "./Help";
@@ -5503,8 +5504,8 @@ function App() {
             </div>
           </div>
           {!managed && active !== "help" && <div className="topbarStatus">
-            <span className={`statusPill ${snapshot.productReadiness ? readinessTone(snapshot.productReadiness.overall_status) : snapshot.health ? "ok" : "warning"}`}>
-              {snapshot.productReadiness ? `Auswertung: ${readinessLabel(snapshot.productReadiness.overall_status)}` : snapshot.health ? "API verbunden" : "Verbinde mit API"}
+            <span className={`statusPill ${snapshot.health ? "ok" : "warning"}`} title="Interne Backend-Erreichbarkeit, kein Nachweis einer Anbieter-Verbindung">
+              {snapshot.health ? "Backend erreichbar" : "Backend wird geprüft"}
             </span>
             {snapshot.productReadiness?.next_action ? <em>{snapshot.productReadiness.next_action}</em> : null}
           </div>}
@@ -6451,13 +6452,18 @@ function Content({
     return (
       <Stack>
         <InstallationSettings />
+        <DataProviderSettings />
+        <ConnectionSettings />
+        <RequestLimitSettings />
+        <AiWorkspace configurationOnly />
+        <details className="advancedSettings"><summary>Bisheriger Einzelzugang und technische Diagnose</summary>
         <AdminCexCredentialForm
           connectorDiagnostics={snapshot.sourceConnectorDiagnostics}
           onSaveCexCredentials={onSaveCexCredentials}
           onRefreshConfiguredSources={onRefreshConfiguredSources}
           sourceRefreshLoading={sourceRefreshLoading}
         />
-        <AiWorkspace configurationOnly />
+        </details>
         <details className="advancedSettings"><summary>Technische Diagnose und erweiterte Einstellungen</summary>
         <ToolSafetyPanel
           title="Administration"
@@ -20397,6 +20403,7 @@ function AdminCexCredentialForm({
   onRefreshConfiguredSources: () => void;
   sourceRefreshLoading: boolean;
 }) {
+  const environment = useAdminEnvironment();
   const [connectorId, setConnectorId] = useState("binance");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
@@ -20435,7 +20442,7 @@ function AdminCexCredentialForm({
         <button
           type="button"
           onClick={() => onSaveCexCredentials(connectorId, apiKey, apiSecret, passphrase)}
-          disabled={!apiKey.trim() || !apiSecret.trim() || (needsPassphrase && !passphrase.trim())}
+          disabled={environment.locked || !apiKey.trim() || !apiSecret.trim() || (needsPassphrase && !passphrase.trim())}
         >
           <Settings size={16} />
           <span>Verschluesselt speichern</span>
@@ -20456,7 +20463,7 @@ function AdminCexCredentialForm({
             Nach dem Speichern sollte direkt `Live abfragen` ausgefuehrt werden, damit Product-Readiness den neuen Snapshot sieht.
           </p>
         </div>
-        <button type="button" onClick={onRefreshConfiguredSources} disabled={sourceRefreshLoading || configuredCredentials.length === 0}>
+        <button type="button" onClick={onRefreshConfiguredSources} disabled={environment.locked || sourceRefreshLoading || configuredCredentials.length === 0}>
           <RefreshCcw size={16} />
           <span>{sourceRefreshLoading ? "Live-Abfrage laeuft" : "Live abfragen"}</span>
         </button>
@@ -20513,10 +20520,18 @@ function AdminCexCredentialForm({
         </label>
         <label>
           {connectorId === "coinbase" ? "ECDSA Private Key" : "API Secret"}
-          <textarea
+          <input
             value={apiSecret}
-            autoComplete="off"
-            rows={connectorId === "coinbase" ? 5 : 2}
+            type="password"
+            autoComplete="new-password"
+            onPaste={(event) => {
+              if (connectorId !== "coinbase") return;
+              const pasted = event.clipboardData.getData("text");
+              if (!/[\r\n]/.test(pasted)) return;
+              event.preventDefault();
+              const field = event.currentTarget;
+              setApiSecret(apiSecret.slice(0, field.selectionStart ?? 0) + pasted.replace(/\r\n|\r|\n/g, "\\n") + apiSecret.slice(field.selectionEnd ?? apiSecret.length));
+            }}
             placeholder={connectorId === "coinbase" ? "-----BEGIN EC PRIVATE KEY-----" : ""}
             onChange={(event) => setApiSecret(event.target.value)}
           />

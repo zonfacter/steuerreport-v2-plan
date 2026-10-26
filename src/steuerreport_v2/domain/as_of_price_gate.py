@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.prices import (
     AsOfPriceGateBackfillJob,
@@ -292,7 +293,7 @@ class AsOfPriceGateService:
             raise ValueError(
                 f"Kein belegter USD/EUR-Kurs fuer {price_date.isoformat()} vorhanden."
             )
-        with httpx.Client(
+        with managed_client(
             timeout=request.timeout_seconds,
             headers={"user-agent": "steuerreport-v2/0.1"},
         ) as client:

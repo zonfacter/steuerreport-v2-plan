@@ -36,8 +36,8 @@ def save(service, **values):
 
 
 def transport(monkeypatch, handler):
-    client = httpx.Client
-    monkeypatch.setattr("steuerreport_v2.domain.ai_provider.httpx.Client", lambda **kwargs: client(transport=httpx.MockTransport(handler), **kwargs))
+    from steuerreport_v2.domain.external_http import managed_client
+    monkeypatch.setattr("steuerreport_v2.domain.ai_provider.managed_client", lambda **kwargs: managed_client(transport=httpx.MockTransport(handler), **kwargs))
 
 
 def completion(text="Pruefung als unverbindlicher Hinweis.", **extra):

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.prices import (
     CurrentPortfolioPriceBackfillJob,
@@ -68,7 +69,7 @@ class ExternalPriceBackfillService:
         seen_asset_dates: set[tuple[str, str]] = set()
         token_risk_statuses = self._token_risk_statuses()
 
-        with httpx.Client(timeout=timeout_seconds, headers={"user-agent": "steuerreport-v2/0.1"}) as client:
+        with managed_client(timeout=timeout_seconds, headers={"user-agent": "steuerreport-v2/0.1"}) as client:
             for requirement in requirements:
                 if requested_assets and requirement.asset.upper() not in requested_assets:
                     continue
@@ -289,7 +290,7 @@ class ExternalPriceBackfillService:
         usd_eur = Decimal("0")
         fx_source_date = ""
         if configured and not dry_run:
-            with httpx.Client(
+            with managed_client(
                 timeout=timeout_seconds,
                 headers={"user-agent": "steuerreport-v2/0.1"},
             ) as client:

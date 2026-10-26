@@ -10,6 +10,7 @@ import textwrap
 import time
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -506,7 +507,7 @@ def call_llm(prompt: str, *, max_tokens: int = 4200) -> tuple[str, str]:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=2400) as response:
+        with managed_urlopen(request, timeout=2400) as response:
             data = json.loads(response.read().decode("utf-8"))
         return data["choices"][0]["message"].get("content") or "Leere Modellantwort.", "ok"
     except (KeyError, urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -519,7 +520,7 @@ def dry_run_report(task: dict[str, Any]) -> str:
 
 def get_api(endpoint: str) -> dict[str, Any]:
     try:
-        with urllib.request.urlopen(f"{API_BASE}/api/v1/{endpoint}", timeout=90) as response:
+        with managed_urlopen(f"{API_BASE}/api/v1/{endpoint}", timeout=90) as response:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
         return {"status": "failed", "errors": [{"code": type(exc).__name__, "message": str(exc)}], "data": None}

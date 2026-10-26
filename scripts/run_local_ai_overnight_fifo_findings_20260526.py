@@ -11,6 +11,7 @@ import textwrap
 import time
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -313,7 +314,7 @@ def call_llm(prompt: str, *, max_tokens: int = 3600) -> tuple[str, str]:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=2400) as response:
+        with managed_urlopen(request, timeout=2400) as response:
             data = json.loads(response.read().decode("utf-8"))
         return data["choices"][0]["message"].get("content") or "Leere Modellantwort.", "ok"
     except (KeyError, urllib.error.URLError, TimeoutError, OSError) as exc:

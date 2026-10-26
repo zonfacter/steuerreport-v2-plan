@@ -10,6 +10,7 @@ import textwrap
 import time
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -387,7 +388,7 @@ def call_llm(prompt: str, *, max_tokens: int) -> tuple[str, str]:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=1800) as response:
+        with managed_urlopen(request, timeout=1800) as response:
             payload = json.loads(response.read().decode("utf-8"))
         content = payload["choices"][0]["message"].get("content") or ""
         return content, "ok" if content.strip() else "empty"
@@ -411,7 +412,7 @@ def dry_run_report(task_data: dict[str, Any]) -> str:
 def get_api(path: str) -> dict[str, Any]:
     url = f"{API_BASE.rstrip('/')}/api/v1/{path.lstrip('/')}"
     try:
-        with urllib.request.urlopen(url, timeout=240) as response:
+        with managed_urlopen(url, timeout=240) as response:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
         return {"status": "error", "errors": [{"message": str(exc), "endpoint": url}]}

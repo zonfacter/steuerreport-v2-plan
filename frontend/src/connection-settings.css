@@ -1,0 +1,50 @@
+.connectionSettings, .installationSettings { min-width: 0; }
+.installationSettings button:not(.helpTipButton) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 8px 12px; border: 1px solid #b7c7bd; border-radius: 4px; background: #edf3ef; color: #243b31; font: inherit; font-size: 13px; line-height: 1.3; cursor: pointer; }
+.installationSettings button:not(.helpTipButton):hover:not(:disabled) { background: #e2eee7; }
+.installationSettings button:not(.helpTipButton):disabled { opacity: .55; cursor: default; }
+.installationSettings button.primaryButton { background: #234c3b; border-color: #234c3b; color: #fff; }
+.installationSettings button.adminDanger { color: #a02638; }
+.adminMessage { padding: 12px 14px; border-left: 3px solid #64776e; background: #f1f5f3; overflow-wrap: anywhere; }
+.adminMessage.error { border-color: #a83042; background: #fff3f4; }
+.adminSectionIntro { margin: 4px 0 16px; color: #4b5563; max-width: 84ch; font-size: 14px; }
+.adminCheckList { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 16px 0; padding: 0; border-top: 1px solid #d6dce2; }
+.adminCheckList > div { padding: 14px 12px 14px 0; border-bottom: 1px solid #d6dce2; min-width: 0; }
+.adminCheckList dt { font-size: 13px; color: #4b5563; }
+.adminCheckList dd { margin: 5px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.adminCheckList small { display: block; font-size: 12px; font-weight: 400; color: #4b5563; margin-top: 5px; }
+.adminStorageChecks { border-top: 1px solid #d6dce2; margin-bottom: 16px; }
+.adminStorageCheck { padding: 12px 0; border-bottom: 1px solid #d6dce2; overflow-wrap: anywhere; }
+.adminStorageCheck strong { font-size: 14px; }
+.adminStorageCheck p { font-size: 13px; margin: 5px 0; }
+.adminInlineHelp { color: #4b5563; font-size: 12px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.adminFieldLabel { display: flex; gap: 7px; align-items: center; }
+.adminFormField { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.adminConnectionList { border-top: 1px solid #d6dce2; margin: 12px 0 20px; }
+.adminConnectionRow { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 16px; padding: 16px 0; border-bottom: 1px solid #d6dce2; align-items: start; }
+.adminConnectionRow h3 { margin: 0 0 5px; font-size: 15px; }
+.adminConnectionRow p { margin: 3px 0; font-size: 13px; overflow-wrap: anywhere; }
+.adminRowActions, .adminFormActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.adminRowActions button, .adminFormActions button { min-height: 36px; }
+.adminSubheading { margin: 18px 0 10px; font-size: 16px; }
+.adminForm { display: grid; gap: 16px; border-top: 1px solid #d6dce2; padding-top: 18px; }
+.adminForm fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.adminForm legend { font-weight: 600; margin-bottom: 10px; }
+.adminForm label { display: grid; gap: 6px; min-width: 0; }
+.adminForm input, .adminForm select { min-width: 0; width: 100%; box-sizing: border-box; }
+.adminForm .adminCheckbox { display: flex; align-items: flex-start; gap: 10px; }
+.adminForm .adminCheckbox input { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 2px; }
+.adminLimitTableWrap { overflow-x: auto; max-width: 100%; }
+.adminLimitTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.adminLimitTable th, .adminLimitTable td { padding: 9px 10px; border-bottom: 1px solid #d6dce2; text-align: left; vertical-align: top; }
+.adminLimitTable th { font-weight: 600; }
+.adminLimitTable caption { text-align: left; margin-bottom: 8px; color: #4b5563; }
+.adminFieldError { color: #a02638; font-size: 12px; }
+.adminDanger { color: #a02638; }
+.adminStatusLine { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.adminForm :focus-visible, .connectionSettings button:focus-visible, .installationSettings summary:focus-visible { outline: 2px solid #16614d; outline-offset: 3px; }
+@media (max-width: 767px) {
+  .installationSettings > .panelToolbar { flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+  .adminCheckList { grid-template-columns: minmax(0, 1fr); }
+  .adminConnectionRow { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .adminRowActions { justify-content: flex-start; }
+}

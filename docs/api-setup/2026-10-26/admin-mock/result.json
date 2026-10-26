@@ -1,0 +1,26 @@
+{
+  "scope": "Echtes Main-Frontend mit kontrollierter Mock-API; kein Secret-Persistenz- oder realer Provider-Nachweis",
+  "results": [
+    {
+      "demo": true,
+      "vault": false,
+      "writes": 0,
+      "api_calls": 21,
+      "console_errors": []
+    },
+    {
+      "demo": false,
+      "vault": true,
+      "writes": 9,
+      "api_calls": 48,
+      "console_errors": []
+    },
+    {
+      "demo": false,
+      "vault": false,
+      "writes": 0,
+      "api_calls": 21,
+      "console_errors": []
+    }
+  ]
+}

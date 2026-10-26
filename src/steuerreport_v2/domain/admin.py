@@ -3,8 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 
-import httpx
-
 from steuerreport_v2.contracts.admin import (
     AdminSetting,
     AdminSettingWrite,
@@ -22,9 +20,9 @@ from steuerreport_v2.domain.secrets import (
     is_secret_key,
     redact_setting,
     secret_value_from_json,
-    upsert_secret,
 )
 from steuerreport_v2.domain.sources import SourceService
+from steuerreport_v2.domain.secret_vault import encrypt_secret_setting, load_vault_key
 from steuerreport_v2.private_settings import private_value
 
 
@@ -36,18 +34,23 @@ class AdminService:
         self.store = store
 
     def upsert_setting(self, setting: AdminSettingWrite) -> AdminSetting:
+        normalized_key = setting.key.strip().lower()
+        if normalized_key.startswith(("connection.", "secret.cex.connection.")):
+            raise ValueError("connection_settings_use_connections_api")
         parsed_value = json.loads(setting.value_json)
         if is_secret_key(setting.key):
             if not isinstance(parsed_value, str):
                 raise ValueError("secret_setting_must_be_json_string")
             value = secret_value_from_json(setting.value_json)
-            return redact_setting(upsert_secret(self.store, setting.key, value))
+            return redact_setting(self._write_v2_secret_setting(setting.key, value))
         return redact_setting(self.store.upsert_admin_setting(setting))
 
     def list_settings(self) -> list[AdminSetting]:
         return [redact_setting(setting) for setting in self.store.list_admin_settings()]
 
     def delete_setting(self, key: str) -> bool:
+        if key.strip().lower().startswith(("connection.", "secret.cex.connection.")):
+            raise ValueError("connection_settings_use_connections_api")
         return self.store.delete_admin_setting(key)
 
     def status(self) -> AdminStatus:
@@ -63,21 +66,29 @@ class AdminService:
         connector_id = payload.connector_id.strip().lower()
         if connector_id not in self.CEX_CONNECTORS:
             raise ValueError("unsupported_cex_connector")
-        api_key = payload.api_key.strip()
-        api_secret = payload.api_secret.strip()
-        passphrase = (payload.passphrase or "").strip()
+        vault_key = load_vault_key()
+        if vault_key is None:
+            raise RuntimeError("secret_vault_key_required")
+        from steuerreport_v2.domain.secrets import resolve_secret_value
+
+        api_key = payload.api_key.strip() or resolve_secret_value(self.store, f"secret.cex.{connector_id}.api_key")
+        api_secret = payload.api_secret.strip() or resolve_secret_value(self.store, f"secret.cex.{connector_id}.api_secret")
+        passphrase = (payload.passphrase or "").strip() or resolve_secret_value(self.store, f"secret.cex.{connector_id}.passphrase")
         if not api_key or not api_secret:
             raise ValueError("api_key_and_api_secret_required")
+        if connector_id == "bitget" and not passphrase:
+            raise ValueError("bitget_passphrase_required")
         settings = [
             (f"secret.cex.{connector_id}.api_key", api_key),
             (f"secret.cex.{connector_id}.api_secret", api_secret),
         ]
         if connector_id == "bitget" or passphrase:
             settings.append((f"secret.cex.{connector_id}.passphrase", passphrase))
-        written_keys: list[str] = []
-        for setting_key, value in settings:
-            self._write_v2_secret_setting(setting_key, value)
-            written_keys.append(setting_key)
+        written_keys = [key for key, _ in settings]
+        self.store.write_admin_settings_batch([
+            AdminSettingWrite(key=key, value_json=encrypt_secret_setting(key, value, vault_key))
+            for key, value in settings
+        ], [])
         diagnostic = next(
             item
             for item in SourceService(self.store).connector_diagnostics().diagnostics
@@ -110,8 +121,16 @@ class AdminService:
             message="Jupiter API-Key wurde im V2-Secret-Store gespeichert.",
         )
 
-    def _write_v2_secret_setting(self, setting_key: str, value: str) -> None:
-        upsert_secret(self.store, setting_key, value)
+    def _write_v2_secret_setting(self, setting_key: str, value: str) -> AdminSetting:
+        key = load_vault_key()
+        if key is None:
+            raise RuntimeError("secret_vault_key_required")
+        if not value.strip():
+            raise ValueError("secret_value_required")
+        return self.store.upsert_admin_setting(AdminSettingWrite(
+            key=setting_key,
+            value_json=encrypt_secret_setting(setting_key, value.strip(), key),
+        ))
 
     def v1_cex_credential_takeover_report(self) -> V1CexCredentialTakeoverReport:
         if not self.V1_ADMIN_BASE_URL:
@@ -199,7 +218,9 @@ class AdminService:
         )
         creds: dict[str, str] = {}
         try:
-            response = httpx.post(
+            from steuerreport_v2.domain.external_http import managed_post
+
+            response = managed_post(
                 f"{self.V1_ADMIN_BASE_URL.rstrip('/')}/api/v1/admin/cex-credentials/load",
                 json={"connector_id": connector_id},
                 timeout=10,

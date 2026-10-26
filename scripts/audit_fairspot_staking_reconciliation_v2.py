@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.fairspot_staking import (
@@ -31,7 +32,7 @@ def main() -> None:
         str(config["independent_source"]["url"]),
         headers={"User-Agent": "steuerreport-v2-fairspot-evidence/1.0"},
     )
-    with urllib.request.urlopen(request, timeout=60) as response:
+    with managed_urlopen(request, timeout=60) as response:
         content = response.read()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     source_path = ARTIFACT_ROOT / f"{timestamp}_fairspot_staking_source.csv"

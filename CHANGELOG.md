@@ -2,6 +2,17 @@
 
 ## Unveröffentlicht - Bedienkonzept
 
+- API-Einrichtung nach Installation, Datenanbietern, eigenen Verbindungen,
+  Abrufsteuerung und KI getrennt; Demo-Modus ausdrücklich schreibgeschützt.
+- UUID-basierte Mehrkontenverwaltung mit verschlüsselten Zugangsdaten,
+  getrennten Bestands-Snapshots und ausdrücklich bestätigten Test-/Abrufjobs.
+- Gemeinsamer persistenter Abrufkoordinator für rollierende Sekunden-/Minutenlimits,
+  lokale Endpunktkosten, Parallelität, Pausen, Retries und Gesamtdeadlines.
+  Hostlokale Worker teilen atomar dieselben Budgets; kein stiller Fallback.
+- Betreiberdeklarierte Tarifobergrenzen, Quellen und tatsächliche Anbieterheader
+  getrennt von lokalen Nutzungswerten. Kein automatischer periodischer Sync.
+- Secret-Felder maskiert; alte Admin-Schreibwege ebenfalls ohne Klartextfallback.
+  Vorhandene Legacy-Zugänge bleiben unverändert lesbar und werden nicht aktiviert.
 - Nachprüfung R1: Aufgabenpanel unterscheidet initiales Laden, API-Fehler mit
   Wiederholen und bestätigten Leertreffer. ID-Abfrage bleibt unabhängig von der
   Listenseite; Filter und Rückweg bleiben erhalten. Kontrollierte Verzögerungs-,

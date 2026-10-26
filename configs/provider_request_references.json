@@ -1,0 +1,16 @@
+{
+  "checked_at": "2026-10-26",
+  "automatic_plan_detection": false,
+  "providers": [
+    {"provider":"binance","source_url":"https://developers.binance.info/en/docs/products/spot/rest-api","scope":"IP und Endpunktgewicht; SAPI kann weitere Kontobudgets haben","limitation":"Kein universelles Kontolimit hinterlegt. Verbindliche Kontingente aus exchangeInfo und Vertrag prüfen. Retry-After und gemeldetes IP-Gewicht werden getrennt von lokaler Nutzung behandelt."},
+    {"provider":"bitget","source_url":"https://www.bitget.com/docs/classic/rest-api","scope":"Endpunktbezogen UID oder IP, zusätzlich Gesamt-IP-Budget","limitation":"Classic- und Unified-Konten unterscheiden. Kein einzelner Wert garantiert alle Endpunktlimits. Bestehende Classic-Connectoren werden nicht automatisch auf UTA migriert."},
+    {"provider":"pionex","source_url":"https://www.pionex.com/docs/api-docs/bot-api/general-info/rate-limits","scope":"IP und Konto; gewichtete Requests","limitation":"Die referenzierte Dokumentation nennt BOT API Beta. Zahlen werden nicht ungeprüft als Obergrenze anderer API-Produkte übernommen."},
+    {"provider":"coinbase","source_url":"https://docs.cdp.coinbase.com/coinbase-app/api-architecture/rate-limiting","scope":"API-Key beziehungsweise OAuth-Nutzer; Produktbezug prüfen","limitation":"Coinbase App und Advanced Trade nicht mit Coinbase Exchange gleichsetzen. Kein unbestätigtes universelles REST-Sekundenlimit."},
+    {"provider":"solscan","source_url":"https://pro-api.solscan.io/pro-api-docs/v2.0/docs","scope":"Tarif, monatliche Computing Units und Minutenlimit","limitation":"Aktiven Plan und freigeschaltete Endpunkte prüfen. Lokale Kosteneinheiten sind ohne bestätigte Zuordnung keine gemessene CU-Restquote."},
+    {"provider":"helius","source_url":"https://www.helius.dev/pricing","scope":"Projekt/Tarif, RPC-Methoden und Credits","limitation":"RPC, DAS und historische Abfragen haben unterschiedliche Kosten und Limits. Keine automatische Erhöhung oder Aktivierung kostenpflichtiger Abrufe."},
+    {"provider":"alchemy","source_url":"https://www.alchemy.com/docs/reference/throughput","scope":"Accountweite CU-Budgets; rollierendes Durchsatzfenster","limitation":"Mehrere Projekte können ein Konto teilen. Lokale Sekunden-/Minutenfenster ersetzen keinen bestätigten CU-/Tarifabgleich."},
+    {"provider":"jupiter","source_url":"https://developers.jup.ag/docs/portal/rate-limits","scope":"Organisation/Plan, Endpunktgruppe und Credits","limitation":"Die Plattformdokumentation hat sich geändert. Kein Key-Wechsel zur Quotenvervielfachung; alle zugehörigen Verbindungen einer Budgetgruppe zuordnen. Gemeldeter Reset öffnet einen Slot, nicht das gesamte Fenster."},
+    {"provider":"solana_rpc","source_url":"https://solana.com/docs/references/clusters","scope":"RPC-Host, IP und Betreibervertrag","limitation":"Ein selbst eingetragener RPC-Endpunkt hat keine aus dem Namen ableitbare Herstellerquote. Konservatives lokales Profil oder bestätigten Vertrag verwenden."},
+    {"provider":"ai_openrouter","source_url":"https://openrouter.ai/docs/api/reference/limits","scope":"KI-Key, Modell und Tarif","limitation":"KI-Anfragen und Modell-Tokenlimits sind getrennt von Exchange-/RPC-Budgets. Keine automatische Wiederholung kostenpflichtiger Modell-POSTs."}
+  ]
+}

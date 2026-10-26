@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +23,10 @@ class InstallationSettings(BaseModel):
     profile_writable: bool
     encrypted_secrets_available: bool
     providers: dict[str, bool]
+    profile_issue: str | None = None
+    server_time_utc: datetime | None = None
+    storage_checks: list[dict[str, str]] = Field(default_factory=list)
+    demo_mode: bool = False
 
 
 class InstallationSettingsWrite(BaseModel):

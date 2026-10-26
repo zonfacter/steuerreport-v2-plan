@@ -19,6 +19,7 @@ import time
 from uuid import uuid4
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.events import CanonicalEvent
 from steuerreport_v2.contracts.moonpay_receipts import MoonpayReceiptItem
@@ -3502,7 +3503,7 @@ class WalletFifoPreviewService:
         if not deposit_events and not withdrawal_events and not withdrawal_evidence_events:
             return anchors
         if live_rpc_enabled:
-            with httpx.Client(timeout=20) as client:
+            with managed_client(timeout=20) as client:
                 for event in deposit_events:
                     deposit_address = self._deposit_address_for_tx(str(event.tx_id))
                     if not deposit_address:
@@ -8207,7 +8208,7 @@ class WalletFifoPreviewService:
     ) -> WalletFifoSolanaOriginTraceReport:
         origin = self.origin_trace(year=year, asset=asset, pool_id=pool_id, limit=limit)
         traces: list[WalletFifoSolanaOriginTrace] = []
-        with httpx.Client(timeout=max(3, min(timeout_seconds, 60))) as client:
+        with managed_client(timeout=max(3, min(timeout_seconds, 60))) as client:
             for trace in origin.traces[:limit]:
                 if not trace.onchain_tx_id:
                     traces.append(
@@ -8277,7 +8278,7 @@ class WalletFifoPreviewService:
         solscan_key = (
             self._solscan_api_key() if normalized_provider == "solscan" else ""
         )
-        with httpx.Client(timeout=max(3, min(timeout_seconds, 60))) as client:
+        with managed_client(timeout=max(3, min(timeout_seconds, 60))) as client:
             for event in event_report.events:
                 signature = event.onchain_tx_id or event.tx_id
                 if not signature:

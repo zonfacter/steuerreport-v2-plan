@@ -5,7 +5,6 @@ import hashlib
 import hmac
 import os
 import json
-import time
 from collections import Counter
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -13,6 +12,7 @@ from typing import Any
 import urllib.parse
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client, request_signer
 
 from steuerreport_v2.contracts.binance_earn import (
     BinanceAssetDividendPreview,
@@ -1238,15 +1238,7 @@ class BinanceEarnHistoryService:
         endpoint: str,
         params: dict[str, object],
     ) -> dict[str, Any]:
-        signed_params = {**params, "timestamp": self._millis(datetime.now(timezone.utc))}
-        query = urllib.parse.urlencode(signed_params)
-        signature = hmac.new(secret_key.encode("utf-8"), query.encode("utf-8"), hashlib.sha256).hexdigest()
-        url = f"{self.BASE_URL}{endpoint}?{query}&signature={signature}"
-        with httpx.Client(timeout=30) as client:
-            response = client.get(url, headers={"X-MBX-APIKEY": api_key})
-            if response.status_code >= 400:
-                raise RuntimeError(self._binance_error_message(response))
-            payload = response.json()
+        payload = self._signed_get_any(api_key, secret_key, endpoint, params)
         if not isinstance(payload, dict):
             raise RuntimeError("binance_unexpected_payload")
         return payload
@@ -1258,12 +1250,12 @@ class BinanceEarnHistoryService:
         endpoint: str,
         params: dict[str, object],
     ) -> object:
-        signed_params = {**params, "timestamp": self._millis(datetime.now(timezone.utc))}
-        query = urllib.parse.urlencode(signed_params)
-        signature = hmac.new(secret_key.encode("utf-8"), query.encode("utf-8"), hashlib.sha256).hexdigest()
-        url = f"{self.BASE_URL}{endpoint}?{query}&signature={signature}"
-        with httpx.Client(timeout=30) as client:
-            response = client.get(url, headers={"X-MBX-APIKEY": api_key})
+        def sign(request: httpx.Request) -> None:
+            query = urllib.parse.urlencode({**params, "timestamp": self._millis(datetime.now(timezone.utc))})
+            signature = hmac.new(secret_key.encode("utf-8"), query.encode("utf-8"), hashlib.sha256).hexdigest()
+            request.url = httpx.URL(f"{self.BASE_URL}{endpoint}?{query}&signature={signature}")
+        with request_signer(sign), managed_client(timeout=30) as client:
+            response = client.get(f"{self.BASE_URL}{endpoint}", headers={"X-MBX-APIKEY": api_key})
             if response.status_code >= 400:
                 raise RuntimeError(self._binance_error_message(response))
             return response.json()
@@ -1275,18 +1267,8 @@ class BinanceEarnHistoryService:
         endpoint: str,
         params: dict[str, object],
     ) -> dict[str, Any]:
-        last_error: Exception | None = None
-        for attempt in range(3):
-            try:
-                return self._signed_get(api_key, secret_key, endpoint, params)
-            except Exception as exc:
-                last_error = exc
-                if "timed out" not in str(exc).lower() and "timeout" not in str(exc).lower():
-                    raise
-                time.sleep(1 + attempt)
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError("binance_request_failed")
+        # Retry-Zahl und Wartezeiten gehoeren ausschliesslich dem gemeinsamen Transport.
+        return self._signed_get(api_key, secret_key, endpoint, params)
 
     def _binance_error_message(self, response: httpx.Response) -> str:
         try:
@@ -1295,9 +1277,8 @@ class BinanceEarnHistoryService:
             payload = {}
         if isinstance(payload, dict):
             code = payload.get("code")
-            message = payload.get("msg")
-            if code is not None or message is not None:
-                return f"binance_http_{response.status_code}: code={code} msg={message}"
+            if str(code).lstrip("-").isdigit():
+                return f"binance_http_{response.status_code}: code={code}"
         return f"binance_http_{response.status_code}"
 
     def _credentials(self) -> tuple[str, str]:

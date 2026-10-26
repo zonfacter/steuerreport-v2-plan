@@ -11,6 +11,7 @@ import textwrap
 import time
 import urllib.error
 import urllib.request
+from steuerreport_v2.domain.external_http import managed_urlopen
 from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -97,7 +98,7 @@ def run_json_command(command: list[str], filename: str, commands: list[str], *, 
 def fetch_api(path: str, filename: str, commands: list[str]) -> dict[str, Any]:
     url = f"{API_BASE}{path}"
     commands.append(f"GET {url}")
-    with urllib.request.urlopen(url, timeout=120) as response:
+    with managed_urlopen(url, timeout=120) as response:
         data = json.loads(response.read().decode("utf-8"))
     write_json(RAW / filename, data)
     return data
@@ -347,7 +348,7 @@ def write_llm_review(
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=900) as response:
+        with managed_urlopen(request, timeout=900) as response:
             data = json.loads(response.read().decode("utf-8"))
         write_json(RAW / "local_llm_review.json", data)
         content = data["choices"][0]["message"].get("content") or ""
@@ -602,7 +603,7 @@ def call_llm(prompt: str, *, max_tokens: int, timeout: int) -> tuple[str, str]:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with managed_urlopen(request, timeout=timeout) as response:
             data = json.loads(response.read().decode("utf-8"))
         content = data["choices"][0]["message"].get("content") or ""
         return "ok", content or "Leere Modellantwort."

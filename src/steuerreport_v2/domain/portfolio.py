@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import urllib.parse
 import urllib.request
 
-import httpx
+from steuerreport_v2.domain.external_http import managed_client, managed_urlopen
 
 from steuerreport_v2.contracts.jupiter import JupiterTokenMetadataCacheItem
 from steuerreport_v2.contracts.portfolio import (
@@ -1773,7 +1773,7 @@ class PortfolioService:
         if not self.V1_CONNECTOR_BASE_URL:
             return {"rows": [], "warnings": [{"code": "v1_bridge_disabled", "message": "V1 bridge URL is empty."}]}
         try:
-            with httpx.Client(timeout=120) as client:
+            with managed_client(timeout=120) as client:
                 response = client.post(
                     f"{self.V1_CONNECTOR_BASE_URL.rstrip('/')}/api/v1/connectors/solana/wallet-preview",
                     json={
@@ -1857,7 +1857,7 @@ class PortfolioService:
 
     def _solana_rpc(self, method: str, params: list[object], timeout_seconds: int) -> object:
         errors: list[str] = []
-        with httpx.Client(timeout=timeout_seconds) as client:
+        with managed_client(timeout=timeout_seconds) as client:
             for rpc_url in self._solana_rpc_urls():
                 try:
                     response = client.post(
@@ -2022,7 +2022,7 @@ class PortfolioService:
         if not self.V1_CONNECTOR_BASE_URL:
             return {}
         try:
-            with httpx.Client(timeout=30) as client:
+            with managed_client(timeout=30) as client:
                 response = client.post(
                     f"{self.V1_CONNECTOR_BASE_URL.rstrip('/')}/api/v1/connectors/solana/balance-snapshot",
                     json={
@@ -2140,7 +2140,7 @@ class PortfolioService:
         if not self.V1_CONNECTOR_BASE_URL:
             return []
         try:
-            with httpx.Client(timeout=8) as client:
+            with managed_client(timeout=8) as client:
                 response = client.post(
                     f"{self.V1_CONNECTOR_BASE_URL.rstrip('/')}/api/v1/connectors/cex/balances-preview",
                     json={"connector_id": connector_id, "timeout_seconds": 20},
@@ -2225,7 +2225,7 @@ class PortfolioService:
             headers={"token": api_key, "accept": "application/json"},
         )
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with managed_urlopen(request, timeout=30) as response:
                 payload = json.loads(response.read().decode("utf-8", errors="replace"))
         except Exception:
             return {}
@@ -2279,7 +2279,7 @@ class PortfolioService:
 
     def _current_usd_eur_rate(self) -> Decimal:
         try:
-            with urllib.request.urlopen(
+            with managed_urlopen(
                 "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml",
                 timeout=10,
             ) as response:

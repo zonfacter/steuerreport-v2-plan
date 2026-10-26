@@ -14,6 +14,7 @@ from typing import Any
 import zipfile
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.bitget_strategy_basis_decisions import (
     BitgetStrategyBasisDecisionReport,
@@ -226,7 +227,7 @@ class BitgetStrategyBasisReconstructionService:
         points: list[PricePointCreate] = []
         evidence_payloads: list[dict[str, object]] = []
         timeout = max(3, min(request.timeout_seconds, 60))
-        with httpx.Client(
+        with managed_client(
             timeout=timeout,
             headers={"user-agent": "steuerreport-v2/0.1"},
         ) as client:

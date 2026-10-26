@@ -12,6 +12,7 @@ import time
 import urllib.parse
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client, request_signer
 
 from steuerreport_v2.contracts.binance_earn_import import BinanceEarnHarvestImportPreview
 from steuerreport_v2.contracts.bitget import (
@@ -309,7 +310,11 @@ class BitgetWalletHistoryService:
             "locale": "en-US",
             "Content-Type": "application/json",
         }
-        with httpx.Client(timeout=30) as client:
+        def sign(request: httpx.Request) -> None:
+            fresh_time = str(int(time.time() * 1000))
+            fresh_signature = base64.b64encode(hmac.new(api_secret.encode("utf-8"), f"{fresh_time}GET{request_path}".encode("utf-8"), hashlib.sha256).digest()).decode("utf-8")
+            request.headers.update({"ACCESS-TIMESTAMP": fresh_time, "ACCESS-SIGN": fresh_signature})
+        with request_signer(sign), managed_client(timeout=30) as client:
             response = client.get(f"{self.BASE_URL}{request_path}", headers=headers)
             if response.status_code >= 400:
                 raise RuntimeError(self._bitget_error_message(response))
@@ -318,7 +323,7 @@ class BitgetWalletHistoryService:
             raise RuntimeError("bitget_unexpected_payload")
         code = str(payload.get("code") or "")
         if code and code != "00000":
-            raise RuntimeError(f"bitget_api_error:{code}:{payload.get('msg') or payload.get('message')}")
+            raise RuntimeError("bitget_api_error:" + (code if code.isdigit() else "unclassified"))
         return payload
 
     def _credentials(self) -> tuple[str, str, str]:
@@ -402,7 +407,6 @@ class BitgetWalletHistoryService:
             payload = {}
         if isinstance(payload, dict):
             code = payload.get("code")
-            message = payload.get("msg") or payload.get("message")
-            if code is not None or message is not None:
-                return f"bitget_http_{response.status_code}: code={code} msg={message}"
+            if str(code).lstrip("-").isdigit():
+                return f"bitget_http_{response.status_code}: code={code}"
         return f"bitget_http_{response.status_code}"

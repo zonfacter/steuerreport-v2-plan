@@ -10,6 +10,8 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
+from steuerreport_v2.domain.request_limits import RequestLimitError, RequestDeadlineExceeded
 from pydantic import ValidationError
 
 from steuerreport_v2.contracts.admin import AdminSettingWrite
@@ -194,7 +196,7 @@ class AiProviderService:
         if config.provider == "openrouter":
             headers["X-OpenRouter-Title"] = "Steuerreport"
         try:
-            with httpx.Client(timeout=httpx.Timeout(config.timeout_seconds, connect=10), follow_redirects=False, trust_env=False) as client:
+            with managed_client(provider="ai_" + config.provider, timeout=httpx.Timeout(config.timeout_seconds, connect=10), follow_redirects=False, trust_env=False) as client:
                 with client.stream("GET" if body is None else "POST", config.base_url + path, headers=headers, json=body) as response:
                     if response.status_code >= 300:
                         code = {401: "ai_auth_failed", 403: "ai_access_denied", 402: "ai_credit_required", 404: "ai_endpoint_or_model_missing", 429: "ai_rate_limited"}.get(response.status_code, "ai_provider_http_error")
@@ -210,6 +212,10 @@ class AiProviderService:
             if not isinstance(data, dict) or data.get("error"):
                 raise AiProviderError("ai_provider_response_error")
             return data
+        except RequestDeadlineExceeded:
+            raise AiProviderError("ai_timeout") from None
+        except RequestLimitError:
+            raise AiProviderError("ai_request_budget_unavailable") from None
         except httpx.TimeoutException:
             raise AiProviderError("ai_timeout") from None
         except httpx.HTTPError:

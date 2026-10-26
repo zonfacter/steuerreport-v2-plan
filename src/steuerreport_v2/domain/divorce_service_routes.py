@@ -14,6 +14,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import httpx
+from steuerreport_v2.domain.external_http import managed_client
 
 from steuerreport_v2.contracts.divorce_service_routes import (
     DivorceServiceRouteAcceptedDecision,
@@ -91,7 +92,7 @@ class DivorceServiceRouteEvidenceService:
             errors.append("wallet_not_owned_in_source_registry")
 
         try:
-            with httpx.Client(
+            with managed_client(
                 timeout=request.timeout_seconds,
                 transport=self.transport,
                 headers={"user-agent": "steuerreport-v2/0.1"},
