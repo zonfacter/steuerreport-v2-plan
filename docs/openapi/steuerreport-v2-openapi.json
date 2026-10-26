@@ -1,6 +1,376 @@
 {
   "components": {
     "schemas": {
+      "ActivityDetail": {
+        "properties": {
+          "corrections": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Corrections",
+            "type": "array"
+          },
+          "decisions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "details_limit": {
+            "default": 200,
+            "title": "Details Limit",
+            "type": "integer"
+          },
+          "event": {
+            "$ref": "#/components/schemas/CanonicalEvent"
+          },
+          "ledger": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Ledger",
+            "type": "array"
+          },
+          "ledger_count": {
+            "default": 0,
+            "title": "Ledger Count",
+            "type": "integer"
+          },
+          "raw": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw"
+          },
+          "tax_lines": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tax Lines",
+            "type": "array"
+          },
+          "tax_lines_count": {
+            "default": 0,
+            "title": "Tax Lines Count",
+            "type": "integer"
+          },
+          "transfer_relationship": {
+            "default": "Keine automatische Zuordnung zu einem Transferpartner; Kandidaten separat pruefen.",
+            "title": "Transfer Relationship",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event"
+        ],
+        "title": "ActivityDetail",
+        "type": "object"
+      },
+      "ActivityExport": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "$ref": "#/components/schemas/ActivityQuery"
+          },
+          "scope": {
+            "enum": [
+              "filtered",
+              "selected",
+              "all"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "selected_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Selected Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "title": "ActivityExport",
+        "type": "object"
+      },
+      "ActivityPage": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "hint_scope": {
+            "default": "Unbekannter Ereignistyp, fehlender Rohbeleg oder nicht zugeordneter FIFO-Abgang; keine vollstaendige Review-Freigabe.",
+            "title": "Hint Scope",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "events",
+              "ledger"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "timezone": {
+            "default": "Europe/Berlin",
+            "title": "Timezone",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "rows",
+          "total",
+          "page",
+          "page_size",
+          "pages",
+          "mode"
+        ],
+        "title": "ActivityPage",
+        "type": "object"
+      },
+      "ActivityQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "trade",
+                  "transfer",
+                  "fee",
+                  "reward",
+                  "income",
+                  "staking",
+                  "mining",
+                  "derivative",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "hint": {
+            "default": "all",
+            "enum": [
+              "all",
+              "present",
+              "none"
+            ],
+            "title": "Hint",
+            "type": "string"
+          },
+          "mode": {
+            "default": "events",
+            "enum": [
+              "events",
+              "ledger"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "page": {
+            "default": 1,
+            "maximum": 1000000.0,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 25,
+            "enum": [
+              10,
+              25,
+              50,
+              100
+            ],
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "search": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Search",
+            "type": "string"
+          },
+          "sort": {
+            "default": "newest",
+            "enum": [
+              "newest",
+              "oldest"
+            ],
+            "title": "Sort",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "pattern": "^s_[a-f0-9]{20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "maximum": 2100.0,
+                "minimum": 2000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "title": "ActivityQuery",
+        "type": "object"
+      },
+      "ActivityRow": {
+        "properties": {
+          "corrected": {
+            "title": "Corrected",
+            "type": "boolean"
+          },
+          "event": {
+            "$ref": "#/components/schemas/CanonicalEvent"
+          },
+          "has_hint": {
+            "title": "Has Hint",
+            "type": "boolean"
+          },
+          "ledger_account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Account"
+          },
+          "ledger_asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Asset"
+          },
+          "ledger_quantity": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Quantity"
+          },
+          "row_id": {
+            "title": "Row Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "row_id",
+          "event",
+          "has_hint",
+          "corrected"
+        ],
+        "title": "ActivityRow",
+        "type": "object"
+      },
       "AdminSetting": {
         "properties": {
           "key": {
@@ -1363,6 +1733,94 @@
           "message"
         ],
         "title": "ApiMessage",
+        "type": "object"
+      },
+      "ApiResponse_ActivityDetail_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActivityDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ActivityDetail]",
+        "type": "object"
+      },
+      "ApiResponse_ActivityPage_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActivityPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ActivityPage]",
         "type": "object"
       },
       "ApiResponse_AdminSettingDeleteResult_": {
@@ -13287,6 +13745,182 @@
           }
         },
         "title": "ApiResponse[WalletOwnershipVerificationResult]",
+        "type": "object"
+      },
+      "ApiResponse_WorkspaceReviewPage_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceReviewPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[WorkspaceReviewPage]",
+        "type": "object"
+      },
+      "ApiResponse_WorkspaceSourceDetail_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceSourceDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[WorkspaceSourceDetail]",
+        "type": "object"
+      },
+      "ApiResponse_WorkspaceSources_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceSources"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[WorkspaceSources]",
+        "type": "object"
+      },
+      "ApiResponse_WorkspaceStatus_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[WorkspaceStatus]",
         "type": "object"
       },
       "ApiResponse_dict_": {
@@ -77088,6 +77722,508 @@
         ],
         "title": "WalletOwnershipVerificationResult",
         "type": "object"
+      },
+      "WorkspaceReviewItem": {
+        "properties": {
+          "event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Event Ids",
+            "type": "array"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "task": {
+            "$ref": "#/components/schemas/ReviewTask"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "WorkspaceReviewItem",
+        "type": "object"
+      },
+      "WorkspaceReviewPage": {
+        "properties": {
+          "blocking_total": {
+            "title": "Blocking Total",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceReviewItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unfiltered_total": {
+            "title": "Unfiltered Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "items",
+          "total",
+          "page",
+          "pages",
+          "page_size",
+          "blocking_total",
+          "unfiltered_total"
+        ],
+        "title": "WorkspaceReviewPage",
+        "type": "object"
+      },
+      "WorkspaceReviewQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fifo",
+                  "price",
+                  "import",
+                  "wallet",
+                  "reconciliation",
+                  "evidence",
+                  "tax"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "page": {
+            "default": 1,
+            "maximum": 1000000.0,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 25,
+            "enum": [
+              10,
+              25,
+              50,
+              100
+            ],
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "search": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Search",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "maximum": 2100.0,
+                "minimum": 2000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "title": "WorkspaceReviewQuery",
+        "type": "object"
+      },
+      "WorkspaceSource": {
+        "properties": {
+          "can_sync": {
+            "default": false,
+            "title": "Can Sync",
+            "type": "boolean"
+          },
+          "connection_status": {
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "connector_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connector Id"
+          },
+          "events_count": {
+            "default": 0,
+            "title": "Events Count",
+            "type": "integer"
+          },
+          "freshness": {
+            "default": "missing",
+            "title": "Freshness",
+            "type": "string"
+          },
+          "imports_count": {
+            "default": 0,
+            "title": "Imports Count",
+            "type": "integer"
+          },
+          "issues_count": {
+            "default": 0,
+            "title": "Issues Count",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_attempt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceConnectorAttempt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "ledger_value_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Value Eur"
+          },
+          "legacy_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Source Id"
+          },
+          "ownership_status": {
+            "default": "not_assessed",
+            "title": "Ownership Status",
+            "type": "string"
+          },
+          "reconciliation_status": {
+            "default": "not_assessed",
+            "title": "Reconciliation Status",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "value_basis": {
+            "default": "unavailable",
+            "title": "Value Basis",
+            "type": "string"
+          },
+          "value_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Eur"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "ref",
+          "label",
+          "source_type",
+          "connection_status"
+        ],
+        "title": "WorkspaceSource",
+        "type": "object"
+      },
+      "WorkspaceSourceDetail": {
+        "properties": {
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "source": {
+            "$ref": "#/components/schemas/WorkspaceSource"
+          },
+          "valuation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "WorkspaceSourceDetail",
+        "type": "object"
+      },
+      "WorkspaceSources": {
+        "properties": {
+          "events_count": {
+            "title": "Events Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generated_at",
+          "sources",
+          "events_count",
+          "methodology"
+        ],
+        "title": "WorkspaceSources",
+        "type": "object"
+      },
+      "WorkspaceStatus": {
+        "properties": {
+          "balance_entries": {
+            "title": "Balance Entries",
+            "type": "integer"
+          },
+          "calculation_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation At"
+          },
+          "calculation_stale": {
+            "default": false,
+            "title": "Calculation Stale",
+            "type": "boolean"
+          },
+          "dimensions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Dimensions",
+            "type": "object"
+          },
+          "events_count": {
+            "title": "Events Count",
+            "type": "integer"
+          },
+          "final_available": {
+            "title": "Final Available",
+            "type": "boolean"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "imports_count": {
+            "title": "Imports Count",
+            "type": "integer"
+          },
+          "last_import_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Import At"
+          },
+          "next_action": {
+            "title": "Next Action",
+            "type": "string"
+          },
+          "next_section": {
+            "enum": [
+              "sources",
+              "import",
+              "dashboard",
+              "review",
+              "tax",
+              "export"
+            ],
+            "title": "Next Section",
+            "type": "string"
+          },
+          "owned_sources_count": {
+            "title": "Owned Sources Count",
+            "type": "integer"
+          },
+          "preview_available": {
+            "title": "Preview Available",
+            "type": "boolean"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/ProductReadinessReport"
+          },
+          "review": {
+            "$ref": "#/components/schemas/ReviewGate"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          },
+          "year_events_count": {
+            "default": 0,
+            "title": "Year Events Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "year",
+          "events_count",
+          "imports_count",
+          "balance_entries",
+          "owned_sources_count",
+          "review",
+          "readiness",
+          "preview_available",
+          "final_available",
+          "summary",
+          "next_section",
+          "next_action",
+          "dimensions"
+        ],
+        "title": "WorkspaceStatus",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -77113,6 +78249,165 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/activity/assets": {
+      "get": {
+        "description": "Activity assets. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "activity_assets_api_v1_activity_assets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_str__object__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Activity Assets",
+        "tags": [
+          "Transactions"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/activity/events/{event_id}": {
+      "get": {
+        "description": "Activity detail. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "activity_detail_api_v1_activity_events__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ActivityDetail_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activity Detail",
+        "tags": [
+          "Transactions"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/activity/export.csv": {
+      "post": {
+        "description": "Lesender CSV-Export ohne Artefakt-/Job-Persistenz; Umfang ist ausdruecklich erforderlich.",
+        "operationId": "activity_export_api_v1_activity_export_csv_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivityExport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activity Export",
+        "tags": [
+          "Transactions"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/activity/query": {
+      "post": {
+        "description": "Lesende, serverseitig paginierte Abfrage. Suchtext bleibt im Body, nicht in URLs.",
+        "operationId": "activity_query_api_v1_activity_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivityQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ActivityPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activity Query",
+        "tags": [
+          "Transactions"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/admin/cex-credentials": {
       "post": {
         "description": "Save cex credentials. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -83039,7 +84334,7 @@
     },
     "/api/v1/export/tax-years/{year}/evidence-package.zip": {
       "get": {
-        "description": "Download tax year evidence package zip. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "description": "Download tax year evidence package zip. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
         "operationId": "download_tax_year_evidence_package_zip_api_v1_export_tax_years__year__evidence_package_zip_get",
         "parameters": [
           {
@@ -83076,7 +84371,7 @@
         "tags": [
           "Reports"
         ],
-        "x-data-effect": "read-only",
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }
@@ -96753,6 +98048,217 @@
         "summary": "Transfer Candidates",
         "tags": [
           "Transactions"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/review/query": {
+      "post": {
+        "description": "Workspace review. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "workspace_review_api_v1_workspace_review_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceReviewQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_WorkspaceReviewPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workspace Review",
+        "tags": [
+          "Cockpit"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/sources": {
+      "get": {
+        "description": "Workspace sources. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "workspace_sources_api_v1_workspace_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_WorkspaceSources_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Workspace Sources",
+        "tags": [
+          "Cockpit"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/sources/{ref}": {
+      "get": {
+        "description": "Workspace source. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "workspace_source_api_v1_workspace_sources__ref__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_WorkspaceSourceDetail_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workspace Source",
+        "tags": [
+          "Cockpit"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/sources/{ref}/sync": {
+      "post": {
+        "description": "Workspace source sync. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "workspace_source_sync_api_v1_workspace_sources__ref__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortfolioReconciliationRefreshResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workspace Source Sync",
+        "tags": [
+          "Cockpit"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/status": {
+      "get": {
+        "description": "Workspace status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "workspace_status_api_v1_workspace_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "default": 2025,
+              "maximum": 2100,
+              "minimum": 2000,
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_WorkspaceStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workspace Status",
+        "tags": [
+          "Cockpit"
         ],
         "x-data-effect": "read-only",
         "x-long-running": false,

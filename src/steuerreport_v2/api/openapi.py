@@ -26,12 +26,12 @@ OPENAPI_TAGS = [
 
 TAG_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Administration", ("/api/v1/admin",)),
-    ("Cockpit", ("/api/v1/cockpit", "/api/v1/product")),
+    ("Cockpit", ("/api/v1/cockpit", "/api/v1/product", "/api/v1/workspace")),
     ("Sources", ("/api/v1/sources", "/api/v1/connectors")),
     ("Import", ("/api/v1/import", "/api/v1/raw")),
     ("Portfolio", ("/api/v1/portfolio",)),
     ("Prices", ("/api/v1/prices",)),
-    ("Transactions", ("/api/v1/events", "/api/v1/ledger", "/api/v1/flows", "/api/v1/transfers")),
+    ("Transactions", ("/api/v1/events", "/api/v1/ledger", "/api/v1/flows", "/api/v1/transfers", "/api/v1/activity")),
     ("Review", ("/api/v1/review",)),
     ("Tax", ("/api/v1/tax", "/api/v1/tax-years", "/api/v1/tax-methodology", "/api/v1/tax-filing-snapshots", "/api/v1/derivatives")),
     ("Reports", ("/api/v1/reports", "/api/v1/export")),
@@ -138,6 +138,10 @@ def tag_for_path(path: str) -> str:
 
 def data_effect(methods: Iterable[str], path: str) -> str:
     method_set = set(methods)
+    if path.startswith("/api/v1/export/tax-years/") and path.endswith("/evidence-package.zip"):
+        return "write"  # Existing implementation persists a ZIP cache, even though it uses GET.
+    if method_set == {"POST"} and path in {"/api/v1/activity/query", "/api/v1/activity/export.csv", "/api/v1/workspace/review/query"}:
+        return "read-only"
     if "DELETE" in method_set:
         return "delete"
     if method_set.intersection({"POST", "PUT", "PATCH"}):

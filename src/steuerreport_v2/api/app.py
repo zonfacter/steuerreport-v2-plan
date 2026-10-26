@@ -16,7 +16,7 @@ import io
 import json
 import os
 from pathlib import Path
-from threading import RLock
+from threading import Lock, RLock
 from time import monotonic
 from uuid import uuid4
 from urllib.parse import urlsplit, urlencode
@@ -36,6 +36,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.routing import APIRoute
 
 from steuerreport_v2 import __version__
+from steuerreport_v2.contracts.workspace import ActivityQuery, ActivityPage, ActivityDetail, ActivityExport, WorkspaceSources, WorkspaceSourceDetail, WorkspaceStatus
+from steuerreport_v2.contracts.workspace import WorkspaceReviewPage, WorkspaceReviewQuery
+from steuerreport_v2.domain.workspace import ActivityService, WorkspaceService
 from steuerreport_v2.api.openapi import OPENAPI_TAGS, configure_openapi_routes
 from steuerreport_v2.contracts.api_meta import ApiCapabilities
 from steuerreport_v2.contracts.admin import (
@@ -723,6 +726,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             return Response(status_code=403)
         return await call_next(request)
     db = store or DuckDbStore()
+    workspace_operation_lock = Lock()
     installation = InstallationSettingsService(db)
 
     @app.get("/api/v1/admin/installation")
@@ -1606,6 +1610,88 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     ) -> ApiResponse[list[CanonicalEvent]]:
         return ApiResponse(data=db.list_canonical_events(batch_id=batch_id))
 
+    @app.get("/api/v1/workspace/sources")
+    def workspace_sources() -> ApiResponse[WorkspaceSources]:
+        return ApiResponse(data=WorkspaceService(db).sources())
+
+    @app.get("/api/v1/workspace/sources/{ref}")
+    def workspace_source(ref: str) -> ApiResponse[WorkspaceSourceDetail]:
+        try:
+            return ApiResponse(data=WorkspaceService(db).source(ref))
+        except LookupError:
+            raise HTTPException(status_code=404, detail="workspace_source_not_found") from None
+
+    @app.get("/api/v1/workspace/status")
+    def workspace_status(year: int = Query(default=2025, ge=2000, le=2100)) -> ApiResponse[WorkspaceStatus]:
+        return ApiResponse(data=WorkspaceService(db).status(year))
+
+    @app.post("/api/v1/workspace/review/query")
+    def workspace_review(payload: WorkspaceReviewQuery) -> ApiResponse[WorkspaceReviewPage]:
+        return ApiResponse(data=WorkspaceService(db).review_page(payload))
+
+    @app.post("/api/v1/activity/query")
+    def activity_query(payload: ActivityQuery) -> ApiResponse[ActivityPage]:
+        """Lesende, serverseitig paginierte Abfrage. Suchtext bleibt im Body, nicht in URLs."""
+        try:
+            return ApiResponse(data=ActivityService(db).query(payload))
+        except LookupError:
+            raise HTTPException(status_code=404, detail="workspace_source_not_found") from None
+
+    @app.get("/api/v1/activity/assets")
+    def activity_assets() -> ApiResponse[dict[str, object]]:
+        with db.connect() as con:
+            rows = con.execute("select distinct asset from (select asset from canonical_events union select quote_asset from canonical_events union select fee_asset from canonical_events) where asset is not null order by asset limit 5001").fetchall()
+        return ApiResponse(data={"assets": [row[0] for row in rows[:5000]], "truncated": len(rows) > 5000})
+
+    @app.get("/api/v1/activity/events/{event_id}")
+    def activity_detail(event_id: str) -> ApiResponse[ActivityDetail]:
+        try:
+            return ApiResponse(data=ActivityService(db).detail(event_id))
+        except LookupError:
+            raise HTTPException(status_code=404, detail="activity_event_not_found") from None
+
+    @app.post("/api/v1/activity/export.csv")
+    def activity_export(payload: ActivityExport) -> Response:
+        """Lesender CSV-Export ohne Artefakt-/Job-Persistenz; Umfang ist ausdruecklich erforderlich."""
+        try:
+            rows = ActivityService(db).export(payload)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="workspace_source_not_found") from None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="activity_export_selection_empty") from None
+        except OverflowError:
+            raise HTTPException(status_code=413, detail="activity_export_too_large") from None
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["row_id", "event_id", "event_time_utc", "source", "type", "asset", "quantity", "quote_asset", "quote_quantity", "fee_asset", "fee_quantity", "ledger_asset", "ledger_quantity", "has_hint", "corrected"])
+        def cell(value):
+            text = "" if value is None else str(value)
+            return "'" + text if isinstance(value, str) and text.startswith(("=", "+", "-", "@")) else text
+        for row in rows:
+            event = row.event
+            writer.writerow([cell(value) for value in [row.row_id, event.event_id, event.event_time.isoformat(), event.source, event.event_type, event.asset,
+                event.quantity, event.quote_asset, event.quote_quantity, event.fee_asset, event.fee_quantity, row.ledger_asset, row.ledger_quantity, row.has_hint, row.corrected]])
+        return Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8", headers={
+            "Content-Disposition": f'attachment; filename="activity-{payload.scope}.csv"',
+            "X-Export-Row-Count": str(len(rows)), "X-Export-Scope": payload.scope, "Cache-Control": "no-store"})
+
+    @app.post("/api/v1/workspace/sources/{ref}/sync")
+    def workspace_source_sync(ref: str) -> ApiResponse[PortfolioReconciliationRefreshResult]:
+        try:
+            source = WorkspaceService(db).scope(ref).item
+        except LookupError:
+            raise HTTPException(status_code=404, detail="workspace_source_not_found") from None
+        if not source.can_sync:
+            raise HTTPException(status_code=409, detail="source_sync_not_configured")
+        if not workspace_operation_lock.acquire(blocking=False):
+            raise HTTPException(status_code=409, detail="workspace_operation_running")
+        try:
+            result = PortfolioService(db).refresh_reconciliation_snapshots(connectors=[source.connector_id])
+            clear_response_cache()
+            return ApiResponse(data=result)
+        finally:
+            workspace_operation_lock.release()
+
     @app.get("/api/v1/import/batches/{batch_id}/trace.json")
     def download_import_batch_trace(batch_id: str) -> Response:
         batch = db.get_import_batch(batch_id)
@@ -2316,7 +2402,12 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def portfolio_reconciliation_refresh() -> ApiResponse[
         PortfolioReconciliationRefreshResult
     ]:
-        result = PortfolioService(db).refresh_reconciliation_snapshots()
+        if not workspace_operation_lock.acquire(blocking=False):
+            raise HTTPException(status_code=409, detail="workspace_operation_running")
+        try:
+            result = PortfolioService(db).refresh_reconciliation_snapshots()
+        finally:
+            workspace_operation_lock.release()
         clear_response_cache()
         warnings = [
             ApiMessage(
@@ -6247,7 +6338,14 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
 
     @app.post("/api/v1/pipeline/rebuild")
     def rebuild_pipeline() -> ApiResponse[PipelineResult]:
-        return ApiResponse(data=PipelineService(db).rebuild_all())
+        if not workspace_operation_lock.acquire(blocking=False):
+            raise HTTPException(status_code=409, detail="workspace_operation_running")
+        try:
+            result = PipelineService(db).rebuild_all()
+            clear_response_cache()
+            return ApiResponse(data=result)
+        finally:
+            workspace_operation_lock.release()
 
     @app.post("/api/v1/demo/seed")
     def seed_demo() -> ApiResponse[DemoSeedResult]:
@@ -9499,6 +9597,8 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     async def safe_ai_validation(request: Request, exc: RequestValidationError):
         if request.url.path.startswith("/api/v1/ai/"):
             return JSONResponse(status_code=422, content={"detail": "ai_request_invalid"})
+        if request.url.path.startswith(("/api/v1/activity/", "/api/v1/workspace/")):
+            return JSONResponse(status_code=422, content={"detail": "workspace_request_invalid"})
         return await request_validation_exception_handler(request, exc)
 
     @app.exception_handler(AiProviderError)

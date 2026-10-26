@@ -342,7 +342,7 @@ class ReviewService:
             suggestions.extend(self._token_risk_documentation_suggestions())
         return suggestions
 
-    def tasks(self, limit: int = 80, include_reconciliation: bool = False) -> ReviewTaskSummary:
+    def tasks(self, limit: int | None = 80, include_reconciliation: bool = False) -> ReviewTaskSummary:
         from steuerreport_v2.domain.portfolio import PortfolioService
 
         coverage = PriceCoverageService(self.store).report()
@@ -429,7 +429,8 @@ class ReviewService:
         tasks = self._deduplicate_tasks(tasks)
         self._enrich_tasks_with_token_metadata(tasks)
         tasks.sort(key=self._task_sort_key)
-        tasks = tasks[: max(1, limit)]
+        if limit is not None:
+            tasks = tasks[: max(1, limit)]
 
         return ReviewTaskSummary(
             generated_at=datetime.now(timezone.utc),
