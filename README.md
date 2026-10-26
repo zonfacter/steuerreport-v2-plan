@@ -1,9 +1,9 @@
 # Steuerreport V2
 
-Version 0.2.0rc15. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc16. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc15](docs/RELEASE_0.2.0rc15.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc16](docs/RELEASE_0.2.0rc16.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
@@ -20,7 +20,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc15
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc16
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -44,7 +44,17 @@ Ist der Port belegt: `STEUERREPORT_PORT=18010 docker
 compose up -d --build`. Das Image enthaelt keine Betreiberkonten,
 Originalimporte oder Zugangsdaten. Neue Installationen starten leer.
 
-### Geschuetzte Wallet-Einrichtung
+### Solana-Adresse einrichten
+
+Unter **Quellen & Wallets > Quelle hinzufuegen > Solana Wallet** die Eingabeart
+**Oeffentliche Adresse speichern** verwenden. Optional Name und oeffentliche
+Adresse eingeben, Zusammenfassung pruefen und **Adresse speichern** waehlen.
+Keine Signatur, kein Setup-Token und kein Private Key erforderlich. Mehrere
+Adressen bleiben getrennt; erneutes Speichern erzeugt keine doppelte Quelle.
+Die Adresse liegt nur im privaten Datenvolume. Historienimport, Bestandsabruf,
+Eigentumsnachweis und steuerliche Aktivierung sind davon getrennt.
+
+### Optionaler Eigentumsnachweis
 
 Unter **Einrichtung > Wallet-Eigentumsnachweis** stehen Status und lokale
 Bootstrap-Befehle. Neue Docker-Installationen bereiten ein privates zufaelliges
@@ -58,7 +68,7 @@ docker compose -f compose.ghcr.yml exec steuerreport python -m steuerreport_v2.c
 
 Die zweite Aktion zeigt das Passwort nur in einer privaten interaktiven Konsole.
 Es wird nie von der Web-API zurueckgegeben. Unter **Quellen & Wallets > Quelle
-hinzufuegen > Solana-Wallet** in das maskierte Feld **Connector-Setup-Token**
+hinzufuegen > Solana-Wallet > Optional: Eigentum per Signatur nachweisen** in das maskierte Feld **Connector-Setup-Token**
 einfuegen. Wallet-Nachricht signieren und den vorhandenen Signaturnachweis pruefen;
 keine Seed-Phrase, Wallet-Private-Keys oder Boersen-Handelsrechte anfordern.
 Details, native/manuelle Installation und Fehlerhilfe: [Inbetriebnahme](docs/INBETRIEBNAHME.md).

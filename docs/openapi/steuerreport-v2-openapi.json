@@ -7962,6 +7962,50 @@
         "title": "ApiResponse[ProductReadinessReport]",
         "type": "object"
       },
+      "ApiResponse_PublicWalletAddressResult_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicWalletAddressResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[PublicWalletAddressResult]",
+        "type": "object"
+      },
       "ApiResponse_ReportCenterStatus_": {
         "properties": {
           "data": {
@@ -26414,6 +26458,7 @@
         "properties": {
           "auth_method": {
             "enum": [
+              "public_address",
               "wallet_signature",
               "api_key",
               "oauth_partner",
@@ -26460,6 +26505,7 @@
           "connection_status": {
             "default": "not_configured",
             "enum": [
+              "address_saved",
               "configured",
               "not_configured",
               "ownership_verified_pending_registry",
@@ -26639,6 +26685,7 @@
           },
           "status": {
             "enum": [
+              "address_saved",
               "configured",
               "not_configured",
               "ownership_verified_pending_registry",
@@ -46132,6 +46179,56 @@
           "api_key"
         ],
         "title": "ProviderSecretWrite",
+        "type": "object"
+      },
+      "PublicWalletAddressRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Label"
+          },
+          "wallet_address": {
+            "maxLength": 44,
+            "minLength": 32,
+            "title": "Wallet Address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wallet_address"
+        ],
+        "title": "PublicWalletAddressRequest",
+        "type": "object"
+      },
+      "PublicWalletAddressResult": {
+        "properties": {
+          "connection": {
+            "$ref": "#/components/schemas/ConnectorConnection"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection",
+          "created",
+          "message"
+        ],
+        "title": "PublicWalletAddressResult",
         "type": "object"
       },
       "RawObject": {
@@ -79635,6 +79732,17 @@
             ],
             "title": "Value Eur"
           },
+          "wallet_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wallet Address"
+          },
           "warning": {
             "anyOf": [
               {
@@ -79869,7 +79977,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc15"
+    "version": "0.2.0rc16"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -100458,6 +100566,51 @@
           "Cockpit"
         ],
         "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/wallets": {
+      "post": {
+        "description": "Lokale Adresskonfiguration, kein Eigentumsnachweis oder externer Abruf.",
+        "operationId": "save_public_wallet_address_api_v1_workspace_wallets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicWalletAddressRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PublicWalletAddressResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Public Wallet Address",
+        "tags": [
+          "Cockpit"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

@@ -37,7 +37,7 @@ export function ConnectorSetupSettings() {
         }}><Copy size={16} /></button></div>
       </div>)}
       <p>Neue Docker-Installationen bereiten das Passwort automatisch vor. Bei bestehenden Installationen erzeugt <code>init</code> es nur auf ausdrücklichen Aufruf; vorhandene Schlüssel und Passwörter werden nicht ersetzt. Danach den Status neu prüfen, ein Neustart ist nicht erforderlich.</p>
-      <p>Unter <strong>Quellen &amp; Wallets → Quelle hinzufügen → Solana-Wallet</strong> das Passwort in <strong>Connector-Setup-Token</strong> einfügen. Es bleibt nur im aktuellen Formular, nicht in URL oder Browserspeicher. Danach die angezeigte Nachricht mit der eigenen Wallet signieren. Die steuerliche Aktivierung ist davon getrennt.</p>
+      <p>Eine öffentliche Solana-Adresse lässt sich unter <strong>Quelle hinzufügen → Öffentliche Adresse speichern</strong> ohne Passwort und Signatur hinterlegen. Nur für die Eingabeart <strong>Optional: Eigentum per Signatur nachweisen</strong> wird das Passwort in <strong>Connector-Setup-Token</strong> benötigt. Es bleibt nur im aktuellen Formular, nicht in URL oder Browserspeicher. Die steuerliche Aktivierung ist davon getrennt.</p>
       <p className="adminInlineHelp">Die Web-API liefert das Einrichtungspasswort niemals aus. <code>show-token</code> funktioniert nur in einer interaktiven Konsole. Keine Seed-Phrase, keinen privaten Wallet-Schlüssel und keine Börsen-Handels- oder Auszahlungsrechte angeben.</p>
     </>}
     {notice && <p role="status">{notice}</p>}

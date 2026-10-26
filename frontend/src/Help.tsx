@@ -17,7 +17,7 @@ export const HELP_TOPICS = [
     "Pruefe offene Hinweise und danach das jeweilige Steuerjahr. Erstelle erst anschliessend die Berichte."
   ], caution: "Die Ablaufleiste dient der Orientierung. Sie bestaetigt weder Vollstaendigkeit noch eine steuerliche Freigabe." },
   { id: "admin", title: "Konten, Wallets und Zugangsdaten einrichten", keywords: "einrichtung api key secret vault neustart docker connector setup token schreibfreigabe passwort", steps: [
-    "Trage ausschliesslich eigene Konten und Wallets unter Einrichtung ein. Verwende fuer Boersen nach Moeglichkeit reine Lesezugriffe ohne Handels- oder Auszahlungsrechte.",
+    "Für eine Solana-Adresse unter Quellen & Wallets → Quelle hinzufügen die Eingabeart Öffentliche Adresse speichern verwenden. Optional Name und öffentliche Adresse eingeben und bestätigen. Keine Signatur und kein Setup-Passwort nötig; kein automatischer Abruf oder Eigentumsnachweis.",
     "Speichere API-Keys im vorgesehenen Zugangsdatenbereich, nicht in Kontonamen, Dienstadressen oder JSON-Belegtexten.",
     "Für Wallet-Nachweise den Bereich Wallet-Eigentumsnachweis prüfen. Neue Docker-Installationen bereiten das Einrichtungspasswort vor; bestehende Installationen brauchen den ausdrücklichen lokalen init-Befehl. show-token zeigt es nur in der privaten interaktiven Serverkonsole, niemals über die Web-API. Danach in Connector-Setup-Token einfügen und die Wallet-Nachricht signieren.",
     "Beachte die Rueckmeldung nach dem Speichern: Konto- und Dateizuordnungen koennen einen API- oder Container-Neustart erfordern. Bestehende Auswertungen werden dadurch nicht automatisch neu berechnet."

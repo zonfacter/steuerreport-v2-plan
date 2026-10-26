@@ -19,7 +19,35 @@ Kein `docker compose down -v` verwenden. Die Anwendung besitzt weiterhin keine
 globale Benutzeranmeldung; nur im vertrauenswuerdigen LAN/VPN oder hinter TLS
 und einem geeigneten Authentifizierungszugang betreiben.
 
-## Connector-Einrichtungspasswort
+## Oeffentliche Solana-Adresse hinzufuegen
+
+1. **Quellen & Wallets → Quelle hinzufuegen → Solana Wallet** oeffnen.
+2. Die vorausgewaehlte Eingabeart **Oeffentliche Adresse speichern** beibehalten.
+3. Optional einen Namen und die oeffentliche Solana-Adresse eingeben.
+4. **Weiter**, Zusammenfassung pruefen und **Adresse speichern** waehlen.
+
+Keine Signatur, kein Einrichtungspasswort, kein API-Key und keine Wallet-Verbindung
+sind fuer diese Adressspeicherung erforderlich. Das funktioniert auch ueber den
+normalen lokalen HTTP-Zugriff. Adresse und Name werden ausschliesslich im privaten
+Datenvolume gespeichert und erscheinen nach Neuladen in der Quellenliste.
+Mehrere Adressen werden getrennt gefuehrt; eine erneut gespeicherte Adresse erzeugt
+keinen zweiten Eintrag und setzt einen vorhandenen Pruefstatus nicht zurueck.
+
+Speichern startet **keinen** externen Abruf, Import oder steuerliche Aktivierung.
+Die Transaktionshistorie ueber den vorhandenen Importablauf ergaenzen. Der bisherige
+Bestandsabruf bleibt auf konfigurierte Haupt-/weitere Wallet und eingerichtete
+Datenanbieter beschraenkt; zusaetzliche Beobachtungsadressen erhalten keinen
+wirkungslosen Synchronisieren-Button. Eine Signatur ist nur fuer den gesonderten
+kryptografischen Eigentumsnachweis erforderlich, nicht zum Anlegen einer Adresse.
+Bestehende private Profiladressen werden ebenfalls ohne erfundenen Nachweis sichtbar.
+
+Der neue lokale Schreibvertrag `POST /api/v1/workspace/wallets` akzeptiert nur
+`wallet_address` und optional `display_label`. Er setzt weder `source_id` noch
+`verified_at`, aendert kein privates Profil und startet keinen Provider-Aufruf.
+Er verwendet denselben lokalen Host-/Origin-Schutz wie die bestehende Einrichtung;
+dies ist keine globale Benutzeranmeldung. Demo-/Testvorschauen bleiben schreibgesperrt.
+
+## Optionales Connector-Einrichtungspasswort
 
 Dieses Passwort schuetzt die vorhandenen Connector-Administrationsfunktionen,
 unter anderem Wallet-Eigentumsnachweise und die Kopplung von Mobilgeraeten.
@@ -73,9 +101,10 @@ Den eigenen Containernamen verwenden. Fuer einen lokalen Compose-Build entfaellt
 mit `python3 -m steuerreport_v2.connector_setup` ausfuehren. Wer `initialize_state()`
 bei einer neuen nativen Installation nutzt, erhaelt dieselbe sichere Vorbereitung.
 
-## Wallet-Eigentumsnachweis
+## Optionaler Wallet-Eigentumsnachweis
 
 1. **Quellen & Wallets → Quelle hinzufuegen → Solana-Wallet** waehlen.
+   Eingabeart **Optional: Eigentum per Signatur nachweisen** ausdruecklich auswaehlen.
 2. Die eigene oeffentliche Adresse eingeben.
    Keine Token-Mint- oder Programmadresse verwenden; diese ist kein eigener Signaturschluessel.
 3. Das lokale Einrichtungspasswort in **Connector-Setup-Token** einfuegen.

@@ -88,6 +88,7 @@ class WorkspaceSource(BaseModel):
     connector_id: str | None = None
     connection_status: str
     ownership_status: str = "not_assessed"
+    wallet_address: str | None = None
     last_success_at: datetime | None = None
     last_attempt: SourceConnectorAttempt | None = None
     freshness: str = "missing"

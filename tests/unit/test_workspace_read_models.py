@@ -17,6 +17,14 @@ from steuerreport_v2.domain.workspace import ActivityService, WorkspaceService
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 
+@pytest.fixture(autouse=True)
+def no_configured_wallets(monkeypatch):
+    # These scenarios model accounts without the legacy suite's fixture wallets.
+    from steuerreport_v2.domain.portfolio import PortfolioService
+    monkeypatch.setattr(PortfolioService, "PRIMARY_SOLANA_WALLET", "")
+    monkeypatch.setattr(PortfolioService, "KNOWN_JUP_WALLET", "")
+
+
 @pytest.fixture
 def workspace(tmp_path):
     store = DuckDbStore(tmp_path / "workspace.duckdb")

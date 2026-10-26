@@ -118,6 +118,8 @@ from steuerreport_v2.contracts.business_inventory import (
 from steuerreport_v2.contracts.common import ApiMessage, ApiResponse
 from steuerreport_v2.contracts.cockpit import CockpitSummary
 from steuerreport_v2.contracts.connectors import (
+    PublicWalletAddressRequest,
+    PublicWalletAddressResult,
     ConnectorCatalogReport,
     ConnectorConnection,
     MobileConnectorPairing,
@@ -1624,6 +1626,18 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     @app.get("/api/v1/workspace/sources")
     def workspace_sources() -> ApiResponse[WorkspaceSources]:
         return ApiResponse(data=WorkspaceService(db).sources())
+
+    @app.post("/api/v1/workspace/wallets")
+    def save_public_wallet_address(payload: PublicWalletAddressRequest, request: Request) -> ApiResponse[PublicWalletAddressResult]:
+        """Lokale Adresskonfiguration, kein Eigentumsnachweis oder externer Abruf."""
+        if getattr(request.app.state, "ux_sandbox", False) is True:
+            raise HTTPException(status_code=403, detail="synthetic_preview_readonly")
+        try:
+            result = ConnectorService(db).save_public_wallet(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="public_wallet_address_invalid_or_revoked") from exc
+        clear_response_cache()
+        return ApiResponse(data=result)
 
     @app.get("/api/v1/workspace/sources/{ref}")
     def workspace_source(ref: str) -> ApiResponse[WorkspaceSourceDetail]:

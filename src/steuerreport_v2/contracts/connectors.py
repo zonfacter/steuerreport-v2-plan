@@ -18,6 +18,7 @@ ConnectorCategory = Literal[
     "payment_reference",
 ]
 ConnectorAuthMethod = Literal[
+    "public_address",
     "wallet_signature",
     "api_key",
     "oauth_partner",
@@ -35,6 +36,7 @@ ConnectorAvailability = Literal[
     "evidence_only",
 ]
 ConnectorConnectionStatus = Literal[
+    "address_saved",
     "configured",
     "not_configured",
     "ownership_verified_pending_registry",
@@ -115,6 +117,19 @@ class WalletOwnershipChallengeRequest(BaseModel):
     wallet_address: str
     wallet_provider: Literal["phantom", "jupiter", "solflare", "other"] = "other"
     display_label: str | None = None
+
+
+class PublicWalletAddressRequest(BaseModel):
+    wallet_address: str = Field(min_length=32, max_length=44)
+    display_label: str | None = Field(default=None, max_length=120)
+
+    model_config = {"extra": "forbid"}
+
+
+class PublicWalletAddressResult(BaseModel):
+    connection: ConnectorConnection
+    created: bool
+    message: str
 
 
 class WalletOwnershipChallenge(BaseModel):

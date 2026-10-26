@@ -5,6 +5,7 @@ import { HelpTip } from "../Help";
 import { compactQuantity, type Resource, timestamp } from "./resource";
 
 export const LABELS: Record<string, string> = {
+  address_saved: "Öffentliche Adresse gespeichert", public_address: "Öffentliche Adresse ohne Signatur",
   known_wallet_missing_import: "Wallet bekannt — Transaktionen noch nicht importiert", missing_live_anchor: "Noch kein aktueller Vergleichsbestand verfügbar",
   missing_credentials: "API-Zugangsdaten fehlen", missing_snapshot: "Noch kein gespeicherter Prüfstand vorhanden", ledger_only: "Nur aus importierten Transaktionen berechnet",
   configured: "Eingerichtet", registered: "Registriert", imported: "Dateiimport vorhanden", not_required: "Kein API-Zugang erforderlich", not_configured: "Einrichtung erforderlich",

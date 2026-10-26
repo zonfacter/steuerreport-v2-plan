@@ -88,7 +88,7 @@ def main():
             if not parsed.path.startswith("/api/"):
                 route.continue_()
                 return
-            allowed_post = {"/api/v1/activity/query", "/api/v1/workspace/review/query", "/api/v1/connectors/wallet/challenges", "/api/v1/connectors/wallet/verifications"}
+            allowed_post = {"/api/v1/activity/query", "/api/v1/workspace/review/query", "/api/v1/workspace/wallets", "/api/v1/connectors/wallet/challenges", "/api/v1/connectors/wallet/verifications"}
             assert request.method == "GET" or request.method == "POST" and parsed.path in allowed_post
             headers = {"Content-Type": "application/json"}
             if request.headers.get("authorization"):
@@ -109,6 +109,44 @@ def main():
             setup.scroll_into_view_if_needed()
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=str(args.output / f"synthetic-setup-disabled-{width}.png"), animations="disabled")
+        page.goto(base + "/#sources")
+        page.get_by_role("button", name="Quelle hinzufügen", exact=True).click()
+        panel = page.get_by_role("dialog")
+        panel.get_by_label("Anbieter für neue Quelle").select_option("solana-wallet")
+        assert panel.get_by_label("Eingabeart").input_value() == "public"
+        panel.get_by_role("button", name="Weiter", exact=True).click()
+        expect(panel.get_by_label("Connector-Setup-Token", exact=True)).to_have_count(0)
+        panel.get_by_label("Name der neuen Wallet").fill("Browser Test Wallet")
+        panel.get_by_label("Neue Wallet-Adresse").fill(address)
+        for width in (390, 768, 1280, 1440):
+            page.set_viewport_size({"width": width, "height": 1000})
+            page.wait_for_function("innerWidth > 820 || getComputedStyle(document.querySelector('.sidebar')).visibility === 'hidden'")
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.screenshot(path=str(args.output / f"synthetic-public-address-{width}.png"), animations="disabled")
+        panel.get_by_role("button", name="Weiter", exact=True).click()
+        assert not ConnectorService(store).connections()
+        panel.get_by_role("button", name="Adresse speichern", exact=True).click()
+        expect(panel.get_by_role("status")).to_contain_text("Öffentliche Solana-Adresse gespeichert")
+        saved = ConnectorService(store).connections()[0]
+        assert saved.status == "address_saved" and saved.verified_at is None and not read_token()
+        panel.get_by_role("button", name="Fertig", exact=True).click()
+        page.reload()
+        expect(page.get_by_role("button", name="Browser Test Wallet", exact=True)).to_be_visible()
+        page.get_by_role("button", name="Browser Test Wallet", exact=True).click()
+        expect(page.get_by_role("dialog").get_by_text(address, exact=True)).to_be_visible()
+        page.get_by_role("dialog").get_by_role("button", name="Details schließen", exact=True).click()
+        page.get_by_role("button", name="Quelle hinzufügen", exact=True).click()
+        panel = page.get_by_role("dialog")
+        panel.get_by_label("Anbieter für neue Quelle").select_option("solana-wallet")
+        panel.get_by_role("button", name="Weiter", exact=True).click()
+        panel.get_by_label("Neue Wallet-Adresse").fill(address)
+        panel.get_by_role("button", name="Weiter", exact=True).click()
+        panel.get_by_role("button", name="Adresse speichern", exact=True).click()
+        expect(panel.get_by_role("status")).to_contain_text("bereits gespeichert")
+        assert len(ConnectorService(store).connections()) == 1
+        assert ConnectorService(store).connections()[0].connection_id == saved.connection_id
+        panel.get_by_role("button", name="Fertig", exact=True).click()
+        page.goto(base + "/#admin")
         initialize_token()
         setup.get_by_role("button", name="Connector-Einrichtung neu prüfen").click()
         expect(setup.get_by_text("Einrichtungspasswort vorhanden.", exact=False)).to_be_visible()
@@ -116,6 +154,7 @@ def main():
         page.get_by_role("button", name="Quelle hinzufügen", exact=True).click()
         panel = page.get_by_role("dialog")
         panel.get_by_label("Anbieter für neue Quelle").select_option("solana-wallet")
+        panel.get_by_label("Eingabeart").select_option("wallet")
         panel.get_by_role("button", name="Weiter", exact=True).click()
         panel.get_by_label("Neue Wallet-Adresse").fill(address)
         token = panel.get_by_label("Connector-Setup-Token", exact=True)
@@ -138,12 +177,15 @@ def main():
         row = ConnectorService(store).connections()[0]
         assert row.status == "ownership_verified_pending_registry"
         assert row.tax_activation == "review_required"
+        assert row.connection_id == saved.connection_id
         with store.connect() as connection:
             for name in ("canonical_events", "balance_ledger", "tax_lots", "tax_lines"):
                 assert connection.execute(f"select count(*) from {name}").fetchone()[0] == 0
         assert not errors, errors
         result = {"synthetic_only": True, "actual_fastapi_bridge": True, "existing_install_not_auto_enabled": True,
                   "local_explicit_setup": True, "wrong_bearer_rejected": True, "masked_token": True,
+                  "public_address_without_token_or_signature": True, "public_address_persisted_after_reload": True,
+                  "duplicate_address_idempotent": True, "proof_upgrades_same_connection": True,
                   "real_ed25519_signature_verified": True, "tax_activation": "review_required", "financial_rows_written": 0,
                   "viewports": [390, 768, 1280, 1440], "external_requests": 0, "javascript_errors": errors,
                   "calls": calls}

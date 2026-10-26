@@ -62,6 +62,18 @@ Oberflaeche.
 
 ## Connector-Katalog und Wallet-Eigentum
 
+### `POST /api/v1/workspace/wallets`
+
+Lokale Adresskonfiguration mit `wallet_address` und optional `display_label`.
+Ohne Setup-Bearer oder Signatur; bestehender Host-/Origin-Schutz bleibt wirksam,
+synthetische schreibgeschuetzte Vorschauen verweigern die Aktion. Keine allgemeine
+Internet-Authentifizierung. Antwort: `connection`, `created`, `message`.
+Der neue unbestaetigte Zustand heisst `address_saved`, `verified_at` und `source_id`
+bleiben leer, `tax_activation` bleibt `review_required`. Kein Provider-Aufruf,
+Import, Eigentumsnachweis oder Steuerlauf. Doppeleingaben erhalten denselben
+Eintrag und bestehenden Pruefstatus, widerrufene Verbindungen werden nicht reaktiviert.
+Quellen-Readmodelle enthalten optional `wallet_address`; dies gehoert nicht in URLs.
+
 `GET /api/v1/connectors/catalog`
 
 Liefert den serverseitigen Connector-Katalog fuer Wallets, CEX, Datenanbieter,
@@ -71,7 +83,7 @@ Verbindungen, aber niemals API-Keys oder Setup-Token.
 
 `GET /api/v1/connectors/connections`
 
-Liefert signierte Wallet-Verbindungen einschliesslich vollstaendiger Adresse
+Liefert gespeicherte oeffentliche und signierte Wallet-Verbindungen einschliesslich vollstaendiger Adresse
 fuer den Drilldown. Clients muessen Wallets in Listen kuerzen und die
 vollstaendige Adresse nur im Detail anzeigen.
 

@@ -138,6 +138,42 @@ class WorkspaceService:
                 warning=entry.coverage_limitation_note,
             ), predicate, parameters, entry))
 
+        wallets = {connection.external_identifier: connection for connection in catalog.connections
+                   if connection.connector_id == "solana-wallet" and connection.status != "revoked" and connection.revoked_at is None}
+        portfolio = PortfolioService(self.store)
+        configured_wallets: dict[str, str] = {}
+        for address, connector in ((portfolio.PRIMARY_SOLANA_WALLET, "solana_wallet"), (portfolio.KNOWN_JUP_WALLET, "jup_wallet")):
+            if address:
+                configured_wallets.setdefault(address, connector)
+        # Private profile entries remain visible without silently manufacturing
+        # a cryptographic proof or a persisted connection during a GET request.
+        for address in dict.fromkeys([*wallets, *configured_wallets]):
+            connection = wallets.get(address)
+            existing = next((scope for scope in scopes if
+                (scope.registry and {identifier.value for identifier in scope.registry.identifiers if identifier.kind in {"account", "wallet", "address"}} == {address})
+                or len(scope.parameters) == 3 and scope.parameters[-2:] == [address, address]), None)
+            connector_id = configured_wallets.get(address)
+            diagnostic = next((item for item in diagnostics.values() if item.connector_id == connector_id), None) if connector_id else None
+            status = connection.status if connection else "address_saved"
+            if existing:
+                existing.item.ref = source_ref("wallet:" + address)
+                existing.item.wallet_address = address
+                if connection:
+                    existing.item.label = connection.display_label
+                    existing.item.connection_status = status
+                    if not existing.registry and connection.verified_at:
+                        existing.item.ownership_status = "pending_registry"
+                continue
+            scopes.append(SourceScope(WorkspaceSource(
+                ref=source_ref("wallet:" + address), label=connection.display_label if connection else f"Solana {address[:6]}...{address[-4:]}",
+                source_type="wallet", connector_id=connector_id or "solana-wallet", wallet_address=address,
+                connection_status=status, ownership_status="pending_registry" if connection and connection.verified_at else "not_assessed",
+                last_success_at=utc(diagnostic.last_snapshot_at) if diagnostic else None,
+                last_attempt=diagnostic.last_attempt if diagnostic else None,
+                can_sync=bool(diagnostic and diagnostic.credential_status in {"configured", "not_required"}),
+                warning="Adresse gespeichert. Historienimport und Quellenzuordnung separat pruefen; kein automatischer Eigentumsnachweis.",
+            ), "(e.account=? or e.wallet=?)", [address, address]))
+
         with self.store.connect() as con:
             for scope in scopes:
                 rows = con.execute(f"select e.source, count(*) from canonical_events e where {scope.predicate} group by e.source", scope.parameters).fetchall()
@@ -173,6 +209,8 @@ class WorkspaceService:
                     ), "e.source=?", [source]))
 
         for connector in catalog.connectors:
+            if connector.category == "wallet":
+                continue
             if connector.category not in {"exchange", "wallet"} or connector.connection_status in {"not_configured", "revoked"}:
                 continue
             existing = next((scope for scope in scopes if scope.item.connector_id == connector.connector_id
@@ -206,7 +244,7 @@ class WorkspaceService:
 
     def source(self, ref: str) -> WorkspaceSourceDetail:
         scopes = self.source_scopes()
-        scope = next((row for row in scopes if row.item.ref == ref), None)
+        scope = next((row for row in scopes if row.item.ref == ref or row.item.legacy_source_id and source_ref(row.item.legacy_source_id) == ref), None)
         if scope is None:
             raise LookupError("workspace_source_not_found")
         reviews = self._attach_review(scopes)
@@ -223,8 +261,10 @@ class WorkspaceService:
                     full_accounts=[row.account for row in group.accounts],
                     methodology="Bestehende Bewertung. Ereignisse werden ausschliesslich separat paginiert geladen; kein Vollscan der Ereignisliste fuer diesen Detailaufruf.")
         evidence = scope.registry.model_dump(mode="json") if scope.registry else {"ownership": "not_assessed", "note": "Import oder API-Konfiguration bestaetigt nicht automatisch Eigentum oder steuerliche Aktivierung."}
-        return WorkspaceSourceDetail(source=scope.item, valuation=valuation, evidence=evidence,
-                                     review_tasks=[item for item in reviews if ref in item.candidate_source_refs][:50])
+        if scope.item.wallet_address:
+            evidence["wallet_address"] = scope.item.wallet_address
+        return WorkspaceSourceDetail(source=scope.item.model_copy(update={"ref": ref}), valuation=valuation, evidence=evidence,
+                                     review_tasks=[item for item in reviews if scope.item.ref in item.candidate_source_refs][:50])
 
     def _attach_review(self, scopes: list[SourceScope]) -> list[WorkspaceReviewItem]:
         items = self._review_items(ReviewService(self.store).tasks(limit=None).tasks, scopes)
@@ -293,7 +333,7 @@ class WorkspaceService:
         return items
 
     def scope(self, ref: str) -> SourceScope:
-        scope = next((row for row in self.source_scopes() if row.item.ref == ref), None)
+        scope = next((row for row in self.source_scopes() if row.item.ref == ref or row.item.legacy_source_id and source_ref(row.item.legacy_source_id) == ref), None)
         if scope is None:
             raise LookupError("workspace_source_not_found")
         return scope

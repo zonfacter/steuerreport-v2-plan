@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0rc16 - 2026-10-26
+
+- Oeffentliche Solana-Adressen im normalen Quelle-hinzufuegen-Ablauf speichern:
+  optionaler Name, Adresse, Zusammenfassung und Speichern. Kein Setup-Passwort
+  und keine Signatur fuer diese Adresskonfiguration erforderlich.
+- Mehrere Adressen getrennt und persistent; doppelte Eingaben sind idempotent.
+  Bestehende Pruefungen werden nicht zurueckgesetzt oder automatisch erneuert.
+- Eigene Quellen zeigen auch noch nicht importierte Adressen und bestehende
+  private Profilwallets. Unbekannte Werte bleiben unbekannt; keine fiktiven Bestaende.
+- Optionaler Eigentumsnachweis bleibt getrennt und unveraendert authentifiziert.
+  Keine automatische Quellenregistry-, FIFO- oder Steuerfreigabe.
+- Anleitung und API-Vertrag aktualisiert; lokale Host-/Origin-Grenzen und
+  Demo-Schreibsperre bleiben wirksam. Keine Schemaaenderung erforderlich.
+
 ## 0.2.0rc15 - 2026-10-26
 
 - Geschuetzte lokale Connector-Inbetriebnahme mit zufaelligem Passwort in einer

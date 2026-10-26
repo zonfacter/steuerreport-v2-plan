@@ -7,12 +7,15 @@ import json
 import os
 import secrets
 from uuid import uuid4
+from threading import RLock
 
 from nacl.bindings import crypto_core_ed25519_is_valid_point
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 
 from steuerreport_v2.contracts.connectors import (
+    PublicWalletAddressRequest,
+    PublicWalletAddressResult,
     ConnectorCatalogEntry,
     ConnectorCatalogReport,
     ConnectorConnection,
@@ -37,6 +40,7 @@ from steuerreport_v2.domain.source_registry import SourceRegistryService
 
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 BASE58_INDEX = {character: index for index, character in enumerate(BASE58_ALPHABET)}
+_PUBLIC_WALLET_LOCK = RLock()
 
 
 def decode_base58(value: str) -> bytes:
@@ -155,8 +159,8 @@ class ConnectorService:
             connections=connections,
             methodology=(
                 "Read-only Connector-Katalog. Konfiguration oder Wallet-Signatur aktiviert keine "
-                "Steuerquelle automatisch; neue Wallets bleiben bis zur Quellenregistry-Pruefung "
-                "ownership_verified_pending_registry."
+                "Steuerquelle automatisch. Oeffentliche Adressen werden ohne Signatur als "
+                "address_saved gespeichert; Eigentumsnachweis und Quellenregistry bleiben getrennt."
             ),
         )
 
@@ -172,6 +176,32 @@ class ConnectorService:
                 """
             ).fetchall()
         return [self._connection_from_row(row) for row in rows]
+
+    def save_public_wallet(self, payload: PublicWalletAddressRequest) -> PublicWalletAddressResult:
+        address = payload.wallet_address.strip()
+        if len(decode_base58(address)) != 32:
+            raise ValueError("invalid_solana_public_address")
+        label = (payload.display_label or "").strip() or f"Solana {address[:6]}...{address[-4:]}"
+        if any(ord(char) < 32 for char in label):
+            raise ValueError("invalid_wallet_display_label")
+        # The unique address constraint and lock make repeats idempotent without
+        # downgrading a verified connection or reviving a revoked one.
+        with _PUBLIC_WALLET_LOCK, self.store.connect() as con:
+            inserted = con.execute(
+                """insert into connector_connections (
+                    connection_id, connector_id, external_identifier, display_label,
+                    source_id, status, metadata_json, created_at, verified_at,
+                    revoked_at, last_sync_at
+                ) values (?, 'solana-wallet', ?, ?, null, 'configured', ?, ?, null, null, null)
+                on conflict (connector_id, external_identifier) do nothing
+                returning connection_id""",
+                [str(uuid4()), address, label, '{"registration_method":"public_address"}', datetime.now(timezone.utc)],
+            ).fetchone()
+        connection = next(row for row in self.connections() if row.connector_id == "solana-wallet" and row.external_identifier == address)
+        if connection.revoked_at is not None or connection.status == "revoked":
+            raise ValueError("wallet_connection_revoked")
+        return PublicWalletAddressResult(connection=connection, created=inserted is not None,
+            message="Oeffentliche Adresse gespeichert. Kein Eigentumsnachweis, Abruf, Import oder steuerliche Aktivierung ausgefuehrt.")
 
     def create_mobile_pairing(
         self,
@@ -553,7 +583,7 @@ class ConnectorService:
         status: str,
         verified_at: datetime,
     ) -> ConnectorConnection:
-        with self.store.connect() as con:
+        with _PUBLIC_WALLET_LOCK, self.store.connect() as con:
             existing = con.execute(
                 """
                 select connection_id, created_at
@@ -717,6 +747,8 @@ class ConnectorService:
     @staticmethod
     def _connection_from_row(row: tuple[object, ...]) -> ConnectorConnection:
         status = str(row[5])
+        if str(row[1]) == "solana-wallet" and status == "configured" and row[7] is None:
+            status = "address_saved"
         return ConnectorConnection(
             connection_id=str(row[0]),
             connector_id=str(row[1]),
@@ -810,13 +842,13 @@ class ConnectorService:
                 "connector_id": "solana-wallet",
                 "label": "Solana Wallet (Phantom, Jupiter, Solflare)",
                 "category": "wallet",
-                "auth_method": "wallet_signature",
+                "auth_method": "public_address",
                 "availability": "available",
                 "mobile_platforms": ["android", "ios", "web"],
                 "capabilities": ["ownership_proof", "public_history", "live_balance"],
-                "required_fields": ["wallet_address", "signature"],
+                "required_fields": ["wallet_address"],
                 "safety_notes": ["Niemals Seed Phrase oder Private Key eingeben."],
-                "limitation": "Die Signatur beweist Eigentum, aktiviert aber keine Steuerquelle ohne Registry-Review.",
+                "limitation": "Die oeffentliche Adresse reicht zum Speichern. Eigentumsnachweis, Historienimport und steuerliche Aktivierung sind getrennte Schritte.",
             },
             {
                 "connector_id": "binance",
