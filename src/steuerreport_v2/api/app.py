@@ -699,7 +699,7 @@ def _import_preview_errors(
     ]
 
 
-def create_app(store: DuckDbStore | None = None) -> FastAPI:
+def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     app = FastAPI(
         title="Steuerreport V2 API",
         summary="Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
@@ -733,7 +733,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
             return Response(status_code=403)
         with outbound_scope():
             return await call_next(request)
-    db = store or DuckDbStore()
+    db = store if isinstance(store, DuckDbStore) else DuckDbStore(store)
     app.include_router(build_connections_router(db))
     app.include_router(build_history_router(db, lambda: clear_response_cache()))
     app.include_router(build_historical_prices_router(db, lambda: clear_response_cache()))

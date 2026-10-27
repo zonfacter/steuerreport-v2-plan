@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0rc30 - 2026-10-27 (Releasekandidat)
+
+- Historischer EUR-Preisworkflow aus rc29 einschliesslich Belegen, isolierter
+  Vorschau und ausdruecklicher Uebernahme unveraendert enthalten.
+- `create_app` normalisiert einen uebergebenen Datenbankpfad zum DuckDbStore;
+  bestehende pfadbasierte Aufrufer bleiben mit dem neuen Preisrouter kompatibel.
+- Neue Preis-Mocktests nutzen fuer Scope, Transport und Limiter dieselbe
+  kontrollierte Uhr. Andere Runner-Systemlaufzeiten duerfen keine kuenstliche
+  Deadlineverletzung erzeugen. Keine fachliche Assertion entfernt.
+- rc29 wurde nach sechs CI-Fehlern nicht deployt; sein Tag bleibt unveraendert.
+  Der abgebrochene Publisher veroeffentlichte kein rc29-Image.
+
 ## 0.2.0rc29 - 2026-10-27 (Releasekandidat)
 
 - Gefuehrter historischer EUR-Preisablauf unter Portfolio -> EUR-Preise ermitteln:

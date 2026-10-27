@@ -13,7 +13,7 @@ from steuerreport_v2.contracts.historical_prices import HistoricalPriceApply, Hi
 from steuerreport_v2.contracts.request_limits import RequestLimitProfile, RequestLimitsConfig
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain import historical_prices as module
-from steuerreport_v2.domain.external_http import managed_client
+from steuerreport_v2.domain.external_http import managed_client, outbound_scope
 from steuerreport_v2.domain.historical_prices import HistoricalPriceError, HistoricalPriceService
 from steuerreport_v2.domain.request_limits import RequestLimiter
 
@@ -29,6 +29,7 @@ def setup(tmp_path, monkeypatch):
     limiter = RequestLimiter(state_root=tmp_path / "limits", clock=lambda: clock[0], monotonic=lambda: clock[0], sleep=lambda value: clock.__setitem__(0, clock[0] + value))
     config = RequestLimitsConfig(default_profile=RequestLimitProfile(requests_per_second=1000, requests_per_minute=60000, burst=1000, max_retries=1))
     limiter.write_config(config, expected_revision=0)
+    monkeypatch.setattr(module, "outbound_scope", lambda **kwargs: outbound_scope(clock=limiter._clock, monotonic=limiter._monotonic, **kwargs))
     calls = []
     def handle(request):
         calls.append(request)
@@ -39,7 +40,7 @@ def setup(tmp_path, monkeypatch):
         timestamp = int(request.url.path.split("/")[3])
         return httpx.Response(200, json={"coins": {"coingecko:solana": {"price": "150", "timestamp": timestamp}}})
     transport = httpx.MockTransport(handle)
-    monkeypatch.setattr(module, "managed_client", lambda **kwargs: managed_client(transport=transport, limiter=limiter, **kwargs))
+    monkeypatch.setattr(module, "managed_client", lambda **kwargs: managed_client(transport=transport, limiter=limiter, clock=limiter._clock, monotonic=limiter._monotonic, **kwargs))
     return store, service, calls, monkeypatch, limiter
 
 
@@ -110,11 +111,12 @@ def test_invalid_quotes_remain_open_without_invented_prices(setup, failure):
         if failure == "old_quote":
             timestamp -= 86400
         return httpx.Response(200, json={"coins": {"other" if failure == "identity" else "coingecko:solana": {"price": "-1" if failure == "negative" else "NaN" if failure == "nan" else "150", "timestamp": timestamp}}})
-    monkeypatch.setattr(module, "managed_client", lambda **kwargs: managed_client(transport=httpx.MockTransport(handle), limiter=limiter, **kwargs))
+    monkeypatch.setattr(module, "managed_client", lambda **kwargs: managed_client(transport=httpx.MockTransport(handle), limiter=limiter, clock=limiter._clock, monotonic=limiter._monotonic, **kwargs))
     _, preview = fetched(service)
     assert preview["prices_count"] == 0
     assert not store.list_price_points()
     assert len(calls) <= 10
+    assert calls, "Der ungueltige Providerbeleg muss tatsaechlich geprueft werden"
 
 
 def test_retry_also_consumes_budget(setup):
@@ -122,7 +124,7 @@ def test_retry_also_consumes_budget(setup):
     def reject(request):
         calls.append(request)
         return httpx.Response(429, json={"error": "limit"})
-    monkeypatch.setattr(module, "managed_client", lambda **kwargs: managed_client(transport=httpx.MockTransport(reject), limiter=limiter, **kwargs))
+    monkeypatch.setattr(module, "managed_client", lambda **kwargs: managed_client(transport=httpx.MockTransport(reject), limiter=limiter, clock=limiter._clock, monotonic=limiter._monotonic, **kwargs))
     _, preview = fetched(service, max_requests=1)
     assert len(calls) == preview["requests_started"] == 1
 
@@ -163,3 +165,11 @@ def test_route_validation_demo_and_mapping_persistence(tmp_path):
     app.state.ux_sandbox = True
     assert client.put(base + "/mappings", json=mapping).status_code == 403
     assert client.post(base + "/plan", json={}).status_code == 200
+
+
+def test_app_accepts_a_database_path_and_serves_a_read_only_price_plan(tmp_path):
+    from steuerreport_v2.api.app import create_app
+    client = TestClient(create_app(tmp_path / "fresh.duckdb"))
+    response = client.post("/api/v1/prices/historical/plan", json={"year": 2025})
+    assert response.status_code == 200
+    assert response.json()["data"]["requirements_count"] == 0
