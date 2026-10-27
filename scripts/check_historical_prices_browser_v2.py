@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--browser-executable", default="/root/.cache/ms-playwright/chromium-1187/chrome-linux/chrome")
+    parser.add_argument("--browser-executable")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     root = Path(__file__).resolve().parents[1]
