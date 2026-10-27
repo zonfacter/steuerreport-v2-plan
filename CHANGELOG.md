@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0rc23 - 2026-10-27
+
+- Die freizugebende Historienvorschau zeigt normalisierte Ereignisse mit
+  UTC-Zeitpunkt, Asset, exakter Menge, Gegenmenge und Gebuehren. Unterschiedliche
+  Binance-/Bitget-/Coinbase-/Pionex-Rohspalten erzeugen keine leeren Werte mehr.
+- Die Stichprobe gehoert zur hashgebundenen Berechnungsvorschau und ist auf
+  zehn neue Ereignisse begrenzt. Reine Dubletten ergeben keine neue Ereignisstichprobe.
+- Kauf-/Verkaufstest prueft die sichtbaren Vorschauwerte zusaetzlich zur
+  unveraenderten Preisuebernahme und reproduzierbaren Gewinnberechnung.
+- Handelspaar-Beispiele unterscheiden Pionex (`BTC_USDT`) von Binance (`BTCUSDT`).
+- Keine Aenderung der Steuer-, FIFO- oder Preisberechnungsregeln und keine
+  automatische Korrektur historischer Finanzdaten.
+
 ## 0.2.0rc22 - 2026-10-27
 
 - Ergaenzender Kauf-/Verkaufstest belegt die atomare Uebernahme abgeleiteter

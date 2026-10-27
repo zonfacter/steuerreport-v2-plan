@@ -23,6 +23,10 @@ Status: `queued`, `running`, `paused`, `ready`, `succeeded`, `failed`,
 Vorschau, keinen Finanzimport. Erst Importfreigabe uebernimmt Rohobjekte,
 kanonische Ereignisse und bestehende Ableitungen in einer Transaktion.
 `can_resume` unterscheidet unterbrochene von nicht sicher fortsetzbaren Jobs.
+`sample_rows` eines bereiten Jobs enthaelt ab rc23 bis zu zehn neue normalisierte
+Ereignisse aus derselben vorbereiteten Datenbank, einschliesslich UTC-Zeit,
+Asset/Menge, Gegenmenge und Gebuehren. Die Stichprobe ist hashgebunden; Rohspalten
+werden nicht als kanonische Felder ausgegeben. Bei reinen Dubletten ist sie leer.
 `requests` zaehlt Anfragen erfolgreich gespeicherter Seiten, keine garantierte
 Gesamtzahl aller fehlgeschlagenen Versuche oder Anbieter-Credits.
 

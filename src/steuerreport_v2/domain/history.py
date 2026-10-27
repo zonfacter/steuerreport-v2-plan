@@ -362,6 +362,7 @@ class HistoryService:
                                preview_sha256=preview["preview_sha256"], new_records=preview["new_records"],
                                duplicate_records=preview["duplicate_records"], before_summary=preview["before_summary"],
                                after_summary=preview["after_summary"], review_issues_open=preview["review_issues_open"], error_code=None)
+                    job["sample_rows"] = preview["sample_rows"]
                     self.storage.save(job)
         except Exception as exc:
             try:

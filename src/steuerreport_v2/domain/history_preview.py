@@ -74,6 +74,26 @@ class HistoryPreview:
                     "(select raw_object_id from raw_objects where batch_id in (select unnest(?)))",
                     [[batch.batch_id for batch in batches]],
                 ).fetchone()[0] if batches else 0
+                sample_rows = []
+                if batches:
+                    sample = con.execute(
+                        """
+                        select e.event_id, e.event_time, e.event_type, e.asset, e.quantity,
+                               e.quote_asset, e.quote_quantity, e.fee_asset, e.fee_quantity
+                        from canonical_events e join raw_objects r on r.raw_object_id=e.raw_object_id
+                        where r.batch_id in (select unnest(?))
+                        order by e.event_time, e.event_id limit 10
+                        """, [[batch.batch_id for batch in batches]],
+                    ).fetchall()
+                    for row in sample:
+                        timestamp = row[1].replace(tzinfo=timezone.utc) if row[1].tzinfo is None else row[1].astimezone(timezone.utc)
+                        sample_rows.append({
+                            "event_id": row[0], "timestamp_utc": timestamp.isoformat(),
+                            "event_type": row[2], "asset": row[3], "quantity": str(row[4]),
+                            "quote_asset": row[5], "quote_quantity": str(row[6]) if row[6] is not None else None,
+                            "fee_asset": row[7], "fee_quantity": str(row[8]) if row[8] is not None else None,
+                            "side": None if row[4] == 0 else "out" if row[4] < 0 else "in",
+                        })
                 con.execute("checkpoint")
             prepared = {
                 "database_revision": revision, "prepared_file": working.name,
@@ -85,6 +105,7 @@ class HistoryPreview:
                 "evidence_hashes": sorted(job["_records"].values()),
                 "source_ref": target.source_ref,
                 "review_issues_open": pipeline.review_issues_open if pipeline else None,
+                "sample_rows": sample_rows,
             }
             prepared["preview_sha256"] = hashlib.sha256(canonical_json(prepared).encode()).hexdigest()
             return prepared

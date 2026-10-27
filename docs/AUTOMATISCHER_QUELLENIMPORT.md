@@ -17,6 +17,10 @@
    Es werden noch keine produktiven Transaktionen oder Steuerdaten veraendert.
 5. Datensaetze, Duplikate, Stichprobe, Abdeckung und berechneten Vorher-/Nachherstand
    pruefen. Die Berechnung erfolgt in einer privaten Datenbankkopie.
+   Die Stichprobe zeigt bis zu zehn neue normalisierte Ereignisse mit UTC-Zeit,
+   Asset, exakter Menge, Gegenmenge und Gebuehren, nicht proprietaere Rohspalten.
+   Originalrecords bleiben getrennt unveraendert erhalten. Reine Dubletten
+   ergeben keine neuen Vorschauereignisse.
 6. Freigebende Person eintragen, **Import dieser Vorschau** und **Neuberechnung**
    getrennt bestaetigen. **Importieren und neu berechnen** uebernimmt nur den
    unveraenderten Vorschauhash und die unveraenderte Datenbasis atomar.

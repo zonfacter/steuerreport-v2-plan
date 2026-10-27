@@ -239,6 +239,9 @@ def test_cex_trade_preview_applies_derived_prices_without_changing_original_pric
     service._run(str(job.id))
     ready = service.get(ref, str(job.id))
     assert ready.status == "ready", ready.error_code
+    assert [(row["asset"], Decimal(row["quantity"])) for row in ready.sample_rows] == [
+        ("BTC", Decimal("1")), ("BTC", Decimal("-1")),
+    ]
     assert financial_state(store) == before
     service.approve(ref, str(job.id), approve(ready))
     with store.connect() as con:
