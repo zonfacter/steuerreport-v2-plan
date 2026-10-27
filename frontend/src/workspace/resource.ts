@@ -2,10 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE } from "../api-base";
 
 export type Resource<T> = { status: "initial" | "loading" | "ready" | "empty" | "error"; data?: T; stale: boolean; error?: string; updatedAt?: string; key?: string; reload: () => void };
+export class ApiReadError extends Error {
+  constructor(message: string, public readonly code?: string) { super(message); }
+}
 export async function readApi<T>(path: string, signal?: AbortSignal, body?: unknown): Promise<T> {
   const response = await fetch(API_BASE + path, { signal, method: body === undefined ? "GET" : "POST", headers: body === undefined ? undefined : { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const envelope = await response.json();
-  if (!response.ok || envelope.status === "error") throw new Error(response.status === 404 ? "Datensatz nicht mehr verfügbar. Ansicht aktualisieren." : response.status === 409 ? "Ein Vorgang läuft bereits oder die Voraussetzungen sind noch offen." : "Daten konnten nicht geladen werden. Erneut versuchen.");
+  if (!response.ok || envelope.status === "error") {
+    const candidate = envelope.errors?.[0]?.code;
+    const code = typeof candidate === "string" && /^[a-z][a-z0-9_]{1,100}$/.test(candidate) ? candidate : undefined;
+    throw new ApiReadError(response.status === 404 ? "Datensatz nicht mehr verfügbar. Ansicht aktualisieren." : response.status === 409 ? "Ein Vorgang läuft bereits oder die Voraussetzungen sind noch offen." : "Daten konnten nicht geladen werden. Erneut versuchen.", code);
+  }
   return envelope.data;
 }
 export function useResource<T>(key: string | null, load: (signal: AbortSignal) => Promise<T>): Resource<T> {

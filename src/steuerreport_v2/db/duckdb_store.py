@@ -1742,6 +1742,7 @@ class DuckDbStore:
                 left join canonical_events e on e.raw_object_id = r.raw_object_id
                 where e.event_id is null
                   and lower(r.payload_json) not like '%bitget_withdrawal_evidence%'
+                  and coalesce(json_extract_string(r.payload_json, '$.history_evidence_only'), '') <> '1'
                 group by r.batch_id
                 order by r.batch_id
                 """

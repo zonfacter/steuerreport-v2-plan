@@ -466,6 +466,8 @@ class RawNormalizer:
         *,
         default_timezone: timezone | None = None,
     ) -> CanonicalEventCreate | None:
+        if row.get("history_evidence_only") == "1" and row.get("history_scope_identity"):
+            return None
         profile = profile_for_source(source)
         normalized = {self._normalize_key(key): value for key, value in row.items()}
         if (

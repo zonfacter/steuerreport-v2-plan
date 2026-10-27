@@ -240,6 +240,11 @@ class RequestLimiter:
             )
             self._check_private(os.fstat(lock_fd))
             while True:
+                # Durable job cancellation may need a DB read. Poll only before
+                # acquiring the coordinator lock, never from _check_wait inside it.
+                refresh = getattr(cancel, "refresh", None)
+                if refresh is not None:
+                    refresh()
                 self._check_wait(cancel, deadline)
                 try:
                     fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)

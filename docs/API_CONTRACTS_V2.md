@@ -1,11 +1,45 @@
 # API Contracts V2
 
+## Quellengebundener Historienjob mit Vorschau
+
+`/api/v1/workspace/sources/{ref}/history` ist der neue, gefuehrte Importpfad.
+`ref` bindet genau eine gespeicherte Solana-Adresse oder CEX-Verbindung;
+`connection_id` im lesenden Quellvertrag bezeichnet die einzelne Verbindung.
+Es gibt keinen Clientparameter zum Ueberschreiben der Wallet oder des Kontos.
+
+- GET Basis, `/jobs/{id}` und `/jobs/{id}/audit.json` lesen ausschliesslich.
+- POST `/jobs` verlangt UUID-`request_id`, ausdrueckliches Boolean
+  `confirm_external_request=true`, UTC-Datumsfenster und optional Symbole,
+  `public_rpc_only`, `max_records`. Wiederholung derselben ID/Parameter
+  liefert denselben Job; veraenderte Parameter fuer dieselbe ID ergeben 409.
+- POST `/pause`, `/cancel` am Job speichert die Steuerungsabsicht; POST
+  `/resume` verlangt erneute externe Bestaetigung und optional ein neues Limit.
+- POST `/import` verlangt `preview_sha256`, benannte `actor`-Person sowie
+  exakt `confirm_import=true` und `confirm_recalculation=true`. Geaenderte
+  Quellen-, Daten-, Software- oder Methodenbindung sperrt die Uebernahme.
+
+Status: `queued`, `running`, `paused`, `ready`, `succeeded`, `failed`,
+`cancelled`; `importing` ist fuer Clients mitmodelliert. `ready` bedeutet
+Vorschau, keinen Finanzimport. Erst Importfreigabe uebernimmt Rohobjekte,
+kanonische Ereignisse und bestehende Ableitungen in einer Transaktion.
+`can_resume` unterscheidet unterbrochene von nicht sicher fortsetzbaren Jobs.
+`requests` zaehlt Anfragen erfolgreich gespeicherter Seiten, keine garantierte
+Gesamtzahl aller fehlgeschlagenen Versuche oder Anbieter-Credits.
+
+Private Rohbelege sind SHA-256-adressiert; Konflikte werden nicht ueberschrieben.
+Keine Secretwerte oder internen Dateipfade in Antworten. Audit enthaelt bewusst
+die private Konten-/oeffentliche Walletreferenz und UTC-Anfragegrenzen.
+Vollstaendigkeit bleibt unbestaetigt; Konto-/Quellen-/Jahresfreigaben bleiben
+getrennt. Ausfuehrliche Wirkungen und Limits:
+[Automatischer Quellenimport](AUTOMATISCHER_QUELLENIMPORT.md).
+
 ## Direkter Solana-Historienimport: Idempotenz und Grenzen
 
 `POST /api/v1/portfolio/jup-wallet/import-history` bleibt eine ausdruecklich
 schreibende Aktion mit externen RPC-Aufrufen. Neue Zeilen werden importiert und
 die bestehende Pipeline wird neu berechnet. Quellen-Synchronisieren bleibt davon
-getrennt: es liest Bestaende, nicht diese Historie. Keine neue UI-Aktion eingefuehrt.
+getrennt: es liest Bestaende, nicht diese Historie. Der neue gefuehrte UI-Ablauf
+verwendet den oben beschriebenen Jobvertrag statt dieses direkten Legacy-Aufrufs.
 
 - Eindeutigkeit: Quelle `solana_rpc`, exakte Wallet und Transaktionssignatur.
   Die gesamte Transaktion wird mit ihren gespeicherten Rohzeilen verglichen;

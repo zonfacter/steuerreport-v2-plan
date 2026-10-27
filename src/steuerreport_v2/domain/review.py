@@ -75,9 +75,25 @@ class ReviewService:
                     "Transfer, Handel oder Reward eingeordnet. Originaltransaktion "
                     "und Gegenkonto pruefen; keine automatische steuerliche Einordnung."
                 ),
-                scope=f"event:{event_id}:account:{account}:asset:{asset}",
+                scope=f"event:{event_id}",
                 blocks_export=True,
                 tax_year=reporting_tax_year(event_time),
+            ))
+
+        with self.store.connect() as con:
+            pending_api_evidence = con.execute(
+                """
+                select e.event_id from canonical_events e
+                join raw_objects r on r.raw_object_id=e.raw_object_id
+                where e.event_type='unknown'
+                  and json_extract_string(r.payload_json, '$.history_classification_required')='1'
+                """
+            ).fetchall()
+        for (event_id,) in pending_api_evidence:
+            issues.append(ReviewIssue(
+                code="api_history_classification_required", severity="high", scope="event:" + event_id,
+                message="API-Beleg vorhanden, Betrag/Gebuehrenwirkung noch nicht eindeutig gebucht. Originalbeleg pruefen und fachlich zuordnen.",
+                blocks_export=True,
             ))
 
         for batch_id, count in self.store.unmapped_raw_object_counts().items():
@@ -1018,6 +1034,7 @@ class ReviewService:
             "zero_proceeds_tax_lines": "Steuerzeilen mit 0 EUR Erloes pruefen",
             "derivative_missing_prices": "Derivate-Preisbewertung ergaenzen",
             "solana_history_classification_required": "Solana-Bewegung fachlich einordnen",
+            "api_history_classification_required": "API-Beleg fachlich einordnen",
         }
         return titles.get(issue.code, issue.code.replace("_", " ").title())
 

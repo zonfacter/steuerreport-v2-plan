@@ -25,10 +25,13 @@ export const HELP_TOPICS = [
   { id: "sources", title: "Quellen und Live-Abgleich verstehen", keywords: "wallet boerse binance bitget api verbindung snapshot", steps: [
     "Die Liste enthält eigene importierte, registrierte oder konfigurierte Quellen. Suche, Quellenstatus und Sortierung grenzen sie ein. Öffne eine Quelle für Bestände, Transaktionen, Hinweise und Einstellungen.",
     "Quelle hinzufügen führt durch Anbieter, Eingabeart, Pflichtfelder und Zusammenfassung. Zugangsdaten werden erst nach Bestätigung gespeichert; Dateiimporte bleiben im Importassistenten ausdrücklich freizugeben. Ein Wallet-Eigentumsnachweis aktiviert keine steuerliche Quelle.",
+    "Für den automatischen Import die konkrete Quelle öffnen und Transaktionen abrufen wählen. Zeitraum und gegebenenfalls Handelspaare angeben, externe Anfrage bestätigen und Vorschau abrufen. Nur die ausgewählte Wallet oder einzelne Kontoverbindung wird verwendet.",
+    "Nach dem Abruf Stichprobe, neue Datensätze, Duplikate, Abdeckung und offene Hinweise prüfen. Freigebende Person eintragen sowie Import und Neuberechnung getrennt bestätigen. Erst Importieren und neu berechnen übernimmt die Vorschau. Pause, Fortsetzen und Abbruch sind am Auftrag verfügbar; nach Serverneustart ausdrücklich fortsetzen.",
     "Unterscheide den aktuellen API-Bestand vom aus importierten Ereignissen berechneten Bestand. Ein aktueller Snapshot ersetzt keine historische Transaktionsliste.",
     "Untersuche Differenzen anhand fehlender Zeitraeume, offener Orders, Earn-Produkte und interner Transfers, bevor du Daten korrigierst."
   ], caution: "Ein erfolgreicher Verbindungscheck beweist nicht, dass die Quelle alle historischen Geschaefte liefert." },
-  { id: "import", title: "Dateien vorbereiten und sicher importieren", keywords: "csv xlsx xls spalten layout excel format dublette tabellenblatt", steps: [
+  { id: "import", title: "Automatischer Abruf und ergänzender Dateiimport", keywords: "api automatisch historie csv xlsx xls spalten layout excel format dublette tabellenblatt", steps: [
+    "Für einen automatischen Abruf unter Quellen & Wallets die konkrete Quelle öffnen und Transaktionen abrufen wählen. Solana-RPC sowie Spot-Historien von Binance, Bitget Classic, Pionex und Coinbase Advanced sind vorgesehen; API-Grenzen, Handelspaare und fehlende historische Produkte beachten. Ein erfolgreicher Abruf bestätigt keine vollständige Steuerhistorie.",
     "Waehle die passende Quelle und anschliessend CSV-, XLSX- oder XLS-Dateien. Die erforderlichen Spalten sind je Importprofil unterschiedlich: oeffne Formate & Spalten oder lade die passende Vorlage.",
     "Klicke auf Dateien pruefen. Kontrolliere Quelle, Zeitraum, Vorschau, Tabellenblatt, Zeilenzahl und Warnungen. Bei einem anderen Tabellenblatt erneut pruefen.",
     "Gib nur gepruefte Dateien frei und starte den Import ausdruecklich. Kontrolliere danach das Ergebnis und die Belegspur; bearbeite offene Hinweise."

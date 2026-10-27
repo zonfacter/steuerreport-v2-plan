@@ -29,6 +29,11 @@ const state = route.parseView("#flows?tab=ledger&year=2024&page=3&size=10&sort=o
 assert.equal(route.viewHash(route.parseView(route.viewHash(state))), route.viewHash(state));
 assert.equal(state.page, 3);
 assert.equal(state.tab, "ledger");
+const historyImport = route.parseView("#sources?detail=s_aaaaaaaaaaaaaaaaaaaa&detailTab=import&page=2&status=failed");
+assert.equal(historyImport.detailTab, "import");
+assert.equal(route.parseView(route.viewHash(historyImport)).detailTab, "import");
+assert.equal(route.parseView(route.viewHash(historyImport)).page, 2);
+assert.equal(route.parseView(route.viewHash(historyImport)).status, "failed");
 hash = "#dashboard?year=2024";
 route.navigateView("tax");
 assert.equal(route.parseView(hash).year, "2024");

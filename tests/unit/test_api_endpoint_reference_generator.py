@@ -18,6 +18,14 @@ sys.modules[SPEC.name] = generator
 SPEC.loader.exec_module(generator)
 
 
+def test_reference_includes_source_history_and_existing_account_routers():
+    routes = {(route.method, route.path): route for route in generator.parse_routes(generator.APP_PATH)}
+    history = routes[("POST", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/import")]
+    assert history.file == "history.py" and history.function_name == "apply"
+    assert ("GET", "/api/v1/admin/connections") in routes
+    assert ("GET", "/api/v1/admin/request-limits") in routes
+
+
 def test_endpoint_reference_check_preserves_documented_date(tmp_path, monkeypatch):
     output = tmp_path / "endpoints.md"
     routes = generator.parse_routes(generator.APP_PATH)

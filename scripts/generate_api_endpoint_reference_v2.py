@@ -16,7 +16,7 @@ DEFAULT_OUTPUT = ROOT / "docs/626_API_ENDPOINT_REFERENZ_VOLLSTAENDIG_2026-07-05.
 METHODS = {"get", "post", "put", "patch", "delete"}
 ROW_RE = re.compile(
     r"^\| `(?P<method>GET|POST|PUT|PATCH|DELETE)` \| `(?P<path>[^`]+)` \| "
-    r"(?P<purpose>.*?) \| (?P<effect>.*?) \| `app\.py:\d+` `[^`]+` \|$"
+    r"(?P<purpose>.*?) \| (?P<effect>.*?) \| `[A-Za-z_]+\.py:\d+` `[^`]+` \|$"
 )
 STAND_RE = re.compile(r"^Stand: (?P<date>\d{4}-\d{2}-\d{2})$")
 
@@ -27,6 +27,7 @@ class Route:
     path: str
     function_name: str
     line: int
+    file: str = "app.py"
 
 
 SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -59,6 +60,14 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 PURPOSE_OVERRIDES = {
+    ("GET", "/api/v1/workspace/sources/{ref}/history"): "Liest Abruffaehigkeit und gespeicherte Historienauftraege der konkreten Quelle",
+    ("POST", "/api/v1/workspace/sources/{ref}/history/jobs"): "Startet bestaetigten externen Abruf und isolierte Vorschau ohne produktiven Finanzimport",
+    ("GET", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}"): "Liest den gespeicherten quellengebundenen Auftragsstatus",
+    ("GET", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/audit.json"): "Liest Quellenbindung, Originalhashes, Vorschau und Importfreigabe",
+    ("POST", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/pause"): "Speichert eine Pause fuer den laufenden Abruf",
+    ("POST", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/cancel"): "Bricht Folgeabrufe und Importfreigabe ab; Originalbelege bleiben erhalten",
+    ("POST", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/resume"): "Setzt den Abruf nach ausdruecklicher Anbieterbestaetigung am gespeicherten Cursor fort",
+    ("POST", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/import"): "Uebernimmt unveraenderte Vorschau nach Import- und Berechnungsfreigabe atomar",
     ("GET", "/api/v1/tax-filing-snapshots"): (
         "Liefert das append-only Register hashgebundener Abgabe- und Referenzpakete"
     ),
@@ -156,6 +165,16 @@ PURPOSE_OVERRIDES = {
 def parse_routes(path: Path) -> list[Route]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     routes: list[Route] = []
+    prefixes = {"app": ""}
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name) and node.value.func.id == "APIRouter"):
+            continue
+        prefix = next((item.value.value for item in node.value.keywords if item.arg == "prefix"
+                       and isinstance(item.value, ast.Constant) and isinstance(item.value.value, str)), "")
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                prefixes[target.id] = prefix
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -164,7 +183,7 @@ def parse_routes(path: Path) -> list[Route]:
                 isinstance(decorator, ast.Call)
                 and isinstance(decorator.func, ast.Attribute)
                 and isinstance(decorator.func.value, ast.Name)
-                and decorator.func.value.id == "app"
+                and decorator.func.value.id in prefixes
                 and decorator.func.attr in METHODS
                 and decorator.args
                 and isinstance(decorator.args[0], ast.Constant)
@@ -174,11 +193,21 @@ def parse_routes(path: Path) -> list[Route]:
             routes.append(
                 Route(
                     method=decorator.func.attr.upper(),
-                    path=decorator.args[0].value,
+                    path=prefixes[decorator.func.value.id] + decorator.args[0].value,
                     function_name=node.name,
                     line=node.lineno,
+                    file=path.name,
                 )
             )
+    if path == APP_PATH:
+        factories = {alias.asname or alias.name: APP_PATH.parent / (node.module.rsplit(".", 1)[-1] + ".py")
+                     for node in tree.body if isinstance(node, ast.ImportFrom) and node.module
+                     and node.module.startswith("steuerreport_v2.api.") for alias in node.names}
+        included = {node.args[0].func.id for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute) and node.func.attr == "include_router"
+                    and node.args and isinstance(node.args[0], ast.Call) and isinstance(node.args[0].func, ast.Name)}
+        for module in sorted({factories[name] for name in included if name in factories}):
+            routes.extend(parse_routes(module))
     return sorted(routes, key=lambda item: (item.path, item.method, item.function_name))
 
 
@@ -243,8 +272,8 @@ def render(
         f"Stand: {reference_date}",
         "",
         "Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt aus "
-        "`src/steuerreport_v2/api/app.py` erzeugt. Sie inventarisiert jede statisch "
-        "deklarierte FastAPI-Route. Fachliche Request-/Response- und Sicherheitsdetails "
+        "`src/steuerreport_v2/api/app.py` und seinen statisch eingebundenen Routermodulen erzeugt. "
+        "Sie inventarisiert deren statisch deklarierte FastAPI-Routen. Fachliche Request-/Response- und Sicherheitsdetails "
         "stehen in `docs/API_CONTRACTS_V2.md` und zur Laufzeit in `/docs` bzw. "
         "`/openapi.json`.",
         "",
@@ -290,7 +319,7 @@ def render(
             )
             lines.append(
                 f"| `{route.method}` | `{route.path}` | {purpose} | {effect} | "
-                f"`app.py:{route.line}` `{route.function_name}` |"
+                f"`{route.file}:{route.line}` `{route.function_name}` |"
             )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

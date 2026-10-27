@@ -1,9 +1,9 @@
 # Steuerreport V2
 
-Version 0.2.0rc20. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc21. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc20](docs/RELEASE_0.2.0rc20.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc21](docs/RELEASE_0.2.0rc21.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
@@ -20,7 +20,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc20
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc21
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -154,7 +154,25 @@ Import, keine Modellanfrage): `python scripts/check_ux_browser_v2.py
 --base-url http://localhost:5174`. Dafuer separat Playwright und Chromium
 installieren. Testbelege und Screenshots landen in `artifacts/ux-browser/`.
 
-Unter `Daten importieren > Dateiimport` koennen mehrere CSV-/Excel-Dateien
+Unter **Quellen & Wallets → Quelle oeffnen → Transaktionen abrufen** ist der
+automatische Historienabruf an die ausgewaehlte Wallet oder einzelne
+Boersenverbindung gebunden. Zeitraum, gegebenenfalls Handelspaare und externe
+Anfrage bestaetigen; der Server sammelt Originalbelege und berechnet eine
+isolierte Vorschau. Erst **Importieren und neu berechnen** mit benannter Person
+und zwei Bestaetigungen uebernimmt die gepruefte Vorschau atomar.
+Pause, Fortsetzen und Abbruch erhalten gespeicherte Seiten. Ein Neuladen startet
+keinen Abruf. Nach einem Serverneustart ausdruecklich fortsetzen.
+
+Solana-RPC sowie Spot-Historien fuer Binance, Bitget Classic, Pionex und Coinbase
+Advanced sind enthalten; **keine pauschale Vollstaendigkeitszusage** fuer Rewards,
+Earn, Derivate, alte/geschlossene Tokenkonten oder nicht verfuegbare Zeitraeume.
+Binance/Pionex erfordern die tatsaechlich gehandelten Paare. Anbietergrenzen und
+noch offene Klassifizierungen werden angezeigt. Siehe
+[Historienimport und Grenzen](docs/AUTOMATISCHER_QUELLENIMPORT.md).
+
+Der Dateiimport ist eine **zusaetzliche Moeglichkeit**, insbesondere fuer
+historische/API-seitig nicht verfuegbare Belege. Unter
+`Daten importieren > Dateiimport` koennen mehrere CSV-/Excel-Dateien
 mit Quelle, Blattwahl, Vorschau, Originaldatei-Hash und Dublettenpruefung
 bearbeitet werden. Erst eine ausdrueckliche Freigabe schreibt die Daten und
 startet die vorhandene Pipeline. Der Importverlauf und JSON-Belegspuren

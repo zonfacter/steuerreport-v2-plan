@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0rc21 - 2026-10-27
+
+- Automatischer Historienabruf fuer die ausgewaehlte Solana-Wallet oder einzelne
+  Boersenverbindung; CSV-/Excel-Import bleibt ein zusaetzlicher Weg.
+- Solana-RPC und begrenzte Spot-Historienadapter fuer Binance, Bitget Classic,
+  Pionex und Coinbase Advanced mit ausdruecklichen Abdeckungsgrenzen.
+- Dauerhafte Jobs mit Seitenfortschritt, Pause, Fortsetzen und Abbruch;
+  gemeinsame Abruflimits auch fuer Pagination und Wiederholungen.
+- Originalbelege und SHA-256-gebundene Vorschau in privater Berechnungskopie;
+  erst getrennt bestaetigter Import und Neuberechnung uebernehmen atomar.
+- Konto-/Walletbindung und konfliktpruefende Wiederholung; ueberlappende alte
+  CEX-Dateidaten blockieren ohne belegte gemeinsame Identitaet statt Doppelbuchung.
+- Unklare erfolgreiche Auszahlungen bleiben mit Originalbeleg und blockierendem
+  Review erfasst; keine erfundenen Mengen, Gebuehren, Trades oder Rewards.
+- Abbruch bleibt auch bei abgelaufenem Workerfenster wirksam; persistierte
+  Abbruch-/Pauseabsicht wird ausserhalb der Kontingent-Sperre nachgelesen.
+- Hilfe, Benutzerleitfaden, Inbetriebnahme und API-Vertrag erweitert. Keine
+  automatische Aenderung historischer Finanzdaten oder steuerliche Freigabe.
+
 ## 0.2.0rc20 - 2026-10-27
 
 - Direkter Solana-Historienimport erkennt bereits gespeicherte Transaktionen

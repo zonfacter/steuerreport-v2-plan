@@ -246,7 +246,7 @@ def check_workspace(browser, base_url: str, output: Path):
 
     go("#sources")
     page.get_by_role("button", name="Demo-Börse", exact=True).click()
-    page.get_by_role("dialog").get_by_role("button", name="Quelle synchronisieren", exact=True).click()
+    page.get_by_role("dialog").get_by_role("button", name="Bestand aktualisieren", exact=True).click()
     expect(page.get_by_role("dialog")).to_contain_text("externen Anbieter")
     fixture.hold.add("/api/v1/workspace/sources/" + SOURCE + "/sync")
     page.get_by_role("button", name="Bestätigen und starten", exact=True).click()

@@ -86,6 +86,7 @@ class WorkspaceSource(BaseModel):
     source_type: str
     legacy_source_id: str | None = None
     connector_id: str | None = None
+    connection_id: str | None = None
     connection_status: str
     ownership_status: str = "not_assessed"
     wallet_address: str | None = None

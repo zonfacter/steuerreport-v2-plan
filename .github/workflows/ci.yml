@@ -85,6 +85,12 @@ jobs:
       - name: Protected wallet setup against actual isolated backend
         working-directory: .
         run: python scripts/check_wallet_setup_browser_v2.py
+      - name: Source history workflow with controlled provider responses
+        working-directory: .
+        run: python scripts/check_history_import_browser_v2.py
+      - name: Source history approval against actual isolated backend
+        working-directory: .
+        run: python scripts/check_history_backend_browser_v2.py
       - name: UX browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -93,4 +99,6 @@ jobs:
           path: |
             artifacts/ux-browser/
             artifacts/ux-review-fixes/
+            artifacts/source-history-browser/
+            artifacts/source-history-backend-browser/
           if-no-files-found: ignore

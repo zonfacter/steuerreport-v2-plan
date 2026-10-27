@@ -201,7 +201,7 @@ def main():
             page.goto(base + "/#sources")
             page.get_by_role("button", name="Ansicht aktualisieren", exact=True).click()
             page.get_by_role("button", name=row.display_label, exact=True).click()
-            page.get_by_role("dialog").get_by_role("button", name="Quelle synchronisieren", exact=True).click()
+            page.get_by_role("dialog").get_by_role("button", name="Bestand aktualisieren", exact=True).click()
             page.get_by_role("dialog").get_by_role("button", name="Bestätigen und starten", exact=True).click()
         sync_wallet()
         expect(page.get_by_role("alert")).to_contain_text("noch kein erfolgreicher Bestandsabruf")

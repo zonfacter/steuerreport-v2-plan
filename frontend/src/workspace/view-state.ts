@@ -50,7 +50,7 @@ export function parseView(hash = window.location.hash): ViewState {
     start: validDate(values.get("start") || "") ? values.get("start")! : "",
     end: validDate(values.get("end") || "") ? values.get("end")! : "",
     detail: /^(s_[a-f0-9]{20}|[A-Za-z0-9_-]{1,80})$/.test(values.get("detail") || "") ? values.get("detail")! : "",
-    detailTab: ["overview", "holdings", "transactions", "issues", "settings", "original", "ledger", "tax", "history"].includes(values.get("detailTab") || "") ? values.get("detailTab")! : "overview",
+    detailTab: ["overview", "holdings", "transactions", "import", "issues", "settings", "original", "ledger", "tax", "history"].includes(values.get("detailTab") || "") ? values.get("detailTab")! : "overview",
     detailPage: int("detailPage", 1, 1_000_000)
   };
   if (state.start && state.end && state.start > state.end) state.end = "";

@@ -54,7 +54,7 @@ def fail(code):
     raise AiChangeError(code)
 
 
-def _fingerprint(con):
+def _fingerprint(con, *, excluded_admin_prefixes=()):
     checksum = hashlib.sha256(__version__.encode())
     tables = [row[0] for row in con.execute("select table_name from information_schema.tables where table_schema='main' and table_type='BASE TABLE' order by table_name").fetchall()]
     for table in tables:
@@ -62,7 +62,11 @@ def _fingerprint(con):
             continue
         safe = '"' + table.replace('"', '""') + '"'
         checksum.update(table.encode())
-        cursor = con.execute(f"select * from {safe} order by all")
+        if table == "admin_settings" and excluded_admin_prefixes:
+            predicate = " and ".join("not starts_with(key, ?)" for _ in excluded_admin_prefixes)
+            cursor = con.execute(f"select * from {safe} where {predicate} order by all", list(excluded_admin_prefixes))
+        else:
+            cursor = con.execute(f"select * from {safe} order by all")
         while rows := cursor.fetchmany(1000):
             for row in rows:
                 checksum.update(json_text([encoded(value) for value in row]).encode())

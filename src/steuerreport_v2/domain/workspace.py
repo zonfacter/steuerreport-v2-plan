@@ -20,6 +20,7 @@ from steuerreport_v2.contracts.workspace import (
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.connectors import ConnectorService
+from steuerreport_v2.domain.connections import ConnectionService
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.price_lookup import fiat_price_point
 from steuerreport_v2.domain.product_readiness import ProductReadinessService
@@ -79,6 +80,9 @@ class WorkspaceService:
         # Only actual holdings/imports/snapshots create rows, not generic placeholders.
         for row in overview.sources:
             if not (row.position_count or row.import_batches or row.last_live_at):
+                continue
+            if (row.source_type == "solana_wallet" and not row.position_count and not row.last_live_at
+                    and not any(account.account for account in groups[row.source_id].accounts)):
                 continue
             predicates = ["lower(e.source)=lower(?)"]
             parameters = [row.label]
@@ -178,7 +182,53 @@ class WorkspaceService:
                 warning="Adresse gespeichert. Historienimport und Quellenzuordnung separat pruefen; kein automatischer Eigentumsnachweis.",
             ), "(e.account=? or e.wallet=?)", [address, address]))
 
+        # Each configured exchange account has an exact, stable source scope.
+        # A provider-wide credential or balance is not another account's history.
+        for connection in ConnectionService(self.store).list().connections:
+            identifier = str(connection.id)
+            account = "connection:" + identifier
+            scopes.append(SourceScope(WorkspaceSource(
+                ref=source_ref(account), label=connection.label, source_type="exchange",
+                connector_id=connection.provider, connection_id=identifier,
+                connection_status=connection.credentials.status,
+                last_success_at=utc(connection.last_sync_at),
+                can_sync=False,
+                warning="Verbindungseigene Historie; keine automatische steuerliche Quellenfreigabe.",
+            ), "(e.account=? or e.wallet=?)", [account, account]))
+
         with self.store.connect() as con:
+            exact_accounts = {scope.item.wallet_address or "connection:" + scope.item.connection_id for scope in scopes if scope.item.wallet_address or scope.item.connection_id}
+            exact_refs = [scope.item.ref for scope in scopes if scope.item.wallet_address or scope.item.connection_id]
+            for scope in scopes:
+                if scope.item.wallet_address or scope.item.connection_id:
+                    scope.item.imports_count = 0
+            # Raw-only documentary records still belong to the selected source.
+            # An aggregate disappears only when every raw row is explicitly mapped.
+            raw_coverage = con.execute(
+                """
+                select b.source, count(r.raw_object_id), count(r.raw_object_id) filter(where
+                    e.account in (select unnest(?)) or e.wallet in (select unnest(?))
+                    or json_extract_string(r.payload_json, '$.account') in (select unnest(?))
+                    or json_extract_string(r.payload_json, '$.wallet_address') in (select unnest(?))
+                    or json_extract_string(r.payload_json, '$.history_source_ref') in (select unnest(?)))
+                from raw_import_batches b left join raw_objects r on r.batch_id=b.batch_id
+                left join canonical_events e on e.raw_object_id=r.raw_object_id group by b.source
+                """, [list(exact_accounts)] * 4 + [exact_refs],
+            ).fetchall()
+            fully_scoped = {source for source, total, matched in raw_coverage if total and total == matched}
+            redundant = []
+            for scope in scopes:
+                if scope.item.wallet_address or scope.item.connection_id or not scope.item.legacy_source_id:
+                    continue
+                accounts = con.execute(f"select distinct coalesce(e.account, e.wallet) from canonical_events e where {scope.predicate}", scope.parameters).fetchall()
+                if accounts and all(row[0] in exact_accounts for row in accounts):
+                    redundant.append(scope)
+                elif not accounts:
+                    raw_sources = [source for source, _total, _matched in raw_coverage
+                                   if SourceService.source_id(source) == scope.item.legacy_source_id]
+                    if raw_sources and all(source in fully_scoped for source in raw_sources):
+                        redundant.append(scope)
+            scopes = [scope for scope in scopes if scope not in redundant]
             for scope in scopes:
                 rows = con.execute(f"select e.source, count(*) from canonical_events e where {scope.predicate} group by e.source", scope.parameters).fetchall()
                 scope.item.events_count = sum(row[1] for row in rows)
@@ -199,13 +249,31 @@ class WorkspaceService:
             # Raw-only imports are still a user's source, even before normalization.
             imports = con.execute("select source, count(*) from raw_import_batches group by source").fetchall()
             for source, count in imports:
+                for scope in scopes:
+                    account = scope.item.wallet_address or ("connection:" + scope.item.connection_id if scope.item.connection_id else None)
+                    if account:
+                        scoped_count = con.execute(
+                            """
+                            select count(distinct b.batch_id) from raw_import_batches b
+                            join raw_objects r on r.batch_id=b.batch_id
+                            left join canonical_events e on e.raw_object_id=r.raw_object_id
+                            where b.source=? and (e.account=? or e.wallet=?
+                                or json_extract_string(r.payload_json, '$.account')=?
+                                or json_extract_string(r.payload_json, '$.wallet_address')=?
+                                or json_extract_string(r.payload_json, '$.history_source_ref')=?)
+                            """, [source, account, account, account, account, scope.item.ref],
+                        ).fetchone()[0]
+                        scope.item.imports_count += scoped_count
+                if source in fully_scoped:
+                    continue
                 key = SourceService.source_id(source)
                 existing = next((scope for scope in scopes if scope.item.ref == source_ref(key)), None)
                 if existing:
                     existing.item.imports_count = max(existing.item.imports_count, count)
                 elif source in represented_scopes:
                     for scope in represented_scopes[source]:
-                        scope.item.imports_count = max(scope.item.imports_count, count)
+                        if not scope.item.wallet_address and not scope.item.connection_id:
+                            scope.item.imports_count = max(scope.item.imports_count, count)
                 elif source not in represented:
                     scopes.append(SourceScope(WorkspaceSource(
                         ref=source_ref(key), label=source, source_type="import", imports_count=count,
@@ -215,10 +283,13 @@ class WorkspaceService:
         for connector in catalog.connectors:
             if connector.category == "wallet":
                 continue
+            if any(scope.item.connection_id and scope.item.connector_id == connector.connector_id for scope in scopes):
+                continue
             if connector.category not in {"exchange", "wallet"} or connector.connection_status in {"not_configured", "revoked"}:
                 continue
-            existing = next((scope for scope in scopes if scope.item.connector_id == connector.connector_id
-                             or scope.item.ref == source_ref(connector.connector_id)), None)
+            existing = next((scope for scope in scopes if not scope.item.connection_id and (
+                scope.item.connector_id == connector.connector_id
+                or scope.item.ref == source_ref(connector.connector_id))), None)
             if existing:
                 existing.item.connection_status = connector.connection_status
                 existing.item.connector_id = connector.connector_id

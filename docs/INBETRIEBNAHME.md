@@ -34,7 +34,9 @@ Mehrere Adressen werden getrennt gefuehrt; eine erneut gespeicherte Adresse erze
 keinen zweiten Eintrag und setzt einen vorhandenen Pruefstatus nicht zurueck.
 
 Speichern startet **keinen** externen Abruf, Import oder steuerliche Aktivierung.
-Die Transaktionshistorie ueber den vorhandenen Importablauf ergaenzen. Der bisherige
+Die Transaktionshistorie unter **Quelle → Transaktionen abrufen** starten.
+Der Abruf verwendet genau diese gespeicherte Adresse, auch fuer weitere
+Beobachtungswallets. CSV-/Excel-Import bleibt zusaetzlich moeglich. Der bisherige
 Bestandsabruf bleibt auf konfigurierte Haupt-/weitere Wallet und eingerichtete
 Datenanbieter beschraenkt; zusaetzliche Beobachtungsadressen erhalten keinen
 wirkungslosen Synchronisieren-Button. Eine Signatur ist nur fuer den gesonderten
@@ -92,7 +94,11 @@ keinen Reward, und SOL-Abgang plus Tokenzufluss beweist noch keinen Swap.
 Ungeklaerte Bestandsbewegungen erzeugen deshalb einen blockierenden Pruefhinweis.
 Der technische Import ist keine steuerliche Freigabe. Bestehende Originalimporte
 werden durch dieses Softwareupdate weder veraendert noch automatisch korrigiert.
-Noch kein gefuehrter, pausierbarer Komplettabruf der Wallet-Historie im Browser.
+Der neue gefuehrte Browserablauf ist in
+[Automatischer Quellenimport](AUTOMATISCHER_QUELLENIMPORT.md) beschrieben.
+Er sammelt Belege wiederaufnehmbar, erstellt eine isolierte Berechnung und
+verlangt eine gesonderte Importfreigabe. Auch ein beendeter RPC-Scan beweist
+keine vollstaendige Historie geschlossener Tokenkonten oder begrenzter Anbieter.
 
 ## Optionales Connector-Einrichtungspasswort
 
