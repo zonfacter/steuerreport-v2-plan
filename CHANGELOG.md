@@ -2,6 +2,10 @@
 
 ## 0.2.0rc22 - 2026-10-27
 
+- Ergaenzender Kauf-/Verkaufstest belegt die atomare Uebernahme abgeleiteter
+  Preise in `price_ledger`, den Erhalt vorhandener Originalpreise und ein
+  identisches Ergebnis nach erneuter Berechnung. Keine fachliche Codeaenderung
+  war fuer diesen zusaetzlichen Nachweis erforderlich.
 - Enthaelt den automatischen Quellenimport aus dem nicht produktiv ausgerollten
   rc21-Kandidaten. Dessen GitHub-Frontendpruefung fand einen portabilitaetsbedingten
   Testfehler, keine bestaetigte Finanzdatenabweichung.

@@ -1,26 +1,33 @@
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 import os
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from nacl.signing import SigningKey
+from pydantic import SecretStr
 import pytest
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.contracts.connectors import PublicWalletAddressRequest
+from steuerreport_v2.contracts.connections import ConnectionCreate
 from steuerreport_v2.contracts.history import HistoryApprove, HistoryResume, HistoryStart
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.connectors import ConnectorService
+from steuerreport_v2.domain.connections import ConnectionService
+from steuerreport_v2.domain.history_cex import CexHistoryCollector
 from steuerreport_v2.domain.history import HistoryService
 from steuerreport_v2.domain.history_storage import HistoryStorage
-from steuerreport_v2.domain.history_types import HistoryFetchError, HistoryPage, HistoryRecord
+from steuerreport_v2.domain.history_types import HistoryFetchError, HistoryOptions, HistoryPage, HistoryRecord
+from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.source_registry import SourceRegistryService
+from steuerreport_v2.domain.secret_vault import KEY_FILE_ENV
 from steuerreport_v2.domain.workspace import source_ref
 
 
@@ -99,6 +106,7 @@ def financial_state(store):
     with store.connect() as con:
         return {table: con.execute(f"select * from {table} order by all").fetchall() for table in (
             "raw_import_batches", "raw_objects", "canonical_events", "balance_ledger", "tax_lines", "review_decisions",
+            "price_ledger",
         )}
 
 
@@ -201,6 +209,50 @@ def test_record_directory_symlink_cannot_redirect_evidence_writes_or_reads(setup
         with pytest.raises(HistoryFetchError, match="history_storage_invalid"):
             action()
     assert list(outside.iterdir()) == []
+
+
+def test_cex_trade_preview_applies_derived_prices_without_changing_original_prices(setup, monkeypatch):
+    from steuerreport_v2.domain.history_preview import _summary
+
+    store, service, _ref, _wallet = setup
+    vault = store.path.parent / "synthetic-vault.key"
+    vault.write_bytes(bytes(range(32)))
+    vault.chmod(0o600)
+    monkeypatch.setenv(KEY_FILE_ENV, str(vault))
+    connection = ConnectionService(store).create(ConnectionCreate(
+        provider="binance", label="Synthetic trade account", account="Synthetic spot",
+        api_key=SecretStr("synthetic-trade-key"), api_secret=SecretStr("synthetic-trade-secret"),
+    ))
+    ref = source_ref("connection:" + str(connection.id))
+    first = datetime(2025, 1, 1, 12, tzinfo=timezone.utc)
+    second = datetime(2025, 1, 2, 12, tzinfo=timezone.utc)
+    for asset, price, source in (("ETH", "3000", "synthetic-original"), ("OLD", "5", "derived:event_quote")):
+        store.add_price_point(PricePointCreate(asset=asset, price_eur=price, source=source, priced_at=first))
+    before = financial_state(store)
+    adapter = CexHistoryCollector(store, service._target(ref), HistoryOptions(first, second, ("BTCEUR",)))
+    entries = [adapter._record("/api/v3/myTrades", [identity], {"synthetic": identity}, [
+        adapter._row(timestamp, "BTC", Decimal("1"), side, "EUR", Decimal(amount), "EUR", Decimal("0")),
+    ]) for identity, timestamp, side, amount in (("buy", first, "buy", "20000"), ("sell", second, "sell", "25000"))]
+    collector = Collector([entries])
+    monkeypatch.setattr(HistoryService, "_collector", lambda *_args: collector)
+    job = service.start(ref, request(symbols=["BTCEUR"]))
+    service._run(str(job.id))
+    ready = service.get(ref, str(job.id))
+    assert ready.status == "ready", ready.error_code
+    assert financial_state(store) == before
+    service.approve(ref, str(job.id), approve(ready))
+    with store.connect() as con:
+        prices = con.execute("select asset, price_eur from price_ledger where source='derived:event_quote' order by priced_at").fetchall()
+        originals = con.execute("select * from price_ledger where source='synthetic-original' order by all").fetchall()
+        expected_originals = [row for row in before["price_ledger"] if "synthetic-original" in row]
+        assert originals == expected_originals
+        assert prices == [("BTC", Decimal("20000")), ("BTC", Decimal("25000"))]
+        applied = _summary(con)
+        assert Decimal(applied["tax"]["2025"]["gain_loss_eur"]) == Decimal("5000")
+        assert applied == ready.after_summary
+    PipelineService(store).rebuild_ledgers()
+    with store.connect() as con:
+        assert _summary(con) == applied
 
 
 def test_repeated_new_job_skips_existing_financial_records_despite_new_discovery_metadata(setup, monkeypatch):

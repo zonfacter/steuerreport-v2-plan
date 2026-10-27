@@ -20,7 +20,8 @@ Finanzimport wurde zum Test gestartet.
 ## Ausgefuehrte Pruefungen
 
 Der erste monolithische lokale Testlauf wurde vor Abschluss beendet und wird
-nicht als bestandener Lauf gewertet. Die gesamte aktuelle Sammlung mit **1.773
+nicht als bestandener Lauf gewertet. Die Sammlung am Feature-Baseline-Commit
+`8904b02` mit **1.773
 Tests** wurde anschliessend in disjunkten Teilmengen vollstaendig ausgefuehrt:
 
 - Bestehende Backend-/Fachregressionen ohne die gesonderten Gruppen:
@@ -83,3 +84,27 @@ gesonderte Freigaben in [Automatischer Quellenimport](AUTOMATISCHER_QUELLENIMPOR
 Echte Anbieterzugriffe und Kosten wurden nicht getestet. Ein automatischer
 Zeitplan, universelle Historienabdeckung, eine technische Identitaetspruefung
 der freigebenden Person oder globale Benutzeranmeldung wurden nicht hinzugefuegt.
+
+## Ergaenzung: Trade und Preisbelege in rc22
+
+Die unabhaengige Speicherpruefung hat einen vorsorglich geaeusserten Verdacht
+auf fehlende Preisuebernahme widerlegt. `DuckDbStore.add_price_points` ist
+eine API-Bezeichnung; die tatsaechliche Tabelle heisst `price_ledger` und
+steht bereits in `DERIVED_TABLES`. Keine weitere Pipeline-Schreibtabelle
+fehlte in der atomaren Uebernahme; keine Fachlogik wurde nachtraeglich geaendert.
+
+Ein zusaetzlicher Integrationstest in `test_history_jobs.py` verwendet die
+tatsaechlichen Binance-Profilzeilen fuer Kauf eines BTC fuer 20.000 EUR und
+Verkauf fuer 25.000 EUR. Er prueft die unveraenderte produktive Datenbasis vor
+Freigabe, beide abgeleiteten Preise nach Freigabe, den identischen vorhandenen
+Originalpreis, das Entfernen eines veralteten abgeleiteten Preises sowie
+5.000 EUR Gewinn und denselben Summenstand nach erneutem Pipeline-Lauf.
+Der Test besteht ohne Aenderung am Produktivcode. Die allgemeinen Rollback-
+Assertions schliessen nun ausserdem die Preistabelle ein. Der Baseline-Nachweis
+oben bleibt historisch unveraendert; die Ergaenzung wird separat und im neuen
+CI-Lauf mitgefuehrt.
+
+Eine vorsorgliche Software-Ruecknahme auf rc20 wurde vor Wiederaktivierung
+durchgefuehrt. Datenbank und Konfiguration waren identisch zur Sicherung,
+Historienjobs und produktive Finanzimporte null; es wurden keine Daten aus
+der Sicherung zurueckgeschrieben. Produktive Screenshots bleiben privat.

@@ -22,3 +22,14 @@ Keine echte Transaktionshistorie wurde im Rahmen des Updates importiert.
 
 Die erneuten CI-, Image- und Deploymentpruefungen werden in den
 Release-Pruefartefakten mit dem tatsaechlichen Commit dokumentiert.
+
+## Ergaenzende Preispruefung
+
+Ein vorsorglicher Verdacht auf fehlende Preisuebernahme wurde durch die
+konkrete Speicherimplementierung und einen Kauf-/Verkaufstest widerlegt:
+Die API-Funktionen `add_price_points` schreiben in `price_ledger`; diese
+Tabelle gehoert bereits zur atomaren Uebernahme. Kauf fuer 20.000 EUR und
+Verkauf fuer 25.000 EUR ergeben im synthetischen Test 5.000 EUR Gewinn,
+mit erhaltenen Originalpreisen und gleichem Ergebnis nach Neuberechnung.
+Es wurde dafuer keine Berechnungslogik geaendert. Eine vorsorgliche kurzzeitige
+Software-Ruecknahme erfolgte ohne gestartete Historienjobs oder Datenveraenderung.
