@@ -29,6 +29,8 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc24.md",
+    "docs/SOLANA_ABRUFLIMITS.md",
     "docs/RELEASE_0.2.0rc23.md",
     "docs/RELEASE_0.2.0rc22.md",
     "docs/RELEASE_0.2.0rc21.md",

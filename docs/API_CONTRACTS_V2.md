@@ -1,5 +1,40 @@
 # API Contracts V2
 
+## Abruflimits, Methodenprofile und Solana-Free-Voreinstellung
+
+Bestehendes `GET/PUT /api/v1/admin/request-limits` bleibt erhalten. Schreiben
+verlangt den vollstaendigen `config`-Stand und dessen `expected_revision`.
+Die neue Version ergaenzt abwaertskompatibel:
+
+- `RequestLimitProfile.requests_per_10_seconds`: positive Ganzzahl oder `null`.
+  Zusaetzliches rollierendes Fenster `(jetzt-10s, jetzt]`, nicht ein Ersatz
+  fuer die gleichzeitig geltenden Sekunden-/Minuten-/Burst-/Kostenbudgets.
+- `ProviderCeiling.requests_per_10_seconds`: optionale Betreiberdeklaration;
+  keine behauptete unabhaengige Tarifverifikation.
+- `config.endpoint_profiles`: Anbieterkennung -> bekannte Endpunkt-ID ->
+  vollstaendiges lokales Profil. Der Transport ordnet erkannte Endpunkte selbst
+  zu. Clients duerfen keine fachlichen Request-Zuordnungen vorgeben.
+- Statusgruppen enthalten `requests_last_10_seconds`; `rolling_10_seconds`
+  ist ein lokaler Wartegrund, keine gemeldete Herstellerrestquote.
+
+`GET /api/v1/admin/request-limits/presets` liest verfuegbare Voreinstellungen,
+aktuelle Revision, betroffene Gruppen und Konflikte, ohne Anbieterabfrage oder
+Konfigurationsaenderung. `POST /api/v1/admin/request-limits/presets/solana_public_free`
+verlangt `expected_revision` und `confirmation=true`; Erfolg liefert den neu
+gespeicherten vollstaendigen `RequestLimitsConfig`. Fehlende Bestaetigung oder
+ungueltige Werte: 422; abweichende vorhandene Profile oder Revisionskonflikt:
+409 ohne Teilaenderung. Eine neue oder engere Parallelitaetsbindung, die bereits
+reservierte Anfragen gegenseitig blockieren wuerde, wird ebenfalls vor dem
+Speichern mit 409 (`request_limits_active_leases_conflict`) abgelehnt. Laufende
+Anfragen beenden lassen und danach neu pruefen. Demo-/Testmodus sperrt Schreiben
+mit 403.
+
+Alle gemeinsamen IP-/Anbieter-/Methodenbudgets werden vor dem Requeststart
+atomar reserviert und beim Dispatch erneut geprueft. Neue Methodengruppen
+uebernehmen vorhandene Providerhistorie konservativ; Einstellungen setzen
+kein Kontingent zurueck. Keine Datenbank-, Import- oder Freigabeaenderung durch
+Speichern. [Profilwerte und verbleibende Grenzen](SOLANA_ABRUFLIMITS.md).
+
 ## Quellengebundener Historienjob mit Vorschau
 
 `/api/v1/workspace/sources/{ref}/history` ist der neue, gefuehrte Importpfad.

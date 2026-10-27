@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0rc24 - 2026-10-27
+
+- Solana-Public-Free-Voreinstellung zentral unter Einrichtung / Abrufsteuerung,
+  mit ausdruecklicher Bestaetigung, Quellreferenz, Pruefdatum und Konfliktpruefung.
+  Konservative gemeinsame Vorgabe: 3 Requests/s, 30 je 10 Sekunden, 180/min.
+- Editierbare rollierende 10-Sekunden-Fenster und einzelne Endpunktprofile
+  zusaetzlich zu gemeinsamen IP-, Anbieter-, Minuten-, Burst- und Parallelitaetsbudgets.
+- Transport reserviert alle passenden Budgets vor jedem Start einschliesslich
+  Wiederholungen; Konfigurationsaenderung behaelt bisherige Starts und Pausen.
+- Verstaendliche lokale Wartegruende, neue Einstellungen im Benutzerleitfaden
+  und dokumentierte Grenzen bei fremdem IP-Verkehr und nicht gemessenem Bytebudget.
+- Speichern startet keine externen Abrufe, Importe, Neuberechnungen oder
+  Freigaben. Steuer-/FIFO-Regeln und historische Finanzdaten unveraendert.
+
 ## 0.2.0rc23 - 2026-10-27
 
 - Die freizugebende Historienvorschau zeigt normalisierte Ereignisse mit

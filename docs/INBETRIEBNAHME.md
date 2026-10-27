@@ -19,6 +19,21 @@ Kein `docker compose down -v` verwenden. Die Anwendung besitzt weiterhin keine
 globale Benutzeranmeldung; nur im vertrauenswuerdigen LAN/VPN oder hinter TLS
 und einem geeigneten Authentifizierungszugang betreiben.
 
+## Abrufgeschwindigkeit einstellen
+
+Unter **Einrichtung -> Abrufsteuerung** lassen sich gemeinsame IP-, Anbieter-
+und Endpunktprofile konfigurieren. Fuer den offiziellen oeffentlichen Solana-RPC
+steht eine ausdruecklich anzuwendende konservative Free-Voreinstellung bereit:
+3 Requests/s, 30 je rollierenden 10 Sekunden und 180/min. Vorhandene individuelle
+Profile werden bei Konflikten nicht still ueberschrieben. Das Standardprofil
+anderer Anbieter bleibt erhalten. Auch nach dem Anwenden sind die Zahlen im
+gleichen Einstellungsbereich bearbeitbar.
+
+Speichern startet keinen Abruf, Import oder Neuberechnung. Bereits verbrauchte
+Budgets und Anbieterpausen bleiben erhalten. Die Anzeige der lokalen Nutzung
+ist keine gemessene Herstellerrestquote; Parallelitaet erzeugt keine weiteren
+Import-Worker. [Bedienung, Profilwerte und Grenzen](SOLANA_ABRUFLIMITS.md).
+
 ## Oeffentliche Solana-Adresse hinzufuegen
 
 1. **Quellen & Wallets → Quelle hinzufuegen → Solana Wallet** oeffnen.

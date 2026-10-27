@@ -1,4 +1,4 @@
-# KI: Einsatz und Grenzen (0.2.0rc23)
+# KI: Einsatz und Grenzen (0.2.0rc24)
 
 ## Kurz Gesagt
 

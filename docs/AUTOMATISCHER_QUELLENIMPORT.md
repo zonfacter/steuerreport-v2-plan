@@ -52,6 +52,13 @@ Es wird weder ein Nullsaldo noch eine Gebuehr oder steuerliche Einordnung behaup
 
 ## Wiederaufnahme und Fehler
 
+Die Abrufgeschwindigkeit wird zentral unter **Einrichtung -> Abrufsteuerung**
+eingestellt, nicht durch einen weiteren Importbutton. Fuer den offiziellen
+Solana-Public-RPC gibt es eine konservative Free-Voreinstellung und editierbare
+IP-/Anbieter-/Methodenprofile. [Profilwerte und Grenzen](SOLANA_ABRUFLIMITS.md).
+Ein strengeres gemeinsames Budget begrenzt alle betroffenen Auftraege weiterhin.
+Speichern startet keinen Auftrag und setzt verbrauchte Kontingente nicht zurueck.
+
 - Der Browser darf nach Start geschlossen werden. Der Server fuehrt den
   gestarteten Auftrag in begrenzten Abschnitten fort; alle Requests nutzen den
   vorhandenen gemeinsamen Limiter. Ein Seitenwechsel startet keinen neuen Job.

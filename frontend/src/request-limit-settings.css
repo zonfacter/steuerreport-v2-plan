@@ -1,0 +1,19 @@
+.requestLimitSettings > select,
+.requestLimitSettings .adminForm select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.requestLimitSettings p {
+  overflow-wrap: anywhere;
+}
+
+.requestLimitSettings .adminLimitTable th,
+.requestLimitSettings .adminLimitTable td {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}

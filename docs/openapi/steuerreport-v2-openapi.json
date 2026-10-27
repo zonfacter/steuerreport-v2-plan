@@ -42702,6 +42702,26 @@
         "title": "PortfolioWalletHistoryImportResult",
         "type": "object"
       },
+      "PresetWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "title": "Confirmation",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "confirmation"
+        ],
+        "title": "PresetWrite",
+        "type": "object"
+      },
       "PriceCoverageReport": {
         "properties": {
           "missing": {
@@ -46508,7 +46528,7 @@
       },
       "ProviderCeiling": {
         "additionalProperties": false,
-        "description": "Vom Betreiber aus seinem Plan uebertragene Obergrenze, nicht verifiziert.\n\nDie Referenz wird NICHT aufgerufen. Eine URL beweist keine Vertragstreue;\ndeshalb keine vorgebliche offizielle Domain-Allowlist/Herstellerempfehlung.\nUnbekannte Dimensionen bleiben None. Rollierende 1s/60s-Grenzen sind nur\nfuer dazu passende Anbietersemantik geeignet (z.B. kein 10s-CU-Ersatz).",
+        "description": "Vom Betreiber aus seinem Plan uebertragene Obergrenze, nicht verifiziert.\n\nDie Referenz wird NICHT aufgerufen. Eine URL beweist keine Vertragstreue;\ndeshalb keine vorgebliche offizielle Domain-Allowlist/Herstellerempfehlung.\nUnbekannte Dimensionen bleiben None. Rollierende 1s/10s/60s-Grenzen sind nur\nfuer dazu passende Anbietersemantik geeignet (z.B. kein 10s-CU-Ersatz).",
         "properties": {
           "checked_date": {
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
@@ -46531,6 +46551,19 @@
             "pattern": "^[a-zA-Z0-9][a-zA-Z0-9 ._:+-]{0,79}$",
             "title": "Plan",
             "type": "string"
+          },
+          "requests_per_10_seconds": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per 10 Seconds"
           },
           "requests_per_minute": {
             "anyOf": [
@@ -47412,6 +47445,18 @@
             "title": "Cost Last Minute",
             "type": "integer"
           },
+          "endpoint": {
+            "anyOf": [
+              {
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_.:-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
           "group": {
             "pattern": "^(provider|ip|project|account|endpoint|budget):[a-z0-9][a-z0-9_.:-]{0,63}$",
             "title": "Group",
@@ -47446,6 +47491,18 @@
           "profile": {
             "$ref": "#/components/schemas/RequestLimitProfile"
           },
+          "provider": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_-]{0,47}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "provider_ceiling": {
             "anyOf": [
               {
@@ -47458,6 +47515,11 @@
           },
           "queued": {
             "title": "Queued",
+            "type": "integer"
+          },
+          "requests_last_10_seconds": {
+            "default": 0,
+            "title": "Requests Last 10 Seconds",
             "type": "integer"
           },
           "requests_last_minute": {
@@ -47554,6 +47616,19 @@
             "title": "Origin",
             "type": "string"
           },
+          "requests_per_10_seconds": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per 10 Seconds"
+          },
           "requests_per_minute": {
             "default": 30,
             "maximum": 100000.0,
@@ -47613,6 +47688,21 @@
               }
             },
             "title": "Endpoint Costs",
+            "type": "object"
+          },
+          "endpoint_profiles": {
+            "maxProperties": 1000,
+            "patternProperties": {
+              "^[a-z][a-z0-9_-]{0,47}$": {
+                "patternProperties": {
+                  "^[a-zA-Z][a-zA-Z0-9_.:-]{0,63}$": {
+                    "$ref": "#/components/schemas/RequestLimitProfile"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "title": "Endpoint Profiles",
             "type": "object"
           },
           "group_profiles": {
@@ -80670,7 +80760,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc23"
+    "version": "0.2.0rc24"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -81810,6 +81900,76 @@
           "Administration"
         ],
         "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/request-limits/presets": {
+      "get": {
+        "description": "Presets. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "presets_api_v1_admin_request_limits_presets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Presets",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/admin/request-limits/presets/solana_public_free": {
+      "post": {
+        "description": "Apply preset. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "apply_preset_api_v1_admin_request_limits_presets_solana_public_free_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RequestLimitsConfig_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Preset",
+        "tags": [
+          "Administration"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

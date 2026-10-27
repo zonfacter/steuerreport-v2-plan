@@ -4,6 +4,7 @@ import { API_BASE } from "./api-base";
 import { HelpTip } from "./Help";
 import { useResource, readApi, timestamp } from "./workspace/resource";
 import "./connection-settings.css";
+import "./request-limit-settings.css";
 
 export function useAdminEnvironment() {
   const resource = useResource<{ synthetic_preview: boolean; read_only: boolean }>(
@@ -71,7 +72,8 @@ async function adminRequest<T>(path: string, method: string, body?: unknown): Pr
   catch { throw new Error("Das Backend ist nicht erreichbar. Es wurde kein Erfolg bestätigt."); }
   const result = await response.json().catch(() => null);
   if (!response.ok || result?.status === "error") {
-    if (response.status === 409) throw new Error("Die Einstellungen oder Aufträge haben sich geändert. Neu laden und den aktuellen Stand prüfen.");
+    if (response.status === 409 && result?.detail === "request_limits_active_leases_conflict") throw new Error("Aktive Abrufe oder Reservierungen zuerst beenden; Konfiguration danach erneut speichern. Es wurde nichts geändert und kein automatischer Neustart ausgelöst.");
+    if (response.status === 409) throw new Error(result?.detail === "request_limits_preset_conflict" ? "Das Startprofil kollidiert mit abweichenden vorhandenen Profilen oder Tarifgrenzen. Es wurde nichts angewendet. Vorschau neu laden und die betroffenen Profile einzeln prüfen." : "Die Einstellungen oder Aufträge haben sich geändert. Neu laden und den aktuellen Stand prüfen. Ungespeicherte Eingaben bleiben bis zum Neuladen erhalten.");
     if (response.status === 422) throw new Error("Die Angaben sind ungültig. Pflichtfelder, Budgetgruppen und Zahlenbereiche prüfen; Zugangsdaten werden nicht in Fehlermeldungen wiedergegeben.");
     throw new Error(errorLabel(typeof result?.detail === "string" ? result.detail : result?.errors?.[0]?.code ?? result?.error?.code));
   }
@@ -230,19 +232,21 @@ export function ConnectionSettings() {
 
 type LimitProfile = {
   origin: "local_conservative"; manufacturer_limit_verified: false; cost_unit: "local_units";
-  requests_per_second: number; requests_per_minute: number; weighted_cost_per_minute: number | null;
+  requests_per_second: number; requests_per_10_seconds?: number | null; requests_per_minute: number; weighted_cost_per_minute: number | null;
   burst: number; max_concurrency: number; timeout_seconds: number; max_retries: number;
   backoff_base_seconds: number; backoff_max_seconds: number; jitter_ratio: number; job_deadline_seconds: number;
 };
-type ProviderCeiling = { requests_per_second: number | null; requests_per_minute: number | null; weighted_cost_per_minute: number | null; source_url: string; checked_date: string; scope: "provider" | "ip" | "account" | "api_key" | "project" | "endpoint_group" | "combination"; plan: string; declared_by_operator: true; independently_verified: false };
-type LimitConfig = { schema_version: 1; revision: number; default_profile: LimitProfile; group_profiles: Record<string, LimitProfile>; provider_groups: Record<string, string[]>; endpoint_costs?: Record<string, Record<string, number>>; provider_ceilings?: Record<string, ProviderCeiling>; scheduler_enabled: false };
+type ProviderCeiling = { requests_per_second: number | null; requests_per_10_seconds?: number | null; requests_per_minute: number | null; weighted_cost_per_minute: number | null; source_url: string; checked_date: string; scope: "provider" | "ip" | "account" | "api_key" | "project" | "endpoint_group" | "combination"; plan: string; declared_by_operator: true; independently_verified: false };
+type LimitConfig = { schema_version: 1; revision: number; default_profile: LimitProfile; group_profiles: Record<string, LimitProfile>; provider_groups: Record<string, string[]>; endpoint_profiles?: Record<string, Record<string, LimitProfile>>; endpoint_costs?: Record<string, Record<string, number>>; provider_ceilings?: Record<string, ProviderCeiling>; scheduler_enabled: false };
 type ProviderObservation = { last_observed_at: number; last_rate_limit_at: number | null; used_weight_1m: number | null; remaining_requests: number | null; reset_at: number | null };
-type LimitStatus = { schema_version: 1; config_revision: number; observed_at: number; clock_rollback: boolean; manufacturer_telemetry_available: boolean; provider_observations?: Record<string, ProviderObservation>; coordination_scope: string; concurrency_recovery: string; groups: Array<{ group: string; profile: LimitProfile; requests_last_second: number; requests_last_minute: number; cost_last_minute: number; in_flight: number; queued: number; paused_until: number | null; next_start_at: number | null; blocking_reasons: string[] }> };
+type LimitStatus = { schema_version: 1; config_revision: number; observed_at: number; clock_rollback: boolean; manufacturer_telemetry_available: boolean; provider_observations?: Record<string, ProviderObservation>; coordination_scope: string; concurrency_recovery: string; groups: Array<{ group: string; provider?: string | null; endpoint?: string | null; profile: LimitProfile; requests_last_second: number; requests_last_10_seconds?: number | null; requests_last_minute: number; cost_last_minute: number; in_flight: number; queued: number; paused_until: number | null; next_start_at: number | null; blocking_reasons: string[] }> };
 type ProviderReferences = { checked_at: string; providers: Array<{ provider: string; source_url: string; scope: string; limitation: string }> };
+type LimitPreset = { id: string; label: string; source_url: string; checked_date: string; description: string; profile: LimitProfile; endpoint_profiles?: Record<string, Record<string, LimitProfile>>; affected_groups: string[]; conflicts: string[]; current_revision: number };
 type ProfileNumber = Exclude<keyof LimitProfile, "origin" | "manufacturer_limit_verified" | "cost_unit">;
 type LimitField = { key: ProfileNumber; label: string; help: string; min: number; max: number; step: string; optional?: boolean };
 const LIMIT_FIELDS: LimitField[] = [
   { key: "requests_per_second", label: "Requests pro Sekunde", help: "Rollierendes Sekundenfenster. Gilt zusätzlich zum Minutenfenster, nicht stattdessen.", min: 1, max: 10000, step: "1" },
+  { key: "requests_per_10_seconds", label: "Requests pro 10 Sekunden", help: "Optionales, eigenständiges rollierendes 10-Sekunden-Fenster. Leer: keine zusätzliche lokale 10-Sekunden-Grenze. Sekunden- und Minutenlimits bleiben aktiv.", min: 1, max: 100000, step: "1", optional: true },
   { key: "requests_per_minute", label: "Requests pro Minute", help: "Eigenständiges rollierendes 60-Sekunden-Fenster. Wird nicht aus dem Sekundenwert berechnet.", min: 1, max: 100000, step: "1" },
   { key: "weighted_cost_per_minute", label: "Lokales Kostenbudget pro Minute", help: "Optionale zusätzliche Grenze in lokalen Kosteneinheiten. Leer: keine zusätzliche lokale Kostengrenze; die Requestgrenzen bleiben aktiv. Keine Zusage über CU, Credits oder Herstellergewichte.", min: 1, max: 100000000, step: "1", optional: true },
   { key: "burst", label: "Burst (zusätzliche Startgrenze)", help: "Token-Bucket-Kapazität; Auffüllung mit Requests pro Sekunde. Darf keines der rollierenden Requestfenster überschreiten und hebt diese nicht auf.", min: 1, max: 10000, step: "1" },
@@ -255,13 +259,24 @@ const LIMIT_FIELDS: LimitField[] = [
   { key: "job_deadline_seconds", label: "Gesamtdeadline je Auftrag (Sekunden)", help: "Begrenzt einschließlich Budgetwartezeit und Wiederholungen. Einzelne Aktionen können kürzere Fristen verwenden.", min: 0.001, max: 86400, step: "any" }
 ];
 function profileValues(profile: LimitProfile): Record<ProfileNumber, string> {
-  return Object.fromEntries(LIMIT_FIELDS.map(({ key }) => [key, profile[key] === null ? "" : String(profile[key])])) as Record<ProfileNumber, string>;
+  return Object.fromEntries(LIMIT_FIELDS.map(({ key }) => [key, profile[key] == null ? "" : String(profile[key])])) as Record<ProfileNumber, string>;
 }
 function limitValue(value: number | null | undefined) {
-  return value === null ? "Keine zusätzliche Kostengrenze" : value === undefined ? "Noch kein lokaler Status" : new Intl.NumberFormat("de-DE", { maximumFractionDigits: 6 }).format(value);
+  return value === null ? "Keine zusätzliche Grenze" : value === undefined ? "Nicht gemeldet" : new Intl.NumberFormat("de-DE", { maximumFractionDigits: 6 }).format(value);
 }
 function epochTime(value: number | null) { return value === null ? "Nicht gemeldet" : timestamp(new Date(value * 1000).toISOString()); }
-const BLOCK_REASONS: Record<string, string> = { requests_per_second: "Sekundenbudget", requests_per_minute: "Minutenbudget", weighted_cost_per_minute: "Lokales Kostenbudget", burst: "Burst-Grenze", max_concurrency: "Parallelitätsgrenze", provider_pause: "Wartehinweis des Anbieters", clock_rollback: "Systemzeit zurückgestellt" };
+const BLOCK_REASONS: Record<string, string> = { requests_per_second: "Sekundenbudget", rolling_second: "Sekundenbudget", requests_per_10_seconds: "10-Sekunden-Budget", rolling_10_seconds: "10-Sekunden-Budget", requests_per_minute: "Minutenbudget", rolling_minute: "Minutenbudget", weighted_cost_per_minute: "Lokales Kostenbudget", burst: "Burst-Grenze", max_concurrency: "Parallelitätsgrenze", provider_pause: "Wartehinweis des Anbieters", clock_rollback: "Systemzeit zurückgestellt" };
+const REQUEST_PROVIDERS: Record<string, string> = { ...PROVIDERS, solana_rpc: "Solana Public RPC", alchemy: "Alchemy", helius: "Helius", solscan: "Solscan", jupiter: "Jupiter", coingecko: "CoinGecko", cryptocompare: "CryptoCompare", ecb: "EZB", fx: "Wechselkurse", ai_local: "KI lokal", ai_cloud: "KI Cloud", ai_openrouter: "OpenRouter", other: "Sonstige" };
+function endpointSelection(target: string): { provider: string; endpoint: string } | null {
+  if (!target.startsWith("endpoint-profile:")) return null;
+  const [provider, ...endpoint] = target.slice("endpoint-profile:".length).split(":");
+  return { provider, endpoint: endpoint.join(":") };
+}
+function selectedProfile(config: LimitConfig, target: string, provider: string, endpoint: string): LimitProfile | undefined {
+  const selection = target === "new-endpoint" ? { provider, endpoint } : endpointSelection(target);
+  if (selection) return config.endpoint_profiles?.[selection.provider]?.[selection.endpoint] ?? (target === "new-endpoint" ? config.group_profiles[`provider:${selection.provider}`] ?? config.default_profile : undefined);
+  return target === "default" || target === "new" ? config.default_profile : config.group_profiles[target];
+}
 function documentationUrl(value: string): string | undefined {
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password ? url.href : undefined; } catch { return undefined; }
 }
@@ -272,8 +287,12 @@ export function RequestLimitSettings() {
   const status = useResource<LimitStatus>("admin-request-limits-status", (signal) => readApi("/api/v1/admin/request-limits/status", signal));
   const references = useResource<ProviderReferences>("admin-provider-references", (signal) => readApi("/api/v1/admin/provider-references", signal));
   const endpoints = useResource<{ http?: { id: string; path: string }[]; rpc?: { id: string; method: string }[] }>("admin-request-endpoints", (signal) => readApi("/api/v1/admin/request-limits/endpoints", signal));
+  const presets = useResource<{ presets: LimitPreset[]; current_revision: number }>("admin-request-presets", (signal) => readApi("/api/v1/admin/request-limits/presets", signal));
+  const [presetConfirmed, setPresetConfirmed] = useState(false);
   const [target, setTarget] = useState("default");
   const [newGroup, setNewGroup] = useState("");
+  const [endpointProvider, setEndpointProvider] = useState("solana_rpc");
+  const [endpointName, setEndpointName] = useState("rpc_gettransaction");
   const [draft, setDraft] = useState<Record<ProfileNumber, string> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -283,26 +302,54 @@ export function RequestLimitSettings() {
   const [costEndpoint, setCostEndpoint] = useState("default");
   const [costValue, setCostValue] = useState("1");
   const [costError, setCostError] = useState("");
-  const [ceilingDraft, setCeilingDraft] = useState({ provider: "binance", requests_per_second: "", requests_per_minute: "", weighted_cost_per_minute: "", source_url: "", checked_date: "", scope: "provider" as ProviderCeiling["scope"], plan: "", confirmed: false });
+  const [ceilingDraft, setCeilingDraft] = useState({ provider: "binance", requests_per_second: "", requests_per_10_seconds: "", requests_per_minute: "", weighted_cost_per_minute: "", source_url: "", checked_date: "", scope: "provider" as ProviderCeiling["scope"], plan: "", confirmed: false, revision: null as number | null });
   const [ceilingError, setCeilingError] = useState("");
   const id = useId();
   const dirtyRef = useRef(false);
-  const base = config.data && (target === "default" || target === "new" ? config.data.default_profile : config.data.group_profiles[target]);
-  const dirty = !!(draft && base && LIMIT_FIELDS.some(({ key }) => draft[key] !== profileValues(base)[key])) || (target === "new" && !!newGroup);
+  const draftRevision = useRef<number | null>(null);
+  const writePending = useRef(false);
+  const selection = target === "new-endpoint" ? { provider: endpointProvider, endpoint: endpointName } : endpointSelection(target);
+  const base = config.data && selectedProfile(config.data, target, endpointProvider, endpointName);
+  const dirty = !!(draft && base && LIMIT_FIELDS.some(({ key }) => draft[key] !== profileValues(base)[key])) || (target === "new" && !!newGroup) || target === "new-endpoint";
   dirtyRef.current = dirty;
-  useEffect(() => { if (config.data && !dirtyRef.current) { const profile = target === "default" || target === "new" ? config.data.default_profile : config.data.group_profiles[target]; if (profile) setDraft(profileValues(profile)); } }, [config.data, target]);
+  useEffect(() => { if (config.data && !dirtyRef.current) { const profile = selectedProfile(config.data, target, endpointProvider, endpointName); if (profile) { draftRevision.current = config.data.revision; setDraft(profileValues(profile)); } } }, [config.data, target, endpointProvider, endpointName]);
+  useEffect(() => { setPresetConfirmed(false); }, [presets.data, config.data?.revision]);
+  useEffect(() => { setCeilingDraft((previous) => previous.confirmed ? { ...previous, confirmed: false } : previous); }, [config.data?.revision]);
   const locked = busy || environment.locked || config.status !== "ready";
   const group = target === "new" ? newGroup : target;
   const providerCeiling = target.startsWith("provider:") ? config.data?.provider_ceilings?.[target.slice("provider:".length)] : undefined;
   const effectiveGroup = providerCeiling ? `budget:ceiling:${target.slice("provider:".length)}` : group;
-  const observed = status.data?.groups.find((item) => item.group === effectiveGroup);
+  const observed = status.data?.groups.find((item) => selection ? item.provider === selection.provider && item.endpoint === selection.endpoint : item.group === effectiveGroup);
   const statusCurrent = status.status === "ready" && status.data?.config_revision === config.data?.revision;
-  function refresh() {
-    if (dirty && !window.confirm("Ungespeicherte Limitänderungen verwerfen?")) return;
-    dirtyRef.current = false; setDraft(null); setNewGroup(""); setValidation({}); config.reload(); status.reload();
+  const draftConflict = draft !== null && dirty && draftRevision.current !== config.data?.revision;
+  const ceilingConflict = ceilingDraft.revision !== null && ceilingDraft.revision !== config.data?.revision;
+  const providerNames = Array.from(new Set([...Object.keys(REQUEST_PROVIDERS), ...Object.keys(config.data?.provider_ceilings ?? {}), ...Object.keys(config.data?.endpoint_profiles ?? {}), ...Object.keys(config.data?.endpoint_costs ?? {}), ...Object.keys(config.data?.provider_groups ?? {}), ...Object.keys(config.data?.group_profiles ?? {}).filter((key) => key.startsWith("provider:")).map((key) => key.slice(9)), ...(references.data?.providers ?? []).map((item) => item.provider)])).sort();
+  const endpointNames = new Map<string, string>([["default", "Standard / sonstige Endpunkte"], ...(endpoints.data?.http ?? []).map((item): [string, string] => [item.id, `${item.id} · ${item.path}`]), ...(endpoints.data?.rpc ?? []).map((item): [string, string] => [item.id, item.method])]);
+  const solanaPreset = presets.data?.presets.find((preset) => preset.id === "solana_public_free");
+  const presetCurrent = presets.status === "ready" && presets.data?.current_revision === config.data?.revision && solanaPreset?.current_revision === config.data?.revision;
+  function beginWrite() {
+    if (writePending.current) return false;
+    writePending.current = true;
+    setBusy(true); setError(""); setNotice("");
+    return true;
   }
-  return <section className="installationSettings connectionSettings" aria-label="Abrufsteuerung">
-    <div className="panelToolbar"><div className="pageTitle"><h2>Abrufsteuerung</h2><HelpTip label="Gemeinsame serverseitige Abrufbudgets">Alle gleichzeitig geltenden Budgetgruppen begrenzen den Start eines Requests gemeinsam. Sekundenfenster, Minutenfenster, Burst und Parallelität haben unterschiedliche Aufgaben. Ein zweites Konto erhöht kein geteiltes Anbieter- oder IP-Budget.</HelpTip></div>
+  function finishWrite() { writePending.current = false; setBusy(false); }
+  function updateCeilingDraft(values: Partial<typeof ceilingDraft>) {
+    setCeilingDraft((previous) => ({ ...previous, ...values, confirmed: false, revision: previous.revision ?? config.data?.revision ?? null }));
+  }
+  function editCeiling(provider: string) {
+    if (locked || writePending.current || !config.data) return;
+    const ceiling = config.data.provider_ceilings?.[provider];
+    setCeilingDraft({ provider, requests_per_second: ceiling?.requests_per_second == null ? "" : String(ceiling.requests_per_second), requests_per_10_seconds: ceiling?.requests_per_10_seconds == null ? "" : String(ceiling.requests_per_10_seconds), requests_per_minute: ceiling?.requests_per_minute == null ? "" : String(ceiling.requests_per_minute), weighted_cost_per_minute: ceiling?.weighted_cost_per_minute == null ? "" : String(ceiling.weighted_cost_per_minute), source_url: ceiling?.source_url ?? "", checked_date: ceiling?.checked_date ?? "", scope: ceiling?.scope ?? "provider", plan: ceiling?.plan ?? "", confirmed: false, revision: config.data.revision });
+    setCeilingError("");
+  }
+  function refresh() {
+    if (writePending.current) return;
+    if (dirty && !window.confirm("Ungespeicherte Limitänderungen verwerfen?")) return;
+    dirtyRef.current = false; draftRevision.current = null; setDraft(null); if (target === "new-endpoint" || target === "new") setTarget("default"); setNewGroup(""); setValidation({}); setError(""); setNotice(""); setPresetConfirmed(false); setCeilingDraft((previous) => ({ ...previous, confirmed: false })); config.reload(); status.reload(); presets.reload();
+  }
+  return <section className="installationSettings connectionSettings requestLimitSettings" aria-label="Abrufsteuerung">
+    <div className="panelToolbar"><div className="pageTitle"><h2>Abrufsteuerung</h2><HelpTip label="Gemeinsame serverseitige Abrufbudgets">Alle gleichzeitig geltenden Budgetgruppen begrenzen den Start eines Requests gemeinsam. Sekunden-, 10-Sekunden- und Minutenfenster, Burst und Parallelität haben unterschiedliche Aufgaben. Ein zweites Konto erhöht kein geteiltes Anbieter- oder IP-Budget.</HelpTip></div>
       <button type="button" className="ghostButton" title="Gespeicherte Limits und lokale Auslastung neu lesen" aria-label="Gespeicherte Limits und lokale Auslastung neu lesen" disabled={busy} onClick={refresh}><RefreshCw size={16} /></button></div>
     <p className="adminSectionIntro">Lokale Betreiberlimits und gemessene Auslastung. Herstellerobergrenzen sind nicht bestätigt; lokale Einstellungen können Anbietergrenzen niemals erhöhen. KI hat einen getrennten Providerbereich.</p>
     <AdminEnvironmentState environment={environment} />
@@ -311,23 +358,68 @@ export function RequestLimitSettings() {
     {config.status === "loading" && <p role="status">Gespeicherte Limitprofile werden geladen.{config.data ? " Der vorherige Stand bleibt sichtbar." : ""}</p>}
     {config.status === "error" && <p role="alert" className="adminMessage error">Limitprofile konnten nicht gelesen werden. Änderungen bleiben gesperrt. <button className="ghostButton" type="button" onClick={config.reload}>Erneut laden</button></p>}
     {config.data && <>
+      <details className="installationSection"><summary>Solana Public RPC - Free</summary>
+        <p>Der gesamte Flaschenhals zählt: Anbieterprofil und gemeinsames <code>ip:global</code>-Budget gelten gleichzeitig. Ein höherer Anbieterwert allein hebt ein engeres IP-Budget nicht auf.</p>
+        <p className="adminInlineHelp">Konservativer Startwert: 3 Requests/s, 180/min und 30/10 Sekunden, Burst 1, parallel 1. Drei Historien-RPC-Endpunkte erhalten 4/s, 240/min und 40/10 Sekunden, ebenfalls Burst 1 und parallel 1; das gemeinsame Gesamtbudget bleibt strenger. Keine Zusage einer erreichbaren Abrufrate.</p>
+        <p className="adminInlineHelp">Dokumentierte Public-RPC-Grenzen: 100 Requests/10 Sekunden insgesamt, 40/10 Sekunden je Methode und 40 neue Verbindungen/10 Sekunden. Deshalb konservativ 3/s. 100 MB/30 Sekunden werden nicht als Bytebudget durchgesetzt. Weiterer Verkehr hinter derselben NAT/IP wird nicht koordiniert.</p>
+        {presets.status === "loading" && <p role="status">Serverseitige Preset-Vorschau wird geladen. Kein Anbieter wird angefragt.</p>}
+        {presets.status === "error" && <p role="alert" className="adminMessage error">Die Preset-Vorschau ist nicht verfügbar. Es wurde nichts angewendet. <button className="ghostButton" type="button" disabled={busy} onClick={presets.reload}>Vorschau neu laden</button></p>}
+        {presets.status === "ready" && !solanaPreset && <p>Der Server bietet dieses Startprofil nicht an.</p>}
+        {solanaPreset && <>
+          <p><strong>Solana Public RPC - Free</strong> · Quellenstand {solanaPreset.checked_date}</p><p>{solanaPreset.description}</p>
+          {documentationUrl(solanaPreset.source_url) && <a href={documentationUrl(solanaPreset.source_url)} target="_blank" rel="noreferrer noopener">Solana-Referenz öffnen</a>}
+          <p className="adminInlineHelp">Betroffene gemeinsame Gruppen: {solanaPreset.affected_groups.filter((groupName) => !groupName.startsWith("budget:endpoint:")).join(", ")}. Startkonfiguration, keine Herstellerverifikation. Alle Zahlen bleiben über die Profile editierbar.</p>
+          <div className="adminLimitTableWrap" role="region" aria-label="Vorgeschlagene Solana-Profile" tabIndex={0}><table className="adminLimitTable"><thead><tr><th scope="col">Profil</th><th scope="col">Requests: 1 s / 10 s / 60 s</th><th scope="col">Burst / parallel</th></tr></thead><tbody>
+            <tr><th scope="row">Anbieter und gemeinsame IP</th><td>{solanaPreset.profile.requests_per_second} / {solanaPreset.profile.requests_per_10_seconds ?? "Keine zusätzliche Grenze"} / {solanaPreset.profile.requests_per_minute}</td><td>{solanaPreset.profile.burst} / {solanaPreset.profile.max_concurrency}</td></tr>
+            {Object.entries(solanaPreset.endpoint_profiles ?? {}).flatMap(([providerName, profiles]) => Object.entries(profiles).map(([endpoint, profile]) => <tr key={`${providerName}:${endpoint}`}><th scope="row">{REQUEST_PROVIDERS[providerName] ?? providerName} · {endpointNames.get(endpoint) ?? endpoint}</th><td>{profile.requests_per_second} / {profile.requests_per_10_seconds ?? "Keine zusätzliche Grenze"} / {profile.requests_per_minute}</td><td>{profile.burst} / {profile.max_concurrency}</td></tr>))}
+          </tbody></table></div>
+          {!!solanaPreset.conflicts.length && <p role="alert" className="adminMessage error">Abweichende vorhandene Profile: {solanaPreset.conflicts.join(", ")}. Das Preset überschreibt diese nicht. Die betroffenen Profile einzeln prüfen und bearbeiten.</p>}
+          {!presetCurrent && <p role="status">Die Vorschau passt nicht zur aktuellen Konfigurationsrevision. Vor dem Anwenden neu laden.</p>}
+          <form className="adminForm" onSubmit={(event) => {
+            event.preventDefault(); if (locked || dirty || !presetConfirmed || !presetCurrent || solanaPreset.conflicts.length || !config.data) return;
+            if (!beginWrite()) return;
+            void adminRequest<LimitConfig>("request-limits/presets/solana_public_free", "POST", { expected_revision: config.data.revision, confirmation: true }).then(() => {
+              setPresetConfirmed(false); setDraft(null); config.reload(); status.reload(); presets.reload(); setNotice("Solana-Startprofil serverseitig gespeichert. Kein externer Abruf, Sync oder Historienimport gestartet. Die Profile bleiben einzeln editierbar.");
+            }).catch((caught) => { setPresetConfirmed(false); setError(caught instanceof Error ? caught.message : "Das Startprofil konnte nicht angewendet werden."); presets.reload(); }).finally(finishWrite);
+          }}>
+            <label className="adminCheckbox"><input type="checkbox" checked={presetConfirmed} disabled={locked || dirty || !presetCurrent || !!solanaPreset.conflicts.length} onChange={(event) => setPresetConfirmed(event.target.checked)} />Ich möchte das Startprofil ausdrücklich auf die genannten gemeinsamen und Endpunktbudgets anwenden. Dies startet keinen Abruf.</label>
+            {dirty && <p className="adminInlineHelp">Zuerst Änderungen am Betreiberprofil speichern oder verwerfen.</p>}
+            <div><button type="submit" className="primaryButton" disabled={locked || dirty || !presetConfirmed || !presetCurrent || !!solanaPreset.conflicts.length}><Save size={16} /> Solana-Startprofil anwenden</button></div>
+          </form>
+        </>}
+      </details>
       <label htmlFor={`${id}-profile`}>Limitprofil</label><select id={`${id}-profile`} value={target} disabled={busy} onChange={(event) => {
+        if (writePending.current) return;
         if (dirty && !window.confirm("Ungespeicherte Limitänderungen verwerfen?")) return;
         const value = event.target.value; setTarget(value); setNewGroup(""); setValidation({}); setNotice("");
-        setDraft(profileValues(value === "default" || value === "new" ? config.data!.default_profile : config.data!.group_profiles[value]));
+        draftRevision.current = config.data!.revision; const profile = selectedProfile(config.data!, value, endpointProvider, endpointName); setDraft(profile ? profileValues(profile) : null);
       }}><option value="default">Lokales Standardprofil (für nicht separat konfigurierte Gruppen)</option>
-        {Object.keys(config.data.group_profiles).sort().map((value) => <option value={value} key={value}>{value}</option>)}<option value="new">Zusätzliches Budgetgruppenprofil</option></select>
+        <optgroup label="Gemeinsame Budgetgruppen">{Object.keys(config.data.group_profiles).sort().map((value) => <option value={value} key={value}>{value}</option>)}</optgroup>
+        <optgroup label="Endpunktprofile">{Object.entries(config.data.endpoint_profiles ?? {}).flatMap(([providerName, profiles]) => Object.keys(profiles).sort().map((endpoint) => <option key={`${providerName}:${endpoint}`} value={`endpoint-profile:${providerName}:${endpoint}`}>{REQUEST_PROVIDERS[providerName] ?? providerName} · {endpointNames.get(endpoint) ?? endpoint}</option>))}</optgroup>
+        <option value="new">Zusätzliches Budgetgruppenprofil</option><option value="new-endpoint">Endpunktprofil hinzufügen / bearbeiten</option></select>
+      {target === "new-endpoint" && <div className="adminForm"><div className="formGrid">
+        <label>Anbieter des Endpunktprofils<select value={endpointProvider} disabled={locked} onChange={(event) => {
+          if (draft && base && LIMIT_FIELDS.some(({ key }) => draft[key] !== profileValues(base)[key]) && !window.confirm("Ungespeicherte Limitänderungen verwerfen?")) return;
+          draftRevision.current = config.data!.revision; setEndpointProvider(event.target.value); setDraft(profileValues(selectedProfile(config.data!, "new-endpoint", event.target.value, endpointName)!)); setValidation({});
+        }}>{providerNames.map((providerName) => <option key={providerName} value={providerName}>{REQUEST_PROVIDERS[providerName] ?? providerName}</option>)}</select></label>
+        <label>Endpunkt des Limitprofils<select value={endpointName} disabled={locked || endpoints.status !== "ready"} onChange={(event) => {
+          if (draft && base && LIMIT_FIELDS.some(({ key }) => draft[key] !== profileValues(base)[key]) && !window.confirm("Ungespeicherte Limitänderungen verwerfen?")) return;
+          draftRevision.current = config.data!.revision; setEndpointName(event.target.value); setDraft(profileValues(selectedProfile(config.data!, "new-endpoint", endpointProvider, event.target.value)!)); setValidation({});
+        }}>{!endpointNames.has(endpointName) && <option value={endpointName}>{endpointName}</option>}{Array.from(endpointNames, ([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
+      </div><p className="adminInlineHelp">{config.data.endpoint_profiles?.[endpointProvider]?.[endpointName] ? "Vorhandenes Endpunktprofil bearbeiten." : "Neues vollständiges Profil auf Basis des Anbieter- oder Standardprofils."} Automatisch an passende Requests gebunden; gemeinsame Anbieter- und IP-Budgets gelten zusätzlich. Keine URL und keinen API-Key eingeben.</p></div>}
+      {endpoints.status === "error" && <p role="alert" className="adminMessage error">Der Endpunktkatalog konnte nicht geladen werden. Neue Endpunktzuordnungen bleiben gesperrt. <button type="button" className="ghostButton" disabled={busy} onClick={endpoints.reload}>Katalog erneut laden</button></p>}
       {target === "new" && <div className="adminFormField"><label htmlFor={`${id}-new-group`}>Neue Budgetgruppen-ID</label><input id={`${id}-new-group`} type="text" value={newGroup} maxLength={80} disabled={locked} autoComplete="off" spellCheck={false} aria-describedby={`${id}-new-group-help`} aria-invalid={!!validation.group} onChange={(event) => setNewGroup(event.target.value)} /><small id={`${id}-new-group-help`} className="adminInlineHelp">Geheimnisfreie Kennung, z. B. provider:binance, ip:global oder budget:boersen. Ein Gruppenprofil ist erst für zugeordnete Verbindungen bzw. Anbieter wirksam. Keine API-Keys eingeben.</small>{validation.group && <small className="adminFieldError">{validation.group}</small>}</div>}
-      <p className="adminInlineHelp">{target === "default" ? "Das Standardprofil ersetzt keine Herstellergrenze. Jede aktive Budgetgruppe erbt es, sofern kein eigenes Profil hinterlegt ist." : "Dieses Profil begrenzt die gesamte Budgetgruppe gemeinsam, nicht jedes Konto einzeln. Weitere IP-/Anbietergruppen können strenger begrenzen."}</p>
+      <p className="adminInlineHelp">{target === "default" ? "Das Standardprofil ersetzt keine Herstellergrenze. Jede aktive Budgetgruppe erbt es, sofern kein eigenes Profil hinterlegt ist." : selection ? `Endpunktprofil für ${selection.provider} / ${selection.endpoint}. Alle passenden Requests teilen dieses Budget; weitere IP-/Anbietergruppen können strenger begrenzen.` : "Dieses Profil begrenzt die gesamte Budgetgruppe gemeinsam, nicht jedes Konto einzeln. Weitere IP-/Anbietergruppen können strenger begrenzen."}</p>
       <div className="adminLimitTableWrap" role="region" aria-label="Hersteller, Betreiber und wirksame Limits" tabIndex={0}><table className="adminLimitTable"><caption>Gespeicherter Stand · Revision {config.data.revision}. Wirksame Werte gelten für diese Budgetgruppe einschließlich einer hinterlegten Betreiberdeklaration. Weitere gemeinsame Budgets können zusätzlich strenger begrenzen.</caption><thead><tr><th scope="col">Parameter</th><th scope="col">Herstellergrenze (Betreiberdeklaration)</th><th scope="col">Betreiberwert (gespeichert)</th><th scope="col">Wirksam laut Koordinator</th></tr></thead><tbody>
-        {LIMIT_FIELDS.filter(({ key }) => ["requests_per_second", "requests_per_minute", "weighted_cost_per_minute", "burst", "max_concurrency", "timeout_seconds", "max_retries", "job_deadline_seconds"].includes(key)).map(({ key, label: fieldLabel }) => {
-          const cap = providerCeiling && (key === "requests_per_second" || key === "requests_per_minute" || key === "weighted_cost_per_minute") ? providerCeiling[key] : null;
-          return <tr key={key}><th scope="row">{fieldLabel}</th><td>{cap === null ? "Unbekannt / nicht bestätigt" : `${limitValue(cap)} · vom Betreiber deklariert, nicht unabhängig verifiziert`}</td><td>{limitValue(base?.[key])}</td><td>{!statusCurrent ? status.status === "error" ? "Koordinatorstatus nicht verfügbar" : "Aktueller Koordinatorstatus wird geprüft" : target === "default" || target === "new" ? "Je zugeordneter Budgetgruppe" : limitValue(observed?.profile[key])}</td></tr>;
+        {LIMIT_FIELDS.filter(({ key }) => ["requests_per_second", "requests_per_10_seconds", "requests_per_minute", "weighted_cost_per_minute", "burst", "max_concurrency", "timeout_seconds", "max_retries", "job_deadline_seconds"].includes(key)).map(({ key, label: fieldLabel }) => {
+          const cap = providerCeiling && (key === "requests_per_second" || key === "requests_per_10_seconds" || key === "requests_per_minute" || key === "weighted_cost_per_minute") ? providerCeiling[key] : null;
+          return <tr key={key}><th scope="row">{fieldLabel}</th><td>{cap == null ? "Unbekannt / nicht bestätigt" : `${limitValue(cap)} · vom Betreiber deklariert, nicht unabhängig verifiziert`}</td><td>{limitValue(key === "requests_per_10_seconds" ? base?.[key] ?? null : base?.[key])}</td><td>{!statusCurrent ? status.status === "error" ? "Koordinatorstatus nicht verfügbar" : "Aktueller Koordinatorstatus wird geprüft" : target === "default" || target === "new" ? "Je zugeordneter Budgetgruppe" : limitValue(observed?.profile[key])}</td></tr>;
         })}
       </tbody></table></div>
       {providerCeiling && <p className="adminInlineHelp">Betreiberdeklaration für Plan {providerCeiling.plan} · Prüfung durch den Betreiber: {providerCeiling.checked_date}. Geltungsbereich: {providerCeiling.scope}. Die Software hat diese Grenze nicht unabhängig verifiziert.</p>}
-      <details className="installationSection" open={target === "new" ? true : undefined}><summary>Lokales Betreiberprofil bearbeiten</summary><form className="adminForm" onSubmit={(event) => {
+      <details className="installationSection" open={target === "new" || target === "new-endpoint" ? true : undefined}><summary>Lokales Betreiberprofil bearbeiten</summary><form className="adminForm" onSubmit={(event) => {
         event.preventDefault(); if (locked || !draft || !base || !config.data) return;
+        if (draftConflict) { setError("Die Konfiguration wurde während der Bearbeitung geändert. Ihre Eingaben bleiben erhalten. Neu laden und den aktuellen Stand prüfen, bevor Sie erneut speichern."); return; }
         const errors: Record<string, string> = {};
         const values: Partial<Record<ProfileNumber, number | null>> = {};
         for (const field of LIMIT_FIELDS) {
@@ -337,17 +429,18 @@ export function RequestLimitSettings() {
           if (!raw || !Number.isFinite(value) || value < field.min || value > field.max || (field.step === "1" && !Number.isInteger(value))) errors[field.key] = `Wert zwischen ${field.min} und ${field.max}${field.step === "1" ? " als ganze Zahl" : ""} erforderlich.`;
           else values[field.key] = value;
         }
-        if (Number(values.burst) > Math.min(Number(values.requests_per_second), Number(values.requests_per_minute))) errors.burst = "Burst darf die Sekunden- und Minutengrenze nicht überschreiten.";
+        if (Number(values.burst) > Math.min(Number(values.requests_per_second), values.requests_per_10_seconds == null ? Infinity : Number(values.requests_per_10_seconds), Number(values.requests_per_minute))) errors.burst = "Burst darf die Sekunden-, 10-Sekunden- und Minutengrenze nicht überschreiten.";
         if (Number(values.backoff_base_seconds) > Number(values.backoff_max_seconds)) errors.backoff_base_seconds = "Die anfängliche Wartezeit darf die maximale Basiswartezeit nicht überschreiten.";
         if (Number(values.timeout_seconds) > Number(values.job_deadline_seconds)) errors.timeout_seconds = "Der Request-Timeout darf die Gesamtdeadline nicht überschreiten.";
-        if (target === "new" && (!GROUP_PATTERN.test(newGroup) || newGroup.startsWith("budget:ceiling:") || !!config.data.group_profiles[newGroup])) errors.group = "Eine gültige, neue Budgetgruppen-ID angeben. budget:ceiling: ist reserviert; vorhandene Gruppen im Profilmenü auswählen.";
+        if (target === "new" && (!GROUP_PATTERN.test(newGroup) || newGroup.startsWith("budget:ceiling:") || newGroup.startsWith("budget:endpoint:") || !!config.data.group_profiles[newGroup])) errors.group = "Eine gültige, neue Budgetgruppen-ID angeben. budget:ceiling: und budget:endpoint: sind reserviert; vorhandene Gruppen im Profilmenü auswählen.";
+        if (selection && (endpoints.status !== "ready" || !endpointNames.has(selection.endpoint) || !providerNames.includes(selection.provider))) errors.endpoint = "Anbieter und unterstützten Endpunkt aus dem geladenen Katalog wählen.";
         setValidation(errors); if (Object.keys(errors).length) return;
         const profile = { ...base, ...values } as LimitProfile;
-        const nextConfig = { ...config.data, ...(target === "default" ? { default_profile: profile } : { group_profiles: { ...config.data.group_profiles, [group]: profile } }) };
-        setBusy(true); setError(""); setNotice("");
+        const nextConfig = { ...config.data, ...(selection ? { endpoint_profiles: { ...config.data.endpoint_profiles, [selection.provider]: { ...config.data.endpoint_profiles?.[selection.provider], [selection.endpoint]: profile } } } : target === "default" ? { default_profile: profile } : { group_profiles: { ...config.data.group_profiles, [group]: profile } }) };
+        if (!beginWrite()) return;
         void adminRequest<LimitConfig>("request-limits", "PUT", { config: nextConfig, expected_revision: config.data.revision }).then(() => {
-          dirtyRef.current = false; setDraft(null); setTarget(target === "new" ? group : target); setNewGroup(""); config.reload(); status.reload(); setNotice("Lokales Limitprofil gespeichert. Kein externer Abruf und kein Zeitplan gestartet. Bestehende Budgetbelegung wurde nicht durch die Oberfläche zurückgesetzt.");
-        }).catch((caught) => setError(caught instanceof Error ? caught.message : "Das Limitprofil konnte nicht gespeichert werden.")).finally(() => setBusy(false));
+          dirtyRef.current = false; setDraft(profileValues(profile)); setTarget(selection ? `endpoint-profile:${selection.provider}:${selection.endpoint}` : target === "new" ? group : target); setNewGroup(""); config.reload(); status.reload(); presets.reload(); setNotice("Lokales Limitprofil gespeichert. Kein externer Abruf und kein Zeitplan gestartet. Bestehende Budgetbelegung wurde nicht durch die Oberfläche zurückgesetzt.");
+        }).catch((caught) => setError(caught instanceof Error ? caught.message : "Das Limitprofil konnte nicht gespeichert werden.")).finally(finishWrite);
       }}>
         <fieldset disabled={locked || !draft}><legend>Lokales Betreiberprofil bearbeiten</legend>
           <div className="formGrid">{LIMIT_FIELDS.map((field) => <div className="adminFormField" key={field.key}><span className="adminFieldLabel"><label htmlFor={`${id}-${field.key}`}>{field.label}</label><HelpTip label={field.label}>{field.help}</HelpTip></span>
@@ -356,7 +449,9 @@ export function RequestLimitSettings() {
           </div>)}</div>
         </fieldset>
         <label>Automatisches Sync-Intervall (Sekunden)<input type="number" value={0} disabled aria-describedby={`${id}-sync-help`} /></label><small className="adminInlineHelp" id={`${id}-sync-help`}>0 = deaktiviert. Es gibt derzeit keinen aktivierten periodischen Sync-Scheduler. Speichern eines Profils plant keine Abrufe.</small>
-        <div><button type="submit" className="primaryButton" disabled={locked || !draft || (!dirty && target !== "new")}><Save size={16} /> Limitprofil speichern</button></div>
+        {validation.endpoint && <p role="alert" className="adminFieldError">{validation.endpoint}</p>}
+        {draftConflict && <p role="alert" className="adminMessage error">Die Konfiguration wurde während der Bearbeitung geändert. Ihre Eingaben bleiben erhalten. Neu laden und den aktuellen Stand prüfen; der alte Entwurf wird nicht mit einer neueren Revision gespeichert.</p>}
+        <div><button type="submit" className="primaryButton" disabled={locked || draftConflict || !draft || (selection !== null && endpoints.status !== "ready") || (!dirty && target !== "new")}><Save size={16} /> Limitprofil speichern</button></div>
       </form></details>
       <details className="installationSection"><summary>Gemeinsame Gruppen und Geltungsbereich</summary>
         <p>Börsen-/RPC-Connectoren verwenden das gemeinsame IP-Budget <code>ip:global</code> und ihr Anbieterbudget <code>provider:anbieter</code>. Zusätzliche Gruppen begrenzen gemeinsam. API-Key- oder IP-Wechsel zur Umgehung sind kein Einrichtungsablauf.</p>
@@ -365,13 +460,14 @@ export function RequestLimitSettings() {
         <p className="adminInlineHelp">Lokale Kosteneinheiten sind keine bestätigten Anbieter-Credits. Ein Tages-/Abrechnungsbudget wird hier nicht angeboten, solange dessen technische Durchsetzung und Herstellersemantik nicht verfügbar sind.</p>
       </details>
       <details className="installationSection"><summary>Herstellergrenzen aus eigenem Tarif deklarieren</summary>
-        <p className="adminInlineHelp">Optionale, vom Betreiber aus dem eigenen Tarif übertragene Obergrenzen. Nicht unabhängig verifiziert. Ohne Deklaration bleiben Herstellergrenzen unbekannt; lokale Schutzlimits bleiben aktiv. Der Server begrenzt zusätzlich auf den kleineren passenden Wert. Rollierende Sekunden-/Minutenwerte ersetzen keine anders definierten Anbieterfenster.</p>
-        {Object.entries(config.data.provider_ceilings ?? {}).map(([providerName, ceiling]) => <div className="adminStorageCheck" key={providerName}><strong>{PROVIDERS[providerName] ?? providerName} · {ceiling.plan}</strong><p>Betreiberdeklaration vom {ceiling.checked_date} · nicht unabhängig verifiziert</p><div className="adminRowActions"><button type="button" className="ghostButton" disabled={locked} onClick={() => { setCeilingDraft({ provider: providerName, requests_per_second: ceiling.requests_per_second === null ? "" : String(ceiling.requests_per_second), requests_per_minute: ceiling.requests_per_minute === null ? "" : String(ceiling.requests_per_minute), weighted_cost_per_minute: ceiling.weighted_cost_per_minute === null ? "" : String(ceiling.weighted_cost_per_minute), source_url: ceiling.source_url, checked_date: ceiling.checked_date, scope: ceiling.scope, plan: ceiling.plan, confirmed: false }); setCeilingError(""); }}><Pencil size={16} /> Deklaration bearbeiten</button>{documentationUrl(ceiling.source_url) && <a href={documentationUrl(ceiling.source_url)} rel="noreferrer noopener" target="_blank">Hinterlegte Referenz öffnen</a>}</div></div>)}
+        <p className="adminInlineHelp">Optionale, vom Betreiber aus dem eigenen Tarif übertragene Obergrenzen. Nicht unabhängig verifiziert. Ohne Deklaration bleiben Herstellergrenzen unbekannt; lokale Schutzlimits bleiben aktiv. Der Server begrenzt zusätzlich auf den kleineren passenden Wert. Rollierende Sekunden-/10-Sekunden-/Minutenwerte ersetzen keine anders definierten Anbieterfenster.</p>
+        {Object.entries(config.data.provider_ceilings ?? {}).map(([providerName, ceiling]) => <div className="adminStorageCheck" key={providerName}><strong>{REQUEST_PROVIDERS[providerName] ?? providerName} · {ceiling.plan}</strong><p>Betreiberdeklaration vom {ceiling.checked_date} · nicht unabhängig verifiziert</p><div className="adminRowActions"><button type="button" className="ghostButton" disabled={locked} onClick={() => editCeiling(providerName)}><Pencil size={16} /> Deklaration bearbeiten</button>{documentationUrl(ceiling.source_url) && <a href={documentationUrl(ceiling.source_url)} rel="noreferrer noopener" target="_blank">Hinterlegte Referenz öffnen</a>}</div></div>)}
         <form className="adminForm" onSubmit={(event) => {
           event.preventDefault(); if (locked || !config.data || dirty || !ceilingDraft.confirmed) return;
+          if (ceilingDraft.revision === null || ceilingConflict) { setCeilingError("Die Tarifdeklaration stammt aus einem älteren Konfigurationsstand. Aktuellen Stand ausdrücklich laden und erneut prüfen; Ihre Eingaben wurden nicht gespeichert."); return; }
           const values: Record<string, number | null> = {};
           let invalid = false;
-          for (const [key, maximum] of [["requests_per_second", 10000], ["requests_per_minute", 100000], ["weighted_cost_per_minute", 100000000]] as const) {
+          for (const [key, maximum] of [["requests_per_second", 10000], ["requests_per_10_seconds", 100000], ["requests_per_minute", 100000], ["weighted_cost_per_minute", 100000000]] as const) {
             const raw = ceilingDraft[key].trim(); const value = Number(raw);
             if (!raw) values[key] = null;
             else if (!Number.isInteger(value) || value < 1 || value > maximum) invalid = true;
@@ -382,24 +478,28 @@ export function RequestLimitSettings() {
           if (invalid || Object.values(values).every((value) => value === null) || !/^[a-z][a-z0-9_-]{0,47}$/.test(ceilingDraft.provider) || !/^[a-zA-Z0-9][a-zA-Z0-9 ._:+-]{0,79}$/.test(ceilingDraft.plan) || !/^\d{4}-\d{2}-\d{2}$/.test(ceilingDraft.checked_date) || !validUrl) {
             setCeilingError("Mindestens eine positive Grenze, gültige Anbieterkennung, Tarifname, Prüfdatum und öffentliche HTTPS-Referenz ohne Zugangsdaten, IP-Adresse oder Query-Parameter angeben."); return;
           }
-          const ceiling = { ...values, source_url: ceilingDraft.source_url, checked_date: ceilingDraft.checked_date, scope: ceilingDraft.scope, plan: ceilingDraft.plan, declared_by_operator: true, independently_verified: false };
+          const ceiling = { ...config.data.provider_ceilings?.[ceilingDraft.provider], ...values, source_url: ceilingDraft.source_url, checked_date: ceilingDraft.checked_date, scope: ceilingDraft.scope, plan: ceilingDraft.plan, declared_by_operator: true, independently_verified: false };
           const nextConfig = { ...config.data, provider_ceilings: { ...config.data.provider_ceilings, [ceilingDraft.provider]: ceiling } };
-          setCeilingError(""); setBusy(true); setError(""); setNotice("");
-          void adminRequest<LimitConfig>("request-limits", "PUT", { config: nextConfig, expected_revision: config.data.revision }).then(() => { setCeilingDraft((previous) => ({ ...previous, confirmed: false })); config.reload(); status.reload(); setNotice("Tarifgrenze als Betreiberdeklaration gespeichert, nicht unabhängig verifiziert. Die Referenz wurde nicht aufgerufen; kein Abruf wurde gestartet."); }).catch((caught) => setError(caught instanceof Error ? caught.message : "Die Betreiberdeklaration konnte nicht gespeichert werden.")).finally(() => setBusy(false));
+          if (!beginWrite()) return;
+          setCeilingError("");
+          void adminRequest<LimitConfig>("request-limits", "PUT", { config: nextConfig, expected_revision: ceilingDraft.revision }).then(() => { setCeilingDraft((previous) => ({ ...previous, confirmed: false })); config.reload(); status.reload(); presets.reload(); setNotice("Tarifgrenze als Betreiberdeklaration gespeichert, nicht unabhängig verifiziert. Die Referenz wurde nicht aufgerufen; kein Abruf wurde gestartet."); }).catch((caught) => setError(caught instanceof Error ? caught.message : "Die Betreiberdeklaration konnte nicht gespeichert werden.")).finally(finishWrite);
         }}>
-          <fieldset disabled={locked || dirty}><legend>Eigene Tarifdeklaration</legend><div className="formGrid">
-            <label>Anbieterkennung für Tarifgrenze<input value={ceilingDraft.provider} maxLength={48} autoComplete="off" onChange={(event) => setCeilingDraft({ ...ceilingDraft, provider: event.target.value, confirmed: false })} /></label>
-            <label>Nicht vertraulicher Tarifname<input value={ceilingDraft.plan} maxLength={80} autoComplete="off" onChange={(event) => setCeilingDraft({ ...ceilingDraft, plan: event.target.value, confirmed: false })} /></label>
-            <label>Tarifgrenze Requests pro Sekunde<input type="number" min={1} max={10000} step={1} value={ceilingDraft.requests_per_second} onChange={(event) => setCeilingDraft({ ...ceilingDraft, requests_per_second: event.target.value, confirmed: false })} /></label>
-            <label>Tarifgrenze Requests pro Minute<input type="number" min={1} max={100000} step={1} value={ceilingDraft.requests_per_minute} onChange={(event) => setCeilingDraft({ ...ceilingDraft, requests_per_minute: event.target.value, confirmed: false })} /></label>
-            <label>Tarifgrenze gewichtete Kosten pro Minute<input type="number" min={1} max={100000000} step={1} value={ceilingDraft.weighted_cost_per_minute} onChange={(event) => setCeilingDraft({ ...ceilingDraft, weighted_cost_per_minute: event.target.value, confirmed: false })} /></label>
-            <div className="adminFormField"><label htmlFor={`${id}-ceiling-scope`}>Geltungsbereich der Tarifgrenze</label><select id={`${id}-ceiling-scope`} value={ceilingDraft.scope} onChange={(event) => setCeilingDraft({ ...ceilingDraft, scope: event.target.value as ProviderCeiling["scope"], confirmed: false })}>{Object.entries({ provider: "Anbieter", ip: "IP-Adresse", account: "Anbieterkonto", api_key: "API-Key", project: "Projekt", endpoint_group: "Endpunktgruppe", combination: "Kombination" }).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></div>
-            <label>Öffentliche Referenz zur Tarifgrenze<input type="url" value={ceilingDraft.source_url} maxLength={1024} autoComplete="off" onChange={(event) => setCeilingDraft({ ...ceilingDraft, source_url: event.target.value, confirmed: false })} /></label>
-            <label>Prüfdatum der Tarifdeklaration<input type="date" value={ceilingDraft.checked_date} onChange={(event) => setCeilingDraft({ ...ceilingDraft, checked_date: event.target.value, confirmed: false })} /></label>
+          <fieldset disabled={locked || dirty || ceilingConflict}><legend>Eigene Tarifdeklaration</legend><div className="formGrid">
+            <label>Anbieterkennung für Tarifgrenze<select value={ceilingDraft.provider} onChange={(event) => updateCeilingDraft({ provider: event.target.value })}>{providerNames.map((providerName) => <option key={providerName} value={providerName}>{REQUEST_PROVIDERS[providerName] ?? providerName}</option>)}</select></label>
+            <label>Nicht vertraulicher Tarifname<input value={ceilingDraft.plan} maxLength={80} autoComplete="off" onChange={(event) => updateCeilingDraft({ plan: event.target.value })} /></label>
+            <label>Tarifgrenze Requests pro Sekunde<input type="number" min={1} max={10000} step={1} value={ceilingDraft.requests_per_second} onChange={(event) => updateCeilingDraft({ requests_per_second: event.target.value })} /></label>
+            <label>Tarifgrenze Requests pro 10 Sekunden<input type="number" min={1} max={100000} step={1} value={ceilingDraft.requests_per_10_seconds} onChange={(event) => updateCeilingDraft({ requests_per_10_seconds: event.target.value })} /></label>
+            <label>Tarifgrenze Requests pro Minute<input type="number" min={1} max={100000} step={1} value={ceilingDraft.requests_per_minute} onChange={(event) => updateCeilingDraft({ requests_per_minute: event.target.value })} /></label>
+            <label>Tarifgrenze gewichtete Kosten pro Minute<input type="number" min={1} max={100000000} step={1} value={ceilingDraft.weighted_cost_per_minute} onChange={(event) => updateCeilingDraft({ weighted_cost_per_minute: event.target.value })} /></label>
+            <div className="adminFormField"><label htmlFor={`${id}-ceiling-scope`}>Geltungsbereich der Tarifgrenze</label><select id={`${id}-ceiling-scope`} value={ceilingDraft.scope} onChange={(event) => updateCeilingDraft({ scope: event.target.value as ProviderCeiling["scope"] })}>{Object.entries({ provider: "Anbieter", ip: "IP-Adresse", account: "Anbieterkonto", api_key: "API-Key", project: "Projekt", endpoint_group: "Endpunktgruppe", combination: "Kombination" }).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></div>
+            <label>Öffentliche Referenz zur Tarifgrenze<input type="url" value={ceilingDraft.source_url} maxLength={1024} autoComplete="off" onChange={(event) => updateCeilingDraft({ source_url: event.target.value })} /></label>
+            <label>Prüfdatum der Tarifdeklaration<input type="date" value={ceilingDraft.checked_date} onChange={(event) => updateCeilingDraft({ checked_date: event.target.value })} /></label>
           </div><p className="adminInlineHelp">Leere Grenzfelder bedeuten unbekannt, nicht unbegrenzt. Ein Kostenwert darf nur bei passender, geprüfter Einheit und Zeitfenstersemantik übertragen werden. Keine vertraulichen Vertragsnotizen oder Secrets eingeben.</p>
-          <label className="adminCheckbox"><input type="checkbox" checked={ceilingDraft.confirmed} onChange={(event) => setCeilingDraft({ ...ceilingDraft, confirmed: event.target.checked })} />Ich habe diese Angaben aus meinem Tarif geprüft. Sie sind eine Betreiberdeklaration, keine unabhängige Verifikation durch die Software.</label></fieldset>
+          <label className="adminCheckbox"><input type="checkbox" checked={ceilingDraft.confirmed} onChange={(event) => { if (!ceilingConflict) setCeilingDraft({ ...ceilingDraft, confirmed: event.target.checked, revision: ceilingDraft.revision ?? config.data!.revision }); }} />Ich habe diese Angaben aus meinem Tarif geprüft. Sie sind eine Betreiberdeklaration, keine unabhängige Verifikation durch die Software.</label></fieldset>
           {dirty && <p className="adminInlineHelp">Zuerst Änderungen am Betreiberprofil speichern oder verwerfen.</p>}{ceilingError && <p className="adminFieldError" role="alert">{ceilingError}</p>}
-          <div><button className="primaryButton" type="submit" disabled={locked || dirty || !ceilingDraft.confirmed}><Save size={16} /> Tarifdeklaration speichern</button></div>
+          {ceilingConflict && <p role="alert" className="adminMessage error">Die Konfiguration wurde seit Beginn dieses Tarifentwurfs geändert. Die alten Eingaben bleiben sichtbar, sind aber nicht mehr bestätigt und können nicht gespeichert werden. Aktuellen Stand ausdrücklich laden und erneut prüfen.</p>}
+          <div className="adminFormActions"><button className="primaryButton" type="submit" disabled={locked || dirty || ceilingConflict || !ceilingDraft.confirmed}><Save size={16} /> Tarifdeklaration speichern</button>
+            <button className="ghostButton" type="button" disabled={locked} onClick={() => editCeiling(ceilingDraft.provider)}><RefreshCw size={16} /> Tarifentwurf verwerfen und aktuellen Stand laden</button></div>
         </form>
       </details>
       <details className="installationSection"><summary>Lokale Endpunktkosten</summary>
@@ -414,20 +514,20 @@ export function RequestLimitSettings() {
           const supported = new Set(["default", ...(endpoints.data?.http ?? []).map((item) => item.id), ...(endpoints.data?.rpc ?? []).map((item) => item.id)]);
           if (endpoints.status !== "ready" || !Array.isArray(endpoints.data?.http) || !supported.has(costEndpoint)) { setCostError("Unterstützte Endpunktkennung aus der Liste wählen. Der Katalog muss erfolgreich geladen sein."); return; }
           if (!/^[a-z][a-z0-9_-]{0,47}$/.test(costProvider) || !/^[a-zA-Z][a-zA-Z0-9_.:-]{0,63}$/.test(costEndpoint) || !Number.isInteger(cost) || cost < 1 || cost > 100000000) { setCostError("Gültige Anbieter-/Endpunktkennung und ganze lokale Kosten zwischen 1 und 100000000 angeben."); return; }
-          setCostError(""); setBusy(true); setError(""); setNotice("");
+          if (!beginWrite()) return;
+          setCostError("");
           const nextConfig = { ...config.data, endpoint_costs: { ...config.data.endpoint_costs, [costProvider]: { ...config.data.endpoint_costs?.[costProvider], [costEndpoint]: cost } } };
-          void adminRequest<LimitConfig>("request-limits", "PUT", { config: nextConfig, expected_revision: config.data.revision }).then(() => { config.reload(); status.reload(); setNotice("Lokaler Endpunktkostenwert gespeichert. Keine Herstellerquote geändert und kein Request gestartet."); }).catch((caught) => setError(caught instanceof Error ? caught.message : "Endpunktkosten konnten nicht gespeichert werden.")).finally(() => setBusy(false));
+          void adminRequest<LimitConfig>("request-limits", "PUT", { config: nextConfig, expected_revision: config.data.revision }).then(() => { config.reload(); status.reload(); presets.reload(); setNotice("Lokaler Endpunktkostenwert gespeichert. Keine Herstellerquote geändert und kein Request gestartet."); }).catch((caught) => setError(caught instanceof Error ? caught.message : "Endpunktkosten konnten nicht gespeichert werden.")).finally(finishWrite);
         }}>
           <fieldset disabled={locked || dirty}><legend>Lokalen Kostenwert hinterlegen</legend><div className="formGrid">
-            <label>Anbieterkennung<input value={costProvider} maxLength={48} autoComplete="off" spellCheck={false} onChange={(event) => setCostProvider(event.target.value)} aria-describedby={`${id}-cost-help`} /></label>
-            <label>Endpunktkennung<input list={`${id}-endpoints`} value={costEndpoint} maxLength={64} autoComplete="off" spellCheck={false} onChange={(event) => setCostEndpoint(event.target.value)} aria-describedby={`${id}-cost-help`} /></label>
-            <datalist id={`${id}-endpoints`}><option value="default">Rückfallwert</option>{endpoints.data?.http?.map((item) => <option key={item.path} value={item.id}>{item.path}</option>)}{endpoints.data?.rpc?.map((item) => <option key={item.id} value={item.id}>{item.method}</option>)}</datalist>
+            <label>Anbieterkennung<select value={costProvider} onChange={(event) => setCostProvider(event.target.value)} aria-describedby={`${id}-cost-help`}>{providerNames.map((providerName) => <option key={providerName} value={providerName}>{REQUEST_PROVIDERS[providerName] ?? providerName}</option>)}</select></label>
+            <label>Endpunktkennung<select value={costEndpoint} disabled={endpoints.status !== "ready"} onChange={(event) => setCostEndpoint(event.target.value)} aria-describedby={`${id}-cost-help`}>{!endpointNames.has(costEndpoint) && <option value={costEndpoint}>{costEndpoint}</option>}{Array.from(endpointNames, ([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
             <label htmlFor={`${id}-cost-value`}>Lokale Einheiten je Requestversuch<input id={`${id}-cost-value`} type="number" min={1} max={100000000} step={1} value={costValue} onChange={(event) => setCostValue(event.target.value)} aria-describedby={`${id}-cost-help`} /></label>
           </div></fieldset>
           <small id={`${id}-cost-help`} className="adminInlineHelp">Beispiele aus dem vorhandenen Connector: binance / account, bitget / spot_assets, pionex / balances, coinbase / accounts. Solana-RPC verwendet rpc_ plus kleingeschriebenen Methodennamen; default ist der Rückfallwert eines Anbieters. Ein frei erfundener Name trifft keinen Request-Pfad.</small>
           {dirty && <p className="adminInlineHelp">Zuerst Änderungen am Betreiberprofil speichern oder verwerfen, bevor Endpunktkosten bearbeitet werden.</p>}
           {costError && <p role="alert" className="adminFieldError">{costError}</p>}
-          <div><button className="primaryButton" type="submit" disabled={locked || dirty}><Save size={16} /> Endpunktkosten speichern</button></div>
+          <div><button className="primaryButton" type="submit" disabled={locked || dirty || endpoints.status !== "ready"}><Save size={16} /> Endpunktkosten speichern</button></div>
         </form>
       </details>
     </>}
@@ -439,8 +539,8 @@ export function RequestLimitSettings() {
       {status.status === "ready" && !status.data?.groups.length && <p>Noch keine aktive Budgetgruppe gemessen. Das ist weder eine freie Restquote noch ein Nachweis unbegrenzter Abrufe.</p>}
       {status.data && <>
         <p className="adminInlineHelp">Messzeitpunkt: {epochTime(status.data.observed_at)} · Konfigurationsrevision {status.data.config_revision}</p>
-        <div className="adminLimitTableWrap" role="region" aria-label="Lokale Budgetauslastung" tabIndex={0}><table className="adminLimitTable"><thead><tr><th scope="col">Budgetgruppe</th><th scope="col">Starts: 1 s / 60 s</th><th scope="col">Lokale Kosten: 60 s</th><th scope="col">Laufend / wartend</th><th scope="col">Wartehinweis</th><th scope="col">Nächster Start laut Koordinator</th></tr></thead><tbody>{status.data.groups.map((item) => <tr key={item.group}>
-          <th scope="row"><code>{item.group}</code></th><td>{item.requests_last_second} / {item.requests_last_minute}</td><td>{item.cost_last_minute}</td><td>{item.in_flight} / {item.queued}</td>
+        <div className="adminLimitTableWrap" role="region" aria-label="Lokale Budgetauslastung" tabIndex={0}><table className="adminLimitTable"><thead><tr><th scope="col">Budgetgruppe</th><th scope="col">Starts: 1 s / 10 s / 60 s</th><th scope="col">Lokale Kosten: 60 s</th><th scope="col">Laufend / wartend</th><th scope="col">Wartehinweis</th><th scope="col">Nächster Start laut Koordinator</th></tr></thead><tbody>{status.data.groups.map((item) => <tr key={item.group}>
+          <th scope="row">{item.provider && item.endpoint ? <>{REQUEST_PROVIDERS[item.provider] ?? item.provider} · {endpointNames.get(item.endpoint) ?? item.endpoint}</> : item.group.startsWith("budget:endpoint:") ? "Endpunktbudget (Zuordnung nicht gemeldet)" : <code>{item.group}</code>}</th><td>{item.requests_last_second} / {item.requests_last_10_seconds ?? "Nicht gemeldet"} / {item.requests_last_minute}</td><td>{item.cost_last_minute}</td><td>{item.in_flight} / {item.queued}</td>
           <td>{item.paused_until ? `Anbieterpause bis ${epochTime(item.paused_until)}` : "Keine Anbieterpause gemeldet"}{item.blocking_reasons.length > 0 && <div>{item.blocking_reasons.map((reason) => BLOCK_REASONS[reason] ?? "Lokale Budgetbedingung").join(", ")}</div>}</td><td>{epochTime(item.next_start_at)}</td>
         </tr>)}</tbody></table></div>
         <details className="installationSection"><summary>Tatsächlich gemeldete Anbieterwerte</summary>

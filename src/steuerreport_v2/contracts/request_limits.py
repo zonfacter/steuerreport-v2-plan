@@ -1,6 +1,6 @@
 """Lokale Abrufbudgets, keine Aussage ueber vertragliche Herstellerlimits.
 
-Sekunden-/Minutenfenster sind rollierend: (jetzt - Fenster, jetzt].
+Sekunden-/10-Sekunden-/Minutenfenster sind rollierend: (jetzt - Fenster, jetzt].
 Burst ist eine ZUSAETZLICHE Token-Bucket-Grenze mit requests_per_second
 als Auffuellrate; sie hebt keines der rollierenden Fenster auf. Kosten sind
 lokale Einheiten. Ihre Zuordnung zu API-Gewichten/CU obliegt dem Connector.
@@ -33,6 +33,7 @@ class RequestLimitProfile(LimitContract):
     manufacturer_limit_verified: Literal[False] = False
     cost_unit: Literal["local_units"] = "local_units"
     requests_per_second: int = Field(default=1, ge=1, le=10_000)
+    requests_per_10_seconds: int | None = Field(default=None, ge=1, le=100_000)
     requests_per_minute: int = Field(default=30, ge=1, le=100_000)
     weighted_cost_per_minute: int | None = Field(default=None, ge=1, le=100_000_000)
     burst: int = Field(default=1, ge=1, le=10_000)
@@ -46,7 +47,10 @@ class RequestLimitProfile(LimitContract):
 
     @model_validator(mode="after")
     def consistent_limits(self):
-        if self.burst > min(self.requests_per_second, self.requests_per_minute):
+        windows = [self.requests_per_second, self.requests_per_minute]
+        if self.requests_per_10_seconds is not None:
+            windows.append(self.requests_per_10_seconds)
+        if self.burst > min(windows):
             raise ValueError("burst_exceeds_request_window")
         if self.backoff_base_seconds > self.backoff_max_seconds:
             raise ValueError("backoff_range_invalid")
@@ -60,11 +64,12 @@ class ProviderCeiling(LimitContract):
 
     Die Referenz wird NICHT aufgerufen. Eine URL beweist keine Vertragstreue;
     deshalb keine vorgebliche offizielle Domain-Allowlist/Herstellerempfehlung.
-    Unbekannte Dimensionen bleiben None. Rollierende 1s/60s-Grenzen sind nur
+    Unbekannte Dimensionen bleiben None. Rollierende 1s/10s/60s-Grenzen sind nur
     fuer dazu passende Anbietersemantik geeignet (z.B. kein 10s-CU-Ersatz).
     """
 
     requests_per_second: int | None = Field(default=None, ge=1, le=10_000)
+    requests_per_10_seconds: int | None = Field(default=None, ge=1, le=100_000)
     requests_per_minute: int | None = Field(default=None, ge=1, le=100_000)
     weighted_cost_per_minute: int | None = Field(default=None, ge=1, le=100_000_000)
     source_url: str = Field(min_length=12, max_length=1024)
@@ -101,7 +106,8 @@ class ProviderCeiling(LimitContract):
     @model_validator(mode="after")
     def at_least_one_ceiling(self):
         if all(value is None for value in (
-            self.requests_per_second, self.requests_per_minute, self.weighted_cost_per_minute,
+            self.requests_per_second, self.requests_per_10_seconds,
+            self.requests_per_minute, self.weighted_cost_per_minute,
         )):
             raise ValueError("ceiling_has_no_known_dimension")
         return self
@@ -115,6 +121,7 @@ class RequestLimitsConfig(LimitContract):
     # Zusaetzlich zu provider:<name> und ip:ai (ai_*) bzw. ip:global (CEX/RPC).
     provider_groups: dict[ProviderId, list[GroupId]] = Field(default_factory=dict, max_length=1000)
     endpoint_costs: dict[ProviderId, dict[EndpointId, EndpointCost]] = Field(default_factory=dict, max_length=1000)
+    endpoint_profiles: dict[ProviderId, dict[EndpointId, RequestLimitProfile]] = Field(default_factory=dict, max_length=1000)
     provider_ceilings: dict[ProviderId, ProviderCeiling] = Field(default_factory=dict, max_length=1000)
     scheduler_enabled: Literal[False] = False
 
@@ -124,9 +131,13 @@ class RequestLimitsConfig(LimitContract):
             raise ValueError("budget_bindings_invalid")
         if sum(len(costs) for costs in self.endpoint_costs.values()) > 1000:
             raise ValueError("too_many_endpoint_costs")
+        if sum(len(profiles) for profiles in self.endpoint_profiles.values()) > 1000:
+            raise ValueError("too_many_endpoint_profiles")
         reserved = [*self.group_profiles, *(group for groups in self.provider_groups.values() for group in groups)]
         if any(group.startswith("budget:ceiling:") for group in reserved):
             raise ValueError("ceiling_budget_namespace_reserved")
+        if any(group.startswith("budget:endpoint:") for group in reserved):
+            raise ValueError("endpoint_budget_namespace_reserved")
         return self
 
 
@@ -134,6 +145,7 @@ class RequestLimitGroupStatus(LimitContract):
     group: GroupId
     profile: RequestLimitProfile
     requests_last_second: int
+    requests_last_10_seconds: int = 0
     requests_last_minute: int
     cost_last_minute: int
     in_flight: int
@@ -142,6 +154,8 @@ class RequestLimitGroupStatus(LimitContract):
     next_start_at: float | None
     blocking_reasons: list[str]
     provider_ceiling: ProviderCeiling | None = None
+    provider: ProviderId | None = None
+    endpoint: EndpointId | None = None
 
 
 class ProviderObservation(LimitContract):

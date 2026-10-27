@@ -18,7 +18,7 @@ from typing import Callable
 
 import httpx
 
-from steuerreport_v2.domain.request_limits import RequestLimiter, RequestCancelled, RequestDeadlineExceeded
+from steuerreport_v2.domain.request_limits import RequestLimiter, RequestLimitError, RequestCancelled, RequestDeadlineExceeded
 
 
 @dataclass
@@ -108,6 +108,8 @@ def provider_for(request: httpx.Request, explicit: str | None = None) -> str:
     try:
         payload = json.loads(request.content)
         if isinstance(payload, dict) and payload.get("jsonrpc") == "2.0":
+            return "solana_rpc"
+        if isinstance(payload, list) and payload and all(isinstance(row, dict) and row.get("jsonrpc") == "2.0" for row in payload):
             return "solana_rpc"
     except (ValueError, httpx.RequestNotRead):
         pass
@@ -200,7 +202,17 @@ class LimitedTransport(httpx.BaseTransport):
         scope = _scope.get()
         provider = provider_for(request, self.provider or scope.provider)
         groups = list(scope.groups)
-        profile = limiter.profile(provider, groups=groups)
+        endpoint = endpoint_for(request)
+        config = limiter.read_config()
+        try:
+            batch = isinstance(json.loads(request.content), list)
+        except (ValueError, httpx.RequestNotRead):
+            batch = False
+        if batch and getattr(config, "endpoint_profiles", {}).get(provider):
+            # Keine Aufteilung/Mehrfachsendung eines signierten Requests; ein
+            # Batch darf nicht mehrere Methoden fuer nur einen Start verbrauchen.
+            raise RequestLimitError("request_limits_endpoint_batch_unsupported")
+        profile = limiter.profile(provider, groups=groups, endpoint=endpoint)
         deadline = self.monotonic() + profile.job_deadline_seconds
         if scope.budget is not None:
             with scope.budget.lock:
@@ -208,7 +220,7 @@ class LimitedTransport(httpx.BaseTransport):
                 scope.budget.deadline_monotonic = min(scoped, scope.budget.deadline_monotonic) if scope.budget.deadline_monotonic is not None else scoped
                 deadline = min(deadline, scope.budget.deadline_monotonic)
         safe = retry_safe(request)
-        costs = getattr(limiter.read_config(), "endpoint_costs", {}).get(provider, {})
+        costs = getattr(config, "endpoint_costs", {}).get(provider, {})
         cost = request_cost(request, costs)
         attempt = 0
         while True:
@@ -217,7 +229,7 @@ class LimitedTransport(httpx.BaseTransport):
             if self.monotonic() >= deadline:
                 raise RequestDeadlineExceeded("request_deadline_exceeded")
             response = None
-            with limiter.acquire(provider, cost=cost, groups=groups, cancel=scope.cancel, deadline=deadline) as lease:
+            with limiter.acquire(provider, cost=cost, groups=groups, cancel=scope.cancel, deadline=deadline, endpoint=endpoint, batch=batch) as lease:
                 # Sign only after waiting. Every retry obtains a fresh timestamp/signature.
                 signer = _signer.get()
                 def prepare():
@@ -237,7 +249,7 @@ class LimitedTransport(httpx.BaseTransport):
                 request.extensions["timeout"] = {name: min(previous[name], lease.timeout_seconds) if previous.get(name) is not None else lease.timeout_seconds for name in ("connect", "read", "write", "pool")}
                 try:
                     response = self.inner.handle_request(request)
-                    wait = self._observe_headers(limiter, provider, response, groups, profile)
+                    wait = self._observe_headers(limiter, provider, response, groups, profile, endpoint=endpoint)
                     chunks, size = [], 0
                     body = [response.content] if response.is_stream_consumed else response.iter_bytes()
                     for chunk in body:
@@ -269,10 +281,10 @@ class LimitedTransport(httpx.BaseTransport):
                 if not safe or result.status_code not in {429, 502, 503, 504} or attempt >= profile.max_retries:
                     return result
                 attempt += 1
-                delay = limiter.retry_delay(provider, attempt, retryable=True, idempotent=True, retry_after=wait, groups=groups)
-                limiter.pause(provider, max(delay, 0.001), groups=groups)
+                delay = limiter.retry_delay(provider, attempt, retryable=True, idempotent=True, retry_after=wait, groups=groups, endpoint=endpoint)
+                limiter.pause(provider, max(delay, 0.001), groups=groups, endpoint=endpoint)
 
-    def _observe_headers(self, limiter, provider, result, groups, profile):
+    def _observe_headers(self, limiter, provider, result, groups, profile, *, endpoint=None):
         wait = retry_after(result.headers.get("retry-after"), self.clock())
         observation = {}
         used = result.headers.get("x-mbx-used-weight-1m")
@@ -288,12 +300,12 @@ class LimitedTransport(httpx.BaseTransport):
                     observation.update(remaining_requests=left, reset_at=reset_at)
                     if left <= 0 and reset_at > self.clock():
                         wait = max(wait or 0, min(reset_at - self.clock(), 604800))
-                        limiter.pause(provider, max(wait, 0.001), groups=groups)
+                        limiter.pause(provider, max(wait, 0.001), groups=groups, endpoint=endpoint)
             except ValueError:
                 pass
         if result.status_code in {429, 418}:
             observation["rate_limited"] = True
-            limiter.pause(provider, max(wait or profile.backoff_base_seconds, 0.001), groups=groups)
+            limiter.pause(provider, max(wait or profile.backoff_base_seconds, 0.001), groups=groups, endpoint=endpoint)
         if observation and hasattr(limiter, "observe"):
             limiter.observe(provider, **observation)
         return wait

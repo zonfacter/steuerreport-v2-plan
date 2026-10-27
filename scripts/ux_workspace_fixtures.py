@@ -111,6 +111,8 @@ class WorkspaceFixture:
             data = {"schema_version": 1, "revision": 0, "scheduler_enabled": False, "group_profiles": {}, "provider_groups": {}, "endpoint_costs": {}, "provider_ceilings": {}, "default_profile": {
                 "origin": "local_conservative", "manufacturer_limit_verified": False, "cost_unit": "local_units", "requests_per_second": 1, "requests_per_minute": 30, "burst": 1, "max_concurrency": 1, "weighted_cost_per_minute": None,
                 "timeout_seconds": 30, "max_retries": 2, "backoff_base_seconds": 1, "backoff_max_seconds": 30, "jitter_ratio": 0.2, "job_deadline_seconds": 300}}
+        elif path == "/api/v1/admin/request-limits/presets":
+            data = {"presets": [], "current_revision": 0}
         elif path == "/api/v1/admin/request-limits/status":
             data = {"schema_version": 1, "config_revision": 0, "observed_at": 1793000000, "clock_rollback": False, "groups": [], "provider_observations": {}, "manufacturer_telemetry_available": False, "coordination_scope": "host_local_flock_shared_volume", "concurrency_recovery": "explicit_release_only"}
         elif path == "/api/v1/admin/request-limits/endpoints":

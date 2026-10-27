@@ -91,6 +91,9 @@ jobs:
       - name: Source history approval against actual isolated backend
         working-directory: .
         run: python scripts/check_history_backend_browser_v2.py
+      - name: Solana rate settings against isolated local coordinator
+        working-directory: .
+        run: python scripts/check_solana_limits_browser_v2.py --output "${RUNNER_TEMP}/solana-limits-browser"
       - name: UX browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -101,4 +104,5 @@ jobs:
             artifacts/ux-review-fixes/
             artifacts/source-history-browser/
             artifacts/source-history-backend-browser/
+            ${{ runner.temp }}/solana-limits-browser/
           if-no-files-found: ignore

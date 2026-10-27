@@ -21,7 +21,7 @@ Dieses Modul startet weder Scheduler noch HTTP, erzwingt keine Transporttimeouts
 und kennt keine Herstellergewichte, Auth-Fehler oder Retry-After-Headersemantik.
 Provider-Ceilings sind deklarierte Betreiberangaben mit Pflichtreferenz, keine
 unabhaengige Vertragspruefung. Sie zaehlen konservativ pro gesamtem Provider,
-nicht separat pro Konto/Key, und nur die hier modellierten rollierenden 1s/60s-
+nicht separat pro Konto/Key, und nur die hier modellierten rollierenden 1s/10s/60s-
 Dimensionen. 10s-CU, Tages-/Monatsbudgets und fremde Anwendungen am selben
 IP-/Providerbudget benoetigen eigene Koordination; observe ist nur Telemetrie.
 """
@@ -30,6 +30,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import fcntl
+from hashlib import sha256
 import json
 import math
 import os
@@ -44,7 +45,7 @@ from uuid import uuid4
 from pydantic import Field, TypeAdapter
 
 from steuerreport_v2.contracts.request_limits import (
-    GroupId, LimitContract, ProviderId, ProviderObservation, RequestLimitGroupStatus,
+    EndpointId, GroupId, LimitContract, ProviderId, ProviderObservation, RequestLimitGroupStatus,
     RequestLimitProfile, RequestLimitsConfig, RequestLimitsStatus,
 )
 from steuerreport_v2.paths import PROJECT_ROOT
@@ -61,6 +62,50 @@ class LimiterUnavailable(RequestLimitError):
 
 class RevisionConflict(RequestLimitError):
     pass
+
+
+class ActiveLeaseConflict(RequestLimitError):
+    pass
+
+
+class PresetConflict(RequestLimitError):
+    def __init__(self, conflicts: list[str]):
+        super().__init__("request_limits_preset_conflict")
+        self.conflicts = conflicts
+
+
+SOLANA_PUBLIC_FREE = RequestLimitProfile(
+    requests_per_second=3, requests_per_minute=180, requests_per_10_seconds=30,
+)
+SOLANA_HISTORY_PROFILE = RequestLimitProfile(
+    requests_per_second=4, requests_per_minute=240, requests_per_10_seconds=40,
+)
+SOLANA_HISTORY_ENDPOINTS = (
+    "rpc_gettransaction", "rpc_getsignaturesforaddress", "rpc_gettokenaccountsbyowner",
+)
+
+
+def endpoint_group(provider: str, endpoint: str) -> str:
+    # Feste, kurze IDs auch fuer die maximal langen Vertrags-IDs; keine URL/Keys.
+    return "budget:endpoint:" + sha256(f"{provider}:{endpoint}".encode("ascii")).hexdigest()[:32]
+
+
+def solana_preset_conflicts(config: RequestLimitsConfig) -> list[str]:
+    conflicts = []
+    for group in ("provider:solana_rpc", "ip:global"):
+        if group in config.group_profiles and config.group_profiles[group] != SOLANA_PUBLIC_FREE:
+            conflicts.append(f"group_profiles.{group}")
+    for endpoint in SOLANA_HISTORY_ENDPOINTS:
+        existing = config.endpoint_profiles.get("solana_rpc", {}).get(endpoint)
+        if existing is not None and existing != SOLANA_HISTORY_PROFILE:
+            conflicts.append(f"endpoint_profiles.solana_rpc.{endpoint}")
+    ceiling = config.provider_ceilings.get("solana_rpc")
+    if ceiling is not None:
+        for name in ("requests_per_second", "requests_per_10_seconds", "requests_per_minute", "weighted_cost_per_minute"):
+            cap, desired = getattr(ceiling, name), getattr(SOLANA_PUBLIC_FREE, name)
+            if cap is not None and (desired is None or desired > cap):
+                conflicts.append(f"provider_ceilings.solana_rpc.{name}")
+    return conflicts
 
 
 class RequestCancelled(RequestLimitError):
@@ -83,6 +128,7 @@ class _Start(LimitContract):
     at: float = Field(ge=0)
     cost: int = Field(ge=1)
     reservation_id: str | None = None
+    endpoint: EndpointId | None = None
 
 
 class _Bucket(LimitContract):
@@ -98,6 +144,7 @@ class _Active(LimitContract):
     groups: list[GroupId] = Field(min_length=2)
     started_at: float = Field(ge=0)
     timeout_seconds: float = Field(gt=0)
+    endpoint: EndpointId | None = None
 
 
 class _Waiter(LimitContract):
@@ -131,6 +178,8 @@ bei Timeout/Prozesstod; __exit__/release muessen nach Transportende stattfinden.
     cost: int = 1
     cancel: Event | None = None
     acquired_at: float = 0.0
+    endpoint: str | None = None
+    batch: bool = False
     _released: bool = False
     _entered: bool = False
     _started: bool = False
@@ -330,31 +379,47 @@ class RequestLimiter:
             if own_fd:
                 os.close(directory_fd)
 
-    def _groups(self, provider: str, groups: list[str] | None, config: RequestLimitsConfig) -> list[str]:
+    def _groups(self, provider: str, groups: list[str] | None, config: RequestLimitsConfig, *, endpoint: str | None = None, batch: bool = False) -> list[str]:
         TypeAdapter(ProviderId).validate_python(provider)
+        if endpoint is not None:
+            TypeAdapter(EndpointId).validate_python(endpoint)
         extra = TypeAdapter(list[GroupId]).validate_python(groups or [])
         if len(extra) > 16:
             raise ValueError("too_many_budget_groups")
         if any(group.startswith("budget:ceiling:") for group in extra):
             raise ValueError("ceiling_budget_namespace_reserved")
+        if any(group.startswith("budget:endpoint:") for group in extra):
+            raise ValueError("endpoint_budget_namespace_reserved")
         # Provideridentitaet muss der serverseitige Adapter vorgeben, nicht ein freies UI-Feld.
         shared = "ip:ai" if provider.startswith("ai_") else "ip:global"
         ceiling = [f"budget:ceiling:{provider}"] if provider in config.provider_ceilings else []
-        return sorted({f"provider:{provider}", shared, *ceiling, *config.provider_groups.get(provider, []), *extra})
+        methods = config.endpoint_profiles.get(provider, {})
+        if batch and methods:
+            raise RequestLimitError("request_limits_endpoint_batch_unsupported")
+        # Ein Aufruf ohne Methodenidentitaet darf konfigurierte Budgets nicht umgehen.
+        endpoints = [endpoint_group(provider, name) for name in methods if endpoint is None or name == endpoint]
+        return sorted({f"provider:{provider}", shared, *ceiling, *endpoints, *config.provider_groups.get(provider, []), *extra})
 
     @staticmethod
     def _profile(group: str, config: RequestLimitsConfig) -> RequestLimitProfile:
+        if group.startswith("budget:endpoint:"):
+            for provider, profiles in config.endpoint_profiles.items():
+                for endpoint, profile in profiles.items():
+                    if endpoint_group(provider, endpoint) == group:
+                        return profile
         prefix = "budget:ceiling:"
         if group.startswith(prefix) and group[len(prefix):] in config.provider_ceilings:
             provider = group[len(prefix):]
             ceiling = config.provider_ceilings[provider]
             operator = config.group_profiles.get(f"provider:{provider}", config.default_profile)
             values = operator.model_dump()
-            for name in ("requests_per_second", "requests_per_minute", "weighted_cost_per_minute"):
+            for name in ("requests_per_second", "requests_per_10_seconds", "requests_per_minute", "weighted_cost_per_minute"):
                 cap, desired = getattr(ceiling, name), values[name]
                 if cap is not None:
                     values[name] = min(cap, desired) if desired is not None else cap
             values["burst"] = min(operator.burst, values["requests_per_second"], values["requests_per_minute"])
+            if values["requests_per_10_seconds"] is not None:
+                values["burst"] = min(values["burst"], values["requests_per_10_seconds"])
             return RequestLimitProfile(**values)
         return config.group_profiles.get(group, config.default_profile)
 
@@ -362,10 +427,10 @@ class RequestLimiter:
         with self._locked() as document:
             return document.config.model_copy(deep=True)
 
-    def profile(self, provider: str, *, groups: list[str] | None = None) -> RequestLimitProfile:
+    def profile(self, provider: str, *, groups: list[str] | None = None, endpoint: str | None = None) -> RequestLimitProfile:
         """Konservativste gemeinsame Parameter aller wirksamen Budgetgruppen."""
         config = self.read_config()
-        profiles = [self._profile(group, config) for group in self._groups(provider, groups, config)]
+        profiles = [self._profile(group, config) for group in self._groups(provider, groups, config, endpoint=endpoint)]
         fields = (
             "requests_per_second", "requests_per_minute", "burst", "max_concurrency",
             "timeout_seconds", "max_retries", "backoff_base_seconds", "backoff_max_seconds",
@@ -373,7 +438,54 @@ class RequestLimiter:
         )
         values = {name: min(getattr(profile, name) for profile in profiles) for name in fields}
         costs = [profile.weighted_cost_per_minute for profile in profiles if profile.weighted_cost_per_minute is not None]
-        return RequestLimitProfile(**values, weighted_cost_per_minute=min(costs) if costs else None)
+        tens = [p.requests_per_10_seconds for p in profiles if p.requests_per_10_seconds is not None]
+        return RequestLimitProfile(**values, weighted_cost_per_minute=min(costs) if costs else None,
+                                   requests_per_10_seconds=min(tens) if tens else None)
+
+    def apply_solana_public_free(self, *, expected_revision: int) -> RequestLimitsConfig:
+        config = self.read_config()
+        if config.revision != expected_revision:
+            raise RevisionConflict("limiter_config_revision_conflict")
+        conflicts = solana_preset_conflicts(config)
+        if conflicts:
+            raise PresetConflict(conflicts)
+        profiles = {**config.group_profiles,
+                    "provider:solana_rpc": SOLANA_PUBLIC_FREE, "ip:global": SOLANA_PUBLIC_FREE}
+        endpoints = {**config.endpoint_profiles, "solana_rpc": {
+            **config.endpoint_profiles.get("solana_rpc", {}),
+            **dict.fromkeys(SOLANA_HISTORY_ENDPOINTS, SOLANA_HISTORY_PROFILE),
+        }}
+        # CAS prueft unter derselben Sperre wie die persistente Aktualisierung;
+        # jede konkurrierende Aenderung verwirft den gesamten vorbereiteten Merge.
+        return self.write_config(config.model_copy(update={"group_profiles": profiles, "endpoint_profiles": endpoints}),
+                                 expected_revision=expected_revision)
+
+    def _check_config_concurrency(self, document: _Document, config: RequestLimitsConfig) -> None:
+        before: dict[str, set[str]] = {}
+        after: dict[str, set[str]] = {}
+        for identifier, lease in document.active.items():
+            previous, proposed = set(lease.groups), set(lease.groups)
+            for group in lease.groups:
+                if group.startswith("provider:"):
+                    provider = group[len("provider:"):]
+                    try:
+                        TypeAdapter(ProviderId).validate_python(provider)
+                    except ValueError:
+                        # Freie Budgetgruppen duerfen z.B. Punkte enthalten;
+                        # nur gueltige Provideridentitaeten ergeben RPC-Bindungen.
+                        continue
+                    previous.update(self._groups(provider, None, document.config, endpoint=lease.endpoint))
+                    proposed.update(self._groups(provider, None, config, endpoint=lease.endpoint))
+            for names, memberships in ((previous, before), (proposed, after)):
+                for group in names:
+                    memberships.setdefault(group, set()).add(identifier)
+        for group, members in after.items():
+            cap = self._profile(group, config).max_concurrency
+            old_cap = self._profile(group, document.config).max_concurrency
+            # Auch ungestartete Reservierungen belegen Parallelitaet. Eine neue
+            # oder engere Bindung darf sie nicht gegenseitig beim Dispatch sperren.
+            if len(members) > cap and (members - before.get(group, set()) or cap < old_cap):
+                raise ActiveLeaseConflict("request_limits_active_leases_conflict")
 
     def write_config(self, config: RequestLimitsConfig, *, expected_revision: int) -> RequestLimitsConfig:
         config = RequestLimitsConfig.model_validate(config.model_dump())
@@ -382,6 +494,7 @@ class RequestLimiter:
         with self._locked() as document:
             if document.config.revision != expected_revision or config.revision != expected_revision:
                 raise RevisionConflict("limiter_config_revision_conflict")
+            self._check_config_concurrency(document, config)
             now = self._now(document)
             # Vorhandene Token nur nach ALTER Rate auffuellen. Keine Reset-/Erhoehungsbursts.
             buckets = {group: self._refresh(bucket, self._profile(group, document.config), now)
@@ -402,7 +515,24 @@ class RequestLimiter:
                         "starts": list(canonical.starts),
                         "paused_until": max(buckets[group].paused_until, canonical.paused_until),
                     })
-            self._save(replacement.model_copy(update={"buckets": buckets}))
+            # Alle 60s der Providerhistorie erhalten. Alte Starts ohne Endpoint
+            # werden konservativ jeder neu aktivierten Methode zugerechnet.
+            active = dict(document.active)
+            for provider, profiles in updated.endpoint_profiles.items():
+                canonical = buckets.get(f"provider:{provider}")
+                for endpoint in profiles:
+                    group = endpoint_group(provider, endpoint)
+                    buckets = self._buckets(replacement.model_copy(update={"buckets": buckets}), [group], now)
+                    if canonical is not None:
+                        buckets[group] = buckets[group].model_copy(update={
+                            "starts": [start for start in canonical.starts if start.endpoint in (None, endpoint)],
+                            "paused_until": max(buckets[group].paused_until, canonical.paused_until),
+                            "tokens": min(buckets[group].tokens, canonical.tokens),
+                        })
+                    for identifier, lease in active.items():
+                        if f"provider:{provider}" in lease.groups and lease.endpoint in (None, endpoint):
+                            active[identifier] = lease.model_copy(update={"groups": sorted({*lease.groups, group})})
+            self._save(replacement.model_copy(update={"buckets": buckets, "active": active}))
             return updated.model_copy(deep=True)
 
     @staticmethod
@@ -438,6 +568,9 @@ class RequestLimiter:
         second = [start for start in bucket.starts if start.at > now - 1.0]
         if len(second) >= profile.requests_per_second:
             delays.append((second[len(second) - profile.requests_per_second].at + 1.0 - now, "rolling_second"))
+        ten = [start for start in bucket.starts if start.at > now - 10.0]
+        if profile.requests_per_10_seconds is not None and len(ten) >= profile.requests_per_10_seconds:
+            delays.append((ten[len(ten) - profile.requests_per_10_seconds].at + 10.0 - now, "rolling_10_seconds"))
         if len(bucket.starts) >= profile.requests_per_minute:
             delays.append((bucket.starts[len(bucket.starts) - profile.requests_per_minute].at + 60.0 - now, "rolling_minute"))
         if profile.weighted_cost_per_minute is not None:
@@ -455,6 +588,8 @@ class RequestLimiter:
     def acquire(
         self, provider: str, *, cost: int = 1, groups: list[str] | None = None,
         cancel: Event | None = None, deadline: float | None = None,
+        endpoint: str | None = None,
+        batch: bool = False,
     ) -> Lease:
         """Reserviert sofort; deadline ist absolute monotone Zeit, kein UTC-Wert."""
         if type(cost) is not int or cost < 1 or cost > 100_000_000:
@@ -469,7 +604,7 @@ class RequestLimiter:
             while True:
                 self._check_wait(cancel, effective_deadline)
                 with self._locked(cancel=cancel, deadline=effective_deadline) as document:
-                    names = self._groups(provider, groups, document.config)
+                    names = self._groups(provider, groups, document.config, endpoint=endpoint, batch=batch)
                     profiles = [self._profile(group, document.config) for group in names]
                     effective_deadline = min(effective_deadline, started + min(p.job_deadline_seconds for p in profiles))
                     self._check_wait(cancel, effective_deadline)
@@ -488,9 +623,9 @@ class RequestLimiter:
                             bucket = buckets[group]
                             buckets[group] = bucket.model_copy(update={
                                 "tokens": bucket.tokens - 1.0,
-                                "starts": [*bucket.starts, _Start(at=now, cost=cost, reservation_id=waiter)],
+                                "starts": [*bucket.starts, _Start(at=now, cost=cost, reservation_id=waiter, endpoint=None if batch else endpoint)],
                             })
-                        active[waiter] = _Active(groups=names, started_at=now, timeout_seconds=timeout)
+                        active[waiter] = _Active(groups=names, started_at=now, timeout_seconds=timeout, endpoint=None if batch else endpoint)
                     else:
                         waiters[waiter] = _Waiter(groups=names, expires_at=now + effective_deadline - self._monotonic())
                         waiting = True
@@ -500,7 +635,7 @@ class RequestLimiter:
                 if delay == 0:
                     waiting = False
                     lease = Lease(self, waiter, tuple(names), timeout, effective_deadline,
-                                  provider=provider, cost=cost, cancel=cancel, acquired_at=started)
+                                  provider=provider, cost=cost, cancel=cancel, acquired_at=started, endpoint=endpoint, batch=batch)
                     if cancel is not None and cancel.is_set():
                         lease.release()
                         raise RequestCancelled("request_cancelled")
@@ -534,7 +669,7 @@ class RequestLimiter:
                         raise RequestLimitError("lease_not_active")
                     # Eine neue Pflichtgruppe muss gelten; entfernte alte
                     # Gruppen duerfen bestehende Reservierungen nicht freigeben.
-                    names = sorted(set(current.groups) | set(self._groups(lease.provider, None, document.config)))
+                    names = sorted(set(current.groups) | set(self._groups(lease.provider, None, document.config, endpoint=lease.endpoint, batch=lease.batch)))
                     profiles = [self._profile(group, document.config) for group in names]
                     lease.deadline = min(lease.deadline, lease.acquired_at + min(p.job_deadline_seconds for p in profiles))
                     self._check_wait(lease.cancel, lease.deadline)
@@ -554,13 +689,13 @@ class RequestLimiter:
                             bucket = eligible[group]
                             buckets[group] = bucket.model_copy(update={
                                 "tokens": bucket.tokens - 1.0,
-                                "starts": [*bucket.starts, _Start(at=now, cost=lease.cost, reservation_id=lease.lease_id)],
+                                "starts": [*bucket.starts, _Start(at=now, cost=lease.cost, reservation_id=lease.lease_id, endpoint=None if lease.batch else lease.endpoint)],
                             })
                         timeout = min(lease.timeout_seconds, *(p.timeout_seconds for p in profiles),
                                       lease.deadline - self._monotonic())
                         self._check_wait(lease.cancel, lease.deadline)
                         active = {**document.active, lease.lease_id: _Active(
-                            groups=names, started_at=now, timeout_seconds=timeout,
+                            groups=names, started_at=now, timeout_seconds=timeout, endpoint=None if lease.batch else lease.endpoint,
                         )}
                         waiters = {key: value for key, value in document.waiters.items() if key != lease.lease_id}
                         self._save(document.model_copy(update={
@@ -608,13 +743,13 @@ class RequestLimiter:
                 del active[identifier]
                 self._save(document.model_copy(update={"active": active}))
 
-    def pause(self, provider: str, seconds: float, *, groups: list[str] | None = None) -> None:
+    def pause(self, provider: str, seconds: float, *, groups: list[str] | None = None, endpoint: str | None = None) -> None:
         """Alle Gruppen pausieren; bestehende laengere Pause niemals verkuerzen."""
         if isinstance(seconds, bool) or not math.isfinite(seconds) or not 0 < seconds <= 604_800:
             raise ValueError("pause_seconds_invalid")
         with self._locked() as document:
             now = self._now(document)
-            names = self._groups(provider, groups, document.config)
+            names = self._groups(provider, groups, document.config, endpoint=endpoint)
             buckets = self._buckets(document, names, now)
             for group in names:
                 buckets[group] = buckets[group].model_copy(update={"paused_until": max(buckets[group].paused_until, now + seconds)})
@@ -622,14 +757,14 @@ class RequestLimiter:
 
     def retry_delay(
         self, provider: str, attempt: int, *, retryable: bool, idempotent: bool,
-        retry_after: float | None = None, groups: list[str] | None = None,
+        retry_after: float | None = None, groups: list[str] | None = None, endpoint: str | None = None,
     ) -> float:
         """attempt=1 ist erster Retry; HTTP-Klassifikation macht der Adapter.
 
         Ergebnis via pause speichern und erneut acquire aufrufen. Auth-/dauerhafte
         Fehler mit retryable=False, unsichere Schreibaufrufe mit idempotent=False.
         """
-        profile = self.profile(provider, groups=groups)
+        profile = self.profile(provider, groups=groups, endpoint=endpoint)
         if not retryable or not idempotent or type(attempt) is not int or not 1 <= attempt <= profile.max_retries:
             raise RetryNotAllowed("request_retry_not_allowed")
         if retry_after is not None and (isinstance(retry_after, bool) or not math.isfinite(retry_after) or not 0 <= retry_after <= 604_800):
@@ -675,7 +810,11 @@ class RequestLimiter:
         with self._locked() as document:
             now = self._now(document)
             names = sorted(set(document.buckets) | set(document.config.group_profiles)
-                           | {f"budget:ceiling:{provider}" for provider in document.config.provider_ceilings})
+                           | {f"budget:ceiling:{provider}" for provider in document.config.provider_ceilings}
+                           | {endpoint_group(provider, endpoint) for provider, profiles in document.config.endpoint_profiles.items()
+                              for endpoint in profiles})
+            endpoint_bindings = {endpoint_group(provider, endpoint): (provider, endpoint)
+                                 for provider, profiles in document.config.endpoint_profiles.items() for endpoint in profiles}
             buckets = self._buckets(document, names, now)
             statuses = []
             for group in names:
@@ -685,6 +824,7 @@ class RequestLimiter:
                 statuses.append(RequestLimitGroupStatus(
                     group=group, profile=profile,
                     requests_last_second=sum(start.at > now - 1.0 for start in bucket.starts),
+                    requests_last_10_seconds=sum(start.at > now - 10.0 for start in bucket.starts),
                     requests_last_minute=len(bucket.starts), cost_last_minute=sum(start.cost for start in bucket.starts),
                     in_flight=in_flight,
                     queued=sum(group in item.groups and item.expires_at > now for item in document.waiters.values()),
@@ -692,6 +832,8 @@ class RequestLimiter:
                     next_start_at=now + delay if math.isfinite(delay) else None, blocking_reasons=reasons,
                     provider_ceiling=document.config.provider_ceilings.get(group[len("budget:ceiling:"):])
                     if group.startswith("budget:ceiling:") else None,
+                    provider=endpoint_bindings[group][0] if group in endpoint_bindings else None,
+                    endpoint=endpoint_bindings[group][1] if group in endpoint_bindings else None,
                 ))
             observations = document.observations
             available = any(item.used_weight_1m is not None or item.remaining_requests is not None

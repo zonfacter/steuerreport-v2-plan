@@ -76,6 +76,8 @@ def run(browser, base_url: str, out: Path, demo=False, vault=True):
             data=state['config']
         elif path=='admin/request-limits':
             data=state['config']
+        elif path=='admin/request-limits/presets':
+            data=dict(presets=[],current_revision=state['config']['revision'])
         elif path=='admin/request-limits/status':
             groups=[dict(group='ip:global',profile=PROFILE,requests_last_second=1,requests_last_minute=10,cost_last_minute=12,in_flight=1,queued=2,paused_until=1793016005,next_start_at=1793016005,blocking_reasons=['max_concurrency'])]
             for provider_name, ceiling in state['config'].get('provider_ceilings',{}).items():
@@ -195,8 +197,8 @@ def run(browser, base_url: str, out: Path, demo=False, vault=True):
             assert saved['config']['default_profile']['requests_per_minute']==60
             assert saved['config']['scheduler_enabled'] is False
             limits.get_by_text('Lokale Endpunktkosten',exact=True).click()
-            limits.get_by_label('Anbieterkennung',exact=True).fill('binance')
-            limits.get_by_label('Endpunktkennung',exact=True).fill('account')
+            limits.get_by_role('combobox',name='Anbieterkennung',exact=True).select_option('binance')
+            limits.get_by_role('combobox',name='Endpunktkennung',exact=True).select_option('account')
             limits.get_by_label('Lokale Einheiten je Requestversuch',exact=True).fill('7')
             limits.get_by_role('button',name='Endpunktkosten speichern',exact=True).click()
             expect(limits.get_by_text('Lokaler Endpunktkostenwert gespeichert.',exact=False)).to_be_visible()
