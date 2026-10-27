@@ -70,6 +70,8 @@ from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.secrets import resolve_secret_value
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+from steuerreport_v2.importers.solana_history_identity import SolanaHistoryConflict, exclusive_history_import, new_transaction_rows
+from steuerreport_v2.importers.solana_history_mapper import transaction_rows
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 
@@ -171,6 +173,7 @@ class PortfolioService:
         self._virtual_wallet_cache: dict[datetime, PortfolioVirtualWallet] = {}
         self._solscan_live_prices_usd: dict[str, Decimal] = {}
         self._jupiter_metadata_cache: dict[str, JupiterTokenMetadataCacheItem] | None = None
+        self._history_mint_symbols_cache: dict[str, str] | None = None
 
     def snapshot(self) -> PortfolioSnapshot:
         balances = BalanceLedgerBuilder(self.store).positions()
@@ -1706,6 +1709,8 @@ class PortfolioService:
     ) -> PortfolioWalletHistoryImportResult:
         request = request or PortfolioWalletHistoryImportRequest()
         wallet_address = request.wallet_address or self.KNOWN_JUP_WALLET
+        if not wallet_address:
+            raise ValueError("Fuer den Historienimport muss eine Wallet eingerichtet oder angegeben sein.")
         preview = self._v1_solana_wallet_history(
             wallet_address=wallet_address,
             before_signature=request.before_signature,
@@ -1719,18 +1724,54 @@ class PortfolioService:
             rows = []
         source = "solana_rpc"
         filename = f"v1_solana_rpc_{wallet_address}_{request.max_signatures}_{request.before_signature or 'latest'}.json"
-        file_hash = "sha256:" + hashlib.sha256(
-            json.dumps(rows, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        ).hexdigest()
-        existing = self.store.get_import_batch_by_file_hash(source, file_hash)
-        batch = CsvRawImporter(self.store).import_rows(
-            source=source,
-            filename=filename,
-            file_hash=file_hash,
-            rows=rows,
-        )
-        pipeline = PipelineService(self.store).rebuild_after_import(batch.batch_id)
         warnings = preview.get("warnings", [])
+        warnings = [item for item in warnings if isinstance(item, dict)]
+        with exclusive_history_import(self.store):
+            import_rows, duplicate_transactions, prior_batch_id = new_transaction_rows(
+                self.store, wallet_address, rows,
+            )
+            if duplicate_transactions:
+                warnings.append({
+                    "code": "solana_history_duplicate_transactions",
+                    "message": f"{duplicate_transactions} bereits gespeicherte Transaktion(en) nicht erneut importiert.",
+                })
+            if rows and not import_rows and prior_batch_id:
+                batch = self.store.get_import_batch(prior_batch_id)
+                pipeline_data = {"skipped": True, "reason": "no_new_transactions"}
+                normalized_events = skipped_raw_objects = 0
+                duplicate_batch = True
+            else:
+                file_hash = "sha256:" + hashlib.sha256(
+                    json.dumps(import_rows, ensure_ascii=False, sort_keys=True).encode("utf-8")
+                ).hexdigest()
+                existing = self.store.get_import_batch_by_file_hash(source, file_hash)
+                batch = CsvRawImporter(self.store).import_rows(
+                    source=source, filename=filename, file_hash=file_hash, rows=import_rows,
+                )
+                if existing is not None:
+                    if existing.status != "normalized":
+                        raise SolanaHistoryConflict(
+                            "Vorheriger Historienimport ist unvollstaendig. "
+                            "Manuelle Pruefung erforderlich; kein Erfolg bestaetigt."
+                        )
+                    pipeline_data = {"skipped": True, "reason": "duplicate_batch"}
+                    normalized_events = skipped_raw_objects = 0
+                else:
+                    pipeline = PipelineService(self.store).rebuild_after_import(batch.batch_id)
+                    pipeline_data = pipeline.model_dump()
+                    normalized_events = pipeline.normalized_events
+                    skipped_raw_objects = pipeline.skipped_raw_objects
+                    if not import_rows:
+                        # Only a successfully fetched, genuinely empty page may
+                        # complete a created batch without a raw-load checkpoint.
+                        with self.store.connect() as con:
+                            con.execute(
+                                "update raw_import_batches set status = 'normalized' where batch_id = ? and status = 'created'",
+                                [batch.batch_id],
+                            )
+                duplicate_batch = existing is not None
+        if batch is None:
+            raise RuntimeError("Historienimport: gespeicherter Import-Batch fehlt.")
         return PortfolioWalletHistoryImportResult(
             wallet_address=wallet_address,
             source=source,
@@ -1740,11 +1781,11 @@ class PortfolioService:
             signature_count=int(preview.get("signature_count", 0) or 0),
             first_signature=preview.get("first_signature") if isinstance(preview.get("first_signature"), str) else None,
             last_signature=preview.get("last_signature") if isinstance(preview.get("last_signature"), str) else None,
-            duplicate_batch=existing is not None,
-            normalized_events=pipeline.normalized_events,
-            skipped_raw_objects=pipeline.skipped_raw_objects,
-            pipeline=pipeline.model_dump(),
-            warnings=[item for item in warnings if isinstance(item, dict)],
+            duplicate_batch=duplicate_batch,
+            normalized_events=normalized_events,
+            skipped_raw_objects=skipped_raw_objects,
+            pipeline=pipeline_data,
+            warnings=warnings,
         )
 
     def _v1_solana_wallet_history(
@@ -1821,11 +1862,14 @@ class PortfolioService:
         )
         if not isinstance(signatures, list):
             raise RuntimeError("solana_direct_signatures_invalid_payload")
-        signature_values = [
-            str(item.get("signature"))
+        if any(
+            not isinstance(item, dict)
+            or not isinstance(item.get("signature"), str)
+            or not item["signature"].strip()
             for item in signatures
-            if isinstance(item, dict) and item.get("signature")
-        ]
+        ):
+            raise RuntimeError("Historienseite enthaelt keine eindeutigen Transaktionssignaturen; kein Import.")
+        signature_values = list(dict.fromkeys(item["signature"] for item in signatures))
         for signature in signature_values:
             try:
                 tx = self._solana_rpc(
@@ -1834,12 +1878,22 @@ class PortfolioService:
                     timeout_seconds=30,
                 )
             except Exception as exc:
-                warnings.append({"code": "solana_direct_transaction_failed", "message": f"{signature}: {exc}"})
-                continue
+                raise RuntimeError(
+                    "Historienseite unvollstaendig: Transaktionsdetail nicht abrufbar. "
+                    "Kein Import und kein Fortschreiben des Cursors; Abruf spaeter wiederholen."
+                ) from exc
             if not isinstance(tx, dict):
-                warnings.append({"code": "solana_direct_transaction_missing", "message": signature})
-                continue
-            rows.extend(self._solana_transaction_rows(wallet_address, signature, tx))
+                raise RuntimeError(
+                    "Historienseite unvollstaendig: Transaktionsdetail fehlt. "
+                    "Kein Import und kein Fortschreiben des Cursors; Abruf spaeter wiederholen."
+                )
+            try:
+                rows.extend(self._solana_transaction_rows(wallet_address, signature, tx))
+            except ValueError as exc:
+                raise RuntimeError(
+                    "Historienseite nicht eindeutig auswertbar. "
+                    "Keine Teilimporte; Originaldaten und Wallet-Zuordnung pruefen."
+                ) from exc
         return {
             "wallet_address": wallet_address,
             "rpc_url": self._redacted_solana_rpc_url(self._solana_rpc_urls()[0]),
@@ -1924,106 +1978,25 @@ class PortfolioService:
         signature: str,
         tx: dict[str, object],
     ) -> list[dict[str, object]]:
-        block_time = tx.get("blockTime")
-        timestamp = datetime.fromtimestamp(int(block_time), timezone.utc).isoformat() if block_time else ""
-        meta = tx.get("meta") if isinstance(tx.get("meta"), dict) else {}
-        transaction = tx.get("transaction") if isinstance(tx.get("transaction"), dict) else {}
-        message = transaction.get("message") if isinstance(transaction.get("message"), dict) else {}
-        account_keys = message.get("accountKeys") if isinstance(message.get("accountKeys"), list) else []
-        wallet_index = self._solana_wallet_account_index(account_keys, wallet_address)
-        rows: list[dict[str, object]] = []
-        if wallet_index is not None:
-            pre_balances = meta.get("preBalances") if isinstance(meta.get("preBalances"), list) else []
-            post_balances = meta.get("postBalances") if isinstance(meta.get("postBalances"), list) else []
-            if wallet_index < len(pre_balances) and wallet_index < len(post_balances):
-                delta_lamports = Decimal(str(post_balances[wallet_index])) - Decimal(str(pre_balances[wallet_index]))
-                if delta_lamports:
-                    rows.append(
-                        self._solana_row(
-                            timestamp=timestamp,
-                            signature=signature,
-                            wallet_address=wallet_address,
-                            event_type="sol_transfer",
-                            asset="SOL",
-                            delta=delta_lamports / Decimal("1000000000"),
-                        )
-                    )
-        token_deltas = self._solana_token_deltas(
-            pre=meta.get("preTokenBalances") if isinstance(meta.get("preTokenBalances"), list) else [],
-            post=meta.get("postTokenBalances") if isinstance(meta.get("postTokenBalances"), list) else [],
-            wallet_address=wallet_address,
-        )
-        for asset, delta in sorted(token_deltas.items()):
-            if delta:
-                rows.append(
-                    self._solana_row(
-                        timestamp=timestamp,
-                        signature=signature,
-                        wallet_address=wallet_address,
-                        event_type="token_transfer",
-                        asset=asset,
-                        delta=delta,
-                    )
-                )
-        return rows
+        return transaction_rows(wallet_address, signature, tx, self._solana_history_mint_symbols())
 
-    def _solana_wallet_account_index(self, account_keys: list[object], wallet_address: str) -> int | None:
-        for index, key in enumerate(account_keys):
-            if isinstance(key, str) and key == wallet_address:
-                return index
-            if isinstance(key, dict) and str(key.get("pubkey") or "") == wallet_address:
-                return index
-        return None
-
-    def _solana_token_deltas(
-        self,
-        *,
-        pre: list[object],
-        post: list[object],
-        wallet_address: str,
-    ) -> dict[str, Decimal]:
-        pre_balances = self._solana_token_balance_map(pre, wallet_address)
-        post_balances = self._solana_token_balance_map(post, wallet_address)
-        result: dict[str, Decimal] = {}
-        for key in sorted(set(pre_balances) | set(post_balances)):
-            asset = self.SOLANA_MINT_SYMBOLS.get(key, key[:6] + "..." + key[-4:])
-            result[asset] = result.get(asset, Decimal("0")) + post_balances.get(key, Decimal("0")) - pre_balances.get(key, Decimal("0"))
-        return result
-
-    def _solana_token_balance_map(self, balances: list[object], wallet_address: str) -> dict[str, Decimal]:
-        result: dict[str, Decimal] = {}
-        for item in balances:
-            if not isinstance(item, dict):
-                continue
-            owner = str(item.get("owner") or "")
-            if owner and owner != wallet_address:
-                continue
-            mint = str(item.get("mint") or "").upper()
-            amount = item.get("uiTokenAmount") if isinstance(item.get("uiTokenAmount"), dict) else {}
-            quantity = self._decimal_from_payload(amount.get("uiAmountString") if isinstance(amount, dict) else "0")
-            if mint:
-                result[mint] = result.get(mint, Decimal("0")) + quantity
-        return result
-
-    def _solana_row(
-        self,
-        *,
-        timestamp: str,
-        signature: str,
-        wallet_address: str,
-        event_type: str,
-        asset: str,
-        delta: Decimal,
-    ) -> dict[str, object]:
-        return {
-            "timestamp_utc": timestamp,
-            "event_type": event_type,
-            "asset": asset,
-            "quantity": abs(delta).normalize().to_eng_string(),
-            "side": "in" if delta > 0 else "out",
-            "tx_id": signature,
-            "wallet_address": wallet_address,
-        }
+    def _solana_history_mint_symbols(self) -> dict[str, str]:
+        if self._history_mint_symbols_cache is None:
+            symbols: dict[str, str] = {}
+            path = SOFTWARE_ROOT / "configs/crypto_price_sources.json"
+            try:
+                config = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                config = {}
+            for entry in config.get("assets", []):
+                mint_id = entry.get("defillama_id", "")
+                symbol = entry.get("symbol")
+                if isinstance(mint_id, str) and mint_id.startswith("solana:") and isinstance(symbol, str) and symbol:
+                    mint = mint_id.removeprefix("solana:")
+                    if mint:
+                        symbols[mint] = symbol
+            self._history_mint_symbols_cache = symbols
+        return self._history_mint_symbols_cache
 
     def _v1_solana_wallet_balances(self, wallet_address: str) -> dict[str, Decimal]:
         if not self.V1_CONNECTOR_BASE_URL:

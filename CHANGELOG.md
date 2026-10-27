@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0rc20 - 2026-10-27
+
+- Direkter Solana-Historienimport erkennt bereits gespeicherte Transaktionen
+  anhand von Wallet und Signatur auch bei ueberlappenden Abrufseiten. Reine
+  Wiederholungen starten keine erneute Normalisierung oder Steuerberechnung.
+- Netzwerkgebuehr wird nur dem nachgewiesenen Gebuehrenzahler zugeordnet und
+  genau einmal abgezogen. Fehlgeschlagene Transaktionen erzeugen keine Trades.
+- Bloesse RPC-Bestandsdifferenzen werden nicht automatisch zu Handel, Einkommen
+  oder Rewards. Ungeklaerte Bewegungen sperren den finalen Export zur Pruefung.
+- Originalantworten bleiben an den erzeugten Rohzeilen erhalten; exakte Mint-
+  Identitaeten werden nicht mehr durch Grossschreibung oder Kuerzung vermischt.
+- Fehlende Transaktionsdetails brechen eine Seite vor dem Import ab. Abweichende
+  Altbelege und unvollstaendige Vorimporte erfordern Pruefung statt Ueberschreiben.
+- Gemeinsame dateibasierte Importsperre verhindert konkurrierende Historienimporte
+  derselben Datenbank. Keine automatische Migration historischer Finanzdaten.
+
 ## 0.2.0rc19 - 2026-10-26
 
 - Gespeicherte Solana-Bestandspositionen erscheinen auch ohne importierte Historie

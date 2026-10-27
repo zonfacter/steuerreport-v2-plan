@@ -1,5 +1,55 @@
 # API Contracts V2
 
+## Direkter Solana-Historienimport: Idempotenz und Grenzen
+
+`POST /api/v1/portfolio/jup-wallet/import-history` bleibt eine ausdruecklich
+schreibende Aktion mit externen RPC-Aufrufen. Neue Zeilen werden importiert und
+die bestehende Pipeline wird neu berechnet. Quellen-Synchronisieren bleibt davon
+getrennt: es liest Bestaende, nicht diese Historie. Keine neue UI-Aktion eingefuehrt.
+
+- Eindeutigkeit: Quelle `solana_rpc`, exakte Wallet und Transaktionssignatur.
+  Die gesamte Transaktion wird mit ihren gespeicherten Rohzeilen verglichen;
+  eine groessere/ueberlappende Seite erhoeht alte Bestaende nicht erneut.
+- Reine Wiederholung: `duplicate_batch=true`, `normalized_events=0`,
+  `pipeline={"skipped":true,"reason":"no_new_transactions"}`. `batch_id` verweist
+  auf einen bestehenden Belegbatch, nicht auf einen neuen Batch fuer die Seite.
+  `fetched_rows` beschreibt weiterhin gelesene Zeilen, nicht neue Transaktionen.
+- Teilueberlappung: nur neue Transaktionen gehen in den neuen Batch ein;
+  `warnings` enthaelt `solana_history_duplicate_transactions` mit Anzahl.
+- HTTP 409: abweichende vorhandene Rohzeilen, alter/unvollstaendiger Import ohne
+  erfolgreich abgeschlossene Berechnung oder laufender paralleler Import.
+  Kein automatisches Ersetzen alter Belege. HTTP 422 bei fehlender Wallet.
+- HTTP 502: eine Transaktion fehlt, ist nicht eindeutig auswertbar oder konnte
+  nicht gelesen werden. Kein erfolgreicher Teilimport und kein neuer Cursor.
+  Erneut mit demselben Eingabecursor versuchen. Dies ist noch kein persistenter Job.
+
+Mapper-Version `2` speichert pro erzeugter Zeile die urspruengliche RPC-Antwort
+als deterministisches JSON `raw_transaction`, Wallet, Signatur und bei Tokenzeilen
+den unveraenderten Mint. Netzwerkgebuehren stehen als `network_fee` neben den
+gebuehrenbereinigten SOL-Bewegungen. Nur Account 0 zahlt die Transaktionsgebuehr;
+fehlgeschlagene Transaktionen tragen hoechstens dessen Gebuehr bei. Fehlende
+Zeit-/Bestands-/Eigentumsdaten werden nicht durch Annahmen ergaenzt.
+
+Bekannte Mints werden ausschliesslich ueber exakte `solana:`-IDs in der bestehenden
+Assetkonfiguration zugeordnet. Unbekannte Mints erhalten `SOLANA_` plus SHA256 des
+exakten Mintstrings; Gross-/Kleinschreibung bleibt dadurch identitaetswirksam.
+Originalmint und Originalmenge bleiben im Beleg erhalten. Keine automatische
+Preisannahme oder Assetfreigabe fuer unbekannte Token.
+
+Nettoveraenderungen allein beweisen weder Swap noch Reward. Solche Bewegungen
+bleiben zunaechst Transfers mit dem blockierenden Hinweis
+`solana_history_classification_required`. Dieser Patch fuehrt keinen neuen
+Freigabeautomatismus ein. Fachliche Klassifizierung, Belegpruefung und bestehende
+Korrekturablaeufe bleiben erforderlich; eine dokumentarische Markierung ersetzt
+keine fachliche Klaerung. Alte CSV-/Referenznormalisierungen bleiben unveraendert.
+
+Die Importsperre liegt neben der Datenbank (`.solana-history.lock`), enthaelt
+keine Zugangsdaten und gilt ueber Store-Instanzen und Prozesse hinweg. Linux/
+POSIX-Dateisperren sind erforderlich; ohne Sperre wird nicht ungeschuetzt importiert.
+Sie ersetzt keinen allgemeinen Mehrprozess-Schreibbetrieb fuer DuckDB. Ein nach
+Pipelinefehler als `loaded` verbliebener Batch wird nicht als Erfolg bestaetigt.
+Es erfolgt keine automatische Datenbereinigung oder steuerliche Rueckkorrektur.
+
 ## Gespeicherter Wallet-Bestand ohne Historie
 
 `GET /api/v1/workspace/sources` liefert bei explizit zugeordneten Profilwallets

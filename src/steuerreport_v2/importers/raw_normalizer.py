@@ -89,6 +89,11 @@ class RawNormalizer:
         if batch is None:
             raise ValueError(f"unknown import batch: {batch_id}")
 
+        with self.store.connect() as con:
+            con.execute(
+                "update raw_import_batches set status = 'loaded' where batch_id = ? and status = 'normalized'",
+                [batch_id],
+            )
         self.store.delete_canonical_events_for_batch(batch_id)
         events: list[CanonicalEvent] = []
         event_payloads: list[CanonicalEventCreate] = []
@@ -560,6 +565,8 @@ class RawNormalizer:
         if profile.source == "helium" and event_type == "transfer":
             sign_context = self._helium_transfer_sign_context(normalized, account, raw_type)
         quantity = self._signed_quantity(quantity, event_type, sign_context)
+        if profile.source == "solana_rpc" and raw_type.strip().lower() == "network_fee":
+            quantity = -abs(quantity)
         if (
             profile.source == "coinbase"
             and event_type == "transfer"
@@ -572,6 +579,7 @@ class RawNormalizer:
             and event_type == "transfer"
             and raw_type.strip().lower() == "token_transfer"
             and quantity > 0
+            and not self._is_direct_solana_history(row)
         ):
             event_type = (
                 "reward"
@@ -1282,6 +1290,8 @@ class RawNormalizer:
 
         grouped: dict[str, list[tuple[int, CanonicalEventCreate, dict[str, str | None]]]] = {}
         for index, (event, row) in enumerate(event_rows):
+            if self._is_direct_solana_history(row):
+                continue
             if event.event_type in {"trade", "transfer", "income"} and event.tx_id:
                 grouped.setdefault(event.tx_id, []).append((index, event, row))
 
@@ -1466,6 +1476,10 @@ class RawNormalizer:
                         }
                     )
                 continue
+            if all(self._is_direct_solana_history(row) for _index, _event, row in items):
+                # This mapper already separates the actual payer fee. Reapplying
+                # native reconciliation would count it a second time.
+                continue
             state = next(
                 (
                     parsed
@@ -1541,6 +1555,10 @@ class RawNormalizer:
             (rewritten.get(index, event), row)
             for index, (event, row) in enumerate(event_rows)
         ] + additions
+
+    @staticmethod
+    def _is_direct_solana_history(row: dict[str, object]) -> bool:
+        return str(row.get("history_mapper_version") or row.get("history mapper version") or "") == "2"
 
     def _solana_rpc_raw_wallet_state(
         self,

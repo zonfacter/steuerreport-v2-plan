@@ -74,6 +74,26 @@ Ein spaeterer Fehler loescht keinen zuvor erfolgreichen historischen Stand.
 Abruflimits bleiben aktiv; keine Historienimporte oder Steuerneuberechnung.
 Weitere Beobachtungsadressen erhalten durch diesen Patch keinen neuen Connector.
 
+### Historienimport und Wiederholungen
+
+Der direkte Historien-Endpunkt ist nicht derselbe Vorgang wie **Synchronisieren**.
+Er importiert Transaktionen und startet die bestehende Berechnungspipeline.
+Eine wiederholte oder ueberlappende Seite erzeugt keine zweite finanzielle Buchung
+derselben Wallet/Signatur. Bei reiner Wiederholung wird auch nicht neu berechnet.
+
+Eine Meldung ueber **abweichende Belege** oder **nicht vollstaendig bestaetigten
+Vorimport** bedeutet: alte Daten bleiben erhalten; der Import braucht eine
+manuelle Pruefung. Keine alten Batches zum blossen Umgehen dieser Meldung loeschen.
+Fehlende Details brechen die ganze Seite vor dem Import ab. Den Abruf spaeter mit
+demselben Cursor wiederholen, nicht den naechsten Cursor erraten.
+
+Netzwerkgebuehren sind von SOL-Bewegungen getrennt. Tokenzufluss allein beweist
+keinen Reward, und SOL-Abgang plus Tokenzufluss beweist noch keinen Swap.
+Ungeklaerte Bestandsbewegungen erzeugen deshalb einen blockierenden Pruefhinweis.
+Der technische Import ist keine steuerliche Freigabe. Bestehende Originalimporte
+werden durch dieses Softwareupdate weder veraendert noch automatisch korrigiert.
+Noch kein gefuehrter, pausierbarer Komplettabruf der Wallet-Historie im Browser.
+
 ## Optionales Connector-Einrichtungspasswort
 
 Dieses Passwort schuetzt die vorhandenen Connector-Administrationsfunktionen,

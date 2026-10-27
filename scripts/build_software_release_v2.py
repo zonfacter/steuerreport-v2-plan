@@ -29,6 +29,8 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc20.md",
+    "docs/FEHLERKORREKTUR_SOLANA_HISTORIE_2026-10-27.md",
     "docs/RELEASE_0.2.0rc16.md",
     "docs/RELEASE_0.2.0rc17.md",
     "docs/RELEASE_0.2.0rc18.md",

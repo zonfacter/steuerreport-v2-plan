@@ -33,6 +33,16 @@ class DerivedPriceService:
 
         derived: list[PricePointCreate] = []
         events = sorted(self.store.list_canonical_events(), key=self._event_sort_key)
+        with self.store.connect() as con:
+            unclassified = {row[0] for row in con.execute(
+                """
+                select e.event_id from canonical_events e
+                join raw_objects r on r.raw_object_id = e.raw_object_id
+                where e.source = 'solana_rpc' and e.event_type = 'transfer'
+                  and json_extract_string(r.payload_json, '$.history_mapper_version') = '2'
+                """
+            ).fetchall()}
+        counterflow_events = [event for event in events if event.event_id not in unclassified]
         for _ in range(max_passes):
             created_in_pass = 0
             for event in events:
@@ -100,7 +110,7 @@ class DerivedPriceService:
                     confidence=Decimal("0.80"),
                 )
             created_in_pass += self._append_group_counterflow_prices(
-                events=events,
+                events=counterflow_events,
                 history=history,
                 known_keys=known_keys,
                 derived=derived,

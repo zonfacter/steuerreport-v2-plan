@@ -2463,7 +2463,15 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     def portfolio_jup_wallet_import_history(
         payload: PortfolioWalletHistoryImportRequest | None = None,
     ) -> ApiResponse[PortfolioWalletHistoryImportResult]:
-        return ApiResponse(data=PortfolioService(db).import_jup_wallet_history(payload))
+        from steuerreport_v2.importers.solana_history_identity import SolanaHistoryConflict
+        try:
+            return ApiResponse(data=PortfolioService(db).import_jup_wallet_history(payload))
+        except SolanaHistoryConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.get("/api/v1/portfolio/separation-report")
     def portfolio_separation_report() -> ApiResponse[PortfolioSeparationReport]:

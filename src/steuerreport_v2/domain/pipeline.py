@@ -34,7 +34,9 @@ class PipelineService:
         self._suppress_solana_rpc_duplicate_reward_income_events()
         self._carry_forward_solana_rpc_legacy_helium_claim_rewards()
         self._carry_forward_solana_defi_position_principal()
-        return self._rebuild_ledgers(normalized_events)
+        result = self._rebuild_ledgers(normalized_events)
+        self._mark_solana_history_normalized()
+        return result
 
     def rebuild_after_import(self, batch_id: str) -> ImportRunResult:
         batch = self.store.get_import_batch(batch_id)
@@ -45,6 +47,7 @@ class PipelineService:
         self._carry_forward_solana_rpc_legacy_helium_claim_rewards()
         self._carry_forward_solana_defi_position_principal()
         pipeline = self._rebuild_ledgers(report.created_events)
+        self._mark_solana_history_normalized(batch_id)
         return ImportRunResult(
             batch_id=batch_id,
             imported_rows=batch.raw_object_count,
@@ -52,6 +55,17 @@ class PipelineService:
             skipped_raw_objects=report.skipped_raw_objects,
             pipeline=pipeline,
         )
+
+    def _mark_solana_history_normalized(self, batch_id: str | None = None) -> None:
+        with self.store.connect() as con:
+            con.execute(
+                """
+                update raw_import_batches set status = 'normalized'
+                where source = 'solana_rpc' and status = 'loaded'
+                  and (? is null or batch_id = ?)
+                """,
+                [batch_id, batch_id],
+            )
 
     def delete_import_and_rebuild(self, batch_id: str) -> ImportDeleteResult:
         deleted = self.store.delete_import_batch(batch_id)

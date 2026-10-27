@@ -55,6 +55,31 @@ class ReviewService:
                                           message="Freigegebene Datenkorrektur stimmt nicht mit dem aktuellen Datenstand ueberein.", blocks_export=True))
         positions = BalanceLedgerBuilder(self.store).positions()
 
+        with self.store.connect() as con:
+            pending_history = con.execute(
+                """
+                select e.event_id, e.account, e.asset, e.event_time
+                from canonical_events e
+                join raw_objects r on r.raw_object_id = e.raw_object_id
+                where e.source = 'solana_rpc' and e.event_type = 'transfer'
+                  and json_extract_string(r.payload_json, '$.history_mapper_version') = '2'
+                order by e.event_time, e.event_id
+                """
+            ).fetchall()
+        for event_id, account, asset, event_time in pending_history:
+            issues.append(ReviewIssue(
+                code="solana_history_classification_required",
+                severity="high",
+                message=(
+                    "RPC-Bestandsbewegung ist belegt, aber noch nicht fachlich als "
+                    "Transfer, Handel oder Reward eingeordnet. Originaltransaktion "
+                    "und Gegenkonto pruefen; keine automatische steuerliche Einordnung."
+                ),
+                scope=f"event:{event_id}:account:{account}:asset:{asset}",
+                blocks_export=True,
+                tax_year=reporting_tax_year(event_time),
+            ))
+
         for batch_id, count in self.store.unmapped_raw_object_counts().items():
             issues.append(
                 ReviewIssue(
@@ -992,6 +1017,7 @@ class ReviewService:
             "zero_cost_tax_lots": "FIFO-Lots mit 0 EUR Kosten pruefen",
             "zero_proceeds_tax_lines": "Steuerzeilen mit 0 EUR Erloes pruefen",
             "derivative_missing_prices": "Derivate-Preisbewertung ergaenzen",
+            "solana_history_classification_required": "Solana-Bewegung fachlich einordnen",
         }
         return titles.get(issue.code, issue.code.replace("_", " ").title())
 
