@@ -73,6 +73,10 @@ def build_history_router(store, on_import):
         on_import()
         return ApiResponse(data=result)
 
+    @router.post("/jobs/{job_id}/repreview", status_code=202)
+    def repreview(ref: str, job_id: UUID) -> ApiResponse[HistoryJob]:
+        return ApiResponse(data=service.repreview(ref, str(job_id)))
+
     @router.get("/jobs/{job_id}/audit.json")
     def audit(ref: str, job_id: UUID) -> ApiResponse[dict]:
         return ApiResponse(data=service.audit(ref, str(job_id)))

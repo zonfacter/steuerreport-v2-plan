@@ -140,6 +140,7 @@ class HistoryApprove(BaseModel):
 
 
 class HistoryJob(BaseModel):
+    requires_repreview: bool = False
     id: UUID
     source_ref: str
     label: str

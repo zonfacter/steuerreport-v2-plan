@@ -4,7 +4,7 @@ const TABS: Record<string, readonly string[]> = {
   dashboard: ["holdings", "sources", "development"], sources: ["list", "expert"],
   flows: ["transactions", "ledger", "flows", "transfers"], review: ["tasks", "evidence", "expert"],
   tax: ["guided", "details", "expert"], export: ["packages", "evidence", "expert"],
-  import: ["assistant", "preflight", "expert"], portfolio: ["overview", "reconciliation", "expert"],
+  import: ["assistant", "preflight", "expert"], portfolio: ["overview", "reconciliation", "prices", "expert"],
   admin: ["overview"], ai: ["text", "changes"], help: ["overview"],
   stichtage: ["overview"], zugewinn: ["overview"]
 };

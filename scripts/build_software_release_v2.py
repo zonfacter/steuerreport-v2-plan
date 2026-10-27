@@ -29,6 +29,8 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc29.md",
+    "docs/HISTORISCHE_EUR_PREISE.md",
     "docs/RELEASE_0.2.0rc28.md",
     "docs/RELEASE_0.2.0rc27.md",
     "docs/RELEASE_0.2.0rc26.md",

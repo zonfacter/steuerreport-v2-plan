@@ -62,6 +62,8 @@ export const HELP_TOPICS = [
   { id: "portfolio", title: "Portfolio und Preisabdeckung pruefen", keywords: "bestand haltefrist saldo preis kurs live ledger", steps: [
     "Vergleiche Bestaende nach Asset und Konto. Beruecksichtige technische Belegkonten nicht als zusaetzliches Vermoegen.",
     "Pruefe fuer einen EUR-Wert den verwendeten Preis, dessen Zeitpunkt und die Preisabdeckung.",
+    "Oeffne EUR-Preise ermitteln. Plane den fehlenden historischen Preisbedarf, bestaetige den externen Abruf und pruefe danach die isolierte Preisvorschau mit Originalantworten und Hashes. Erst die getrennten Bestaetigungen fuer Preise und Neuberechnung uebernehmen die Vorschau.",
+    "Ordne unbekannte Token einer exakten Preisquelle zu. Historische EUR-Preise benoetigen keine V1-Installation. Heutige Portfolio-Marktpreise bleiben ein eigener Abruf und ersetzen keine historischen Ereignispreise.",
     "Untersuche Bestandsabweichungen im Quellenabgleich. Fehlende Anschaffungsbelege nicht durch geschaetzte Kaeufe ersetzen."
   ], caution: "Aktueller Marktwert, steuerlicher Gewinn und tatsaechlicher Geldzufluss sind verschiedene Groessen." },
   { id: "stichtage", title: "Historische Stichtagswerte", keywords: "datum bewertung kurs historisch", steps: [

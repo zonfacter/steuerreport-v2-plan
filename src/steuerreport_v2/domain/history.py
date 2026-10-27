@@ -107,7 +107,7 @@ class HistoryService:
             return HistoryTarget(ref, source.label, provider, provider, legacy_credentials=True)
         raise HistoryFetchError("history_provider_not_supported", resumable=False)
 
-    def _binding(self, target: HistoryTarget):
+    def _binding(self, target: HistoryTarget, *, software_version=None):
         keys = []
         if target.provider != "solana":
             if target.connection_id:
@@ -124,7 +124,7 @@ class HistoryService:
             connection = next(c for c in self.connections.list().connections if str(c.id) == target.connection_id)
             binding["account_name"] = connection.account
             binding["subaccount"] = connection.subaccount
-        return hashlib.sha256(canonical_json([__version__, binding, sorted(keys)]).encode()).hexdigest()
+        return hashlib.sha256(canonical_json([software_version or __version__, binding, sorted(keys)]).encode()).hexdigest()
 
     def capability(self, ref):
         try:
@@ -180,7 +180,7 @@ class HistoryService:
             transport = HistoryRpcOption.model_validate(job['transport'])
             transport.limits = HistoryRateState.model_validate(rpc_status(self.store, provider_id=transport.provider_id))
         from steuerreport_v2.domain.history_progress import public_progress
-        return HistoryJob.model_validate({**effective, "can_resume": (
+        return HistoryJob.model_validate({**effective, "requires_repreview": bool(job.get("_preview") and job["_preview"].get("software_version") != __version__), "can_resume": (
             effective["status"] in {"paused", "failed"} and job.get("_resumable") is not False
         ), 'transport': transport, 'progress': public_progress(effective, transport)})
 
@@ -450,6 +450,37 @@ class HistoryService:
             self._check_rpc_binding(job)
             return self._public(HistoryPreview(self.store).apply(job, request))
 
+    def repreview(self, ref, job_id):
+        with self.connections._mutation():
+            job = self.storage.load(job_id)
+            if job["source_ref"] != ref or job["status"] not in {"ready", "paused", "failed"} or not job.get("_done") or not job.get("_preview") or job.get("approval"):
+                raise HistoryFetchError("history_preview_required", resumable=False)
+            old = job["_preview"]
+            version = old.get("software_version")
+            if not version or self._binding(self._target(ref), software_version=version) != job["_binding"]:
+                raise HistoryFetchError("history_source_changed", resumable=False)
+            self._check_rpc_binding(job)
+            self.storage.records(job)
+            content = canonical_json(old).encode()
+            digest = hashlib.sha256(content).hexdigest()
+            path = self.storage.directory(job_id) / ("previous-preview-" + digest + ".json")
+            if not path.exists():
+                with path.open("xb") as stream:
+                    stream.write(content)
+                path.chmod(0o400)
+            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                raise HistoryFetchError("history_preview_changed", resumable=False)
+            previous = job.get("_previous_previews", [])
+            if len(previous) >= 20:
+                raise HistoryFetchError("history_job_storage_limit", resumable=False)
+            job.update(_previous_previews=[*previous, {"sha256": digest, "software_version": version, "preview_sha256": job["preview_sha256"]}],
+                       _binding=self._binding(self._target(ref)), status="queued", phase="Gespeicherte Originalbelege lokal neu pruefen",
+                       _run_id=str(uuid4()), _until=(datetime.now(timezone.utc) + timedelta(seconds=RUN_SECONDS)).isoformat(),
+                       _pid=os.getpid(), _pause_requested=False, _cancel_requested=False, error_code=None)
+            self.storage.save(job)
+        self._launch(job_id)
+        return self._public(job)
+
     def audit(self, ref, job_id):
         job = self.storage.load(job_id)
         if job["source_ref"] != ref:
@@ -457,4 +488,4 @@ class HistoryService:
         return {"job": self._public(job).model_dump(mode="json"), "evidence_sha256": sorted(job.get("_records", {}).values()),
                 "preview": {k: v for k, v in job.get("_preview", {}).items() if k != "prepared_file"},
                 "options": job["_options"], "source_binding": job["_target"],
-                "software_version": __version__, "tax_source_activated": False}
+                "software_version": __version__, "previous_previews": job.get("_previous_previews", []), "tax_source_activated": False}

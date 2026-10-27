@@ -26,6 +26,8 @@ class ScopeBudget:
     started_monotonic: float
     deadline_monotonic: float | None
     lock: Lock = field(default_factory=Lock)
+    max_requests: int | None = None
+    requests_started: int = 0
 
 
 @dataclass(frozen=True)
@@ -54,7 +56,7 @@ HOST_PROVIDERS = {
     "alchemy.com": "alchemy", "alchemyapi.io": "alchemy", "jup.ag": "jupiter",
     "solana.com": "solana_rpc", "coingecko.com": "coingecko", "cryptocompare.com": "cryptocompare",
     "ecb.europa.eu": "ecb", "frankfurter.app": "fx", "frankfurter.dev": "fx",
-    "openrouter.ai": "ai_openrouter",
+    "openrouter.ai": "ai_openrouter", "llama.fi": "defillama",
 }
 HTTP_ENDPOINTS = {
     "/api/v3/account": "account", "/api/v2/spot/account/assets": "spot_assets",
@@ -79,12 +81,14 @@ HTTP_ENDPOINTS = {
 
 
 @contextmanager
-def outbound_scope(*, provider=None, connection_id=None, groups=(), cancel=None, deadline=None, clock=time.time, monotonic=time.monotonic):
+def outbound_scope(*, provider=None, connection_id=None, groups=(), cancel=None, deadline=None, max_requests=None, clock=time.time, monotonic=time.monotonic):
+    if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
+        raise ValueError("request_budget_invalid")
     started = monotonic()
-    budget = ScopeBudget(started, started + max(0, deadline - clock()) if deadline is not None else None)
+    budget = ScopeBudget(started, started + max(0, deadline - clock()) if deadline is not None else None, max_requests=max_requests)
     token = _scope.set(OutboundScope(provider, str(connection_id) if connection_id else None, tuple(groups), cancel, deadline, budget))
     try:
-        yield
+        yield _scope.get()
     finally:
         _scope.reset(token)
 
@@ -238,6 +242,11 @@ class LimitedTransport(httpx.BaseTransport):
                         refresh()
                     if scope.cancel is not None and scope.cancel.is_set():
                         raise RequestCancelled("request_cancelled")
+                    if scope.budget is not None:
+                        with scope.budget.lock:
+                            if scope.budget.max_requests is not None and scope.budget.requests_started >= scope.budget.max_requests:
+                                raise RequestLimitError("request_budget_exhausted")
+                            scope.budget.requests_started += 1
                     if signer is not None:
                         signer(request)
                 lease.start(prepare=prepare)

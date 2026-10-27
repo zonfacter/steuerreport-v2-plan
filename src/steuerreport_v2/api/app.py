@@ -9,6 +9,7 @@ from steuerreport_v2.contracts.installation import InstallationSettings, Install
 from steuerreport_v2.domain.installation import InstallationSettingsError, InstallationSettingsService
 from steuerreport_v2.api.connections import build_connections_router
 from steuerreport_v2.api.history import build_history_router
+from steuerreport_v2.api.historical_prices import build_historical_prices_router
 from steuerreport_v2.api.request_limits import build_request_limits_router
 from steuerreport_v2.domain.external_http import outbound_scope
 
@@ -735,6 +736,7 @@ def create_app(store: DuckDbStore | None = None) -> FastAPI:
     db = store or DuckDbStore()
     app.include_router(build_connections_router(db))
     app.include_router(build_history_router(db, lambda: clear_response_cache()))
+    app.include_router(build_historical_prices_router(db, lambda: clear_response_cache()))
     app.include_router(build_request_limits_router())
     workspace_operation_lock = Lock()
     installation = InstallationSettingsService(db)

@@ -168,3 +168,13 @@
   .wsYearContext { flex: 1 1 100%; }
 }
 .wsPager > label { white-space: nowrap; }
+.wsPriceWorkspace, .wsPriceWorkspace fieldset { min-width: 0; }
+.wsPriceWorkspace fieldset { border: 0; padding: 8px 0; margin: 0; }
+.wsPriceWorkspace legend { font-weight: 600; padding: 0; }
+.wsPriceWorkspace .wsFilterInputs > label { flex: 1 1 180px; min-width: 0; max-width: 100%; }
+.wsPriceWorkspace input:not([type="checkbox"]), .wsPriceWorkspace select { min-width: 0; max-width: 100%; width: 100%; }
+.wsPriceWorkspace button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.wsPriceWorkspace fieldset > label:not(.checkboxLabel) { display: grid; gap: 4px; margin: 8px 0; }
+.wsPriceWorkspace .checkboxLabel { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; }
+.wsPriceWorkspace .checkboxLabel input { flex: 0 0 auto; margin-top: 3px; }
+.wsPriceWorkspace > section { margin-top: 24px; border-top: 1px solid var(--line, #d7dde1); padding-top: 12px; }

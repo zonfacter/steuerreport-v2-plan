@@ -102,6 +102,26 @@ def approve(job):
                           confirm_import=True, confirm_recalculation=True)
 
 
+def test_repreview_after_software_change_reuses_originals_without_external_fetch(setup, monkeypatch):
+    from steuerreport_v2.domain import history as history_module
+    store, service, ref, wallet = setup
+    job, collector = collect(monkeypatch, service, ref, [records(wallet)])
+    original = job.preview_sha256
+    before = financial_state(store)
+    monkeypatch.setattr(history_module, "__version__", "synthetic-next-version")
+    assert service.get(ref, str(job.id)).requires_repreview
+    result = service.repreview(ref, str(job.id))
+    assert result.status == "queued"
+    assert len(collector.calls) == 1
+    assert financial_state(store) == before
+    assert len(service.audit(ref, str(job.id))["previous_previews"]) == 1
+    assert service.audit(ref, str(job.id))["previous_previews"][0]["preview_sha256"] == original
+    service._run(str(job.id))
+    assert service.get(ref, str(job.id)).status == "ready"
+    assert len(collector.calls) == 1
+    assert financial_state(store) == before
+
+
 def financial_state(store):
     with store.connect() as con:
         return {table: con.execute(f"select * from {table} order by all").fetchall() for table in (

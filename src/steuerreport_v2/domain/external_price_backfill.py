@@ -423,6 +423,13 @@ class ExternalPriceBackfillService:
                         defillama_id=defillama_id,
                     )
                 )
+        from steuerreport_v2.contracts.historical_prices import PriceMapping
+        with self.store.connect() as con:
+            configured = con.execute("select value_json from admin_settings where starts_with(key, 'price.mapping.')").fetchall()
+        for row in configured:
+            mapping = PriceMapping.model_validate_json(row[0])
+            result.append(_PriceAsset(symbol=mapping.asset, coingecko_id=mapping.coingecko_id,
+                defillama_id=mapping.defillama_id, aliases=(mapping.asset,)))
         return result
 
     def _token_risk_statuses(self) -> dict[str, str]:

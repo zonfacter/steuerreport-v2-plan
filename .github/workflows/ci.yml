@@ -97,6 +97,9 @@ jobs:
       - name: Solana rate settings against isolated local coordinator
         working-directory: .
         run: python scripts/check_solana_limits_browser_v2.py --output "${RUNNER_TEMP}/solana-limits-browser"
+      - name: Historical EUR prices against isolated backend and mock providers
+        working-directory: .
+        run: python scripts/check_historical_prices_browser_v2.py --output "${RUNNER_TEMP}/historical-prices-browser"
       - name: UX browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -109,4 +112,5 @@ jobs:
             artifacts/source-history-backend-browser/
             ${{ runner.temp }}/history-provider-eta-browser/
             ${{ runner.temp }}/solana-limits-browser/
+            ${{ runner.temp }}/historical-prices-browser/
           if-no-files-found: ignore

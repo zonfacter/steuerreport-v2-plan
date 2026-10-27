@@ -212,3 +212,16 @@ und die Datei fuer den Dienstbenutzer lesbar eingebunden sein.
 Vor Updates das gesamte Volume einschliesslich **beider** privaten Dateien
 `keys/vault.key` und `keys/connector-setup.token` sichern. Keine privaten Sicherungen
 an GitHub-Releases anhaengen. Neue Versionen nie mit alten Zugangsdaten im Image bauen.
+
+## Historische EUR-Preise Ohne Altinstallation
+
+Ab rc29 benoetigt der gefuehrte Preisablauf keinen V1-Wechselkurscache.
+Nach ausdruecklichem Transaktionsimport unter Portfolio & Haltefristen ->
+EUR-Preise ermitteln den Bedarf planen, Providerabruf bestaetigen und erst
+nach Pruefung Preise plus Neuberechnung uebernehmen. Eigene Preiszuordnungen
+werden privat gespeichert; Einrichtung verlinkt diese Zuordnung.
+Details: [Historische EUR-Preise](HISTORISCHE_EUR_PREISE.md).
+
+Ein Update importiert keine bereits abgerufenen Transaktionen. Fertige alte
+Historienvorschauen vor Importfreigabe ausdruecklich lokal erneut berechnen;
+Originalbelege bleiben erhalten.

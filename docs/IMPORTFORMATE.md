@@ -1,4 +1,4 @@
-# Importformate und Spaltenlayouts (0.2.0rc28)
+# Importformate und Spaltenlayouts (0.2.0rc29)
 
 Generiert aus den tatsaechlichen Importprofilen. Keine Zusage fuer beliebige Exporte eines Anbieters.
 

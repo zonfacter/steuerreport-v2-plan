@@ -34,6 +34,7 @@ type HistoryCapability = {
   rpc_options?: HistoryRpcOption[];
 };
 type HistoryJob = {
+  requires_repreview?: boolean;
   id: string; source_ref: string; label: string; provider: string;
   status: "queued" | "running" | "paused" | "ready" | "importing" | "succeeded" | "failed" | "cancelled";
   phase: string; created_at: string; updated_at: string; start: string; end: string;
@@ -259,7 +260,7 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
     }
   }, [jobs]);
 
-  const command = async (action: "start" | "pause" | "resume" | "cancel" | "import", payload: HistoryStart | HistoryResume | HistoryApprove | Record<string, never>) => {
+  const command = async (action: "start" | "pause" | "resume" | "cancel" | "import" | "repreview", payload: HistoryStart | HistoryResume | HistoryApprove | Record<string, never>) => {
     const controller = lifetime.current;
     if (running.current || !controller || controller.signal.aborted) return;
     running.current = true; mutationEpoch.current += 1; pollController.current?.abort(); setBusy(action); setCommandError(""); setPollError("");
@@ -370,7 +371,9 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
         {unfinished.has(job.status) && job.status !== "importing" && <button type="button" disabled={!!busy} onClick={() => void command("cancel", {})}><X size={16} /> Auftrag abbrechen</button>}
       </div>
       {(job.status === "paused" || job.status === "failed") && job.can_resume !== false && <div className="hiResume"><label>Datensatzlimit beim Fortsetzen<input type="number" min={1} max={1000000} step={1} value={resumeValue} onChange={(event) => { setResumeRecords((previous) => ({ ...previous, [job.id]: event.target.value })); setResumeConsent(""); }} /></label><label className="hiCheck"><input type="checkbox" checked={resumeConsent === job.id} onChange={(event) => setResumeConsent(event.target.checked ? job.id : "")} /><span>Ich bestätige weitere externe Anbieteranfragen für {sourceLabel}.</span></label><button type="button" disabled={!!busy || resumeConsent !== job.id || !validResumeLimit} onClick={() => { const payload: HistoryResume = { confirm_external_request: true, max_records: resumeLimit }; void command("resume", payload); }}><Play size={16} /> Abruf fortsetzen</button></div>}
-      {job.status === "ready" && <>
+      {job.status === "ready" && job.requires_repreview && <p className="wsWarning">Diese Vorschau stammt aus einer anderen Softwareversion. Vor einer Freigabe die gespeicherten Originalbelege lokal erneut berechnen.</p>}
+      {job.status === "ready" && <button type="button" disabled={!!busy} onClick={() => { if (window.confirm("Vorschau aus den gespeicherten Originalbelegen lokal neu berechnen? Kein erneuter Anbieterabruf, kein Import. Die bisherige Vorschau bleibt als Nachweis erhalten.")) void command("repreview", {}); }}><RefreshCw size={16} /> Vorschau erneut berechnen</button>}
+      {job.status === "ready" && !job.requires_repreview && <>
         <h3>Importvorschau</h3>
         {job.sample_rows.length ? <SampleTable rows={job.sample_rows} /> : <p className="wsMuted">Keine Beispielzeilen in dieser Vorschau. Datensatzzahlen und Abdeckung vor einer Freigabe prüfen.</p>}
         {job.review_issues_open !== null && <p className="wsMuted">{job.review_issues_open} offene Review-Hinweise</p>}
@@ -387,7 +390,7 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
           }}>{busy === "import" ? <LoaderCircle size={16} className="spin" /> : <Check size={16} />} Importieren und neu berechnen</button>
         </div>
       </>}
-      {job.status === "succeeded" && <p role="status">{job.imported_events} Ereignisse importiert. Abdeckung und offene Review-Aufgaben bleiben zu prüfen.{typeof job.approval?.actor === "string" && ` Freigegeben von: ${job.approval.actor}.`}</p>}
+      {job.status === "succeeded" && <><p role="status">{job.imported_events} Ereignisse importiert. Abdeckung und offene Review-Aufgaben bleiben zu prüfen.{typeof job.approval?.actor === "string" && ` Freigegeben von: ${job.approval.actor}.`}</p><a className="wsButton" href="#portfolio?tab=prices">Historische EUR-Preise ermitteln</a></>}
       <details className="wsTechnical"><summary>Technische Auftragsdetails</summary><pre>{JSON.stringify({ source_ref: job.source_ref, id: job.id, provider: job.provider, phase: job.phase, max_records: job.max_records, error_code: job.error_code, preview_sha256: job.preview_sha256, complete_history_proven: job.complete_history_proven, before_summary: job.before_summary, after_summary: job.after_summary, approval: job.approval, sample_rows: job.sample_rows }, null, 2)}</pre></details>
     </section>}
     {capability?.blocked_reason && <details className="wsTechnical"><summary>Technische Einrichtungshinweise</summary><code>{capability.blocked_reason}</code></details>}

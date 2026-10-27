@@ -1,5 +1,18 @@
 # API Contracts V2
 
+## Historische EUR-Preise Ab rc29
+
+Neue additive Endpunkte unter `/api/v1/prices/historical`: lokales `POST /plan`,
+private `GET/PUT /mappings`, bestaetigtes `POST /previews`, lesende
+`GET /previews` und `GET /previews/{id}`, gebundene Originalbelege unter
+`GET /previews/{id}/evidence/{sha}`, sowie explizites `POST /previews/{id}/apply`.
+Request-/Plan-/Vorschauhash, HTTP-Budget einschliesslich Retry/FX, Datum,
+Methodik und Grenzen: [vollstaendiger Ablauf](HISTORISCHE_EUR_PREISE.md).
+Die neue Oberflaeche verwendet keine V1-FX-Datenbank. Legacy-Preisendpunkte
+bleiben kompatibel. `HistoryJob.requires_repreview` kennzeichnet einen
+Softwarewechsel; `POST .../history/jobs/{id}/repreview` berechnet gespeicherte
+fertige Historienbelege ausdruecklich lokal neu, ohne erneuten Abruf/Import.
+
 ## Abruflimits, Methodenprofile und Solana-Free-Voreinstellung
 
 Bestehendes `GET/PUT /api/v1/admin/request-limits` bleibt erhalten. Schreiben

@@ -12,6 +12,7 @@ import { SourceWorkspace } from "./workspace/SourceWorkspace";
 import { ActivityWorkspace } from "./workspace/Transactions";
 import { ReviewWorkspace } from "./workspace/ReviewWorkspace";
 import { YearWorkspace } from "./workspace/YearWorkspace";
+import { PriceWorkspace } from "./workspace/PriceWorkspace";
 import { navigateView, useViewState } from "./workspace/view-state";
 import {
   AlertTriangle,
@@ -3146,7 +3147,7 @@ type LoaderStatus = {
 };
 
 type TaxViewMode = "guided" | "details" | "expert";
-type PortfolioViewMode = "overview" | "reconciliation" | "expert";
+type PortfolioViewMode = "overview" | "reconciliation" | "prices" | "expert";
 type TokenRiskFilter = "all" | "verified" | "unverified_plausible" | "spam_review";
 type SourceViewMode = "overview" | "reconciliation" | "expert";
 type ExportViewMode = "packages" | "evidence" | "expert";
@@ -3747,7 +3748,7 @@ function App() {
           "taxHoldingPeriods",
           "taxLossRealizationPlanner",
           "priceCoverage",
-          ...(portfolioViewMode !== "overview"
+          ...(portfolioViewMode === "reconciliation" || portfolioViewMode === "expert"
             ? ["portfolioReconciliation", "portfolioValuationAudit", "separationReport", "fiatDeposits", "latestPrices"]
             : []),
           ...(portfolioViewMode === "expert"
@@ -6058,6 +6059,10 @@ function Content({
     );
   }
   if (active === "portfolio") {
+    if (portfolioViewMode === "prices") return <Stack>
+      <div className="wsActionFooter"><button type="button" onClick={() => onPortfolioViewModeChange("overview")}>Portfolio-Übersicht</button><button type="button" onClick={() => onPortfolioViewModeChange("expert")}>Preisbelege / CSV im Expertenmodus</button></div>
+      <PriceWorkspace onCurrentPrices={onBackfillCurrentPortfolioPrices} />
+    </Stack>;
     return (
       <Stack>
         <PortfolioDecisionPanel
@@ -6069,6 +6074,7 @@ function Content({
           onViewModeChange={onPortfolioViewModeChange}
         />
         <div className="taxViewSwitch" role="tablist" aria-label="Portfolio Ansicht">
+          <button type="button" onClick={() => onPortfolioViewModeChange("prices")}>EUR-Preise ermitteln</button>
           <button
             type="button"
             className={portfolioViewMode === "overview" ? "active" : ""}
@@ -6131,7 +6137,7 @@ function Content({
           <>
             <PriceForm onAddPrice={onAddPrice} />
             <PriceCsvImportForm onImportPriceCsv={onImportPriceCsv} />
-            <ExternalPriceBackfillForm onBackfillExternalPrices={onBackfillExternalPrices} />
+            <button type="button" onClick={() => onPortfolioViewModeChange("prices")}>Historische EUR-Preise planen und prüfen</button>
             <CurrentPortfolioPriceBackfillForm onBackfillCurrentPortfolioPrices={onBackfillCurrentPortfolioPrices} />
             <PriceCoveragePanel
               coverage={snapshot.priceCoverage}
@@ -6457,6 +6463,7 @@ function Content({
         <DataProviderSettings />
         <ConnectionSettings />
         <RequestLimitSettings />
+        <section><h2>EUR-Preisquellen</h2><a href="#portfolio?tab=prices">Historische EUR-Preise und eigene Preiszuordnungen einrichten</a></section>
         <AiWorkspace configurationOnly />
         <details className="advancedSettings"><summary>Bisheriger Einzelzugang und technische Diagnose</summary>
         <AdminCexCredentialForm

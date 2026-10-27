@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0rc29 - 2026-10-27 (Releasekandidat)
+
+- Gefuehrter historischer EUR-Preisablauf unter Portfolio -> EUR-Preise ermitteln:
+  lokal planen, externe Abfrage bestaetigen, isolierte Vorschau pruefen und
+  Preise/Neuberechnung getrennt freigeben. Keine V1-Datenbank erforderlich.
+- CoinGecko-EUR-Tagesreferenzen oder DefiLlama-USD-Quotes mit historischen
+  EZB-USD/EUR-Kursen ueber Frankfurter v2. Keine spaeteren Kryptoquotes,
+  heutigen Ersatzkurse oder pauschale Stablecoin-Paritaet.
+- Private hashgebundene Originalantworten und Vorschauen, Belegdownloads,
+  idempotente Uebernahme, Datenstand-/Integritaetspruefung und atomare
+  Uebernahme der isolierten Berechnung mit menschlichem Freigabeprotokoll.
+- Private Preiszuordnungen konfigurierbar; bestehende Anbieter-/IP-Limits
+  gelten. Das abschnittsweise HTTP-Budget zaehlt auch FX und Wiederholungen.
+- Gespeicherte Historienbelege koennen nach Softwarewechsel ausdruecklich
+  lokal neu geprueft werden; kein erneuter Anbieterabruf oder Autoimport.
+- Aktuelle Portfolio-Marktpreise bleiben separat; unvollstaendige Historie,
+  Tokenzuordnung und offene fachliche Hinweise bleiben pruefpflichtig.
+
 ## 0.2.0rc28 - 2026-10-27 (Releasekandidat)
 
 - Alchemy, Helius und eigene Solana-RPC-Anbieter sind unter Abrufsteuerung
