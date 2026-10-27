@@ -1,10 +1,11 @@
 """V1-unabhaengige Tagespreisplanung und explizite Uebernahme."""
 from datetime import date
 from decimal import Decimal
+import re
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class PriceMapping(BaseModel):
@@ -12,6 +13,16 @@ class PriceMapping(BaseModel):
     asset: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_:./-]+$")
     coingecko_id: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,100}$")
     defillama_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$")
+    solana_mint: str | None = Field(default=None, pattern=r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
+
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_address_identity(cls, value):
+        if isinstance(value, dict) and not value.get("solana_mint"):
+            original = value.get("asset")
+            if isinstance(original, str) and re.fullmatch(r"[1-9A-HJ-NP-Za-km-z]{32,44}", original):
+                return {**value, "solana_mint": original}
+        return value
 
     @field_validator("asset")
     @classmethod
@@ -25,6 +36,9 @@ class HistoricalPriceQuery(BaseModel):
     assets: list[str] = Field(default_factory=list, max_length=100)
     provider: Literal["defillama", "coingecko"] = "defillama"
     max_requests: int = Field(default=10, ge=1, le=50)
+    scope: Literal["tax_required", "all_observed"] = "tax_required"
+    page: int = Field(default=1, ge=1, le=100_000)
+    page_size: int = Field(default=25, ge=1, le=100)
 
     @field_validator("assets")
     @classmethod
@@ -60,6 +74,21 @@ class HistoricalPriceApply(BaseModel):
         return value.strip()
 
     @field_validator("confirm_prices", "confirm_recalculation", mode="before")
+    @classmethod
+    def consent(cls, value):
+        if value is not True:
+            raise ValueError("historical_price_confirmation_required")
+        return value
+
+
+class HistoricalPriceContinue(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    request_id: UUID
+    preview_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    confirm_external_request: Literal[True]
+    retry_open: bool = False
+
+    @field_validator("confirm_external_request", mode="before")
     @classmethod
     def consent(cls, value):
         if value is not True:

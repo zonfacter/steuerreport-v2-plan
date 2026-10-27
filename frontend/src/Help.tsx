@@ -62,7 +62,9 @@ export const HELP_TOPICS = [
   { id: "portfolio", title: "Portfolio und Preisabdeckung pruefen", keywords: "bestand haltefrist saldo preis kurs live ledger", steps: [
     "Vergleiche Bestaende nach Asset und Konto. Beruecksichtige technische Belegkonten nicht als zusaetzliches Vermoegen.",
     "Pruefe fuer einen EUR-Wert den verwendeten Preis, dessen Zeitpunkt und die Preisabdeckung.",
-    "Oeffne EUR-Preise ermitteln. Plane den fehlenden historischen Preisbedarf, bestaetige den externen Abruf und pruefe danach die isolierte Preisvorschau mit Originalantworten und Hashes. Erst die getrennten Bestaetigungen fuer Preise und Neuberechnung uebernehmen die Vorschau.",
+    "Öffne EUR-Preise ermitteln und wähle Alle erkannten Token sowie ein Jahr oder Alle Jahre. Preisbedarf planen erfasst auch Token aus Transfers, ohne sie als Rewards oder Trades anzuerkennen. Vorhandene, fehlende und blockierte Tagespreise bleiben getrennt.",
+    "Bestätige den externen Abruf. Weitere Abschnitte ergänzen dieselbe kombinierte Vorschau; fehlgeschlagene Zeilen werden nur nach ausdrücklichem erneutem Versuch abgefragt. Lade Jahresdateien und Originalbelege als ZIP oder die Auswertung als JSON/Markdown herunter. Dafür ist keine KI erforderlich.",
+    "Prüfe Preise und Berechnungsänderungen. Erst freigebende Person und getrennte Bestätigungen für Preise und Neuberechnung erlauben die Übernahme. Rohbelege und Ereignisklassifikationen bleiben unverändert; offene Einordnungen und Jahresfreigaben bleiben offen.",
     "Ordne unbekannte Token einer exakten Preisquelle zu. Historische EUR-Preise benoetigen keine V1-Installation. Heutige Portfolio-Marktpreise bleiben ein eigener Abruf und ersetzen keine historischen Ereignispreise.",
     "Untersuche Bestandsabweichungen im Quellenabgleich. Fehlende Anschaffungsbelege nicht durch geschaetzte Kaeufe ersetzen."
   ], caution: "Aktueller Marktwert, steuerlicher Gewinn und tatsaechlicher Geldzufluss sind verschiedene Groessen." },

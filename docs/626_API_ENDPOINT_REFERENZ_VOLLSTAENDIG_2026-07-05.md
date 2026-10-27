@@ -12,9 +12,9 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 
 ## Statistik
 
-- Endpunkte gesamt: `458`
-- GET: `325`
-- POST: `114`
+- Endpunkte gesamt: `463`
+- GET: `329`
+- POST: `115`
 - PUT: `9`
 - PATCH: `1`
 - DELETE: `9`
@@ -191,12 +191,17 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 | `POST` | `/api/v1/prices/coverage/decisions` | Fuegt hinzu price gap decision | schreibt/erzeugt Artefakte | `app.py:2319` `add_price_gap_decision` |
 | `GET` | `/api/v1/prices/historical/mappings` | Mappings | read-only | `historical_prices.py:44` `mappings` |
 | `PUT` | `/api/v1/prices/historical/mappings` | Save mapping | schreibt | `historical_prices.py:48` `save_mapping` |
-| `POST` | `/api/v1/prices/historical/plan` | Plan | kann Daten oder Artefakte schreiben | `historical_prices.py:40` `plan` |
+| `POST` | `/api/v1/prices/historical/plan` | Plant historische Tagespreise lokal mit Jahresuebersicht und reiner Listenpagination | read-only; keine Anbieterabfrage | `historical_prices.py:40` `plan` |
 | `GET` | `/api/v1/prices/historical/previews` | Recent | read-only | `historical_prices.py:52` `recent` |
-| `POST` | `/api/v1/prices/historical/previews` | Fetch | kann Daten oder Artefakte schreiben | `historical_prices.py:65` `fetch` |
+| `POST` | `/api/v1/prices/historical/previews` | Sammelt bestaetigte Preisbelege und berechnet eine isolierte Vorschau | externer Abruf und private Vorschauartefakte; keine produktive Preisuebernahme | `historical_prices.py:102` `fetch` |
 | `GET` | `/api/v1/prices/historical/previews/{request_id}` | Get | read-only | `historical_prices.py:56` `get` |
-| `POST` | `/api/v1/prices/historical/previews/{request_id}/apply` | Apply | kann Daten oder Artefakte schreiben | `historical_prices.py:69` `apply` |
-| `GET` | `/api/v1/prices/historical/previews/{request_id}/evidence/{sha}` | Evidence | read-only | `historical_prices.py:60` `evidence` |
+| `POST` | `/api/v1/prices/historical/previews/{request_id}/apply` | Uebernimmt bestaetigte Preise und Neuberechnung bei unveraenderten Quellen | bestaetigte Preis-/Ledger-Neuberechnung und Auditspur; keine Ereignisumklassifikation | `historical_prices.py:106` `apply` |
+| `POST` | `/api/v1/prices/historical/previews/{request_id}/continue` | Ergaenzt eine kumulative Preisvorschau nach erneuter externer Bestaetigung | externer Abruf und private Vorschauartefakte; keine produktive Preisuebernahme | `historical_prices.py:64` `continue_preview` |
+| `GET` | `/api/v1/prices/historical/previews/{request_id}/evidence/{sha}` | Evidence | read-only | `historical_prices.py:97` `evidence` |
+| `GET` | `/api/v1/prices/historical/previews/{request_id}/report.json` | Exportiert die vollstaendige Preisvorschau und Belegbindung als JSON | read-only | `historical_prices.py:68` `json_report` |
+| `GET` | `/api/v1/prices/historical/previews/{request_id}/report.md` | Exportiert die vollstaendige Jahresauswertung als Markdown | read-only | `historical_prices.py:75` `markdown_report` |
+| `GET` | `/api/v1/prices/historical/previews/{request_id}/report.zip` | Exportiert saemtliche Jahreszeilen und gepruefte Originalbelege als ZIP | read-only | `historical_prices.py:81` `zip_report` |
+| `GET` | `/api/v1/prices/historical/previews/{request_id}/status` | Liest laufenden oder gespeicherten Preisabrufstatus ohne Anbieterabfrage | read-only | `historical_prices.py:60` `status` |
 | `POST` | `/api/v1/prices/import/csv` | Importiert price csv | schreibt/erzeugt Artefakte | `app.py:1954` `import_price_csv` |
 | `POST` | `/api/v1/prices/import/csv/preview` | Preview price csv | read-only | `app.py:1945` `preview_price_csv` |
 | `POST` | `/api/v1/prices/import/v1-fx-cache` | Importiert v1 fx cache | schreibt/erzeugt Artefakte | `app.py:1994` `import_v1_fx_cache` |
@@ -554,15 +559,15 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 | `POST` | `/api/v1/workspace/review/query` | Workspace review | kann Daten oder Artefakte schreiben | `app.py:1658` `workspace_review` |
 | `GET` | `/api/v1/workspace/sources` | Workspace sources | read-only | `app.py:1631` `workspace_sources` |
 | `GET` | `/api/v1/workspace/sources/{ref}` | Workspace source | read-only | `app.py:1647` `workspace_source` |
-| `GET` | `/api/v1/workspace/sources/{ref}/history` | History | read-only | `history.py:47` `history` |
-| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs` | Start | kann Daten oder Artefakte schreiben | `history.py:51` `start` |
-| `GET` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}` | Job | read-only | `history.py:55` `job` |
-| `GET` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/audit.json` | Audit | read-only | `history.py:81` `audit` |
-| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/cancel` | Cancel | kann Daten oder Artefakte schreiben | `history.py:63` `cancel` |
-| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/import` | Apply | kann Daten oder Artefakte schreiben | `history.py:71` `apply` |
-| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/pause` | Pause | kann Daten oder Artefakte schreiben | `history.py:59` `pause` |
+| `GET` | `/api/v1/workspace/sources/{ref}/history` | Liest Abruffaehigkeit und gespeicherte Historienauftraege der konkreten Quelle | read-only | `history.py:47` `history` |
+| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs` | Startet bestaetigten externen Abruf und isolierte Vorschau ohne produktiven Finanzimport | kann Daten oder Artefakte schreiben | `history.py:51` `start` |
+| `GET` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}` | Liest den gespeicherten quellengebundenen Auftragsstatus | read-only | `history.py:55` `job` |
+| `GET` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/audit.json` | Liest Quellenbindung, Originalhashes, Vorschau und Importfreigabe | read-only | `history.py:81` `audit` |
+| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/cancel` | Bricht Folgeabrufe und Importfreigabe ab; Originalbelege bleiben erhalten | kann Daten oder Artefakte schreiben | `history.py:63` `cancel` |
+| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/import` | Uebernimmt unveraenderte Vorschau nach Import- und Berechnungsfreigabe atomar | kann Daten oder Artefakte schreiben | `history.py:71` `apply` |
+| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/pause` | Speichert eine Pause fuer den laufenden Abruf | kann Daten oder Artefakte schreiben | `history.py:59` `pause` |
 | `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/repreview` | Repreview | kann Daten oder Artefakte schreiben | `history.py:77` `repreview` |
-| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/resume` | Resume | kann Daten oder Artefakte schreiben | `history.py:67` `resume` |
+| `POST` | `/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/resume` | Setzt den Abruf nach ausdruecklicher Anbieterbestaetigung am gespeicherten Cursor fort | kann Daten oder Artefakte schreiben | `history.py:67` `resume` |
 | `POST` | `/api/v1/workspace/sources/{ref}/sync` | Workspace source sync | kann Daten oder Artefakte schreiben | `app.py:1708` `workspace_source_sync` |
 | `GET` | `/api/v1/workspace/status` | Workspace status | read-only | `app.py:1654` `workspace_status` |
 | `POST` | `/api/v1/workspace/wallets` | Save public wallet address | kann Daten oder Artefakte schreiben | `app.py:1635` `save_public_wallet_address` |

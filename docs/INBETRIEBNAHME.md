@@ -222,6 +222,14 @@ nach Pruefung Preise plus Neuberechnung uebernehmen. Eigene Preiszuordnungen
 werden privat gespeichert; Einrichtung verlinkt diese Zuordnung.
 Details: [Historische EUR-Preise](HISTORISCHE_EUR_PREISE.md).
 
+Ab rc31 ist **Alle erkannten Token** der normale Preiseinstieg. Er umfasst
+auch Transfers und bietet Alle Jahre, Jahresuebersicht, begrenzte fortsetzbare
+Abrufabschnitte sowie vollstaendige Jahresdateien und Originalbelege als ZIP.
+Der komplette Ablauf ist ohne KI oder Terminal bedienbar. Bestehende steuerliche
+Preisbedarfe bleiben ein eigener Modus. Preisuebernahme setzt weiterhin
+Vorschau, menschliche Bestaetigung und unveraenderte Ereignisklassifikationen
+voraus. Ein Preisabruf schliesst keine ungeklaerten Reward-/Trade-Zuordnungen.
+
 Ein Update importiert keine bereits abgerufenen Transaktionen. Fertige alte
 Historienvorschauen vor Importfreigabe ausdruecklich lokal erneut berechnen;
 Originalbelege bleiben erhalten.

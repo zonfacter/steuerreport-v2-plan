@@ -42,7 +42,7 @@ class PriceCsvImporter:
                 source=row.source or default_source,
                 confidence=row.confidence or Decimal("1.0"),
             )
-            for row in preview.rows
+            for row in self._parse_rows(content, default_source)
         ]
         return preview, prices
 

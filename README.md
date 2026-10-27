@@ -1,9 +1,9 @@
 # Steuerreport V2
 
-Version 0.2.0rc30. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc31. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc30](docs/RELEASE_0.2.0rc30.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc31](docs/RELEASE_0.2.0rc31.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
@@ -20,7 +20,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc30
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc31
 docker compose -f compose.ghcr.yml up -d
 ```
 

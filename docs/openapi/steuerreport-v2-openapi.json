@@ -32875,6 +32875,38 @@
         "title": "HistoricalPriceApply",
         "type": "object"
       },
+      "HistoricalPriceContinue": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_external_request": {
+            "const": true,
+            "title": "Confirm External Request",
+            "type": "boolean"
+          },
+          "preview_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Preview Sha256",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "retry_open": {
+            "default": false,
+            "title": "Retry Open",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "request_id",
+          "preview_sha256",
+          "confirm_external_request"
+        ],
+        "title": "HistoricalPriceContinue",
+        "type": "object"
+      },
       "HistoricalPriceFetch": {
         "additionalProperties": false,
         "properties": {
@@ -32898,6 +32930,20 @@
             "title": "Max Requests",
             "type": "integer"
           },
+          "page": {
+            "default": 1,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 25,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
           "plan_sha256": {
             "pattern": "^[a-f0-9]{64}$",
             "title": "Plan Sha256",
@@ -32915,6 +32961,15 @@
           "request_id": {
             "format": "uuid",
             "title": "Request Id",
+            "type": "string"
+          },
+          "scope": {
+            "default": "tax_required",
+            "enum": [
+              "tax_required",
+              "all_observed"
+            ],
+            "title": "Scope",
             "type": "string"
           },
           "year": {
@@ -32957,6 +33012,20 @@
             "title": "Max Requests",
             "type": "integer"
           },
+          "page": {
+            "default": 1,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 25,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
           "provider": {
             "default": "defillama",
             "enum": [
@@ -32964,6 +33033,15 @@
               "coingecko"
             ],
             "title": "Provider",
+            "type": "string"
+          },
+          "scope": {
+            "default": "tax_required",
+            "enum": [
+              "tax_required",
+              "all_observed"
+            ],
+            "title": "Scope",
             "type": "string"
           },
           "year": {
@@ -43686,6 +43764,18 @@
               }
             ],
             "title": "Defillama Id"
+          },
+          "solana_mint": {
+            "anyOf": [
+              {
+                "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Solana Mint"
           }
         },
         "required": [
@@ -81438,7 +81528,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc30"
+    "version": "0.2.0rc31"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -91549,6 +91639,63 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/prices/historical/previews/{request_id}/continue": {
+      "post": {
+        "description": "Continue preview. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "continue_preview_api_v1_prices_historical_previews__request_id__continue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistoricalPriceContinue"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Continue Preview",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/prices/historical/previews/{request_id}/evidence/{sha}": {
       "get": {
         "description": "Evidence. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -91595,6 +91742,188 @@
           }
         },
         "summary": "Evidence",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/report.json": {
+      "get": {
+        "description": "Json report. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "operationId": "json_report_api_v1_prices_historical_previews__request_id__report_json_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Json Report",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/report.md": {
+      "get": {
+        "description": "Markdown report. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "markdown_report_api_v1_prices_historical_previews__request_id__report_md_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Markdown Report",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/report.zip": {
+      "get": {
+        "description": "Zip report. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "operationId": "zip_report_api_v1_prices_historical_previews__request_id__report_zip_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Zip Report",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/status": {
+      "get": {
+        "description": "Status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "status_api_v1_prices_historical_previews__request_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Status",
         "tags": [
           "Prices"
         ],

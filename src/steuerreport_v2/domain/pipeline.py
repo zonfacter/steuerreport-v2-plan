@@ -79,10 +79,11 @@ class PipelineService:
     def _rebuild_ledgers(self, normalized_events: int) -> PipelineResult:
         return self.rebuild_ledgers(normalized_events)
 
-    def rebuild_ledgers(self, normalized_events: int = 0) -> PipelineResult:
-        from steuerreport_v2.db.ai_corrections import replay
-        with self.store.connect() as con:
-            replay(con)
+    def rebuild_ledgers(self, normalized_events: int = 0, *, replay_event_corrections: bool = True) -> PipelineResult:
+        if replay_event_corrections:
+            from steuerreport_v2.db.ai_corrections import replay
+            with self.store.connect() as con:
+                replay(con)
         DerivedPriceService(self.store).rebuild_from_event_quotes()
         balance_entries = len(BalanceLedgerBuilder(self.store).rebuild())
         flow_entries = len(FlowService(self.store).rebuild())

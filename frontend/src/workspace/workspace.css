@@ -177,4 +177,12 @@
 .wsPriceWorkspace fieldset > label:not(.checkboxLabel) { display: grid; gap: 4px; margin: 8px 0; }
 .wsPriceWorkspace .checkboxLabel { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; }
 .wsPriceWorkspace .checkboxLabel input { flex: 0 0 auto; margin-top: 3px; }
-.wsPriceWorkspace > section { margin-top: 24px; border-top: 1px solid var(--line, #d7dde1); padding-top: 12px; }
+.wsPriceWorkspace > section { min-width: 0; margin-top: 24px; border-top: 1px solid var(--line, #d7dde1); padding-top: 12px; }
+.wsPriceWorkspace h3 { font-size: 16px; line-height: 1.4; margin: 0; }
+.wsPriceWorkspace .wsPricePreviewRows { display: grid; gap: 12px; min-width: 0; }
+.wsPriceWorkspace .wsPriceRows { min-width: 760px; }
+.wsPriceWorkspace .wsPriceRows td { min-width: 110px; }
+.wsPriceWorkspace .wsPriceRows td:first-child { min-width: 155px; }
+.wsPriceWorkspace .wsPager button { width: 38px; height: 38px; padding: 0; flex: 0 0 38px; }
+.wsPriceWorkspace .wsPriceRecovery { border-left: 3px solid #448a9b; padding: 12px; background: #eaf3f6; }
+.wsPriceWorkspace code { overflow-wrap: anywhere; }

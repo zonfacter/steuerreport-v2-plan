@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 
 from steuerreport_v2.contracts.common import ApiResponse
-from steuerreport_v2.contracts.historical_prices import HistoricalPriceApply, HistoricalPriceFetch, HistoricalPriceQuery, PriceMapping
+from steuerreport_v2.contracts.historical_prices import HistoricalPriceApply, HistoricalPriceContinue, HistoricalPriceFetch, HistoricalPriceQuery, PriceMapping
 from steuerreport_v2.domain.historical_prices import HistoricalPriceError, HistoricalPriceService
 
 
@@ -55,6 +55,43 @@ def build_historical_prices_router(store, on_apply):
     @router.get("/previews/{request_id}")
     def get(request_id: UUID) -> ApiResponse[dict]:
         return ApiResponse(data=service.get(request_id))
+
+    @router.get("/previews/{request_id}/status")
+    def status(request_id: UUID) -> ApiResponse[dict]:
+        return ApiResponse(data=service.status(request_id))
+
+    @router.post("/previews/{request_id}/continue")
+    def continue_preview(request_id: UUID, request: HistoricalPriceContinue) -> ApiResponse[dict]:
+        return ApiResponse(data=service.continue_preview(request_id, request))
+
+    @router.get("/previews/{request_id}/report.json")
+    def json_report(request_id: UUID) -> Response:
+        from steuerreport_v2.domain.historical_price_reports import report_json
+        from steuerreport_v2.importers.source_history_importer import canonical_json
+        return Response(content=canonical_json(report_json(service.get(request_id))), media_type="application/json",
+                        headers={"Content-Disposition": f'attachment; filename="historical-prices-{request_id}.json"'})
+
+    @router.get("/previews/{request_id}/report.md")
+    def markdown_report(request_id: UUID) -> Response:
+        from steuerreport_v2.domain.historical_price_reports import report_markdown
+        return Response(content=report_markdown(service.get(request_id)), media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="historical-prices-{request_id}.md"'})
+
+    @router.get("/previews/{request_id}/report.zip")
+    def zip_report(request_id: UUID) -> Response:
+        from steuerreport_v2.domain.historical_price_reports import report_zip
+        try:
+            preview = service.get(request_id)
+            allowed = {item["sha256"] for item in preview["evidence"]}
+            def original(sha):
+                if sha not in allowed:
+                    raise ValueError("historical_price_not_found")
+                return service._path("evidence", sha + ".body").read_bytes()
+            content = report_zip(preview, original)
+        except ValueError:
+            raise HistoricalPriceError("historical_price_report_invalid_or_too_large") from None
+        return Response(content=content, media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="historical-prices-{request_id}.zip"'})
 
     @router.get("/previews/{request_id}/evidence/{sha}")
     def evidence(request_id: UUID, sha: str) -> Response:

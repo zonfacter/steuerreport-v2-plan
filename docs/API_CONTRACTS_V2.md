@@ -2,6 +2,26 @@
 
 ## Historische EUR-Preise Ab rc29
 
+Ab rc31 ergaenzt der Vertrag `scope=all_observed` fuer alle beobachteten
+Asset-/Quote-/Fee-Tage einschliesslich Transfers. `tax_required` bleibt
+API-Default; nur die UI waehlt `all_observed` als normalen Einstieg.
+`page`/`page_size` steuern ausschliesslich die lokale Plananzeige und sind
+nicht Teil des fachlichen Planhashs. Abruf und Vollreport umfassen alle Zeilen.
+Jahresuebersichten erhalten die vorhandene Steuerjahres-/Quellperiodenregel;
+Preiszeitpunkte bleiben UTC.
+
+Additive Endpunkte: lesendes `GET /previews/{id}/status`, ausdrueckliches
+`POST /previews/{id}/continue` mit neuer UUID, Vorschauhash und erneutem
+externem Consent sowie lesende `/report.json`, `/report.md`, `/report.zip`.
+Fortsetzen sammelt `pending`-Zeilen; `retry_open=true` verlangt einen bewussten
+erneuten Versuch fuer fehlgeschlagene Zeilen. Ergebnis ist eine neue,
+hashgebundene kumulative Vorschau, keine produktive Preisuebernahme.
+Eine volle HTTP-Anfragegrenze bedeutet nicht fehlenden Kurs: solche Zeilen
+bleiben `pending`, Anbieter-/Zeit-/Wertfehler werden `open`.
+Vorschauen muessen unveraenderte Rohdaten, Canonical Events, Entscheidungen
+und Event-Overrides nachweisen; die Preisberechnung ruft keine
+Rohnormalisierung oder erneute Ereigniskorrektur auf.
+
 Neue additive Endpunkte unter `/api/v1/prices/historical`: lokales `POST /plan`,
 private `GET/PUT /mappings`, bestaetigtes `POST /previews`, lesende
 `GET /previews` und `GET /previews/{id}`, gebundene Originalbelege unter

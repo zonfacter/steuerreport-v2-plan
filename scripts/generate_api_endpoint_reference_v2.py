@@ -60,6 +60,14 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 PURPOSE_OVERRIDES = {
+    ("POST", "/api/v1/prices/historical/plan"): "Plant historische Tagespreise lokal mit Jahresuebersicht und reiner Listenpagination",
+    ("POST", "/api/v1/prices/historical/previews"): "Sammelt bestaetigte Preisbelege und berechnet eine isolierte Vorschau",
+    ("POST", "/api/v1/prices/historical/previews/{request_id}/continue"): "Ergaenzt eine kumulative Preisvorschau nach erneuter externer Bestaetigung",
+    ("POST", "/api/v1/prices/historical/previews/{request_id}/apply"): "Uebernimmt bestaetigte Preise und Neuberechnung bei unveraenderten Quellen",
+    ("GET", "/api/v1/prices/historical/previews/{request_id}/status"): "Liest laufenden oder gespeicherten Preisabrufstatus ohne Anbieterabfrage",
+    ("GET", "/api/v1/prices/historical/previews/{request_id}/report.json"): "Exportiert die vollstaendige Preisvorschau und Belegbindung als JSON",
+    ("GET", "/api/v1/prices/historical/previews/{request_id}/report.md"): "Exportiert die vollstaendige Jahresauswertung als Markdown",
+    ("GET", "/api/v1/prices/historical/previews/{request_id}/report.zip"): "Exportiert saemtliche Jahreszeilen und gepruefte Originalbelege als ZIP",
     ("GET", "/api/v1/workspace/sources/{ref}/history"): "Liest Abruffaehigkeit und gespeicherte Historienauftraege der konkreten Quelle",
     ("POST", "/api/v1/workspace/sources/{ref}/history/jobs"): "Startet bestaetigten externen Abruf und isolierte Vorschau ohne produktiven Finanzimport",
     ("GET", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}"): "Liest den gespeicherten quellengebundenen Auftragsstatus",
@@ -251,6 +259,12 @@ def default_purpose(route: Route) -> str:
 
 
 def default_effect(route: Route) -> str:
+    if route.path == "/api/v1/prices/historical/plan":
+        return "read-only; keine Anbieterabfrage"
+    if route.method == "POST" and route.path in {"/api/v1/prices/historical/previews", "/api/v1/prices/historical/previews/{request_id}/continue"}:
+        return "externer Abruf und private Vorschauartefakte; keine produktive Preisuebernahme"
+    if route.path == "/api/v1/prices/historical/previews/{request_id}/apply":
+        return "bestaetigte Preis-/Ledger-Neuberechnung und Auditspur; keine Ereignisumklassifikation"
     if route.method == "GET":
         return "read-only"
     if route.method == "DELETE":
@@ -317,6 +331,9 @@ def render(
                 (route.method, route.path),
                 (default_purpose(route), default_effect(route)),
             )
+            purpose = PURPOSE_OVERRIDES.get((route.method, route.path), purpose)
+            if route.path.startswith("/api/v1/prices/historical"):
+                effect = default_effect(route)
             lines.append(
                 f"| `{route.method}` | `{route.path}` | {purpose} | {effect} | "
                 f"`{route.file}:{route.line}` `{route.function_name}` |"

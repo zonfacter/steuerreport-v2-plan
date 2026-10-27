@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0rc31 - 2026-10-27 (Releasekandidat)
+
+- Historische EUR-Ermittlung fuer alle erkannten Token und Jahre direkt in
+  der Anwendung, einschliesslich Transfers, Gegenwaehrungen und Gebuehren.
+  Engerer steuerlicher Preisbedarf bleibt als separater Modus erhalten.
+- Original-Mint-Pruefung, globale Symbol-/Mint-Konflikte, Spam-Sperren und
+  echte Same-Day-Deckung statt Altpreisen aus Vorjahren.
+- Begrenzte DefiLlama-Sammelabfragen, historische EZB-Serien und fortsetzbare
+  Abschnitte mit kumulativer Vorschau; Listenpagination begrenzt keinen Abruf.
+  Anbieterfehler, Budgetwartepositionen und bereits vorhandene Preise bleiben
+  getrennt. Statuswiederherstellung loest keine externen Abfragen aus.
+- Vollstaendige Jahresdownloads als JSON, Markdown und deterministisches ZIP
+  mit CSV, Originalantworten und SHA256; keine privaten Skripte oder KI noetig.
+- Preisvorschau rechnet eingefrorene Ereignisse neu, ohne Rohnormalisierung
+  oder erneutes Einspielen von Ereigniskorrekturen. Quellgleichheit wird vor
+  und nach der Berechnung sowie bei atomarer Uebernahme geprueft.
+- CSV-Preisimport uebernimmt alle validierten Zeilen, nicht nur die ersten
+  50 Vorschauzeilen. Fehler hinter der Vorschaugrenze sperren weiterhin den
+  gesamten Import. Kein automatischer Preisimport oder steuerlicher Entscheid.
+
+
 ## 0.2.0rc30 - 2026-10-27 (Releasekandidat)
 
 - Historischer EUR-Preisworkflow aus rc29 einschliesslich Belegen, isolierter
