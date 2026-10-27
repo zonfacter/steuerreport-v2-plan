@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0rc22 - 2026-10-27
+
+- Enthaelt den automatischen Quellenimport aus dem nicht produktiv ausgerollten
+  rc21-Kandidaten. Dessen GitHub-Frontendpruefung fand einen portabilitaetsbedingten
+  Testfehler, keine bestaetigte Finanzdatenabweichung.
+- Neuer Browser-Test nutzt Playwrights installierten Browser oder einen
+  ausdruecklich uebergebenen Pfad. Kein Zugriff auf ein fremdes `/root`-Verzeichnis
+  bei Programmstart; Pruefung auch unter einem unprivilegierten Benutzer.
+- Versionsvertraege und Leitfaeden aktualisiert; bestehende Tags bleiben
+  unveraendert. Keine historische Datenmigration oder automatische Einordnung.
+
 ## 0.2.0rc21 - 2026-10-27
 
 - Automatischer Historienabruf fuer die ausgewaehlte Solana-Wallet oder einzelne

@@ -36,7 +36,6 @@ OLD_JOB = "33333333-3333-4333-8333-333333333333"
 STAMP = "2026-10-27T10:00:00Z"
 NOTE = "Synthetischer Anbieter: begrenzte Abdeckung, keine Vollstaendigkeitsgarantie."
 EXACT_QUANTITY = "0.123456789012345678"
-CHROMIUM = Path("/root/.cache/ms-playwright/chromium-1187/chrome-linux/chrome")
 PREFIX = "/api/v1/workspace/sources/"
 
 
@@ -691,7 +690,7 @@ class Run:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", help="Nur Loopback-Frontend; ohne Angabe isolierter Server fuer frontend/dist.")
-    parser.add_argument("--browser-executable", default=str(CHROMIUM) if CHROMIUM.is_file() else None)
+    parser.add_argument("--browser-executable")
     parser.add_argument("--output", type=Path, default=Path("artifacts/source-history-browser"))
     parser.add_argument("--scenario", action="append", help="Optional einzelne Szenarionamen wiederholen.")
     args = parser.parse_args()

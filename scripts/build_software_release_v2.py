@@ -29,6 +29,7 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc22.md",
     "docs/RELEASE_0.2.0rc21.md",
     "docs/AUTOMATISCHER_QUELLENIMPORT.md",
     "docs/HISTORY_CEX_PROVIDER_REFERENCES.md",
