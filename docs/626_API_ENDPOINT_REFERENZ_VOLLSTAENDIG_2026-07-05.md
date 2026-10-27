@@ -51,13 +51,13 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 | `DELETE` | `/api/v1/admin/installation/providers/{provider}` | Delete installation provider | loescht | `app.py:765` `delete_installation_provider` |
 | `PUT` | `/api/v1/admin/installation/providers/{provider}` | Write installation provider | schreibt | `app.py:757` `write_installation_provider` |
 | `POST` | `/api/v1/admin/jupiter/api-key` | Speichert jupiter api key | schreibt/erzeugt Artefakte | `app.py:1196` `save_jupiter_api_key` |
-| `GET` | `/api/v1/admin/provider-references` | References | read-only | `request_limits.py:131` `references` |
-| `GET` | `/api/v1/admin/request-limits` | Read limits | read-only | `request_limits.py:67` `read_limits` |
-| `PUT` | `/api/v1/admin/request-limits` | Write limits | schreibt | `request_limits.py:71` `write_limits` |
-| `GET` | `/api/v1/admin/request-limits/endpoints` | Endpoints | read-only | `request_limits.py:86` `endpoints` |
-| `GET` | `/api/v1/admin/request-limits/presets` | Presets | read-only | `request_limits.py:93` `presets` |
-| `POST` | `/api/v1/admin/request-limits/presets/solana_public_free` | Apply preset | kann Daten oder Artefakte schreiben | `request_limits.py:121` `apply_preset` |
-| `GET` | `/api/v1/admin/request-limits/status` | Status | read-only | `request_limits.py:80` `status` |
+| `GET` | `/api/v1/admin/provider-references` | References | read-only | `request_limits.py:133` `references` |
+| `GET` | `/api/v1/admin/request-limits` | Read limits | read-only | `request_limits.py:69` `read_limits` |
+| `PUT` | `/api/v1/admin/request-limits` | Write limits | schreibt | `request_limits.py:73` `write_limits` |
+| `GET` | `/api/v1/admin/request-limits/endpoints` | Endpoints | read-only | `request_limits.py:88` `endpoints` |
+| `GET` | `/api/v1/admin/request-limits/presets` | Presets | read-only | `request_limits.py:95` `presets` |
+| `POST` | `/api/v1/admin/request-limits/presets/solana_public_free` | Apply preset | kann Daten oder Artefakte schreiben | `request_limits.py:123` `apply_preset` |
+| `GET` | `/api/v1/admin/request-limits/status` | Status | read-only | `request_limits.py:82` `status` |
 | `GET` | `/api/v1/admin/settings` | Liste admin settings | read-only | `app.py:1127` `list_admin_settings` |
 | `PATCH` | `/api/v1/admin/settings` | Aktualisiert admin setting | schreibt | `app.py:1131` `update_admin_setting` |
 | `DELETE` | `/api/v1/admin/settings/{key}` | Loescht admin setting | loescht | `app.py:1147` `delete_admin_setting` |

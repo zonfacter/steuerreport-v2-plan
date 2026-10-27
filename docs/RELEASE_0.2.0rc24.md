@@ -1,5 +1,11 @@
 # Steuerreport V2 0.2.0rc24
 
+**Nicht produktiv ausgerollter Kandidat.** 1.818 Unit-Tests und die Browserpruefungen
+bestanden; der anschliessende CI-Dokumentationscheck beanstandete veraltete
+API-Zeilenverweise. Die korrigierte Fassung wird als rc25 separat versioniert.
+Der rc24-Tag bleibt unveraendert. Keine bestaetigte Finanzdatenabweichung und
+kein produktiver rc24-Import oder Containerwechsel.
+
 ## Abrufgeschwindigkeit zentral einrichten
 
 **Einrichtung -> Abrufsteuerung** bietet die konservative Voreinstellung

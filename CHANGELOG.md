@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.2.0rc24 - 2026-10-27
+## 0.2.0rc25 - 2026-10-27
+
+- Enthaelt die konfigurierbaren Solana-Abruflimits aus dem nicht produktiv
+  ausgerollten rc24-Kandidaten. Dessen 1.818 Unit-Tests und Browserpruefungen
+  bestanden; der nachfolgende Dokumentationscheck fand veraltete API-Zeilenverweise.
+- API-Endpunktreferenz nach den abschliessenden Review-Korrekturen neu generiert.
+  Keine weitere Aenderung der Limiter-, Import-, Preis-, Steuer- oder FIFO-Logik.
+- Versionsmetadaten, Installationsvorgaben und Leitfaeden konsistent auf rc25.
+  rc24-Tag bleibt unveraendert; der Kandidat wird nicht produktiv verwendet.
+
+## 0.2.0rc24 - 2026-10-27 (nicht produktiv ausgerollter Kandidat)
 
 - Solana-Public-Free-Voreinstellung zentral unter Einrichtung / Abrufsteuerung,
   mit ausdruecklicher Bestaetigung, Quellreferenz, Pruefdatum und Konfliktpruefung.
