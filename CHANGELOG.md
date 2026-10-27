@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0rc27 - 2026-10-27 (Releasekandidat)
+
+- Enthaelt Anbieterwahl, gepinnte Solana-Auftraege, Inventar und begrenzte
+  Abruf-Restzeitschaetzung aus rc26 unveraendert.
+- Neuer HTTP-Mocktest verwendet dieselbe kontrollierte Uhr fuer Limiter und
+  Transport. Ein GitHub-Runner mit anderer Systemlaufzeit darf keine kuenstliche
+  Deadlineverletzung erzeugen. Keine fachliche Assertion oder Produktquote entfernt.
+- rc26 wurde nach dem fehlgeschlagenen CI-Test nicht deployt. Sein Tag bleibt
+  unveraendert; rc27 ist der neue Kandidat mit konsistenten Anleitungen und Versionen.
+
 ## 0.2.0rc26 - 2026-10-27 (Releasekandidat)
 
 - Explizite Auswahl zwischen oeffentlichem Solana-RPC (Free) und eigenem

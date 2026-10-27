@@ -518,7 +518,8 @@ def test_portfolio_hook_pins_limiter_provider_with_mock_http(tmp_path, monkeypat
         seen.append(str(request.url))
         return httpx.Response(200, json={"result": {"ok": True}})
     monkeypatch.setattr(portfolio, "managed_client", lambda **kwargs: managed_client(
-        transport=httpx.MockTransport(handler), limiter=limiter, **kwargs))
+        transport=httpx.MockTransport(handler), limiter=limiter,
+        clock=limiter._clock, monotonic=limiter._monotonic, **kwargs))
     class Pinned(portfolio.PortfolioService):
         def _solana_rpc_provider(self):
             return "solana_custom_rpc"
