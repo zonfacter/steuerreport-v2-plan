@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "steuerreport-v2"
-version = "0.2.0rc25"
+version = "0.2.0rc26"
 description = "Steuerreport V2 mit DuckDB Ledger, FastAPI Backend und React Frontend"
 requires-python = ">=3.11"
 dependencies = [

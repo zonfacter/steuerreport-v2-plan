@@ -1907,7 +1907,7 @@ class PortfolioService:
 
     def _solana_rpc(self, method: str, params: list[object], timeout_seconds: int) -> object:
         errors: list[str] = []
-        with managed_client(timeout=timeout_seconds) as client:
+        with managed_client(timeout=timeout_seconds, provider=self._solana_rpc_provider()) as client:
             for rpc_url in self._solana_rpc_urls():
                 try:
                     response = client.post(
@@ -1932,6 +1932,9 @@ class PortfolioService:
                     errors.append(f"{self._redacted_solana_rpc_url(rpc_url)}: {reason}")
                     continue
         raise RuntimeError("RPC-Abruf fehlgeschlagen. Einrichtung / Datenanbieter und Abruflimits pruefen. " + "; ".join(errors[-3:]))
+
+    def _solana_rpc_provider(self) -> str | None:
+        return None
 
     def _solana_rpc_urls(self) -> list[str]:
         urls: list[str] = []

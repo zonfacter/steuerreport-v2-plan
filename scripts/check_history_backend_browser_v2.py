@@ -24,6 +24,7 @@ import tempfile
 from threading import Thread, enumerate as threads
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 
 
 WIDTHS = (390, 768, 1280, 1440)
@@ -150,12 +151,17 @@ def main():
                         [deepcopy(record)], {"synthetic_page": 1}, True, requests=1,
                         notes=("Synthetische Browserpruefung; keine vollstaendige historische Abdeckung bewiesen.",),
                         complete_history_proven=False,
+                        extra={"progress": {"phase": "fetch", "references_discovered": 1,
+                                            "signatures_discovered": 1, "signatures_total": 1,
+                                            "signatures_completed": 1, "addresses_completed": 1,
+                                            "addresses_total": 1, "inventory_complete": True}},
                     )
 
             def fixture_collector(service, target, options):
                 assert service.store.path == store.path
                 assert target.source_ref == ref_a and target.wallet_address == target.account == wallet_a
                 assert target.provider == "solana" and not options.symbols and options.public_rpc_only
+                assert options.rpc_provider == "public" and UUID(options.inventory_job_id).version == 4
                 assert options.start <= datetime.fromtimestamp(tx["blockTime"], timezone.utc) <= options.end
                 return FixtureCollector()
 
@@ -191,6 +197,10 @@ def main():
             initial_counts = financial_counts()
             assert all(value == 0 for value in initial_counts.values()), initial_counts
             assert api(f"/api/v1/workspace/sources/{ref_b}/history")["jobs"] == []
+            capability = api(f"/api/v1/workspace/sources/{ref_a}/history")["capability"]
+            free = next(option for option in capability["rpc_options"] if option["id"] == "public")
+            assert free["ready"] and free["configured"] and free["pinned"] and not free["tariff_verified"]
+            assert free["kind"] == "public" and free["provider_id"] == "solana_rpc"
 
             class QuietHandler(SimpleHTTPRequestHandler):
                 def log_message(self, *args):
@@ -234,6 +244,14 @@ def main():
                     allowed_post = parsed.path in {"/api/v1/activity/query", "/api/v1/workspace/review/query", history_base + "/jobs"}
                     allowed_post = allowed_post or any(parsed.path == history_base + "/jobs/" + job_id + "/import" for job_id in job_ids)
                     assert request.method == "GET" or request.method == "POST" and allowed_post, (request.method, parsed.path)
+                    if request.method == "POST" and parsed.path == history_base + "/jobs":
+                        body = request.post_data_json
+                        assert set(body) == {"request_id", "confirm_external_request", "start", "end", "symbols",
+                                             "public_rpc_only", "rpc_provider", "max_records"}
+                        assert UUID(body["request_id"]).version == 4 and body["confirm_external_request"] is True
+                        assert body["rpc_provider"] == "public" and body["public_rpc_only"] is True
+                        assert body["symbols"] == [] and body["max_records"] == 100000
+                        assert body["start"] == "2025-01-01" and body["end"] == "2025-01-02"
                     response = client.request(request.method, parsed.path + ("?" + parsed.query if parsed.query else ""),
                                               content=request.post_data, headers={"Content-Type": "application/json"})
                     result["calls"].append({"method": request.method, "path": parsed.path, "http": response.status_code,
@@ -288,9 +306,18 @@ def main():
                 expect(area.get_by_label("Handelspaare (kommagetrennt)")).to_have_count(0)
                 area.get_by_label("Von", exact=True).fill("2025-01-01")
                 area.get_by_label("Bis", exact=True).fill("2025-01-02")
-                expect(area.get_by_label("Nur \u00f6ffentliche Solana-RPC-Anbieter verwenden", exact=True)).to_be_checked()
+                free_radio = area.get_by_role("radio", name="\u00d6ffentlicher RPC (Free)", exact=True)
+                expect(free_radio).not_to_be_checked()
+                expect(area.get_by_role("radio", name="Eigener Anbieter (Free/Premium)", exact=True)).not_to_be_checked()
                 start = area.get_by_role("button", name="Vorschau abrufen", exact=True)
                 expect(start).to_be_disabled()
+                assert not result["collector_calls"] and not job_ids
+                before_calls = len(result["calls"])
+                free_radio.check()
+                page.evaluate("async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); }")
+                expect(free_radio).to_be_checked()
+                expect(start).to_be_disabled()
+                assert len(result["calls"]) == before_calls, "Die Free-Wahl darf keinen Request ausloesen"
                 assert not result["collector_calls"] and not job_ids
                 area.get_by_label(f"Ich best\u00e4tige den externen Anbieterabruf f\u00fcr {LABEL_A} im gew\u00e4hlten Zeitraum.", exact=True).check()
                 start.click()
@@ -301,6 +328,10 @@ def main():
                 ready = api(history_base + "/jobs/" + job_id)
                 assert ready["status"] == "ready" and ready["source_ref"] == ref_a and ready["imported_events"] == 0, ready
                 assert ready["new_records"] == 1 and len(ready["sample_rows"]) == 2 and not ready["complete_history_proven"]
+                assert ready["transport"]["id"] == "public" and ready["transport"]["pinned"] is True
+                assert ready["progress"]["inventory_complete"] is True
+                assert ready["progress"]["signatures_total"] == ready["progress"]["signatures_completed"] == 1
+                expect(job_area.locator(".hiTransport")).to_contain_text(ready["transport"]["label"])
                 assert financial_counts() == initial_counts, "Vorschau hat produktive Finanzdaten veraendert"
                 assert not store.list_canonical_events()
                 result["phase"] = "preview_ready_live_canonical_empty"

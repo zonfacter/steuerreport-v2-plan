@@ -8,10 +8,12 @@
    Binance/Pionex benoetigen explizite Handelspaare. Keine Paare aus dem heutigen
    Bestand ableiten. Fuer Solana gibt es bewusst keinen Assetfilter, der Gebuehren
    oder Gegenbewegungen abschneiden koennte.
-3. Bei Solana verwendet **Nur oeffentliche Solana-RPC-Anbieter verwenden**
-   ausschliesslich den offiziellen Mainnet-RPC, ohne Provider-Keys zu lesen.
-   Abwaehlen verwendet die bestehende konfigurierte RPC-Auswahl. Anbieterlimits,
-   moegliche Kosten und Uebermittlung der oeffentlichen Adresse beachten.
+3. Bei Solana den Abrufmodus ausdruecklich waehlen: **Oeffentlicher RPC (Free)**
+   verwendet ausschliesslich den offiziellen Mainnet-RPC ohne Provider-Keys.
+   **Eigener Anbieter (Free/Premium)** erfordert die Auswahl eines eingerichteten
+   Helius-, Alchemy- oder Custom-RPC. Ein Key belegt keinen Premium-Tarif;
+   Anbieterlimits, moegliche Kosten und Uebermittlung der oeffentlichen Adresse
+   beachten. Die Auswahl erhoeht keine Quoten und startet selbst keinen Abruf.
 4. Die externe Anfrage bestaetigen und **Vorschau abrufen** starten. Der Server
    speichert Anbieterbelege, Fortsetzungscursor und Auftragsstatus privat.
    Es werden noch keine produktiven Transaktionen oder Steuerdaten veraendert.
@@ -32,6 +34,46 @@
 **Dateien importieren** bleibt ein zusaetzlicher Weg, insbesondere fuer von APIs
 nicht lieferbare Zeitraeume/Produkte. Originalexporte sichern. Der automatische
 Abruf darf eine alte Datei nicht als zweite unabhaengige Buchung anerkennen.
+
+## Anbieterbindung, Inventar und Restzeit
+
+Ein neuer Solana-Auftrag speichert seine explizite Anbieterwahl und bindet
+sich an die zugehoerige Key-/URL-Konfiguration. **Fortsetzen** verwendet diese
+Bindung, nicht die inzwischen geaenderte Auswahl im Startformular. Bei
+geaendertem Key oder Endpunkt wird nicht still mit der neuen Einrichtung
+weitergemacht. Ein Anbieterwechsel erfordert einen neuen Auftrag; Fehler
+fuehren zu keinem automatischen Ersatzanbieter. Fuer aeltere Auftraege ohne
+gespeicherte explizite Bindung wird keine nachtraegliche Anbieterbindung behauptet.
+
+Der neue Solana-Abruf hat zwei Phasen:
+
+1. **Signaturliste ermitteln:** Verfuegbare finalisierte Referenzen der Wallet
+   und nachgewiesener aktueller Tokenkonten sammeln. Bis zum Inventarabschluss
+   bleiben eindeutige Gesamtzahl, Gesamtprozentsatz und Restzeit unbekannt.
+   Gefundene Referenzen sind noch keine abgerufenen Transaktionsdetails.
+2. **Transaktionsdetails abrufen:** Die eindeutigen Signaturen des abgeschlossenen
+   Inventars abarbeiten. Mehrfachfunde ueber verschiedene Adressen werden nicht
+   als mehrere Transaktionen gezaehlt. Fehlende oder unvollstaendige Details
+   werden nicht als erfolgreich erledigt uebersprungen.
+
+Eine Restzeitschaetzung setzt ein abgeschlossenes Inventar, mindestens fuenf
+erfolgreich gemessene Detailabrufe, frische Messdaten und lesbare wirksame
+Limitdaten voraus. Die geglaettete gemessene Detailrate wird durch die effektiven
+gemeinsamen Budgets begrenzt. Messungen erfolgreich gespeicherter Detailseiten
+schliessen dort anfallende Warte-/Retryzeiten ein. Die Anzeige ist keine
+garantierte Geschwindigkeit und keine Schaetzung fuer die gesamte Bearbeitung.
+
+Discovery, Pause, Abbruch, Fehler oder fehlende/veraltete Messdaten liefern
+keinen laufenden Countdown. Bei Anbieterpausen oder fehlgeschlagener
+Statusaktualisierung wird keine verlaessliche laufende ETA behauptet.
+**Abruf beendet** bedeutet nur, dass die verfuegbaren Details abgearbeitet sind.
+Die anschliessende **Vorschauberechnung** hat keine ETA und bleibt von der
+gesonderten Importfreigabe getrennt. Auch 100 Prozent der verfuegbaren Details
+sind kein Vollstaendigkeitsbeweis fuer die Wallet-Historie.
+
+Die Detailanfragen bleiben sequenziell. Hoehere Tarif- oder Parallelitaetswerte
+erzeugen keine zusaetzlichen Detailworker. RPC-Retention und heute nicht mehr
+nachweisbare geschlossene Tokenkonten koennen weiterhin Belege fehlen lassen.
 
 ## Abdeckung
 
@@ -58,6 +100,8 @@ Solana-Public-RPC gibt es eine konservative Free-Voreinstellung und editierbare
 IP-/Anbieter-/Methodenprofile. [Profilwerte und Grenzen](SOLANA_ABRUFLIMITS.md).
 Ein strengeres gemeinsames Budget begrenzt alle betroffenen Auftraege weiterhin.
 Speichern startet keinen Auftrag und setzt verbrauchte Kontingente nicht zurueck.
+Die Ansicht zeigt wirksame gemeinsame Limits, Engpaesse und bekannte Wartegruende;
+ein eigener Key ist weder ein Tarifnachweis noch eine automatische Quotenerhoehung.
 
 - Der Browser darf nach Start geschlossen werden. Der Server fuehrt den
   gestarteten Auftrag in begrenzten Abschnitten fort; alle Requests nutzen den
@@ -87,6 +131,10 @@ Jobmetadaten liegen in vorhandenen privaten `admin_settings` unter `history.job.
 Unveraenderliche, SHA-256-adressierte Anbieterrecords liegen neben der Datenbank
 in `source_history_previews/<Auftrags-ID>/records/`. Diese Verzeichnisse sind
 **privat und Teil der Sicherung**, keine oeffentlichen Web-Artefakte.
+Der neue Solana-Inventarpfad sichert Owner-/Signaturseiten und Detailreferenzen
+zusaetzlich unter `source_history_previews/<Auftrags-ID>/inventory/` mit
+SHA-256-Bezug. Ein Datei-Append allein schreibt den gespeicherten Jobcursor
+nicht fort; nach Unterbrechung ist nur der bestaetigte Cursor der Fortsetzungspunkt.
 Berechnungskopien haben die Endung `.prepared`; nach erfolgreicher Uebernahme
 wird nur diese entbehrliche Kopie entfernt. Urspruengliche Dateien und bereits
 importierte Rohobjekte werden niemals ueberschrieben.
@@ -113,3 +161,11 @@ internen Cursor. Der private Auditabruf enthaelt bewusst die ausgewaehlte
 oeffentliche Wallet-/Kontoreferenz und Anfrageparameter. Nicht ungeschwaerzt
 oeffentlich weitergeben. Die Installation besitzt keine globale Benutzeranmeldung;
 Zugriffsschutz bleibt gemaess Inbetriebnahmeanleitung Aufgabe des Betreibers.
+
+## Offizielle RPC-Quellen
+
+Geprueft am **27.10.2026**: [Solana: Clusters and Public RPC
+Endpoints](https://solana.com/docs/references/clusters) und [Helius: Rate
+Limits](https://www.helius.dev/docs/billing/rate-limits). Diese Referenzen sind
+kein Nachweis des eigenen Tarifs oder einer vollstaendigen historischen Abdeckung.
+Lokale Grenzen und Bedienung stehen unter [Solana-Abruflimits](SOLANA_ABRUFLIMITS.md).

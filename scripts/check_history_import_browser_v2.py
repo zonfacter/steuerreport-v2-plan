@@ -51,7 +51,11 @@ class HistoryFixture(WorkspaceFixture):
         self.capabilities = {
             ref: dict(source_ref=ref, label=LABELS[ref], provider="binance" if ref == SOURCE else "solana",
                       supported=True, ready=True, blocked_reason=None, requires_symbols=ref == SOURCE,
-                      coverage_notes=[NOTE], default_start="2020-01-01")
+                      coverage_notes=[NOTE], default_start="2020-01-01", rpc_options=[dict(
+                          id="public", label="Öffentlicher RPC (Free)", kind="public", provider_id="solana_rpc",
+                          configured=True, ready=True, blocked_reason=None, pinned=True,
+                          tariff_verified=False, limits=None,
+                      )] if ref == OTHER else [])
             for ref in LABELS
         }
         self.jobs = {ref: [] for ref in LABELS}
@@ -95,7 +99,7 @@ class HistoryFixture(WorkspaceFixture):
                                        quantity=EXACT_QUANTITY, quote_asset="USDT", quote_quantity="-10.000000000000000001", side="in")],
                      before_summary={"events_count": 0}, after_summary={"events_count": 8}, review_issues_open=1,
                      error_code=None, coverage_notes=[NOTE], complete_history_proven=False,
-                     can_resume=status in {"paused", "failed"}, approval=None)
+                     can_resume=status in {"paused", "failed"}, approval=None, transport=None, progress=None)
         value.update(changes)
         UUID(value["id"])
         self.jobs[ref].append(value)
@@ -134,11 +138,16 @@ class HistoryFixture(WorkspaceFixture):
     def accept_start(self, route, ref, body):
         assert UUID(body["request_id"]).version == 4
         assert body["confirm_external_request"] is True
-        assert set(body) == {"request_id", "confirm_external_request", "start", "end", "symbols", "public_rpc_only", "max_records"}
+        expected_keys = {"request_id", "confirm_external_request", "start", "end", "symbols", "public_rpc_only", "max_records"}
+        if ref == OTHER:
+            expected_keys.add("rpc_provider")
+            assert body["rpc_provider"] == "public"
+        assert set(body) == expected_keys
         assert body["max_records"] == 100000 and body["public_rpc_only"] is True
         assert body["symbols"] == (["BTCUSDT", "ETHUSDT"] if self.capabilities[ref]["requires_symbols"] else [])
         value = self.job(ref, "queued", start=body["start"], end=body["end"], records_fetched=0, pages_fetched=0,
-                         requests=0, new_records=0, duplicate_records=0, sample_rows=[])
+                         requests=0, new_records=0, duplicate_records=0, sample_rows=[],
+                         transport=deepcopy(self.capabilities[ref]["rpc_options"][0]) if ref == OTHER else None)
         self.reply(route, value, 202)
 
     def handle(self, route):
@@ -250,8 +259,8 @@ def confirm_external(area):
     area.get_by_role("checkbox", name=re.compile("Ich bestätige den externen Anbieterabruf")).check()
 
 
-def public_rpc_checkbox(area):
-    return area.get_by_role("checkbox", name=re.compile(r"Nur .*RPC", re.IGNORECASE))
+def public_rpc_radio(area):
+    return area.get_by_role("radio", name="Öffentlicher RPC (Free)", exact=True)
 
 
 def confirm_import(area):
@@ -411,20 +420,32 @@ class Run:
             assert page.evaluate("window.__historyRefreshes") == 0
 
         def solana_start(page, fixture):
-            """Solana startet nur mit Einwilligung, ohne Asset-/Adressfilter und standardmaessig mit public_rpc_only=true."""
+            """Solana startet nur mit expliziter Free-Wahl plus Einwilligung, ohne Asset-/Adressfilter, mit rpc_provider=public."""
             area = open_source(page, self.base, OTHER)
             button = start_fields(area, OTHER)
             expect(button).to_be_disabled()
             expect(area.get_by_label("Bis", exact=True)).to_have_value(page.evaluate("new Date().toISOString().slice(0, 10)"))
             expect(area.get_by_label("Handelspaare (kommagetrennt)")).to_have_count(0)
             expect(area.locator('input[type="password"]')).to_have_count(0)
-            public_only = public_rpc_checkbox(area)
+            public_only = public_rpc_radio(area)
+            expect(public_only).not_to_be_checked()
+            expect(area.get_by_role("radio", name="Eigener Anbieter (Free/Premium)", exact=True)).not_to_be_checked()
+            confirm_external(area)
+            expect(button).to_be_disabled()
+            before = len(fixture.api_calls)
+            public_only.check()
+            frames(page)
             expect(public_only).to_be_checked()
+            assert len(fixture.api_calls) == before, "Die Moduswahl darf keine Requests starten"
+            expect(area.get_by_role("checkbox", name=re.compile("Ich bestätige den externen Anbieterabruf"))).not_to_be_checked()
+            expect(button).to_be_disabled()
+            assert not fixture.posts()
             confirm_external(area)
             button.click()
             expect(area.locator(".hiJob .wsBadge")).to_have_text("Wartet auf Abruf")
             payload = fixture.posts("/jobs")[-1]["body"]
-            assert payload["symbols"] == [] and payload["public_rpc_only"] is True
+            assert payload["symbols"] == [] and payload["public_rpc_only"] is True and payload["rpc_provider"] == "public"
+            expect(area.locator(".hiTransport")).to_contain_text("Öffentlicher RPC (Free)")
             assert not any(call["path"].startswith(history_path(SOURCE)) for call in fixture.api_calls)
 
         def progress_controls(page, fixture):
@@ -536,6 +557,31 @@ class Run:
             expect(area).not_to_contain_text(JOB_IDS[OTHER])
             assert not fixture.posts()
 
+        def legacy_rpc_jobs(page, fixture):
+            """Fehlende und null RPC-Metadaten bleiben sicher; Formularwahl aendert keinen Altauftrag und Resume sendet keinen Provider."""
+            job = fixture.job(OTHER, status="paused")
+            job.pop("transport")
+            job.pop("progress")
+            area = open_source(page, self.base, OTHER)
+            expect(area.locator(".hiTransport")).to_contain_text("Nicht gespeichert (älterer Auftrag)")
+            expect(area.locator(".hiProgress")).to_contain_text("Gesamtzahl und Restzeit: unbekannt")
+            expect(area.locator(".hiProgress progress")).to_have_count(0)
+            public_rpc_radio(area).check()
+            expect(area.locator(".hiTransport")).to_contain_text("Nicht gespeichert (älterer Auftrag)")
+            assert not fixture.posts()
+            fixture.update(job, transport=None, progress=None)
+            fixture.capabilities[OTHER].pop("rpc_options")
+            area.get_by_role("button", name="Status aktualisieren", exact=True).click()
+            expect(area.locator(".hiTransport")).to_contain_text("Nicht gespeichert (älterer Auftrag)")
+            expect(area.locator(".hiProgress")).to_contain_text("Gesamtzahl und Restzeit: unbekannt")
+            resume = area.get_by_role("button", name="Abruf fortsetzen", exact=True)
+            expect(resume).to_be_disabled()
+            area.get_by_role("checkbox", name=re.compile("Ich bestätige weitere externe Anbieteranfragen")).check()
+            resume.click()
+            expect(area.locator(".hiJob .wsBadge")).to_have_text("Abruf läuft")
+            assert fixture.posts("/resume")[-1]["body"] == {"confirm_external_request": True, "max_records": 100000}
+            assert not fixture.posts("/jobs")
+
         def source_races(page, fixture):
             """Zwei Quellen, verspaetete View-/Poll-Antworten trotz ignoriertem Abort: keine Fremddaten, Polling endet bei Wechsel."""
             job_a = fixture.job(phase="A-RACE-ONLY", records_fetched=888)
@@ -573,7 +619,8 @@ class Run:
             expect(area).not_to_contain_text(JOB_IDS[SOURCE])
             assert page.evaluate("window.__delayedAborts") > 0
             expect(area.get_by_label("Handelspaare (kommagetrennt)")).to_have_count(0)
-            expect(public_rpc_checkbox(area)).to_be_checked()
+            expect(public_rpc_radio(area)).not_to_be_checked()
+            expect(area.get_by_role("radio", name="Eigener Anbieter (Free/Premium)", exact=True)).not_to_be_checked()
             page.get_by_role("dialog").get_by_role("button", name="Details schließen", exact=True).click()
             row_a.get_by_role("button", name="Transaktionen abrufen", exact=True).click()
             expect(count_value(workflow(page), "Datensätze")).to_have_text(str(job_a["records_fetched"]))
@@ -682,7 +729,7 @@ class Run:
 
         return {"loading": loading, "overview-file": overview_and_file, "consent-uuid": consent_uuid, "solana-start": solana_start,
                 "progress-controls": progress_controls, "ready-approval": ready_approval, "prior-jobs": prior_jobs,
-                "non-resumable": non_resumable,
+                "non-resumable": non_resumable, "legacy-rpc-jobs": legacy_rpc_jobs,
                 "source-races": source_races, "unsupported-setup": unsupported_setup, "mapped-errors": mapped_errors,
                 "responsive-keyboard": responsive_keyboard}
 

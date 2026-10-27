@@ -8,6 +8,53 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
+class HistoryRateState(BaseModel):
+    available: bool = False
+    config_revision: int | None = None
+    requests_per_second: int | None = None
+    requests_per_10_seconds: int | None = None
+    requests_per_minute: int | None = None
+    max_concurrency: int | None = None
+    effective_max_requests_per_second: float | None = None
+    budget_groups: list[str] = Field(default_factory=list)
+    bottlenecks: list[str] = Field(default_factory=list)
+    blocking_reasons: list[str] = Field(default_factory=list)
+    waiting_requests: int | None = None
+    in_flight: int | None = None
+    wait_seconds: float | None = None
+    retry_at: datetime | None = None
+
+
+class HistoryRpcOption(BaseModel):
+    id: Literal["public", "helius", "alchemy", "custom", "legacy"]
+    label: str
+    kind: Literal["public", "configured", "legacy"]
+    provider_id: str | None = None
+    configured: bool = False
+    ready: bool = False
+    blocked_reason: str | None = None
+    pinned: bool = True
+    tariff_verified: Literal[False] = False
+    limits: HistoryRateState | None = None
+
+
+class HistoryProgress(BaseModel):
+    phase: Literal["discovery", "fetch", "preparing", "complete", "paused", "cancelled", "error", "unknown"] = "unknown"
+    references_discovered: int | None = Field(default=None, ge=0)
+    signatures_discovered: int | None = Field(default=None, ge=0)
+    signatures_total: int | None = Field(default=None, ge=0)
+    signatures_completed: int | None = Field(default=None, ge=0)
+    addresses_completed: int | None = Field(default=None, ge=0)
+    addresses_total: int | None = Field(default=None, ge=0)
+    inventory_complete: bool = False
+    fetch_elapsed_seconds: float | None = Field(default=None, ge=0)
+    observed_details_per_second: float | None = Field(default=None, gt=0)
+    estimated_fetch_remaining_seconds: int | None = Field(default=None, ge=0)
+    estimate_status: Literal["unknown_total", "warming_up", "estimated", "paused", "fetch_complete", "not_supported", "unavailable"] = "unknown_total"
+    estimate_scope: Literal["available_rpc_transaction_details"] = "available_rpc_transaction_details"
+    updated_at: datetime | None = None
+
+
 class HistoryCapability(BaseModel):
     source_ref: str
     label: str
@@ -18,6 +65,7 @@ class HistoryCapability(BaseModel):
     requires_symbols: bool = False
     coverage_notes: list[str] = Field(default_factory=list)
     default_start: date = date(2020, 1, 1)
+    rpc_options: list[HistoryRpcOption] = Field(default_factory=list)
 
 
 class HistoryStart(BaseModel):
@@ -28,6 +76,7 @@ class HistoryStart(BaseModel):
     end: date | None = None
     symbols: list[str] = Field(default_factory=list, max_length=200)
     public_rpc_only: StrictBool = True
+    rpc_provider: Literal["public", "helius", "alchemy", "custom"] | None = None
     max_records: int = Field(default=100000, ge=1, le=1000000)
 
     @field_validator("confirm_external_request", mode="before")
@@ -50,6 +99,8 @@ class HistoryStart(BaseModel):
     def ordered_dates(self):
         if self.end is not None and self.end < self.start:
             raise ValueError("history_date_range_invalid")
+        if self.rpc_provider is not None and self.public_rpc_only != (self.rpc_provider == "public"):
+            raise ValueError("history_rpc_choice_conflict")
         return self
 
 
@@ -116,6 +167,8 @@ class HistoryJob(BaseModel):
     complete_history_proven: bool = False
     can_resume: bool = False
     approval: dict[str, object] | None = None
+    transport: HistoryRpcOption | None = None
+    progress: HistoryProgress | None = None
 
 
 class HistoryView(BaseModel):

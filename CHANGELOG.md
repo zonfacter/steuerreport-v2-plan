@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0rc26 - 2026-10-27 (Releasekandidat)
+
+- Explizite Auswahl zwischen oeffentlichem Solana-RPC (Free) und eigenem
+  Helius-/Alchemy-/Custom-Zugang (Free/Premium). Auftrag an die gewaehlte
+  Anbietereinrichtung gebunden; kein stiller Ersatzanbieter bei Fehlern oder
+  Keywechsel. Anbieterwechsel erfordert einen neuen Auftrag.
+- Kein Tarifnachweis durch einen API-Key und keine automatische Quotenerhoehung.
+  Wirksame gemeinsame IP-, Anbieter- und Methodenlimits bleiben massgeblich.
+- Zweiphasiges Solana-Inventar mit privaten hashadressierten Originalseiten
+  und dedupliziertem Detailabruf. Abgearbeitete RPC-Listen beweisen keine
+  vollstaendige Historie; Retention und geschlossene Tokenkonten bleiben Grenzen.
+- Geschaetzte Restzeit nur fuer verfuegbare Transaktionsdetails nach fertigem
+  Inventar und mindestens fuenf gemessenen Detailabrufen. Discovery, Pause und
+  nachfolgende Vorschauberechnung erhalten keine laufende Restzeitschaetzung.
+- Doku, aktive Versionsmetadaten und Packaging-Liste auf rc26 erweitert;
+  synthetischer Anbieter-/ETA-Browsercheck samt Artefaktpfad in die CI aufgenommen.
+  Verbindliche Pruef-, CI-, Image- und Deploymentbelege gehoeren gesondert in
+  den Draft Release; lokale Teilnachweise sind in den Releasehinweisen getrennt.
+- Keine Aenderung der Steuer-/FIFO-Regeln oder automatische fachliche Freigabe.
+
 ## 0.2.0rc25 - 2026-10-27
 
 - Enthaelt die konfigurierbaren Solana-Abruflimits aus dem nicht produktiv

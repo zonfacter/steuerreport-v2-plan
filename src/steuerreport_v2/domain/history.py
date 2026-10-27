@@ -152,6 +152,12 @@ class HistoryService:
         if capability.provider == "solana":
             from steuerreport_v2.domain.history_solana import SolanaHistoryCollector
             capability.coverage_notes.extend(SolanaHistoryCollector.NOTES)
+            from steuerreport_v2.contracts.history import HistoryRateState, HistoryRpcOption
+            from steuerreport_v2.domain.history_rpc import rpc_options, rpc_status
+            for values in rpc_options(self.store):
+                option = HistoryRpcOption.model_validate(values)
+                option.limits = HistoryRateState.model_validate(rpc_status(self.store, provider_id=option.provider_id))
+                capability.rpc_options.append(option)
         elif capability.provider:
             from steuerreport_v2.domain.history_cex import coverage_notes
             capability.coverage_notes.extend(coverage_notes(capability.provider))
@@ -167,9 +173,23 @@ class HistoryService:
 
     def _public(self, job):
         effective = self._effective(job)
+        transport = None
+        if job.get('transport'):
+            from steuerreport_v2.contracts.history import HistoryRateState, HistoryRpcOption
+            from steuerreport_v2.domain.history_rpc import rpc_status
+            transport = HistoryRpcOption.model_validate(job['transport'])
+            transport.limits = HistoryRateState.model_validate(rpc_status(self.store, provider_id=transport.provider_id))
+        from steuerreport_v2.domain.history_progress import public_progress
         return HistoryJob.model_validate({**effective, "can_resume": (
             effective["status"] in {"paused", "failed"} and job.get("_resumable") is not False
-        )})
+        ), 'transport': transport, 'progress': public_progress(effective, transport)})
+
+    def _check_rpc_binding(self, job):
+        if job.get('_rpc_binding') is not None:
+            from steuerreport_v2.domain.history_rpc import resolve_rpc
+            endpoint = resolve_rpc(self.store, job['_options']['rpc_provider'])
+            if endpoint.binding_hash != job['_rpc_binding']:
+                raise HistoryFetchError('history_rpc_configuration_changed', resumable=False)
 
     def view(self, ref):
         capability = self.capability(ref)
@@ -205,22 +225,36 @@ class HistoryService:
         if capability.provider == "solana" and request.symbols:
             raise HistoryFetchError("solana_asset_filter_not_supported", resumable=False)
         target = self._target(ref)
+        if target.provider != 'solana' and request.rpc_provider is not None:
+            raise HistoryFetchError('history_rpc_provider_not_supported', resumable=False)
+        job_id = str(request.request_id)
+        transport = endpoint = None
+        if request.rpc_provider is not None:
+            from steuerreport_v2.domain.history_rpc import resolve_rpc
+            endpoint = resolve_rpc(self.store, request.rpc_provider)
+            transport = next((option for option in capability.rpc_options if option.id == request.rpc_provider), None)
+            if transport is None or not transport.ready:
+                raise HistoryFetchError('history_rpc_not_configured', resumable=False)
+            transport = transport.model_copy(update={
+                'provider_id': endpoint.provider_id, 'label': endpoint.label, 'kind': endpoint.kind,
+            })
         end = request.end or datetime.now(timezone.utc).date()
         if end < request.start or request.start > datetime.now(timezone.utc).date():
             raise HistoryFetchError("history_date_range_invalid", resumable=False)
         options = HistoryOptions(
             datetime.combine(request.start, day_time.min, timezone.utc),
             min(datetime.combine(end, day_time.max, timezone.utc), datetime.now(timezone.utc)), tuple(request.symbols), request.public_rpc_only,
+            request.rpc_provider, job_id if request.rpc_provider is not None else None,
         )
         if target.provider != "solana":
             options = HistoryOptions(options.start, options.end.replace(microsecond=options.end.microsecond // 1000 * 1000), options.symbols, options.public_rpc_only)
         values = request.model_dump(mode="json")
-        job_id = str(request.request_id)
         with self.connections._mutation():
             jobs = self.storage.jobs()
             prior = next((job for job in jobs if job["id"] == job_id), None)
             if prior:
-                if prior["source_ref"] != ref or prior["_request"] != values:
+                prior_request = HistoryStart.model_validate(prior["_request"]).model_dump(mode="json")
+                if prior["source_ref"] != ref or prior_request != values:
                     raise HistoryFetchError("history_request_id_conflict", resumable=False)
                 return self._public(prior)
             if len(jobs) >= MAX_JOBS:
@@ -241,6 +275,9 @@ class HistoryService:
                 "_pid": os.getpid(), "_run_id": str(uuid4()),
                 "_until": (datetime.now(timezone.utc) + timedelta(seconds=RUN_SECONDS)).isoformat(),
             }
+            if endpoint is not None:
+                job['_rpc_binding'] = endpoint.binding_hash
+                job['transport'] = transport.model_dump(mode='json')
             self.storage.save(job)
         self._launch(job_id)
         return self._public(job)
@@ -271,6 +308,7 @@ class HistoryService:
             target = self._target(ref)
             if self._binding(target) != job["_binding"]:
                 raise HistoryFetchError("history_source_changed", resumable=False)
+            self._check_rpc_binding(job)
             if sum(self._effective(other)["status"] in ACTIVE for other in self.storage.jobs() if other["id"] != job["id"]) >= MAX_ACTIVE:
                 raise HistoryFetchError("history_job_capacity")
             with self._worker_guard(job["id"]):
@@ -279,6 +317,9 @@ class HistoryService:
                            _run_id=str(uuid4()), _until=(datetime.now(timezone.utc) + timedelta(seconds=RUN_SECONDS)).isoformat())
                 if request.max_records is not None:
                     job["max_records"] = max(job["records_fetched"], request.max_records)
+                job.pop('_detail_rate_ema', None)
+                job['_detail_samples'] = 0
+                job.pop('_detail_measured_at', None)
                 self.storage.save(job)
         self._launch(job["id"])
         return self._public(job)
@@ -305,6 +346,7 @@ class HistoryService:
                 options = HistoryOptions(**{**job["_options"], "start": datetime.fromisoformat(job["_options"]["start"]), "end": datetime.fromisoformat(job["_options"]["end"]), "symbols": tuple(job["_options"]["symbols"])})
                 if self._binding(self._target(job["source_ref"])) != job["_binding"]:
                     raise HistoryFetchError("history_source_changed", resumable=False)
+                self._check_rpc_binding(job)
                 signal = _Signal(self, job_id, run_id, time.monotonic() + RUN_SECONDS)
                 collector = self._collector(target, options)
                 with outbound_scope(provider=None if target.provider == "solana" else target.provider,
@@ -314,8 +356,11 @@ class HistoryService:
                         signal.check()
                         if len(job["_records"]) >= job["max_records"]:
                             raise HistoryFetchError("history_record_limit")
+                        self._check_rpc_binding(job)
+                        page_started = time.monotonic()
                         page = collector.fetch_page(job["_cursor"], signal.check)
                         signal.check()
+                        self._check_rpc_binding(job)
                         if canonical_json(page.cursor) == canonical_json(job["_cursor"]) and not page.done:
                             raise HistoryFetchError("history_cursor_stalled", resumable=False)
                         pending = dict(job["_records"])
@@ -337,6 +382,8 @@ class HistoryService:
                             signal.checked_at = 0
                             signal.check()
                             current = self.storage.load(job_id)
+                            from steuerreport_v2.domain.history_progress import record_progress
+                            record_progress(job, page, time.monotonic() - page_started)
                             job.update(_records=pending, _cursor=page.cursor, _done=page.done,
                                        records_fetched=len(pending), pages_fetched=job["pages_fetched"] + 1,
                                        requests=job["requests"] + page.requests, phase=page.phase,
@@ -400,6 +447,7 @@ class HistoryService:
                 raise HistoryFetchError("history_job_not_found", resumable=False)
             if self._binding(self._target(ref)) != job["_binding"]:
                 raise HistoryFetchError("history_source_changed", resumable=False)
+            self._check_rpc_binding(job)
             return self._public(HistoryPreview(self.store).apply(job, request))
 
     def audit(self, ref, job_id):

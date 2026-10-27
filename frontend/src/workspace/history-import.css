@@ -25,10 +25,34 @@
 .hiSample .hiExact { display: block; margin-top: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }
 .hiWorkflow :is(input, select) { box-sizing: border-box; }
 .hiWorkflow :focus-visible { outline: 2px solid #197b93; outline-offset: 3px; }
+.hiRpcChoice, .hiLimits, .hiTransport, .hiProgress { display: grid; gap: 10px; min-width: 0; }
+.hiModes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; padding: 0; margin: 0; border: 0; }
+.hiModes legend { padding: 0 0 8px; font-weight: 600; color: #3c5548; }
+.wsDetailPanel label.hiMode { display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 10px; border: 1px solid #adc2b5; border-radius: 4px; background: #fff; font-size: 13px; font-weight: 400; cursor: pointer; }
+.wsDetailPanel label.hiModeSelected { border-color: #245b45; background: #edf4ef; box-shadow: inset 0 0 0 1px #245b45; }
+.hiWorkflow .hiModes input[type="radio"] { appearance: auto; flex: 0 0 18px; width: 18px; height: 18px; min-height: 18px; max-width: 18px; padding: 0; margin: 0; accent-color: #245b45; }
+.hiMode span { min-width: 0; overflow-wrap: anywhere; }
+.hiLimitValues { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; margin: 0; }
+.hiLimitValues > div { min-width: 0; }
+.hiLimitValues dt { color: #52675d; font-size: 12px; overflow-wrap: anywhere; }
+.hiLimitValues dd { margin: 3px 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.hiLimits { padding: 10px 0; border-block: 1px solid #d4e0d8; }
+.hiBottleneck { color: #73501c; }
+.hiTransport, .hiProgress { padding-top: 12px; }
+.hiTransport > strong { overflow-wrap: anywhere; }
+.hiPhases { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; list-style: none; margin: 0; padding: 0; }
+.hiPhases li { display: grid; align-content: start; gap: 5px; min-width: 0; padding: 8px 0 8px 10px; border-left: 3px solid #d4e0d8; overflow-wrap: anywhere; }
+.hiPhases li[aria-current="step"] { border-left-color: #197b93; }
+.hiPhases li > span { color: #52675d; font-size: 12px; }
+.hiPhases progress { display: block; width: 100%; height: 8px; margin-block: 5px; accent-color: #197b93; }
+.hiEstimate { font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) {
   .hiFields { grid-template-columns: minmax(0, 1fr); }
   .hiCounts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hiWorkflow :is(button, a.wsButton) { min-height: 44px; }
   .hiActions { align-items: stretch; }
   .hiActions > :is(button, a) { flex: 1 1 150px; }
+  .hiModes, .hiPhases { grid-template-columns: minmax(0, 1fr); }
+  .hiLimitValues { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hiRpcChoice .hiActions > .helpTipAnchor { flex: 0 0 auto; align-self: center; }
 }

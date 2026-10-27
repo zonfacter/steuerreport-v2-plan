@@ -91,6 +91,9 @@ jobs:
       - name: Source history approval against actual isolated backend
         working-directory: .
         run: python scripts/check_history_backend_browser_v2.py
+      - name: History provider selection and detail fetch ETA with synthetic data
+        working-directory: .
+        run: python scripts/check_history_provider_eta_browser_v2.py --output "${RUNNER_TEMP}/history-provider-eta-browser"
       - name: Solana rate settings against isolated local coordinator
         working-directory: .
         run: python scripts/check_solana_limits_browser_v2.py --output "${RUNNER_TEMP}/solana-limits-browser"
@@ -104,5 +107,6 @@ jobs:
             artifacts/ux-review-fixes/
             artifacts/source-history-browser/
             artifacts/source-history-backend-browser/
+            ${{ runner.temp }}/history-provider-eta-browser/
             ${{ runner.temp }}/solana-limits-browser/
           if-no-files-found: ignore

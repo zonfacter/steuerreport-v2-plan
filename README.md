@@ -1,9 +1,9 @@
 # Steuerreport V2
 
-Version 0.2.0rc25. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc26. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc25](docs/RELEASE_0.2.0rc25.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc26](docs/RELEASE_0.2.0rc26.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
@@ -20,7 +20,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc25
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc26
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -53,6 +53,14 @@ Keine Signatur, kein Setup-Token und kein Private Key erforderlich. Mehrere
 Adressen bleiben getrennt; erneutes Speichern erzeugt keine doppelte Quelle.
 Die Adresse liegt nur im privaten Datenvolume. Historienimport, Bestandsabruf,
 Eigentumsnachweis und steuerliche Aktivierung sind davon getrennt.
+
+Beim Historienabruf ausdruecklich **Oeffentlicher RPC (Free)** oder einen
+eingerichteten eigenen Helius-/Alchemy-/Custom-RPC waehlen. Eigene Zugaenge
+koennen Free oder Premium sein; ein Key ist kein Tarifnachweis und erhoeht
+keine lokalen Quoten. Der Auftrag bleibt an seine Anbietereinrichtung gebunden.
+Restzeitangaben betreffen nur verbleibende verfuegbare Transaktionsdetails nach
+abgeschlossenem Inventar und ausreichender Messung, nicht die Gesamtbearbeitung.
+Bedienung und Grenzen: [Automatischer Quellenimport](docs/AUTOMATISCHER_QUELLENIMPORT.md).
 
 ### Optionaler Eigentumsnachweis
 

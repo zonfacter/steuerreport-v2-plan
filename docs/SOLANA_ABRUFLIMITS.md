@@ -29,6 +29,27 @@ Konfigurationsstand gebunden. Nach einer konkurrierenden Aenderung wird seine
 Bestaetigung ungueltig; alte Eingaben duerfen keine neuere Tarifgrenze ersetzen.
 Den aktuellen Stand ausdruecklich in das Formular laden und erneut pruefen.
 
+## Anbieter fuer einen Historienauftrag waehlen
+
+Unter **Quellen & Wallets -> Transaktionen abrufen** ist die Anbieterwahl
+vom Limitprofil getrennt: **Oeffentlicher RPC (Free)** verwendet den offiziellen
+Mainnet-RPC ohne Key. **Eigener Anbieter (Free/Premium)** verlangt einen
+eingerichteten Helius-, Alchemy- oder Custom-RPC. Ein eigener API-Key weist
+keinen bezahlten Tarif nach und hebt keine Quote automatisch an.
+
+Neue Auftraege bleiben an die gewaehlte Anbietereinrichtung gebunden.
+Fortsetzen behaelt die gespeicherte Bindung; eine neue Auswahl im Startformular
+aendert den alten Auftrag nicht. Bei Key-/URL-Aenderung gibt es keinen stillen
+Wechsel und bei Fehlern keinen automatischen Ersatzanbieter. Fuer einen
+Anbieterwechsel einen neuen Auftrag anlegen. Bei Legacy-Auftraegen ohne
+explizit gespeicherten Pin bleibt die eindeutige Anbieterbindung unbestaetigt.
+
+Die angezeigten effektiven Limits beruecksichtigen die gemeinsam passenden
+IP-, Anbieter-, Endpunkt- und weiteren konfigurierten Budgets. Auch ein hoher
+Anbietertarif kann am niedrigeren gemeinsamen IP-Budget begrenzt bleiben.
+Lesen dieser Statusdaten startet keine Anbieteranfrage und erhoeht keine Limits.
+Nicht lesbare Limitdaten sind unbekannt, nicht unbegrenzt.
+
 ## Konservative Voreinstellung
 
 | Budget | Sekunde | 10 Sekunden | Minute | Burst | Parallelitaet |
@@ -73,6 +94,37 @@ Bytebudget.** Es wird keine verbleibende Herstellerquote erfunden. Bei grossen
 Antworten oder gemeinsam genutzter IP niedrigere Betreiberwerte setzen.
 Eigene RPC-Dienste, Helius und Alchemy benoetigen jeweils passende eigene
 Tarifprofile; der Solana-Public-Wert bestaetigt deren Kontingente nicht.
+
+Ebenfalls geprueft am **27.10.2026**: [Helius: Rate
+Limits](https://www.helius.dev/docs/billing/rate-limits). Dort werden Tarif- und
+Produktlimits unterschieden. Ein gespeicherter Helius-Key verraet nicht den
+gebuchten Tarif; dessen Werte muessen beim Anbieter geprueft und bewusst als
+passende lokale Profile gepflegt werden. Hier werden keine neuen Herstellerzahlen
+oder automatisch hoehere Quoten uebernommen.
+
+## Fortschritt und Restzeit
+
+Bei neuen Solana-Auftraegen wird zuerst die verfuegbare Signaturliste
+inventarisiert. Solange das Inventar nicht abgeschlossen ist, bleiben
+eindeutige Gesamtzahl, Gesamtprozentsatz und ETA unbekannt. Erst danach kann
+die Restzeit fuer **verbleibende verfuegbare RPC-Transaktionsdetails** geschaetzt
+werden: mindestens fuenf erfolgreich gemessene Detailabrufe, frische Messungen
+und verfuegbare effektive Limitdaten sind erforderlich. Die geglaettete Messrate
+wird auf die wirksame gemeinsame Obergrenze begrenzt; bekannte Kontingentwartezeit
+geht in die Berechnung ein. Messzeiten erfolgreich gespeicherter Detailseiten
+enthalten dort anfallende Warte-/Retryzeiten.
+
+Pausierte, abgebrochene oder fehlerhafte Auftraege erhalten keinen Countdown.
+Fehlende/veraltete Messdaten, Anbieterpausen oder nicht aktualisierbarer Status
+sind keine Grundlage fuer eine verlaessliche laufende Restzeitanzeige.
+Die **Vorschauberechnung hat keine ETA**; ihr Aufwand ist in der Detailabruf-
+Schaetzung nicht enthalten. Ein beendeter Abruf ist noch keine Importfreigabe.
+
+Der Detailabruf bleibt sequenziell. Ein hoeheres lokales Parallelitaetslimit
+nutzt einen Premium-Tarif daher nicht automatisch voll aus. RPC-Latenz und
+Belegsicherung begrenzen die tatsaechliche Rate zusaetzlich. Anbieter-Retention,
+geschlossene Tokenkonten und historische Eigentumswechsel bleiben Grenzen:
+auch eine abgearbeitete Liste beweist keine vollstaendige Historie.
 
 ## Geschwindigkeit und Fehler
 

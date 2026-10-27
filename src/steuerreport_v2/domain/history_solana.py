@@ -54,12 +54,32 @@ class SolanaHistoryCollector(PortfolioService):
         self.target, self.options = target, options
         self.wallet_address = target.wallet_address
         self.start, self.end = options.start.astimezone(timezone.utc), options.end.astimezone(timezone.utc)
+        self._history_rpc_endpoint = None
+        self._history_inventory = None
+
+    def _selected_rpc(self):
+        if self._history_rpc_endpoint is None:
+            from steuerreport_v2.domain.history_rpc import resolve_rpc
+            self._history_rpc_endpoint = resolve_rpc(self.store, self.options.rpc_provider)
+        return self._history_rpc_endpoint
 
     def _solana_rpc_urls(self) -> list[str]:
+        if self.options.rpc_provider is not None:
+            return [self._selected_rpc().url]
         # Vor jeder Secret-, Profil- oder Umgebungsaufloesung abbrechen.
         if self.options.public_rpc_only:
             return [self.PUBLIC_RPC_URL]
         return super()._solana_rpc_urls()
+
+    def _solana_rpc_provider(self) -> str | None:
+        if self.options.rpc_provider is not None:
+            return self._selected_rpc().provider_id
+        return super()._solana_rpc_provider()
+
+    def _redacted_solana_rpc_url(self, rpc_url: str) -> str:
+        if self.options.rpc_provider is not None:
+            return "https://rpc.invalid/"
+        return super()._redacted_solana_rpc_url(rpc_url)
 
     def _scope(self) -> dict[str, object]:
         return {
@@ -89,8 +109,8 @@ class SolanaHistoryCollector(PortfolioService):
         return {"address": entry["pubkey"], "mint": info["mint"], "program": program,
                 "owner_account": deepcopy(entry)}
 
-    def _signature_page(self, payload: object) -> list[dict[str, object]]:
-        if not isinstance(payload, list) or len(payload) > self.PAGE_SIZE:
+    def _signature_page(self, payload: object, *, limit: int | None = None) -> list[dict[str, object]]:
+        if not isinstance(payload, list) or len(payload) > (self.PAGE_SIZE if limit is None else limit):
             raise HistoryFetchError("solana_signatures_invalid")
         signatures: set[str] = set()
         for item in payload:
@@ -168,6 +188,11 @@ class SolanaHistoryCollector(PortfolioService):
         return state
 
     def fetch_page(self, cursor: dict, check: Callable[[], None]) -> HistoryPage:
+        if self.options.inventory_job_id is not None:
+            if self._history_inventory is None:
+                from steuerreport_v2.domain.history_inventory import HistoryInventory
+                self._history_inventory = HistoryInventory(self)
+            return self._history_inventory.fetch_page(cursor, check)
         state = self._state(cursor)
         requests = 0
 

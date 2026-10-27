@@ -24,6 +24,8 @@ class HistoryOptions:
     end: datetime
     symbols: tuple[str, ...] = ()
     public_rpc_only: bool = False
+    rpc_provider: str | None = None
+    inventory_job_id: str | None = None
 
 
 @dataclass(frozen=True)

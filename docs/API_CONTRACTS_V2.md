@@ -45,7 +45,7 @@ Es gibt keinen Clientparameter zum Ueberschreiben der Wallet oder des Kontos.
 - GET Basis, `/jobs/{id}` und `/jobs/{id}/audit.json` lesen ausschliesslich.
 - POST `/jobs` verlangt UUID-`request_id`, ausdrueckliches Boolean
   `confirm_external_request=true`, UTC-Datumsfenster und optional Symbole,
-  `public_rpc_only`, `max_records`. Wiederholung derselben ID/Parameter
+  `public_rpc_only`, `rpc_provider`, `max_records`. Wiederholung derselben ID/Parameter
   liefert denselben Job; veraenderte Parameter fuer dieselbe ID ergeben 409.
 - POST `/pause`, `/cancel` am Job speichert die Steuerungsabsicht; POST
   `/resume` verlangt erneute externe Bestaetigung und optional ein neues Limit.
@@ -64,6 +64,28 @@ Asset/Menge, Gegenmenge und Gebuehren. Die Stichprobe ist hashgebunden; Rohspalt
 werden nicht als kanonische Felder ausgegeben. Bei reinen Dubletten ist sie leer.
 `requests` zaehlt Anfragen erfolgreich gespeicherter Seiten, keine garantierte
 Gesamtzahl aller fehlgeschlagenen Versuche oder Anbieter-Credits.
+
+Ab rc26 liefert `capability.rpc_options` die geheimnisfreien Optionen `public`,
+`helius`, `alchemy` und `custom` mit Einrichtungsstatus. Neue Solana-Auftraege
+waehlen explizit `rpc_provider`; `public_rpc_only` muss genau bei `public` wahr
+sein. Ohne das additive Feld bleibt der Legacy-Vertrag erhalten, einschliesslich
+Idempotenz bereits gespeicherter Anfragen. CEX-Auftraege haben keine RPC-Auswahl.
+`job.transport` haelt die Auswahl fest: kein stiller Wechsel/Fallback bei Resume;
+eine geaenderte gebundene URL bzw. ein geaenderter Key sperrt die Fortsetzung.
+`tariff_verified=false` ist kein Tarifnachweis. `transport.limits` liest lokale,
+gemeinsam wirksame Fenster-/Methodenbudgets; keine gemeldete Herstellerrestquote.
+Statusabfragen starten keine Requests und initialisieren keinen Koordinator.
+
+Neue explizite Solana-Auftraege ermitteln zuerst das SHA-256-gebundene private
+Signaturinventar. `progress.signatures_total` bleibt bis zum Abschluss unbekannt;
+`references_discovered` kann Mehrfachreferenzen enthalten, `signatures_discovered`
+bezeichnet eindeutige Signaturen. `signatures_completed` zaehlt deren abgerufene
+Details, nicht die Zahl importierter oder steuerpflichtiger Ereignisse.
+`estimated_fetch_remaining_seconds` ist nur fuer verfuegbare RPC-Details definiert,
+nach bekanntem Inventar und mindestens fuenf frischen Detailmessungen. Vorschau,
+fachliche Pruefung und Freigabe sind nicht enthalten. Unbekannt, pausiert,
+veraltet und nicht unterstuetzt bleiben eigene Zustaende; kein erfundenes Prozent
+oder Vollstaendigkeitsbeweis. Legacy-/CEX-Jobs koennen ohne diese Felder gelesen werden.
 
 Private Rohbelege sind SHA-256-adressiert; Konflikte werden nicht ueberschrieben.
 Keine Secretwerte oder internen Dateipfade in Antworten. Audit enthaelt bewusst

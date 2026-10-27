@@ -1,13 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Check, Download, LoaderCircle, Pause, Play, RefreshCw, Upload, X } from "lucide-react";
+import { HelpTip } from "../Help";
 import { ApiReadError, canonicalDecimal, readApi, timestamp, useResource } from "./resource";
 import { Badge, ExactQuantity, ResourceNotice } from "./Ui";
 import "./history-import.css";
 
 // Local mirrors of contracts/history.py; the source is always taken from the panel.
+type RpcProvider = "public" | "helius" | "alchemy" | "custom";
+type HistoryRateState = {
+  available: boolean; config_revision?: number | null; requests_per_second?: number | null;
+  requests_per_10_seconds?: number | null; requests_per_minute?: number | null; max_concurrency?: number | null;
+  effective_max_requests_per_second?: number | null; budget_groups?: string[]; bottlenecks?: string[];
+  blocking_reasons?: string[]; waiting_requests?: number | null; in_flight?: number | null;
+  wait_seconds?: number | null; retry_at?: string | null;
+};
+type HistoryRpcOption = {
+  id: RpcProvider | "legacy"; label: string; kind: "public" | "configured" | "legacy";
+  provider_id?: string | null; configured: boolean; ready: boolean; blocked_reason?: string | null;
+  pinned: boolean; tariff_verified: false; limits?: HistoryRateState | null;
+};
+type HistoryProgress = {
+  phase: "discovery" | "fetch" | "preparing" | "complete" | "paused" | "cancelled" | "error" | "unknown";
+  references_discovered?: number | null; signatures_discovered?: number | null; signatures_total?: number | null;
+  signatures_completed?: number | null; addresses_completed?: number | null; addresses_total?: number | null;
+  inventory_complete: boolean; fetch_elapsed_seconds?: number | null; observed_details_per_second?: number | null;
+  estimated_fetch_remaining_seconds?: number | null;
+  estimate_status: "unknown_total" | "warming_up" | "estimated" | "paused" | "fetch_complete" | "not_supported" | "unavailable";
+  estimate_scope: "available_rpc_transaction_details"; updated_at?: string | null;
+};
 type HistoryCapability = {
   source_ref: string; label: string; provider: string | null; supported: boolean; ready: boolean;
   blocked_reason: string | null; requires_symbols: boolean; coverage_notes: string[]; default_start: string;
+  rpc_options?: HistoryRpcOption[];
 };
 type HistoryJob = {
   id: string; source_ref: string; label: string; provider: string;
@@ -19,9 +43,10 @@ type HistoryJob = {
   after_summary: Record<string, unknown> | null; review_issues_open: number | null;
   error_code: string | null; coverage_notes: string[]; complete_history_proven: boolean; can_resume?: boolean;
   approval: Record<string, unknown> | null;
+  transport?: HistoryRpcOption | null; progress?: HistoryProgress | null;
 };
 type HistoryView = { capability: HistoryCapability; jobs: HistoryJob[] };
-type HistoryStart = { request_id: string; confirm_external_request: true; start: string; end: string | null; symbols: string[]; public_rpc_only: boolean; max_records: number };
+type HistoryStart = { request_id: string; confirm_external_request: true; start: string; end: string | null; symbols: string[]; public_rpc_only: boolean; rpc_provider?: RpcProvider | null; max_records: number };
 type HistoryResume = { confirm_external_request: true; max_records?: number };
 type HistoryApprove = { preview_sha256: string; actor: string; confirm_import: true; confirm_recalculation: true };
 type Props = { sourceRef: string; sourceLabel: string; onApplied: () => void };
@@ -93,6 +118,10 @@ const errors: Record<string, string> = {
   solana_signatures_invalid: "Die Solana-Transaktionsliste des Anbieters ist unvollständig oder ungültig. Der Abruf wurde zur Prüfung angehalten.",
   solana_signatures_not_finalized: "Der Solana-Anbieter hat noch nicht endgültig bestätigte Transaktionen geliefert. Später erneut prüfen.",
   solana_cursor_invalid: "Der gespeicherte Fortsetzungspunkt der Solana-Historie ist ungültig. Den Auftrag und die Belege prüfen; nicht ungeprüft fortsetzen.",
+  solana_inventory_storage_unavailable: "Der private Belegspeicher ist vorübergehend nicht verfügbar. Freien Speicherplatz und Serverressourcen prüfen; gesicherten Auftrag danach ausdrücklich fortsetzen.",
+  solana_inventory_storage_invalid: "Der private Inventarspeicher ist nicht sicher verfügbar. Pfad, Berechtigungen und Belege serverseitig prüfen; keine Importfreigabe erteilen.",
+  solana_inventory_invalid: "Das gesicherte Signaturinventar ist nicht konsistent. Originalbelege und Prüfsummen prüfen; keine automatische Übernahme.",
+  solana_inventory_limit: "Das Sicherheitslimit des privaten Signaturinventars wurde erreicht. Umfang und Belegspeicher serverseitig prüfen; keine vollständige Historie bestätigt.",
   solana_address_limit: "Die Zahl zu prüfender Solana-Konten überschreitet die Abrufgrenze. Wallet-Abdeckung und serverseitige Grenzen prüfen.",
   cex_history_connection_required: "Für diese Quelle fehlt die eingerichtete API-Verbindung.",
   cex_history_account_required: "Die gespeicherte Kontenzuordnung dieser Quelle ist unvollständig.",
@@ -104,6 +133,16 @@ const errors: Record<string, string> = {
   cex_history_quantity_inexact: "Eine Menge ist nicht exakt belegbar. Der Abruf wurde zur Prüfung angehalten.",
   cex_history_coinbase_proof_required: "Für diese Coinbase-Historie fehlen die erforderlichen Herkunftsnachweise.",
   rate_limited: "Der Anbieter begrenzt die Anfragen. Später erneut versuchen.",
+  history_rpc_choice_conflict: "Modus und Anbieter passen nicht zusammen. Die Abrufauswahl erneut prüfen.",
+  history_rpc_not_configured: "Der gewählte RPC-Anbieter ist nicht eingerichtet. Zugang in der Einrichtung prüfen; kein automatischer Ersatzanbieter.",
+  history_rpc_configuration_changed: "Die gespeicherte Anbietereinrichtung hat sich geändert. Für einen Anbieterwechsel ist ein neuer Auftrag erforderlich.",
+  history_rpc_provider_not_supported: "Dieser RPC-Anbieter unterstützt den Historienabruf hier nicht. Die Einrichtung prüfen; kein automatischer Ersatzanbieter.",
+  history_rpc_choice_invalid: "Den gewünschten RPC-Anbieter ausdrücklich auswählen.",
+  history_rpc_key_missing: "Für diesen Dienst fehlt der API-Key. Zugang in der Einrichtung hinterlegen; kein automatischer Ersatzanbieter.",
+  history_rpc_key_unavailable: "Der gespeicherte API-Key ist nicht verfügbar. Zugang und Schlüsselspeicher in der Einrichtung prüfen.",
+  history_rpc_url_missing: "Für den eigenen RPC fehlt die gespeicherte Verbindung. Die Einrichtung prüfen.",
+  history_rpc_url_invalid: "Die gespeicherte RPC-Verbindung ist ungültig. Die Einrichtung prüfen.",
+  history_rpc_profile_unavailable: "Das gespeicherte RPC-Profil ist nicht verfügbar. Die Einrichtung prüfen.",
 };
 function errorText(code: unknown, fallback = "Der Vorgang konnte nicht abgeschlossen werden. Status aktualisieren und erneut versuchen.") {
   const value = code instanceof ApiReadError ? code.code ?? code.message : code instanceof Error ? code.message : code;
@@ -145,7 +184,9 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
   const capability = resource.data?.capability.source_ref === sourceRef ? resource.data.capability : undefined;
   const [jobs, setJobs] = useState<HistoryJob[]>([]), [selectedId, setSelectedId] = useState("");
   const [start, setStart] = useState(""), [end, setEnd] = useState(new Date().toISOString().slice(0, 10));
-  const [symbols, setSymbols] = useState(""), [publicOnly, setPublicOnly] = useState(true), [maxRecords, setMaxRecords] = useState("100000");
+  const [symbols, setSymbols] = useState(""), [rpcMode, setRpcMode] = useState<"public" | "configured" | "">("");
+  const [configuredProvider, setConfiguredProvider] = useState<Exclude<RpcProvider, "public"> | "">("");
+  const [maxRecords, setMaxRecords] = useState("100000");
   const [externalConsent, setExternalConsent] = useState(false), [resumeConsent, setResumeConsent] = useState("");
   const [resumeRecords, setResumeRecords] = useState<Record<string, string>>({});
   const [actor, setActor] = useState(sessionActor);
@@ -248,8 +289,12 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
   const resumeLimit = Number(resumeValue), validResumeLimit = Number.isInteger(resumeLimit) && resumeLimit >= 1 && resumeLimit <= 1000000;
   const validDates = /^\d{4}-\d{2}-\d{2}$/.test(start) && (!end || /^\d{4}-\d{2}-\d{2}$/.test(end) && end >= start);
   const blockingJob = ordered.some((item) => unfinished.has(item.status));
-  const canStart = resource.status === "ready" && capability?.supported && capability.ready && validDates && validLimit && !symbolError && (!capability.requires_symbols || parsedSymbols.length > 0) && externalConsent && !blockingJob && !busy;
   const isSolana = capability?.provider?.toLowerCase().includes("solana");
+  const rpcOptions = capability?.rpc_options ?? [];
+  const rpcProvider: RpcProvider | "" = rpcMode === "public" ? "public" : rpcMode === "configured" ? configuredProvider : "";
+  const selectedRpc = rpcOptions.find((option) => option.id === rpcProvider && option.kind !== "legacy");
+  const configuredOptions = rpcOptions.filter((option) => option.kind === "configured" && option.id !== "legacy" && option.id !== "public");
+  const canStart = resource.status === "ready" && capability?.supported && capability.ready && validDates && validLimit && !symbolError && (!capability.requires_symbols || parsedSymbols.length > 0) && (!isSolana || !!selectedRpc?.ready) && externalConsent && !blockingJob && !busy;
   const refreshStatus = () => { setPollError(""); setRefresh((value) => value + 1); resource.reload(); };
   const changeStartOptions = () => { request.current = undefined; pendingRequests.delete(sourceRef); setExternalConsent(false); };
 
@@ -262,7 +307,8 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
         : !capability.ready ? <div className="wsInlineWarning"><strong>Einrichtung erforderlich</strong><p>{errorText(capability.blocked_reason, "Die gespeicherte Quellen- und Anbietereinrichtung prüfen. Es wurde kein externer Abruf gestartet.")}</p><a className="wsButton" href="#admin">Einrichtung öffnen</a></div>
           : <form className="hiStart" onSubmit={(event) => {
             event.preventDefault(); if (!canStart) return;
-            const options = { start, end: end || null, symbols: parsedSymbols, public_rpc_only: publicOnly, max_records: limit };
+            const options: Omit<HistoryStart, "request_id" | "confirm_external_request"> = { start, end: end || null, symbols: parsedSymbols, public_rpc_only: !isSolana || rpcProvider === "public", max_records: limit,
+              ...(isSolana && rpcProvider ? { rpc_provider: rpcProvider } : {}) };
             const key = JSON.stringify(options);
             if (request.current?.key !== key) request.current = { key, id: uuid() };
             pendingRequests.set(sourceRef, request.current);
@@ -274,7 +320,28 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
             {capability.requires_symbols && <label>Handelspaare (kommagetrennt)<input type="text" placeholder={capability.provider === "pionex" ? "BTC_USDT, ETH_USDT" : "BTCUSDT, ETHUSDT"} maxLength={8200} value={symbols} required aria-invalid={symbolError} onChange={(event) => { setSymbols(event.target.value); changeStartOptions(); }} /></label>}
             {symbolError && <p className="wsWarning">{errorText("history_symbols_invalid")} Höchstens 200 Handelspaare.</p>}
             {start && end && end < start && <p className="wsWarning">{errorText("history_date_range_invalid")}</p>}
-            {isSolana && <label className="hiCheck"><input type="checkbox" checked={publicOnly} onChange={(event) => { setPublicOnly(event.target.checked); changeStartOptions(); }} /><span>Nur öffentliche Solana-RPC-Anbieter verwenden</span></label>}
+            {isSolana && <div className="hiRpcChoice">
+              <fieldset className="hiModes" disabled={!!busy}><legend>Abrufmodus</legend>
+                <label className={`hiMode${rpcMode === "public" ? " hiModeSelected" : ""}`}><input type="radio" name="history-rpc-mode" value="public" checked={rpcMode === "public"} onChange={() => { setRpcMode("public"); changeStartOptions(); }} /><span>Öffentlicher RPC (Free)</span></label>
+                <label className={`hiMode${rpcMode === "configured" ? " hiModeSelected" : ""}`}><input type="radio" name="history-rpc-mode" value="configured" checked={rpcMode === "configured"} onChange={() => { setRpcMode("configured"); changeStartOptions(); }} /><span>Eigener Anbieter (Free/Premium)</span></label>
+              </fieldset>
+              {rpcMode === "configured" && <>
+                <label>Eingerichteter Dienst<select value={configuredProvider} disabled={!!busy} required onChange={(event) => { setConfiguredProvider(event.target.value as typeof configuredProvider); changeStartOptions(); }}>
+                  <option value="">Dienst wählen</option>
+                  {configuredOptions.map((option) => <option key={option.id} value={option.id}>{rpcName(option.id)}{!option.ready ? " · nicht verfügbar" : ""}</option>)}
+                </select></label>
+                {!configuredOptions.some((option) => option.ready) && <p className="wsInlineWarning">Kein eingerichteter Dienst ist abrufbereit. Zugang und Limits in der Einrichtung prüfen.</p>}
+                <p className="wsMuted">Ein API-Key belegt keinen bezahlten Tarif. Free-/Premium-Tarif und mögliche Kosten beim Anbieter prüfen.</p>
+              </>}
+              {!rpcMode && <p className="wsMuted">Abrufmodus ausdrücklich wählen.</p>}
+              {selectedRpc && <>
+                <p><strong>Gewählter Anbieter: {rpcName(selectedRpc.id)}</strong></p>
+                {!selectedRpc.ready && <p className="wsInlineWarning">{errorText(selectedRpc.blocked_reason, "Dieser Dienst ist nicht abrufbereit. Die gespeicherte Einrichtung prüfen; kein automatischer Ersatzanbieter.")}</p>}
+                <RateLimits limits={selectedRpc.limits} />
+              </>}
+              {!!rpcMode && !selectedRpc && <p className="wsMuted">Anbieter- und Limitinformationen fehlen. Dienst wählen oder Status aktualisieren; kein Abruf freigegeben.</p>}
+              <div className="hiActions"><a className="wsButton" href="#admin">Einrichtung öffnen</a><HelpTip label="Anbieter und Tarif">Die Auswahl ändert keine gespeicherten Limits und startet keinen Abruf. Ein eingerichteter Zugang kann Free oder Premium sein; der Tarif ist nicht verifiziert. Alle gemeinsamen Budgets gelten zusätzlich. Ein anderer Anbieter erfordert einen neuen Auftrag, keinen Wechsel beim Fortsetzen.</HelpTip></div>
+            </div>}
             <p className="wsMuted">Der Abruf erstellt zunächst eine isolierte Vorschau. Noch kein Import und keine steuerliche Quellenaktivierung. Anbieterlimits und mögliche Kosten beachten.</p>
             <label className="hiCheck"><input type="checkbox" checked={externalConsent} onChange={(event) => setExternalConsent(event.target.checked)} /><span>Ich bestätige den externen Anbieterabruf für {sourceLabel} im gewählten Zeitraum.</span></label>
             {blockingJob && <p className="wsMuted">Für diese Quelle besteht bereits ein offener Auftrag. Diesen zuerst fortsetzen, seine Vorschau importieren oder ihn abbrechen.</p>}
@@ -289,9 +356,10 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
     </select></label>}
     {resource.status === "ready" && !ordered.length && !resource.data?.jobs.length && <p className="wsMuted">Für diese Quelle ist noch kein Historienauftrag gespeichert.</p>}
     {job && <section className="hiJob" aria-label="Ausgewählter Historienauftrag">
-      <div className="hiJobHeading"><h3>Auftrag für {sourceLabel}</h3><Badge tone={job.status === "failed" ? "danger" : job.status === "paused" ? "warning" : "neutral"}>{statusNames[job.status]}</Badge></div>
+      <div className="hiJobHeading"><h3>Auftrag für {sourceLabel}</h3><Badge tone={job.status === "failed" ? "danger" : job.status === "paused" ? "warning" : "neutral"}>{jobStatusText(job)}</Badge></div>
       <p className="wsMuted">{job.start} bis {job.end} · Stand: {timestamp(job.updated_at)}</p>
-      <p role="status" aria-live="polite">{statusNames[job.status]} · {job.records_fetched} Datensätze · {job.pages_fetched} Seiten</p>
+      <p role="status" aria-live="polite">{jobStatusText(job)} · {job.records_fetched} Datensätze · {job.pages_fetched} Seiten</p>
+      {job.provider.toLowerCase().includes("solana") && <><PinnedJobProvider job={job} /><JobProgress job={job} stale={!!pollError} /></>}
       <dl className="hiCounts"><div><dt>Datensätze</dt><dd>{job.records_fetched}</dd></div><div><dt>Seiten</dt><dd>{job.pages_fetched}</dd></div><div><dt title="Nur Anfragen erfolgreich gespeicherter Seiten; keine vollständige Anbieterabrechnung">Anfragen gespeicherter Seiten</dt><dd>{job.requests}</dd></div><div><dt>Neu</dt><dd>{job.new_records}</dd></div><div><dt>Duplikate</dt><dd>{job.duplicate_records}</dd></div><div><dt>Importierte Ereignisse</dt><dd>{job.imported_events}</dd></div></dl>
       {job.phase && <p className="wsMuted">Phase: {job.phase}</p>}
       {job.error_code && <p className="wsInlineWarning" role="alert">{errorText(job.error_code, "Der Anbieterabruf wurde nicht vollständig abgeschlossen. Einrichtung und technischen Fehlercode prüfen.")}</p>}
@@ -323,6 +391,104 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
       <details className="wsTechnical"><summary>Technische Auftragsdetails</summary><pre>{JSON.stringify({ source_ref: job.source_ref, id: job.id, provider: job.provider, phase: job.phase, max_records: job.max_records, error_code: job.error_code, preview_sha256: job.preview_sha256, complete_history_proven: job.complete_history_proven, before_summary: job.before_summary, after_summary: job.after_summary, approval: job.approval, sample_rows: job.sample_rows }, null, 2)}</pre></details>
     </section>}
     {capability?.blocked_reason && <details className="wsTechnical"><summary>Technische Einrichtungshinweise</summary><code>{capability.blocked_reason}</code></details>}
+  </section>;
+}
+
+function rpcName(id: HistoryRpcOption["id"]) {
+  return ({ public: "Öffentlicher RPC (Free)", helius: "Helius", alchemy: "Alchemy", custom: "Eigener RPC", legacy: "Älterer RPC-Auftrag (Anbieter nicht eindeutig ausgewiesen)" })[id] ?? "Anbieter unbekannt";
+}
+const measuredNumber = (value: number | null | undefined) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+const numberText = (value: number | null | undefined) => measuredNumber(value) ? new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(value!) : "Unbekannt";
+const safeGroups = (values?: string[]) => (values ?? []).filter((value) => /^(?:provider|ip|project|account|endpoint|budget):[a-zA-Z0-9_.:-]{1,100}$/.test(value));
+const budgetReasons: Record<string, string> = {
+  requests_per_second: "Sekundenbudget", rolling_second: "Sekundenbudget", requests_per_10_seconds: "10-Sekunden-Budget",
+  rolling_10_seconds: "10-Sekunden-Budget", requests_per_minute: "Minutenbudget", rolling_minute: "Minutenbudget",
+  weighted_cost_per_minute: "Lokales Kostenbudget", burst: "Burst-Grenze", max_concurrency: "Parallelitätsgrenze", concurrency: "Parallelitätsgrenze",
+  provider_pause: "Anbieter-Wartehinweis (z. B. 429)", clock_rollback: "Systemzeit zurückgestellt",
+};
+function hasBudgetPause(limits?: HistoryRateState | null) {
+  if (!limits?.available) return false;
+  if (limits.blocking_reasons?.includes("provider_pause")) return true;
+  // Admission limits for the next request do not imply the active request is paused.
+  if (measuredNumber(limits.wait_seconds)) return limits.wait_seconds! >= 1;
+  return (limits.waiting_requests ?? 0) > 0 && limits.in_flight === 0;
+}
+function RateLimits({ limits }: { limits?: HistoryRateState | null }) {
+  if (!limits?.available) return <p className="wsMuted">Wirksame Limits: derzeit nicht verfügbar. Keine zugesicherte Abrufrate.</p>;
+  const groups = safeGroups(limits.budget_groups), bottlenecks = safeGroups(limits.bottlenecks);
+  const waiting = hasBudgetPause(limits);
+  return <div className="hiLimits" aria-label="Wirksame Abruflimits">
+    <div className="hiJobHeading"><strong>Wirksame lokale Limits</strong><HelpTip label="Wirksame Abruflimits">Die serverseitigen Grenzen gelten gleichzeitig: Anbieter, gemeinsame IP und gegebenenfalls weitere Budgetgruppen oder Endpunkte. Das niedrigste passende Budget begrenzt. Die rechnerische Obergrenze ist keine gemessene Geschwindigkeit und keine verifizierte Hersteller- oder Tarifgrenze. Andere Nutzer desselben Budgets können den Abruf weiter verlangsamen.</HelpTip></div>
+    <dl className="hiLimitValues">
+      <div><dt>Anfragen / Sekunde</dt><dd>{numberText(limits.requests_per_second)}</dd></div>
+      <div><dt>Anfragen / 10 Sekunden</dt><dd>{limits.requests_per_10_seconds == null ? "Keine zusätzliche Grenze gemeldet" : numberText(limits.requests_per_10_seconds)}</dd></div>
+      <div><dt>Anfragen / Minute</dt><dd>{numberText(limits.requests_per_minute)}</dd></div>
+      <div><dt>Parallel</dt><dd>{numberText(limits.max_concurrency)}</dd></div>
+      <div><dt>Rechnerische Obergrenze</dt><dd>{numberText(limits.effective_max_requests_per_second)}{measuredNumber(limits.effective_max_requests_per_second) && " Anfragen/s"}</dd></div>
+    </dl>
+    {!!groups.length && <p className="wsMuted">Gemeinsam genutzte Budgets: {groups.map((group, index) => <span key={group}>{index > 0 && ", "}<code>{group}</code></span>)}</p>}
+    {!!bottlenecks.length && <p className="hiBottleneck">Begrenzendes Budget: {bottlenecks.map((group, index) => <span key={group}>{index > 0 && ", "}<code>{group}</code></span>)}</p>}
+    {waiting && <div className="wsInlineWarning" role="status">
+      <strong>Abruf wartet auf Budget / Anbieter</strong>
+      {!!limits.blocking_reasons?.length && <p>{[...new Set(limits.blocking_reasons.map((reason) => budgetReasons[reason] ?? "Weitere Budgetgrenze"))].join(" · ")}</p>}
+      <p>{(limits.wait_seconds ?? 0) > 0 ? `Gemeldete Wartezeit: ca. ${Math.ceil(limits.wait_seconds!)} s.` : "Wartezeit unbekannt."}{limits.retry_at && ` Frühester neuer Versuch: ${timestamp(limits.retry_at)}.`}</p>
+    </div>}
+    {(limits.waiting_requests != null || limits.in_flight != null) && <p className="wsMuted">Wartende Anfragen: {numberText(limits.waiting_requests)} · Laufende Anfragen: {numberText(limits.in_flight)}</p>}
+    {limits.config_revision != null && <p className="wsMuted">Limitkonfiguration: Revision {limits.config_revision}</p>}
+  </div>;
+}
+function PinnedJobProvider({ job }: { job: HistoryJob }) {
+  const pinned = job.transport?.pinned === true && job.transport.kind !== "legacy";
+  return <div className="hiTransport" aria-label="Gebundener Auftragsanbieter">
+    <strong>Auftragsanbieter: {job.transport ? job.transport.label : "Nicht gespeichert (älterer Auftrag)"}</strong>
+    {pinned ? <p className="wsMuted">Fest gebunden. Fortsetzen behält die gespeicherte Anbieterbindung. Ein Anbieterwechsel erfordert einen neuen Auftrag; die Auswahl oben ändert diesen Auftrag nicht.</p>
+      : <p className="wsInlineWarning">Für diesen älteren Auftrag ist keine eindeutige Anbieterbindung dokumentiert. Die Auswahl oben ändert ihn nicht. Für eine explizite Anbieterwahl einen neuen Auftrag anlegen.</p>}
+    {job.transport?.kind === "configured" && <p className="wsMuted">Tarif nicht verifiziert. Ein eingerichteter API-Key belegt keinen Premium-Tarif.</p>}
+    {job.transport && !job.transport.ready && <p className="wsInlineWarning">{errorText(job.transport.blocked_reason, "Der gebundene Dienst ist derzeit nicht abrufbereit. Einrichtung prüfen; kein stiller Wechsel auf einen anderen Anbieter.")}</p>}
+    <RateLimits limits={job.transport?.limits} />
+  </div>;
+}
+function jobStatusText(job: HistoryJob) {
+  return job.status === "running" && (job.progress?.phase === "preparing" || /vorschau.*berechnet/i.test(job.phase))
+    ? "Abruf beendet · Vorschau wird berechnet" : statusNames[job.status];
+}
+function durationText(seconds: number) {
+  if (seconds < 60) return "unter 1 Minute";
+  const minutes = Math.ceil(seconds / 60);
+  return minutes < 60 ? `${minutes} Minuten` : `${Math.floor(minutes / 60)} Std. ${minutes % 60} Min.`;
+}
+function JobProgress({ job, stale }: { job: HistoryJob; stale: boolean }) {
+  const progress = job.progress;
+  if (!progress) return <section className="hiProgress" aria-label="Abruffortschritt"><h3>Abruffortschritt</h3><p className="wsMuted">Für diesen älteren Auftrag fehlen detaillierte Fortschrittsmetadaten. Gesamtzahl und Restzeit: unbekannt.</p><p className="wsMuted">Messstand: {timestamp(job.updated_at)}</p></section>;
+  const total = progress?.inventory_complete && measuredNumber(progress.signatures_total) ? progress.signatures_total! : null;
+  const completed = measuredNumber(progress?.signatures_completed) ? progress!.signatures_completed! : null;
+  const discovery = progress?.phase === "discovery" || progress?.estimate_status === "unknown_total";
+  const stopped = ["paused", "failed", "cancelled"].includes(job.status) || ["paused", "cancelled", "error"].includes(progress?.phase ?? "");
+  const waiting = hasBudgetPause(job.transport?.limits);
+  const fetchComplete = progress?.estimate_status === "fetch_complete" || ["preparing", "complete"].includes(progress?.phase ?? "");
+  const canEstimate = !stale && !stopped && !waiting && job.status === "running" && progress?.phase === "fetch" && total !== null && completed !== null && completed > 0
+    && (progress.observed_details_per_second ?? 0) > 0 && progress.estimate_status === "estimated" && measuredNumber(progress.estimated_fetch_remaining_seconds);
+  const percent = !discovery && total !== null && total > 0 && completed !== null ? Math.min(100, Math.max(0, completed / total * 100)) : null;
+  return <section className="hiProgress" aria-label="Abruffortschritt">
+    <div className="hiJobHeading"><h3>Abruffortschritt</h3><HelpTip label="Restzeitschätzung">Zuerst wird die verfügbare Signaturliste ermittelt. Dabei ist die Gesamtzahl unbekannt; es gibt keinen Gesamtprozentsatz. Erst nach abgeschlossener Liste und gemessenen Detailabrufen wird die Restzeit für diese Details geschätzt. Wartezeiten können sie verlängern. Die anschließende Vorschauberechnung ist nicht enthalten. Auch eine abgearbeitete Liste beweist keine vollständige Wallet-Historie.</HelpTip></div>
+    <ol className="hiPhases">
+      <li aria-current={discovery ? "step" : undefined}><strong>1. Signaturliste ermitteln</strong><span>{progress?.inventory_complete ? "Verfügbare Liste ermittelt" : "Gesamtzahl noch unbekannt"}</span>
+        {measuredNumber(progress?.signatures_discovered) && <span>{numberText(progress?.signatures_discovered)} eindeutige Signaturen gefunden</span>}
+        {measuredNumber(progress?.references_discovered) && <span>{numberText(progress?.references_discovered)} Referenzen geprüft</span>}
+        {measuredNumber(progress?.addresses_completed) && <span>{numberText(progress?.addresses_completed)} / {numberText(progress?.addresses_total)} Adressen geprüft</span>}
+      </li>
+      <li aria-current={progress?.phase === "fetch" ? "step" : undefined}><strong>2. Transaktionsdetails abrufen</strong><span>{total === null ? "Wartet auf bekannte Gesamtzahl" : `${numberText(completed)} / ${numberText(total)} Details abgerufen`}</span>
+        {percent !== null && <><progress value={Math.min(completed!, total!)} max={total!} aria-label="Fortschritt der verfügbaren Transaktionsdetails" /><span>{numberText(Math.floor(percent))} % der verfügbaren Details, nicht der gesamten Historie</span></>}
+      </li>
+    </ol>
+    <p className="hiEstimate"><strong>Restzeit Abruf: </strong>{canEstimate ? `ca. ${durationText(progress!.estimated_fetch_remaining_seconds!)}` : stopped ? "Angehalten, keine laufende Schätzung" : fetchComplete ? "Detailabruf beendet" : waiting ? "Wartet auf Budget / Anbieter, Schätzung ausgesetzt" : "Noch nicht schätzbar"}</p>
+    {canEstimate && <p className="wsMuted">Gemessene Rate: {numberText(progress?.observed_details_per_second)} Details/s. Schätzung nur für verbleibende verfügbare Transaktionsdetails.</p>}
+    {!fetchComplete && !stopped && !waiting && !canEstimate && <p className="wsMuted">Eine Schätzung benötigt eine bekannte Gesamtzahl und gemessene Detailabrufe.</p>}
+    {job.status !== "succeeded" && job.status !== "ready" && <p className="wsMuted">Gesamt-Restzeit einschließlich Vorschauberechnung: unbekannt.</p>}
+    {fetchComplete && job.status === "running" && <p className="wsInlineWarning">Abruf beendet. Die isolierte Vorschau wird separat berechnet; noch keine Importfreigabe möglich.</p>}
+    {stopped && <p className="wsInlineWarning">{job.status === "cancelled" ? "Auftrag abgebrochen." : job.status === "failed" || progress?.phase === "error" ? "Abruf wegen eines Fehlers angehalten." : "Abruf pausiert."} Der gespeicherte Fortschritt ist kein laufender Countdown.</p>}
+    {stale && <p className="wsInlineWarning">Statusaktualisierung fehlgeschlagen. Angezeigte Zähler stammen vom letzten gespeicherten Stand; Restzeit derzeit unbekannt.</p>}
+    <p className="wsMuted">Messstand: {timestamp(progress.updated_at ?? job.updated_at)}</p>
   </section>;
 }
 

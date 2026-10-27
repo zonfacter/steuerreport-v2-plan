@@ -32877,6 +32877,13 @@
             "title": "Requires Symbols",
             "type": "boolean"
           },
+          "rpc_options": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryRpcOption"
+            },
+            "title": "Rpc Options",
+            "type": "array"
+          },
           "source_ref": {
             "title": "Source Ref",
             "type": "string"
@@ -33019,6 +33026,16 @@
             ],
             "title": "Preview Sha256"
           },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistoryProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
@@ -33075,6 +33092,16 @@
             "title": "Status",
             "type": "string"
           },
+          "transport": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistoryRpcOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -33094,6 +33121,315 @@
           "end"
         ],
         "title": "HistoryJob",
+        "type": "object"
+      },
+      "HistoryProgress": {
+        "properties": {
+          "addresses_completed": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addresses Completed"
+          },
+          "addresses_total": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addresses Total"
+          },
+          "estimate_scope": {
+            "const": "available_rpc_transaction_details",
+            "default": "available_rpc_transaction_details",
+            "title": "Estimate Scope",
+            "type": "string"
+          },
+          "estimate_status": {
+            "default": "unknown_total",
+            "enum": [
+              "unknown_total",
+              "warming_up",
+              "estimated",
+              "paused",
+              "fetch_complete",
+              "not_supported",
+              "unavailable"
+            ],
+            "title": "Estimate Status",
+            "type": "string"
+          },
+          "estimated_fetch_remaining_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Fetch Remaining Seconds"
+          },
+          "fetch_elapsed_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetch Elapsed Seconds"
+          },
+          "inventory_complete": {
+            "default": false,
+            "title": "Inventory Complete",
+            "type": "boolean"
+          },
+          "observed_details_per_second": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Details Per Second"
+          },
+          "phase": {
+            "default": "unknown",
+            "enum": [
+              "discovery",
+              "fetch",
+              "preparing",
+              "complete",
+              "paused",
+              "cancelled",
+              "error",
+              "unknown"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "references_discovered": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References Discovered"
+          },
+          "signatures_completed": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signatures Completed"
+          },
+          "signatures_discovered": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signatures Discovered"
+          },
+          "signatures_total": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signatures Total"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "title": "HistoryProgress",
+        "type": "object"
+      },
+      "HistoryRateState": {
+        "properties": {
+          "available": {
+            "default": false,
+            "title": "Available",
+            "type": "boolean"
+          },
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Reasons",
+            "type": "array"
+          },
+          "bottlenecks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bottlenecks",
+            "type": "array"
+          },
+          "budget_groups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Budget Groups",
+            "type": "array"
+          },
+          "config_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Revision"
+          },
+          "effective_max_requests_per_second": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Max Requests Per Second"
+          },
+          "in_flight": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Flight"
+          },
+          "max_concurrency": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Concurrency"
+          },
+          "requests_per_10_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per 10 Seconds"
+          },
+          "requests_per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Minute"
+          },
+          "requests_per_second": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Second"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "wait_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Seconds"
+          },
+          "waiting_requests": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting Requests"
+          }
+        },
+        "title": "HistoryRateState",
         "type": "object"
       },
       "HistoryResume": {
@@ -33122,6 +33458,94 @@
           "confirm_external_request"
         ],
         "title": "HistoryResume",
+        "type": "object"
+      },
+      "HistoryRpcOption": {
+        "properties": {
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "id": {
+            "enum": [
+              "public",
+              "helius",
+              "alchemy",
+              "custom",
+              "legacy"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "public",
+              "configured",
+              "legacy"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistoryRateState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pinned": {
+            "default": true,
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "tariff_verified": {
+            "const": false,
+            "default": false,
+            "title": "Tariff Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind"
+        ],
+        "title": "HistoryRpcOption",
         "type": "object"
       },
       "HistoryStart": {
@@ -33160,6 +33584,23 @@
             "format": "uuid",
             "title": "Request Id",
             "type": "string"
+          },
+          "rpc_provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "public",
+                  "helius",
+                  "alchemy",
+                  "custom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rpc Provider"
           },
           "start": {
             "default": "2020-01-01",
@@ -80760,7 +81201,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc25"
+    "version": "0.2.0rc26"
   },
   "openapi": "3.1.0",
   "paths": {
