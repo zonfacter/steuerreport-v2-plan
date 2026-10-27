@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0rc28 - 2026-10-27 (Releasekandidat)
+
+- Alchemy, Helius und eigene Solana-RPC-Anbieter sind unter Abrufsteuerung
+  direkt als benannte Limitprofile waehlbar, auch vor der ersten Profilspeicherung.
+- Geerbtes Standardprofil und eigenes gespeichertes Anbieterprofil bleiben
+  unterscheidbar. Erst ausdrueckliches Speichern erzeugt oder aendert ein Profil.
+- Gemeinsames IP-Budget direkt erreichbar; niedrigere gemeinsame Limits bleiben
+  wirksam und werden bei der Anbieterbearbeitung erklaert. Kein automatisches
+  Anheben von Quoten, kein Reset und kein Start von Anbieterabfragen.
+- Alchemy CU/s ausdruecklich von Requests/s getrennt. Die bestehenden lokalen
+  Kosten pro Minute sind kein CU/s-Limiter; ein Wert von 500 CU/s wird nicht
+  als 500 Requests/s gespeichert. Helius RPC-/DAS-Grenzen nicht vermischen.
+- Erweiterte Browserpruefung mit echter isolierter Limits-API: zwei getrennte
+  Anbieterprofile, 500 Requests/s als synthetischer Testwert, Persistenz und
+  gemeinsam strengeres IP-Profil; schreibgeschuetzte Auswahl bleibt gesperrt.
+
 ## 0.2.0rc27 - 2026-10-27 (Releasekandidat)
 
 - Enthaelt Anbieterwahl, gepinnte Solana-Auftraege, Inventar und begrenzte

@@ -29,6 +29,30 @@ Konfigurationsstand gebunden. Nach einer konkurrierenden Aenderung wird seine
 Bestaetigung ungueltig; alte Eingaben duerfen keine neuere Tarifgrenze ersetzen.
 Den aktuellen Stand ausdruecklich in das Formular laden und erneut pruefen.
 
+## Alchemy Und Helius Direkt Bearbeiten
+
+Im Feld **Limitprofil** stehen **Alchemy - eigenes Anbieterlimit** und
+**Helius - eigenes Anbieterlimit** sowie eigener RPC und Solana Public RPC
+direkt bereit. Es muss keine technische Gruppen-ID angelegt werden.
+Fehlt ein eigenes Profil, zeigt die Anwendung ausdruecklich die geerbten
+Standardwerte. Erst **Limitprofil speichern** legt das Anbieterprofil an;
+Auswaehlen allein speichert nichts und startet keine externe Anfrage.
+
+Requests/s, Requests/10 s, Requests/min, Burst und Parallelitaet getrennt
+pruefen. Ein eingetragener Sekundenwert hebt kein kleineres Minutenlimit auf.
+**Gemeinsames IP-Limit bearbeiten** oeffnet das zusaetzlich geltende IP-Profil.
+Dessen Wirkung betrifft alle zugeordneten Boersen/RPCs, nicht nur einen Anbieter.
+Keine Limits allein deshalb erhoehen, weil ein neuer API-Key gespeichert wurde.
+
+**Alchemy unterscheidet CU/s von Requests/s.** Laut [Durchsatzdokumentation](https://www.alchemy.com/docs/reference/throughput)
+nutzen Methoden unterschiedlich viele Compute Units. 500 CU/s duerfen deshalb
+nicht als 500 Requests/s eingetragen werden. Die bestehenden lokalen Kosten
+pro Minute sind kein CU/s-Durchsatzlimit; dieses Release bietet dafuer keinen
+eigenen herstellerspezifischen Limiter. Die Quote des konkreten Kontos und
+weitere Anwendungen desselben Alchemy-Kontos muessen beruecksichtigt werden.
+Bei Helius RPC-, DAS-/Enhanced-API- und methodenspezifische Limits unterscheiden.
+Quellenstand fuer diese Hinweise: 27.10.2026, keine individuelle Tarifverifikation.
+
 ## Anbieter fuer einen Historienauftrag waehlen
 
 Unter **Quellen & Wallets -> Transaktionen abrufen** ist die Anbieterwahl

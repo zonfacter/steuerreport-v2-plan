@@ -29,6 +29,7 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc28.md",
     "docs/RELEASE_0.2.0rc27.md",
     "docs/RELEASE_0.2.0rc26.md",
     "docs/RELEASE_0.2.0rc25.md",

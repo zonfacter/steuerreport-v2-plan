@@ -472,6 +472,53 @@ def run_case(browser, base, output, mode, state):
                 require(fresh == final, "Persistenzpruefung mit frischer Serviceinstanz fehlgeschlagen")
                 backend.unchanged_starts(document)
                 require(len(bridge.writes) == 3, bridge.writes)
+            elif mode == "rpc-provider-profiles":
+                # Testwerte, keine Herstellerempfehlung oder automatische Tarifverifikation.
+                for provider, second, minute in (("alchemy", "500", "30000"), ("helius", "50", "3000")):
+                    selector.select_option("provider:" + provider)
+                    expect(limits.get_by_role("status").filter(has_text="noch kein eigenes Profil gespeichert")).to_be_visible()
+                    expect(limits.get_by_label("Neue Budgetgruppen-ID", exact=True)).to_have_count(0)
+                    require(backend.config() == before, "Anbieterwahl hat bereits gespeichert")
+                    if provider == "alchemy":
+                        expect(limits.get_by_text("Alchemy: Einheit des Tarifs prüfen.", exact=True)).to_be_visible()
+                        expect(limits).to_contain_text("500 CU/s")
+                    else:
+                        expect(limits).to_contain_text("DAS-/Enhanced-API-Limits")
+                    limits.get_by_label("Requests pro Sekunde", exact=True).fill(second)
+                    limits.get_by_label("Requests pro Minute", exact=True).fill(minute)
+                    limits.get_by_role("button", name="Limitprofil speichern", exact=True).click()
+                    expect(limits.get_by_role("status").filter(has_text="Lokales Limitprofil gespeichert")).to_be_visible()
+                    saved = backend.config()
+                    preserved_config(before, saved, groups=("provider:" + provider,))
+                    require(saved["group_profiles"]["provider:" + provider]["requests_per_second"] == int(second), saved)
+                    before = saved
+                page.reload(wait_until="domcontentloaded")
+                expect(selector).to_be_enabled()
+                selector.select_option("provider:alchemy")
+                expect(limits.get_by_role("columnheader", name="Wirksames Gruppenlimit", exact=True)).to_be_visible()
+                if not limits.get_by_label("Requests pro Sekunde", exact=True).is_visible():
+                    editor.click()
+                expect(limits.get_by_label("Requests pro Sekunde", exact=True)).to_have_value("500")
+                # Das separat geerbte gemeinsame IP-Budget bleibt absichtlich strenger.
+                expect(limits).to_contain_text("2 Requests/s")
+                for width in (390, 768, 1280, 1440):
+                    page.set_viewport_size({"width": width, "height": 1000})
+                    shot(page, limits, output, f"alchemy-profile-{width}", selector, screenshots)
+                limits.get_by_role("button", name="Gemeinsames IP-Limit bearbeiten", exact=True).click()
+                expect(selector).to_have_value("ip:global")
+                expect(limits.get_by_label("Requests pro Sekunde", exact=True)).to_have_value("2")
+                limits.get_by_role("button", name="Limitprofil speichern", exact=True).click()
+                expect(limits.get_by_role("status").filter(has_text="Lokales Limitprofil gespeichert")).to_be_visible()
+                final = backend.config()
+                preserved_config(before, final, groups=("ip:global",))
+                from steuerreport_v2.domain.request_limits import RequestLimiter
+                fresh = RequestLimiter(state_root=state)
+                require(fresh.read_config().model_dump(mode="json") == final, "Anbieterprofile nicht persistent")
+                require(fresh.profile("alchemy").requests_per_second == 2, "Gemeinsames IP-Limit wird umgangen")
+                require(fresh.profile("helius").requests_per_second == 2, "Helius umgeht gemeinsames IP-Limit")
+                backend.unchanged_starts(document)
+                require(len(bridge.writes) == 3, bridge.writes)
+                document = backend.document()
             elif mode == "legacy":
                 expect(confirm).to_be_enabled()
                 editor.click()
@@ -560,6 +607,10 @@ def run_case(browser, base, output, mode, state):
                            "read-only": "Diese Installation ist schreibgesch\u00fctzt.",
                            "environment-error": "Der Betriebsmodus konnte nicht gepr\u00fcft werden."}[mode]
                 expect(limits.get_by_text(message, exact=False)).to_be_visible()
+                selector.select_option("provider:alchemy")
+                expect(limits.get_by_label("Requests pro Sekunde", exact=True)).to_be_disabled()
+                expect(limits.get_by_role("button", name="Limitprofil speichern", exact=True)).to_be_disabled()
+                require(not bridge.writes, bridge.writes)
             elif mode in {"preset-empty", "preset-error"}:
                 expect(apply).to_have_count(0)
                 message = "Der Server bietet dieses Startprofil nicht an." if mode == "preset-empty" else "Die Preset-Vorschau ist nicht verf\u00fcgbar."
@@ -606,7 +657,7 @@ def run_case(browser, base, output, mode, state):
                 raise AssertionError("Unbekannter Prueffall: " + mode)
         if mode != "writable":
             require(backend.document() == document, "Fehler-/Lesefall hat Zustand veraendert: " + mode)
-            if mode not in {"conflict409", "post-error", "demo-error", "editor409", "legacy", "stale-ceiling"}:
+            if mode not in {"conflict409", "post-error", "demo-error", "editor409", "legacy", "stale-ceiling", "rpc-provider-profiles"}:
                 require(not bridge.writes, bridge.writes)
             shot(page, limits, output, mode + "-1440", limits, screenshots)
         require(not dialogs, {"unexpected_dialogs": dialogs})
@@ -670,7 +721,7 @@ def main():
                 playwright = stack.enter_context(sync_playwright())
                 browser = stack.enter_context(playwright.chromium.launch(headless=True, executable_path=args.browser_executable))
                 base = f"http://127.0.0.1:{server.server_port}"
-                for mode in ("writable", "legacy", "stale-ceiling", "preset-empty", "preset-error", "config-error", "status-error",
+                for mode in ("writable", "rpc-provider-profiles", "legacy", "stale-ceiling", "preset-empty", "preset-error", "config-error", "status-error",
                              "endpoint-error", "environment-error", "read-only", "demo", "preset-conflict",
                              "conflict409", "editor409", "post-error", "demo-error"):
                     print("CHECK", mode, flush=True)

@@ -267,6 +267,10 @@ function limitValue(value: number | null | undefined) {
 function epochTime(value: number | null) { return value === null ? "Nicht gemeldet" : timestamp(new Date(value * 1000).toISOString()); }
 const BLOCK_REASONS: Record<string, string> = { requests_per_second: "Sekundenbudget", rolling_second: "Sekundenbudget", requests_per_10_seconds: "10-Sekunden-Budget", rolling_10_seconds: "10-Sekunden-Budget", requests_per_minute: "Minutenbudget", rolling_minute: "Minutenbudget", weighted_cost_per_minute: "Lokales Kostenbudget", burst: "Burst-Grenze", max_concurrency: "Parallelitätsgrenze", provider_pause: "Wartehinweis des Anbieters", clock_rollback: "Systemzeit zurückgestellt" };
 const REQUEST_PROVIDERS: Record<string, string> = { ...PROVIDERS, solana_rpc: "Solana Public RPC", alchemy: "Alchemy", helius: "Helius", solscan: "Solscan", jupiter: "Jupiter", coingecko: "CoinGecko", cryptocompare: "CryptoCompare", ecb: "EZB", fx: "Wechselkurse", ai_local: "KI lokal", ai_cloud: "KI Cloud", ai_openrouter: "OpenRouter", other: "Sonstige" };
+const RPC_LIMIT_PROVIDERS: Record<string, string> = { alchemy: "Alchemy", helius: "Helius", solana_custom_rpc: "Eigener Solana-RPC", solana_rpc: "Solana Public RPC" };
+function hasInheritedProfile(target: string) {
+  return target === "ip:global" || (target.startsWith("provider:") && Object.hasOwn(RPC_LIMIT_PROVIDERS, target.slice(9)));
+}
 function endpointSelection(target: string): { provider: string; endpoint: string } | null {
   if (!target.startsWith("endpoint-profile:")) return null;
   const [provider, ...endpoint] = target.slice("endpoint-profile:".length).split(":");
@@ -275,7 +279,7 @@ function endpointSelection(target: string): { provider: string; endpoint: string
 function selectedProfile(config: LimitConfig, target: string, provider: string, endpoint: string): LimitProfile | undefined {
   const selection = target === "new-endpoint" ? { provider, endpoint } : endpointSelection(target);
   if (selection) return config.endpoint_profiles?.[selection.provider]?.[selection.endpoint] ?? (target === "new-endpoint" ? config.group_profiles[`provider:${selection.provider}`] ?? config.default_profile : undefined);
-  return target === "default" || target === "new" ? config.default_profile : config.group_profiles[target];
+  return target === "default" || target === "new" ? config.default_profile : config.group_profiles[target] ?? (hasInheritedProfile(target) ? config.default_profile : undefined);
 }
 function documentationUrl(value: string): string | undefined {
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password ? url.href : undefined; } catch { return undefined; }
@@ -310,6 +314,7 @@ export function RequestLimitSettings() {
   const writePending = useRef(false);
   const selection = target === "new-endpoint" ? { provider: endpointProvider, endpoint: endpointName } : endpointSelection(target);
   const base = config.data && selectedProfile(config.data, target, endpointProvider, endpointName);
+  const profileNeedsCreation = !!config.data && hasInheritedProfile(target) && !config.data.group_profiles[target];
   const dirty = !!(draft && base && LIMIT_FIELDS.some(({ key }) => draft[key] !== profileValues(base)[key])) || (target === "new" && !!newGroup) || target === "new-endpoint";
   dirtyRef.current = dirty;
   useEffect(() => { if (config.data && !dirtyRef.current) { const profile = selectedProfile(config.data, target, endpointProvider, endpointName); if (profile) { draftRevision.current = config.data.revision; setDraft(profileValues(profile)); } } }, [config.data, target, endpointProvider, endpointName]);
@@ -334,6 +339,14 @@ export function RequestLimitSettings() {
     return true;
   }
   function finishWrite() { writePending.current = false; setBusy(false); }
+  function chooseProfile(value: string) {
+    if (writePending.current || !config.data) return;
+    if (dirty && !window.confirm("Ungespeicherte Limitänderungen verwerfen?")) return;
+    setTarget(value); setNewGroup(""); setValidation({}); setNotice("");
+    draftRevision.current = config.data.revision;
+    const profile = selectedProfile(config.data, value, endpointProvider, endpointName);
+    setDraft(profile ? profileValues(profile) : null);
+  }
   function updateCeilingDraft(values: Partial<typeof ceilingDraft>) {
     setCeilingDraft((previous) => ({ ...previous, ...values, confirmed: false, revision: previous.revision ?? config.data?.revision ?? null }));
   }
@@ -388,15 +401,15 @@ export function RequestLimitSettings() {
           </form>
         </>}
       </details>
-      <label htmlFor={`${id}-profile`}>Limitprofil</label><select id={`${id}-profile`} value={target} disabled={busy} onChange={(event) => {
-        if (writePending.current) return;
-        if (dirty && !window.confirm("Ungespeicherte Limitänderungen verwerfen?")) return;
-        const value = event.target.value; setTarget(value); setNewGroup(""); setValidation({}); setNotice("");
-        draftRevision.current = config.data!.revision; const profile = selectedProfile(config.data!, value, endpointProvider, endpointName); setDraft(profile ? profileValues(profile) : null);
-      }}><option value="default">Lokales Standardprofil (für nicht separat konfigurierte Gruppen)</option>
-        <optgroup label="Gemeinsame Budgetgruppen">{Object.keys(config.data.group_profiles).sort().map((value) => <option value={value} key={value}>{value}</option>)}</optgroup>
+      <label htmlFor={`${id}-profile`}>Limitprofil</label><select id={`${id}-profile`} value={target} disabled={busy} onChange={(event) => chooseProfile(event.target.value)}><option value="default">Lokales Standardprofil (für nicht separat konfigurierte Gruppen)</option>
+        <optgroup label="Solana-Datenanbieter">{Object.entries(RPC_LIMIT_PROVIDERS).map(([provider, label]) => <option value={`provider:${provider}`} key={provider}>{label} · eigenes Anbieterlimit</option>)}</optgroup>
+        <optgroup label="Gemeinsame Budgetgruppen"><option value="ip:global">Gemeinsame IP · alle Börsen und RPC-Anbieter</option>{Object.keys(config.data.group_profiles).filter((value) => !hasInheritedProfile(value)).sort().map((value) => <option value={value} key={value}>{value}</option>)}</optgroup>
         <optgroup label="Endpunktprofile">{Object.entries(config.data.endpoint_profiles ?? {}).flatMap(([providerName, profiles]) => Object.keys(profiles).sort().map((endpoint) => <option key={`${providerName}:${endpoint}`} value={`endpoint-profile:${providerName}:${endpoint}`}>{REQUEST_PROVIDERS[providerName] ?? providerName} · {endpointNames.get(endpoint) ?? endpoint}</option>))}</optgroup>
         <option value="new">Zusätzliches Budgetgruppenprofil</option><option value="new-endpoint">Endpunktprofil hinzufügen / bearbeiten</option></select>
+      {profileNeedsCreation && <p role="status">Für dieses Budget ist noch kein eigenes Profil gespeichert. Angezeigt wird das geerbte Standardprofil. Erst „Limitprofil speichern“ legt das eigene Profil an; die Auswahl allein ändert nichts.</p>}
+      {target === "provider:alchemy" && <p className="adminInlineHelp"><strong>Alchemy: Einheit des Tarifs prüfen.</strong> CU/s (Compute Units pro Sekunde) sind keine Requests/s. „500 CU/s“ nicht als 500 Requests/s eintragen. Dieses Formular steuert Requestgrenzen und lokale Kosten pro Minute, keinen CU/s-Durchsatz. <a href="https://www.alchemy.com/docs/reference/throughput" target="_blank" rel="noreferrer noopener">Alchemy-Durchsatz und Einheiten</a></p>}
+      {target === "provider:helius" && <p className="adminInlineHelp">Helius unterscheidet RPC-Requests/s von DAS-/Enhanced-API-Limits. Nur die für den verwendeten RPC und eigenen Tarif belegten Werte eintragen. <a href="https://www.helius.dev/docs/billing/rate-limits" target="_blank" rel="noreferrer noopener">Helius-Limits prüfen</a></p>}
+      {target.startsWith("provider:") && hasInheritedProfile(target) && <div className="adminInlineHelp"><p>Dieses Anbieterprofil ist kein Durchsatzversprechen. Sekunden-, 10-Sekunden-, Minuten-, Burst- und Methodenlimits gelten zusätzlich. Der Historienabruf verarbeitet Details weiterhin sequenziell.</p><p>Gemeinsames IP-Profil: {config.data.group_profiles["ip:global"] ? "eigenes Profil" : "geerbtes Standardprofil"} · {limitValue((config.data.group_profiles["ip:global"] ?? config.data.default_profile).requests_per_second)} Requests/s · {limitValue((config.data.group_profiles["ip:global"] ?? config.data.default_profile).requests_per_minute)} Requests/min. Ein niedrigeres gemeinsames Budget begrenzt auch Alchemy und Helius.</p><button type="button" className="ghostButton" disabled={busy} onClick={() => chooseProfile("ip:global")}><Pencil size={16} /> Gemeinsames IP-Limit bearbeiten</button></div>}
       {target === "new-endpoint" && <div className="adminForm"><div className="formGrid">
         <label>Anbieter des Endpunktprofils<select value={endpointProvider} disabled={locked} onChange={(event) => {
           if (draft && base && LIMIT_FIELDS.some(({ key }) => draft[key] !== profileValues(base)[key]) && !window.confirm("Ungespeicherte Limitänderungen verwerfen?")) return;
@@ -410,14 +423,14 @@ export function RequestLimitSettings() {
       {endpoints.status === "error" && <p role="alert" className="adminMessage error">Der Endpunktkatalog konnte nicht geladen werden. Neue Endpunktzuordnungen bleiben gesperrt. <button type="button" className="ghostButton" disabled={busy} onClick={endpoints.reload}>Katalog erneut laden</button></p>}
       {target === "new" && <div className="adminFormField"><label htmlFor={`${id}-new-group`}>Neue Budgetgruppen-ID</label><input id={`${id}-new-group`} type="text" value={newGroup} maxLength={80} disabled={locked} autoComplete="off" spellCheck={false} aria-describedby={`${id}-new-group-help`} aria-invalid={!!validation.group} onChange={(event) => setNewGroup(event.target.value)} /><small id={`${id}-new-group-help`} className="adminInlineHelp">Geheimnisfreie Kennung, z. B. provider:binance, ip:global oder budget:boersen. Ein Gruppenprofil ist erst für zugeordnete Verbindungen bzw. Anbieter wirksam. Keine API-Keys eingeben.</small>{validation.group && <small className="adminFieldError">{validation.group}</small>}</div>}
       <p className="adminInlineHelp">{target === "default" ? "Das Standardprofil ersetzt keine Herstellergrenze. Jede aktive Budgetgruppe erbt es, sofern kein eigenes Profil hinterlegt ist." : selection ? `Endpunktprofil für ${selection.provider} / ${selection.endpoint}. Alle passenden Requests teilen dieses Budget; weitere IP-/Anbietergruppen können strenger begrenzen.` : "Dieses Profil begrenzt die gesamte Budgetgruppe gemeinsam, nicht jedes Konto einzeln. Weitere IP-/Anbietergruppen können strenger begrenzen."}</p>
-      <div className="adminLimitTableWrap" role="region" aria-label="Hersteller, Betreiber und wirksame Limits" tabIndex={0}><table className="adminLimitTable"><caption>Gespeicherter Stand · Revision {config.data.revision}. Wirksame Werte gelten für diese Budgetgruppe einschließlich einer hinterlegten Betreiberdeklaration. Weitere gemeinsame Budgets können zusätzlich strenger begrenzen.</caption><thead><tr><th scope="col">Parameter</th><th scope="col">Herstellergrenze (Betreiberdeklaration)</th><th scope="col">Betreiberwert (gespeichert)</th><th scope="col">Wirksam laut Koordinator</th></tr></thead><tbody>
+      <div className="adminLimitTableWrap" role="region" aria-label="Hersteller, Betreiber und wirksame Limits" tabIndex={0}><table className="adminLimitTable"><caption>Gespeicherter Stand · Revision {config.data.revision}. Wirksame Werte gelten für diese Budgetgruppe einschließlich einer hinterlegten Betreiberdeklaration. Weitere gemeinsame Budgets können zusätzlich strenger begrenzen.</caption><thead><tr><th scope="col">Parameter</th><th scope="col">Herstellergrenze (Betreiberdeklaration)</th><th scope="col">Betreiberwert (gespeichert)</th><th scope="col">Wirksames Gruppenlimit</th></tr></thead><tbody>
         {LIMIT_FIELDS.filter(({ key }) => ["requests_per_second", "requests_per_10_seconds", "requests_per_minute", "weighted_cost_per_minute", "burst", "max_concurrency", "timeout_seconds", "max_retries", "job_deadline_seconds"].includes(key)).map(({ key, label: fieldLabel }) => {
           const cap = providerCeiling && (key === "requests_per_second" || key === "requests_per_10_seconds" || key === "requests_per_minute" || key === "weighted_cost_per_minute") ? providerCeiling[key] : null;
           return <tr key={key}><th scope="row">{fieldLabel}</th><td>{cap == null ? "Unbekannt / nicht bestätigt" : `${limitValue(cap)} · vom Betreiber deklariert, nicht unabhängig verifiziert`}</td><td>{limitValue(key === "requests_per_10_seconds" ? base?.[key] ?? null : base?.[key])}</td><td>{!statusCurrent ? status.status === "error" ? "Koordinatorstatus nicht verfügbar" : "Aktueller Koordinatorstatus wird geprüft" : target === "default" || target === "new" ? "Je zugeordneter Budgetgruppe" : limitValue(observed?.profile[key])}</td></tr>;
         })}
       </tbody></table></div>
       {providerCeiling && <p className="adminInlineHelp">Betreiberdeklaration für Plan {providerCeiling.plan} · Prüfung durch den Betreiber: {providerCeiling.checked_date}. Geltungsbereich: {providerCeiling.scope}. Die Software hat diese Grenze nicht unabhängig verifiziert.</p>}
-      <details className="installationSection" open={target === "new" || target === "new-endpoint" ? true : undefined}><summary>Lokales Betreiberprofil bearbeiten</summary><form className="adminForm" onSubmit={(event) => {
+      <details className="installationSection" open={target === "new" || target === "new-endpoint" || profileNeedsCreation ? true : undefined}><summary>Lokales Betreiberprofil bearbeiten</summary><form className="adminForm" onSubmit={(event) => {
         event.preventDefault(); if (locked || !draft || !base || !config.data) return;
         if (draftConflict) { setError("Die Konfiguration wurde während der Bearbeitung geändert. Ihre Eingaben bleiben erhalten. Neu laden und den aktuellen Stand prüfen, bevor Sie erneut speichern."); return; }
         const errors: Record<string, string> = {};
@@ -451,7 +464,7 @@ export function RequestLimitSettings() {
         <label>Automatisches Sync-Intervall (Sekunden)<input type="number" value={0} disabled aria-describedby={`${id}-sync-help`} /></label><small className="adminInlineHelp" id={`${id}-sync-help`}>0 = deaktiviert. Es gibt derzeit keinen aktivierten periodischen Sync-Scheduler. Speichern eines Profils plant keine Abrufe.</small>
         {validation.endpoint && <p role="alert" className="adminFieldError">{validation.endpoint}</p>}
         {draftConflict && <p role="alert" className="adminMessage error">Die Konfiguration wurde während der Bearbeitung geändert. Ihre Eingaben bleiben erhalten. Neu laden und den aktuellen Stand prüfen; der alte Entwurf wird nicht mit einer neueren Revision gespeichert.</p>}
-        <div><button type="submit" className="primaryButton" disabled={locked || draftConflict || !draft || (selection !== null && endpoints.status !== "ready") || (!dirty && target !== "new")}><Save size={16} /> Limitprofil speichern</button></div>
+        <div><button type="submit" className="primaryButton" disabled={locked || draftConflict || !draft || (selection !== null && endpoints.status !== "ready") || (!dirty && target !== "new" && !profileNeedsCreation)}><Save size={16} /> Limitprofil speichern</button></div>
       </form></details>
       <details className="installationSection"><summary>Gemeinsame Gruppen und Geltungsbereich</summary>
         <p>Börsen-/RPC-Connectoren verwenden das gemeinsame IP-Budget <code>ip:global</code> und ihr Anbieterbudget <code>provider:anbieter</code>. Zusätzliche Gruppen begrenzen gemeinsam. API-Key- oder IP-Wechsel zur Umgehung sind kein Einrichtungsablauf.</p>
