@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0rc35 - 2026-10-28 (Releasekandidat)
+
+- Der reale GitHub-Releasekatalog enthaelt nach Entpacken etwa 606 KB inklusive
+  Asset-Metadaten. Das Seitenlimit steigt begrenzt von 512 KiB auf 1 MiB;
+  Gesamtbudget 2 MiB, maximal fuenf Starts, zentrale Quoten und keine
+  Transport-Retries bleiben unveraendert. Grosse Antworten werden weiterhin
+  begrenzt; keine Umgehung des gemeinsamen HTTP-Transports.
+- Regression fuer grosse, gueltige Asset-Metadaten im produktiven Transportpfad.
+  Keine Aenderung von Steuerformeln oder Finanzdaten durch die Versionspruefung.
+
 ## 0.2.0rc34 - 2026-10-28 (Releasekandidat)
 
 - Uebernimmt die unten dokumentierten rc33-Aenderungen. rc33 wurde nicht
