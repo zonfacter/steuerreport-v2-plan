@@ -51,8 +51,21 @@ def main():
         "browser-fixtures.json": "/tmp/sr-issues-20261028/component-final/result.json",
         "browser-backend.json": "/tmp/sr-issues-20261028/browser-managed-final/result.json",
         "review-browser.json": "/tmp/sr-issues-20261028/review-regression/review-verification.json",
+        "workspace-browser.json": "/tmp/sr-issues-20261028/ux-regression/workspace-verification.json",
+        "review-panel-browser.json": "/tmp/sr-issues-20261028/ux-regression/review-panel-verification.json",
+        "general-ux-browser.json": "/tmp/sr-issues-20261028/ux-regression/verification.json",
         "reference-source-freeze.json": "/tmp/sr-issues-20261028/acceptance-final/bitget-stale-source-freeze.json",
         "updates-source-freeze.json": "/tmp/sr-issues-20261028/managed-focused/updates-source-freeze.json",
+        "source-secret-review.json": "/tmp/sr-issues-20261028/source-secret-review-managed.json",
+        "frontend-build.log": "/tmp/sr-issues-20261028/frontend-build.log",
+        "ruff.log": "/tmp/sr-issues-20261028/ruff.log",
+        "url-utc.log": "/tmp/sr-issues-20261028/url-utc.log",
+        "url-berlin.log": "/tmp/sr-issues-20261028/url-berlin.log",
+        "private-defaults.log": "/tmp/sr-issues-20261028/private-defaults.log",
+        "openapi-drift.log": "/tmp/sr-issues-20261028/openapi-drift.log",
+        "endpoint-drift.log": "/tmp/sr-issues-20261028/endpoint-drift.log",
+        "import-drift.log": "/tmp/sr-issues-20261028/import-drift.log",
+        "ai-guide-drift.log": "/tmp/sr-issues-20261028/ai-guide-drift.log",
     }
     for name, source in originals.items():
         shutil.copyfile(source, out / name)
@@ -73,6 +86,7 @@ def main():
         assert json.loads((out / name).read_text())["passed"]
     for name in ("reference-source-freeze.json", "updates-source-freeze.json"):
         assert json.loads((out / name).read_text())["unchanged"]
+    assert json.loads((out / "source-secret-review.json").read_text())["unreviewed_findings"] == 0
     manifest = {"created_at_utc": datetime.now(timezone.utc).isoformat(), "source_commit": commit,
         "diff_base": BASE, "tests": tests, "financial_approval": False, "production_deployed": False,
         "frontend_build": [{"path": p.relative_to(ROOT).as_posix(), "sha256": sha(p)}
