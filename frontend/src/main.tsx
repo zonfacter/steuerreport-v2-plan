@@ -13,6 +13,7 @@ import { ActivityWorkspace } from "./workspace/Transactions";
 import { ReviewWorkspace } from "./workspace/ReviewWorkspace";
 import { YearWorkspace } from "./workspace/YearWorkspace";
 import { PriceWorkspace } from "./workspace/PriceWorkspace";
+import { LotOriginDetails, LOT_CLASS_LABELS, LOT_LINEAGE_LABELS } from "./workspace/LotOriginDetails";
 import { navigateView, useViewState } from "./workspace/view-state";
 import {
   AlertTriangle,
@@ -2611,6 +2612,7 @@ type Snapshot = {
     status: "blocked" | "review" | "ready_for_professional_review";
     strict_ready: boolean;
     read_only: boolean;
+    origin_trace_policy?: string;
     productive_tax_tables_unchanged: boolean;
     active_global: Record<string, unknown>;
     received_first_global: Record<string, unknown>;
@@ -14852,6 +14854,8 @@ function TaxPanel({
   const activeBusinessInventoryRows = (taxBusinessRewardInventoryReview?.rows ?? []).filter(
     (row) => String(row.disposal_year) === activeYearValue
   );
+  const [selectedLotOrigin, setSelectedLotOrigin] = useState<Record<string, unknown>>();
+  const currentOriginPreview = taxBmfCombinedFifoStaging?.origin_trace_policy === "linked_lot_origin_v1";
   const activeBusinessInventoryTotals = activeBusinessInventoryRows.reduce(
     (
       totals: { potentialLines: number; unresolvedLines: number; potentialGainLoss: number },
@@ -18074,18 +18078,20 @@ function TaxPanel({
             title={`Ursprungssphaere der Verwertungen ${activeYearValue}`}
             rows={activeBusinessInventoryRows.map((row) => ({
               asset: row.asset,
-              origin_source: row.origin_source,
-              origin_event_type: row.origin_event_type,
-              origin_account: row.origin_account,
+              ursprung: [row.origin_source, row.origin_event_type].filter(Boolean).join(" · ") || "Nicht verfügbar",
+              herkunftskette: LOT_LINEAGE_LABELS[String(row.lineage_status)] ?? "Noch nicht verfolgt",
               tax_lines: row.tax_lines_count,
               anschaffung_eur: formatCurrency(row.acquisition_cost_eur),
               veraeusserung_eur: formatCurrency(row.disposal_proceeds_eur),
               gewinn_verlust_eur: formatCurrency(row.gain_loss_eur),
-              classification: row.classification
+              einordnung: LOT_CLASS_LABELS[String(row.classification)] ?? "Noch nicht eingeordnet",
+              lineage_details_full: row
             }))}
+            rowActions={[{ label: "Ursprungslot anzeigen", icon: <GitBranch size={16} />, onClick: (row) => setSelectedLotOrigin(row.lineage_details_full as Record<string, unknown>) }]}
             footer={taxBusinessRewardInventoryReview?.methodology ?? "Reward-Ursprungslot-Audit wird geladen."}
             compact
           />
+          {selectedLotOrigin && <LotOriginDetails row={selectedLotOrigin} onClose={() => setSelectedLotOrigin(undefined)} />}
         </div>
         <TablePanel
           title="Review-only Income Event Preview"
@@ -18403,8 +18409,8 @@ function TaxPanel({
             <span>{formatDateTime(taxBmfCombinedFifoStaging?.generated_at)}</span>
           </div>
           <div className="buttonRow">
-            <span className={`statusPill ${taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "ok" : "blocked"}`}>
-              {taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "pruefbereit" : "fachlich blockiert"}
+            <span className={`statusPill ${currentOriginPreview && taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "ok" : "blocked"}`}>
+              {!taxBmfCombinedFifoStaging ? "Noch kein Prüflauf" : !currentOriginPreview ? "Herkunftsvorschau veraltet" : taxBmfCombinedFifoStaging.status === "ready_for_professional_review" ? "prüfbereit" : "fachlich blockiert"}
             </span>
             <button
               type="button"
@@ -18470,6 +18476,7 @@ function TaxPanel({
               wallet_delta_eur: formatCurrency(row.wallet_scope_delta_eur),
               kombiniert_eur: formatCurrency(row.combined_delta_eur),
               ursprung: Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : "",
+              herkunftsverknuepfung: Array.isArray(row.lineage_issue_codes) && row.lineage_issue_codes.length ? "Herkunftskette offen" : "",
               disposal_event_id: row.disposal_event_id
             }))}
             footer="Vollstaendige IDs bleiben im API-Artefakt und im Zellen-Tooltip erhalten."

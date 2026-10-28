@@ -95,6 +95,7 @@ class BmfFifoEventEvidenceService:
         "missing_raw_evidence",
         "missing_onchain_identifier",
         "received_price_missing",
+        "lot_origin_unresolved",
     }
     SCOPES = (
         _Scope(
@@ -168,6 +169,7 @@ class BmfFifoEventEvidenceService:
         ).input_fingerprint(staging.as_of)
         staging_matches_current_input = (
             staging.input_fingerprint_digest == current_input_fingerprint.digest
+            and staging.origin_trace_policy == BmfCombinedFifoStagingService.ORIGIN_TRACE_POLICY
         )
         staging_matches_current = (
             staging.productive_tax_component_sha256 == productive_before
@@ -177,7 +179,9 @@ class BmfFifoEventEvidenceService:
             row
             for row in staging.top_events
             if self._scope_for(row) is not None
-            and self._material_delta(row) >= request.min_abs_delta_eur
+            and (self._material_delta(row) >= request.min_abs_delta_eur
+                 or row.lineage_issue_codes
+                 or set(row.origin_classifications) & self.REVIEW_ORIGIN_CLASSIFICATIONS)
         ]
         eligible.sort(key=self._row_sort_key)
         selected = eligible[: request.limit]
@@ -356,6 +360,8 @@ class BmfFifoEventEvidenceService:
             ),
             full_ledger_scope=full_ledger_scope,
         )
+        if staging.origin_trace_policy != BmfCombinedFifoStagingService.ORIGIN_TRACE_POLICY:
+            findings.append("Der gespeicherte Prueflauf verwendet noch die fruehere direkte Herkunftszuordnung. Eine neue isolierte Herkunftsvorschau ist erforderlich; alte Artefakte bleiben unveraendert.")
         if full_ledger_scope:
             unknown_tax_graph_events = sum(
                 1
@@ -1617,10 +1623,17 @@ class BmfFifoEventEvidenceService:
                 for item in acquisition_evidence
             }
         )
+        if row.lineage_issue_codes:
+            resolved_origin_classifications = sorted(set(resolved_origin_classifications) | {"missing_origin"})
+        elif not acquisition_evidence:
+            resolved_origin_classifications = sorted(set(row.origin_classifications) & self.REVIEW_ORIGIN_CLASSIFICATIONS)
         issue_event_ids = [
             item.event_id for item in acquisition_evidence if item.status != "ready"
         ]
         issue_codes = list(disposal.issue_codes)
+        if row.lineage_issue_codes:
+            issue_codes.append("lot_origin_unresolved")
+            issue_codes.extend("lot_origin:" + code for code in row.lineage_issue_codes)
         issue_codes.extend(
             code
             for item in acquisition_evidence
@@ -1688,6 +1701,8 @@ class BmfFifoEventEvidenceService:
             acquisition_issue_event_ids_truncated=len(issue_event_ids) > 50,
             acquisition_evidence_digest=acquisition_digest,
             origin_classifications=resolved_origin_classifications,
+            lineage_issue_codes=row.lineage_issue_codes,
+            direct_acquisition_event_ids=row.direct_acquisition_event_ids,
             status=status,
             issue_codes=issue_codes,
             asset_fifo_drilldown_endpoint=(
@@ -1727,10 +1742,14 @@ class BmfFifoEventEvidenceService:
                 ]
                 if classification in self.REVIEW_ORIGIN_CLASSIFICATIONS
             }
+            | {"lot_origin_unresolved" for row in selected if row.lineage_issue_codes}
+            | {"lot_origin:" + code for row in selected for code in row.lineage_issue_codes}
+            | {"origin:" + classification for row in selected if not row.acquisition_source_event_ids
+               for classification in row.origin_classifications if classification in self.REVIEW_ORIGIN_CLASSIFICATIONS}
         )
         if not selected:
             status = "not_applicable"
-        elif any(item.status == "blocked" for item in evidence):
+        elif any(item.status == "blocked" for item in evidence) or set(issue_codes) & self.BLOCKING_EVENT_CODES:
             status = "blocked"
         elif issue_codes:
             status = "review"

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from hashlib import sha1
 import json
+from types import SimpleNamespace
 
 from steuerreport_v2.contracts.review import (
     ReviewDecisionSuggestion,
@@ -67,6 +68,23 @@ class ReviewService:
                 issues.append(ReviewIssue(code=code, severity="high", scope=f"correction:{kind}:{target_id}",
                                           message="Freigegebene Datenkorrektur stimmt nicht mit dem aktuellen Datenstand ueberein.", blocks_export=True))
         positions = BalanceLedgerBuilder(self.store).positions()
+
+        from steuerreport_v2.domain.lot_origin import LotOriginIndex
+        origin_events = self.store.list_canonical_events()
+        origin_index = LotOriginIndex(TaxService(self.store).list_tax_lots(), origin_events)
+        with self.store.connect() as con:
+            origin_lines = con.execute("""select tax_line_id,source_event_id,lot_id,asset,acquired_at,
+                disposed_at,pool_id,origin_lot_id,acquisition_source_event_id from tax_lines
+                order by disposed_at,tax_line_id""").fetchall()
+        for values in origin_lines:
+            line = SimpleNamespace(**dict(zip(("tax_line_id", "source_event_id", "lot_id", "asset",
+                "acquired_at", "disposed_at", "pool_id", "origin_lot_id", "acquisition_source_event_id"), values)))
+            trace = origin_index.resolve(line)
+            if trace.status == "unresolved":
+                issues.append(ReviewIssue(code="lot_origin_unresolved", severity="high",
+                    scope=f"event:{line.source_event_id}:lot:{line.lot_id}", blocks_export=True,
+                    tax_year=reporting_tax_year(line.disposed_at),
+                    message=f"Die gespeicherte Anschaffungsherkunft fuer {line.asset} ist nicht vollstaendig oder widerspruchsfrei verknuepft ({trace.reason}). Originale Ereignis- und Lotverweise pruefen; keine automatische private Einordnung."))
 
         with self.store.connect() as con:
             zero_basis = con.execute("""
