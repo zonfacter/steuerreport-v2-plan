@@ -732,6 +732,8 @@ class WalletFifoParallelRunService:
                     """,
                 ),
             }
+        from steuerreport_v2.domain.token_conversion import config_binding
+        component_sha256["token_conversion_config"] = config_binding()
         payload = {
             "as_of": as_of.isoformat(),
             "schema_version": schema_version,

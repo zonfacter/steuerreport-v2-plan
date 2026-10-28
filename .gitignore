@@ -46,3 +46,5 @@ dist/
 *.log
 tmp/
 temp/
+# Vom Betreiber gelieferte Recherche-/Browserdaten bleiben lokal.
+/docs/blockpit-analysis/

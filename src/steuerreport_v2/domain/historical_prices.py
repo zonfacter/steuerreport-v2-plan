@@ -190,6 +190,8 @@ class HistoricalPriceService:
         return rows
 
     def _finish_plan(self, query, rows):
+        from steuerreport_v2.domain.asset_identity import AssetIdentityIndex
+        AssetIdentityIndex(self.store).apply_to_plan(rows, self.mappings(), provider=query.provider)
         if len(rows) > 50_000:
             fail("historical_price_plan_too_large")
         context = self._source_context(query)

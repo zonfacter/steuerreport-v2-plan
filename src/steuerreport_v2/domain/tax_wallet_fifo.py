@@ -627,6 +627,7 @@ class WalletFifoPreviewService:
     def _evidence_cache_fingerprint(self, year: int | None) -> tuple[object, ...]:
         paths = [
             self.source_registry_config_path,
+            private_config_path("token_conversion_mappings.json"),
             self.service_swap_tax_mapping_config_path,
             self.moonpay_receipts.trade_history_path,
             self.moonpay_receipts.alchemy_audit_path,
@@ -657,8 +658,10 @@ class WalletFifoPreviewService:
             except OSError:
                 fingerprint.append((str(path), False, 0, 0))
                 continue
-            fingerprint.append((str(path), True, stat.st_size, stat.st_mtime_ns))
-        return tuple(fingerprint)
+            fingerprint.append((str(path), True, stat.st_size, stat.st_mtime_ns,
+                                hashlib.sha256(path.read_bytes()).hexdigest()))
+        from steuerreport_v2.domain.token_conversion import config_binding
+        return tuple(fingerprint) + (("token_conversion_inputs", config_binding()),)
 
     def _preview_disk_cache_path(
         self, cache_key: tuple[str, str, tuple[object, ...]]
@@ -2332,6 +2335,15 @@ class WalletFifoPreviewService:
                 target_event_id=target_event.event_id,
                 factor=Decimal("1000"),
             )
+        from steuerreport_v2.domain.token_conversion import TokenConversionService
+        for record in TokenConversionService(self.store).report(events)["ready"]:
+            if self._pool_id(record.source) != self._pool_id(record.target):
+                continue
+            anchors[record.source.event_id] = _TokenRedenominationAnchor(
+                source_event_id=record.source.event_id,
+                target_event_id=record.target.event_id,
+                factor=record.factor,
+            )
         return anchors
 
     def _process_token_redenomination(
@@ -2344,6 +2356,7 @@ class WalletFifoPreviewService:
     ) -> tuple[WalletFifoTransferTrace, list[WalletFifoPreviewUnmatched]]:
         pool_id = self._pool_id(source_event)
         asset = source_event.asset.upper()
+        target_asset = target_event.asset.upper()
         lots = lots_by_pool_asset[(pool_id, asset)]
         quantity_to_convert = abs(source_event.quantity)
         quantity_tolerance = Decimal("0.000000000001")
@@ -2361,7 +2374,7 @@ class WalletFifoPreviewService:
             converted.append(
                 self._lot_from_values(
                     pool_id=pool_id,
-                    asset=asset,
+                    asset=target_asset,
                     acquired_at=source_lot.acquired_at,
                     quantity=used * anchor.factor,
                     cost_basis_eur_total=source_lot.cost_basis_eur_total * ratio,
@@ -2382,7 +2395,12 @@ class WalletFifoPreviewService:
             if abs(target_quantity_delta) <= quantity_tolerance * anchor.factor:
                 converted[-1].quantity_total += target_quantity_delta
                 converted[-1].quantity_remaining += target_quantity_delta
-        lots.extend(converted)
+        target_lots = lots_by_pool_asset[(pool_id, target_asset)]
+        target_lots.extend(converted)
+        if target_asset != asset:
+            target_lots = deque(sorted(target_lots, key=lambda lot: (
+                lot.acquired_at.replace(tzinfo=None), lot.source_event_id, lot.origin_lot_id or "")))
+            lots_by_pool_asset[(pool_id, target_asset)] = target_lots
         missing: list[WalletFifoPreviewUnmatched] = []
         if quantity_to_convert > 0:
             missing.append(
@@ -2400,7 +2418,7 @@ class WalletFifoPreviewService:
             )
         return WalletFifoTransferTrace(
             tx_id=f"redenomination:{source_event.event_id}:{target_event.event_id}",
-            asset=asset,
+            asset=target_asset,
             event_time=target_event.event_time,
             source_pool_id=pool_id,
             target_pool_id=pool_id,

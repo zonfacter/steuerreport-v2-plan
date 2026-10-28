@@ -48,6 +48,15 @@ class ReviewService:
 
     def gate(self, price_coverage: PriceCoverageReport | None = None) -> ReviewGate:
         issues: list[ReviewIssue] = []
+        from steuerreport_v2.domain.asset_identity import AssetIdentityIndex
+        for asset, reason in sorted(AssetIdentityIndex(self.store).problems.items()):
+            issues.append(ReviewIssue(code=reason, severity="high", scope=f"asset_identity:{asset}",
+                blocks_export=True, message=f"Tokenidentitaet fuer {asset} nicht eindeutig oder Mengeneinheit widerspruechlich ({reason}). Originale Chain-/Contract-/Dezimalstellen pruefen; keine Freigabe aufgrund des Symbols."))
+        from steuerreport_v2.domain.token_conversion import TokenConversionService
+        for item in TokenConversionService(self.store).report()["issues"]:
+            issues.append(ReviewIssue(code=item["reason"], severity="high",
+                scope=f"token_conversion:{item['event_id'] or 'config'}", blocks_export=True,
+                message="Migration/Wrapping ohne aktuelle eindeutige Beleg-, Mengen- oder Methodenbindung. Keine automatische 1:1-Paritaet oder neutrale Fortschreibung."))
         from steuerreport_v2.db.ai_corrections import conflicts
         with self.store.connect() as con:
             for kind, target_id, code in conflicts(con):

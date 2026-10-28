@@ -43891,6 +43891,32 @@
             ],
             "title": "Coingecko Id"
           },
+          "contract_address": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Address"
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "maximum": 255.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decimals"
+          },
           "defillama_id": {
             "anyOf": [
               {
@@ -43902,6 +43928,18 @@
               }
             ],
             "title": "Defillama Id"
+          },
+          "network": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9:_-]{0,60}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Network"
           },
           "solana_mint": {
             "anyOf": [
