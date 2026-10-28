@@ -27,7 +27,7 @@ jobs:
         run: |
           python scripts/check_reference_baseline_v2.py
           python -m pytest docs/audit/2026-10-28/acceptance_tests.py -q --junitxml=reference-original.xml
-      - name: Additional independent FX and identity probes
+      - name: Independent FX, identity and lot-origin probes
         env:
           PYTHONPATH: src
         run: python -m pytest tests/acceptance -q --basetemp="${RUNNER_TEMP}/reference-additional" --junitxml=reference-additional.xml
@@ -111,6 +111,9 @@ jobs:
       - name: Review context browser checks against actual isolated backend
         working-directory: .
         run: python scripts/check_review_backend_browser_v2.py
+      - name: Lot-origin details with isolated backend and synthetic companion data
+        working-directory: .
+        run: python scripts/check_lot_origin_browser_v2.py --output "${RUNNER_TEMP}/lot-origin-browser"
       - name: Protected wallet setup against actual isolated backend
         working-directory: .
         run: python scripts/check_wallet_setup_browser_v2.py
@@ -137,6 +140,7 @@ jobs:
           path: |
             artifacts/ux-browser/
             artifacts/ux-review-fixes/
+            ${{ runner.temp }}/lot-origin-browser/
             artifacts/source-history-browser/
             artifacts/source-history-backend-browser/
             ${{ runner.temp }}/history-provider-eta-browser/

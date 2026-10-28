@@ -18475,8 +18475,7 @@ function TaxPanel({
               preisdelta_eur: formatCurrency(row.price_policy_delta_eur),
               wallet_delta_eur: formatCurrency(row.wallet_scope_delta_eur),
               kombiniert_eur: formatCurrency(row.combined_delta_eur),
-              ursprung: Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : "",
-              herkunftsverknuepfung: Array.isArray(row.lineage_issue_codes) && row.lineage_issue_codes.length ? "Herkunftskette offen" : "",
+              ursprung: [Array.isArray(row.lineage_issue_codes) && row.lineage_issue_codes.length ? "Herkunftskette offen" : "", Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : ""].filter(Boolean).join(" · "),
               disposal_event_id: row.disposal_event_id
             }))}
             footer="Vollstaendige IDs bleiben im API-Artefakt und im Zellen-Tooltip erhalten."

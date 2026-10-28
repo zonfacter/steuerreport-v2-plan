@@ -190,3 +190,7 @@
 .lotOriginDetails dt { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .lotOriginDetails dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .lotOriginDetails code { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .lotOriginDetails { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .lotOriginDetails dd { margin-bottom: 12px; }
+}

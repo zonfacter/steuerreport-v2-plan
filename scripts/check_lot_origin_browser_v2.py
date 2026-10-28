@@ -114,7 +114,7 @@ def main():
                         return
                 except ValueError:
                     pass
-                fixture.send(route, {})
+                fixture.send(route, None)
             page.route("**/*", bridge)
             expect.set_options(timeout=30000)
             page.goto(origin + "/#tax?tab=details&year=2024", wait_until="networkidle")

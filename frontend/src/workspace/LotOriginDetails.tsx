@@ -14,6 +14,7 @@ export function LotOriginDetails({ row, onClose }: { row: Record<string, unknown
   const text = (value: unknown) => value == null || value === "" ? "Nicht verfügbar" : String(value);
   const path = Array.isArray(row.sample_lot_path) ? row.sample_lot_path.filter((value): value is string => typeof value === "string") : [];
   return <DetailPanel title="Ursprung der Verwertung" onClose={onClose}>
+    {Number(row.tax_lines_count) > 1 && <p>{text(row.tax_lines_count)} zusammengefasste Verwertungszeilen. Die Ereignis-IDs und die Lot-Kette zeigen ein Beispiel; Beträge sind Gruppensummen.</p>}
     <dl className="lotOriginDetails">
       <dt>Asset</dt><dd>{text(row.asset)}</dd>
       <dt>Einordnung</dt><dd>{LOT_CLASS_LABELS[String(row.classification)] ?? "Noch nicht eingeordnet"}</dd>
