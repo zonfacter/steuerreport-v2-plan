@@ -1,6 +1,55 @@
 # Unabhaengige Abnahme G01-G25
 
-## Finaler Freeze-Lauf
+## Addendum b036b8a
+
+Letzter gepruefter Freeze: **b036b8ad4212d08d719fedec7dbc7115cf5704a9**.
+`audit/docker-migration-20261028` wurde vor dem Merge auf exakt diesen SHA
+aufgeloest; gemergt wurde der konkrete SHA, nicht ein spaeter fortgeschriebener
+Branch. Eigener Merge-Commit: `45349a4bb65e2eaa5647286a93a777621aa11b03`.
+Vor Berichtsaenderung war `git diff b036b8a HEAD --stat` leer. Auch der
+gesonderte Vergleich von `src`, `configs` und Versions-/Compose-Dateien war leer.
+
+Realrun vom 28.10.2026, Start11:04:40UTC: **52 Teilproben, 51 PASSED,
+1 FAILED, 0 skipped/xfail, 0 Collectionfehler, 135,51 Sekunden, Exitstatus1**.
+Der strukturierte Vergleich beider XML-Dateien bestaetigt exakt dieselben
+52Testnamen und Einzelergebnisse wie im ae8c30e-Lauf. Einziger Fehler bleibt
+`test_G04_drittassetgebuehr_lotverbrauch_teilprobe`: BNB-Lotbestand
+`1.000000000000000000` statt `0.9` nach der synthetischen Gebuehr0.1.
+Dieser Failure bleibt ungefiltert rot, nicht xfail. Die nachstehende
+G01-G25-Fallabgrenzung gilt mit unveraenderten Teilumfaengen weiterhin;
+insbesondere keine Gesamtfreigabe und G08/G09/G18/G19 weiterhin nicht geprueft.
+
+Der Testcode ist unveraendert, SHA256:
+`09f674b350a9a83943df8980bbceafd88821ee1400e03b5b22ea1ee0f8cd6bfb`.
+Keine Quellen-, Konfigurations-, Versions-, Fixture- oder Sollwertkorrekturen
+durch diesen Abnahmelauf. Nach dem Merge wurde nur dieser Bericht editiert.
+Die parallele Vollunit-Suite mit8isolierten Workern ist ein gesonderter
+Koordinatorennachweis; ihre Ergebnisse werden hier nicht vereinnahmt.
+Die Laufzeit ist unter dieser Parallellast kein Performancevergleich.
+
+```sh
+env PYTHONPATH=src:/tmp/steuerreport-connector-tools-20261026:/tmp/steuerreport-release-tools-20261025 \
+  python3 -B -m pytest docs/audit/2026-10-28/acceptance_tests.py \
+  --basetemp /tmp/steuerreport-migration-20261028-acceptance-tests/pytest-freeze-b036b8a \
+  -q --tb=short \
+  -o cache_dir=/tmp/steuerreport-migration-20261028-acceptance-tests/pytest-cache \
+  --junitxml=/tmp/steuerreport-migration-20261028-acceptance-tests/freeze-b036b8a.xml
+```
+
+XML nur im eigenen synthetischen Testroot ausserhalb des Repos, SHA256:
+`e2782bc8ae498995dcdbe05313c6d153bac0674a81cd6792f3e441bf00d0175f`.
+Keine Produktivdatenbank und kein externer Netzwerk-/API-/KI-Zugriff.
+
+**Neue Aenderungsflaechen nicht pauschal abgenommen:** Die seit ae8c30e
+hinzugekommenen AsOf-/Divorce-Last-known-Diagnosepfade, der genaue
+blocked-versus-stale-HTTP-Fehlervertrag und Registry-unpriced-Review sind keine
+zusaetzlichen eigenen Proben dieses unveraenderten52er-Satzes. Die vorhandenen
+G10-Steuer-/Coverage-/Review-/Export-Fixtures bleiben bestanden; das beweist
+keine vollstaendige Pruefung aller Diagnoseaufrufer oder aller neuen API-Codes.
+G21 prueft die Domain-PDF-Sperre, nicht separat den geaenderten HTTP-Fehlercode.
+Ein neuer Blocking-Gate erfuellt weiterhin nicht den fehlenden G04-Lotverbrauch.
+
+## Vorlauf ae8c30e
 
 Gepruefter Freeze: **ae8c30eb3e4f36849a6b31ae26a7aaf35c60636e**.
 Eigener Merge-Commit: `7d2f586646f47b325b9e10e9a51cd226cfe783d0`;
