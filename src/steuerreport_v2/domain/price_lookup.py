@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -18,6 +19,15 @@ from steuerreport_v2.domain.price_policy import (
 
 
 FIAT_EUR_ASSETS = {"EUR"}
+
+
+@dataclass(frozen=True)
+class LastKnownPriceDiagnostic:
+    asset: str
+    cutoff: datetime
+    point: PricePoint | None
+    policy_id: str = "diagnostic_last_known_non_derived_not_after"
+    policy_version: int = 1
 
 
 def fiat_price_point(asset: str, priced_at: datetime | None = None) -> PricePoint | None:
@@ -90,6 +100,20 @@ class HistoricalPriceLookup:
         if same_day_primary:
             return max(same_day_primary, key=self._selection_key)
         return max(candidates, key=self._selection_key)
+
+    def last_known_for_diagnostics(
+        self, asset: str, priced_at: datetime,
+    ) -> LastKnownPriceDiagnostic:
+        """Reference only: never a replacement for an admitted historical price."""
+        cutoff = as_utc(priced_at)
+        point = fiat_price_point(asset, cutoff)
+        if point is None:
+            point = max((
+                candidate for candidate in self._points.get(asset.upper(), [])
+                if candidate.priced_at <= cutoff and candidate.price_eur > 0
+                and not self.is_derived_source(candidate.source)
+            ), key=self._selection_key, default=None)
+        return LastKnownPriceDiagnostic(asset=asset.upper(), cutoff=cutoff, point=point)
 
     def explain(
         self,

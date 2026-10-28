@@ -33,6 +33,7 @@ from steuerreport_v2.domain.divorce_service_routes import (
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
 from steuerreport_v2.domain.portfolio import PortfolioService
+from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.stichtag_token_valuation import (
     StichtagTokenValuationService,
 )
@@ -1230,6 +1231,8 @@ class DivorceEqualizationService:
         positions: list[object],
         valuation_at: datetime,
         materiality_threshold_eur: Decimal,
+        *,
+        diagnostics: HistoricalPriceLookup | None = None,
     ) -> DivorceValuationGate:
         same_day = 0
         prior_day = 0
@@ -1250,7 +1253,20 @@ class DivorceEqualizationService:
                 price_source=position.price_source,
                 valuation_at=valuation_at,
             )
-            if price_status != "missing" and value_eur < materiality_threshold_eur:
+            if price_status == "missing":
+                if diagnostics is None:
+                    diagnostics = HistoricalPriceLookup(self.store)
+                reference = diagnostics.last_known_for_diagnostics(asset, valuation_at).point
+                # Old references classify the gap, never fill the position or its value.
+                if reference is not None:
+                    age, diagnostic_status = self._price_status(
+                        priced_at=reference.priced_at,
+                        price_source=reference.source,
+                        valuation_at=valuation_at,
+                    )
+                    if age is not None and age > 0:
+                        price_status = diagnostic_status
+            if price_status == "same_day" and value_eur < materiality_threshold_eur:
                 continue
             material += 1
             token_assessment = self.token_valuation_service.assessment(
@@ -1286,11 +1302,11 @@ class DivorceEqualizationService:
         findings: list[str] = []
         if prior_day:
             findings.append(
-                f"{prior_day} materielle Positionen nutzen den Preis des Vortags."
+                f"{prior_day} Positionen haben nur einen Vortagskurs als Diagnose; keine Wertfreigabe."
             )
         if stale:
             findings.append(
-                f"{stale} materielle Positionen nutzen veraltete oder abgeleitete Preise."
+                f"{stale} Positionen haben veraltete oder abgeleitete Preisreferenzen; keine Wertfreigabe."
             )
         if missing:
             findings.append(f"{missing} materielle Positionen besitzen keinen Preis.")
