@@ -40,14 +40,16 @@ from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 from steuerreport_v2.domain.tax_years import TaxYearService
 
 
-ROOT = Path("/tmp/sr-origin-20261028-independent")
+ROOT: Path | None = None
 ACQUIRED = datetime(2024, 1, 10, 12, tzinfo=timezone.utc)
 DISPOSED = datetime(2024, 7, 1, 12, tzinfo=timezone.utc)
 AS_OF = datetime(2024, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def frozen_consumer_sources(request):
+def frozen_consumer_sources(request, tmp_path_factory):
+    global ROOT
+    ROOT = tmp_path_factory.getbasetemp().resolve()
     repo = Path(__file__).resolve().parents[2]
     names = (
         "domain/lot_origin.py",
@@ -95,6 +97,7 @@ def frozen_consumer_sources(request):
 
 
 def _budget():
+    assert ROOT is not None
     size = sum(p.stat().st_size for p in ROOT.rglob("*") if p.is_file())
     assert size < 500 * 1024 * 1024, f"Eigenes Tmpbudget ueberschritten: {size}"
     return size
@@ -102,6 +105,7 @@ def _budget():
 
 @pytest.fixture
 def case(tmp_path, monkeypatch, request):
+    assert ROOT is not None
     assert tmp_path.resolve().is_relative_to(ROOT)
     config = tmp_path / "private-configs"
     config.mkdir()
