@@ -1,0 +1,2 @@
+# Originale Auditbelege duerfen beim Checkout nicht umformatiert werden.
+docs/audit/2026-10-28/blocker-closure/evidence/** -text
