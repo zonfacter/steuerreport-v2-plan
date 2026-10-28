@@ -56,7 +56,8 @@ class ReviewService:
             issues.append(ReviewIssue(code=reason, severity="high", scope=f"asset_identity:{asset}",
                 blocks_export=True, message=f"Tokenidentitaet fuer {asset} nicht eindeutig oder Mengeneinheit widerspruechlich ({reason}). Originale Chain-/Contract-/Dezimalstellen pruefen; keine Freigabe aufgrund des Symbols."))
         from steuerreport_v2.domain.token_conversion import TokenConversionService
-        for item in TokenConversionService(self.store).report()["issues"]:
+        conversion_report = TokenConversionService(self.store).report()
+        for item in conversion_report["issues"]:
             issues.append(ReviewIssue(code=item["reason"], severity="high",
                 scope=f"token_conversion:{item['event_id'] or 'config'}", blocks_export=True,
                 message="Migration/Wrapping ohne aktuelle eindeutige Beleg-, Mengen- oder Methodenbindung. Keine automatische 1:1-Paritaet oder neutrale Fortschreibung."))
@@ -82,10 +83,33 @@ class ReviewService:
                 message=f"Fuer {asset} ist eine Nullkostenbasis gespeichert. Anschaffung, Herkunft und ein gegebenenfalls begruendeter Nullansatz sind gesondert zu belegen; keine automatische Anerkennung."))
 
         fee_service = TaxService(self.store)
+        with self.store.connect() as con:
+            fee_marker = con.execute("select value_json from admin_settings where key='tax.fee_accounting_binding'").fetchone()
+            fee_line_quantities = {(event_id, asset.upper()): quantity for event_id, asset, quantity in con.execute(
+                "select source_event_id,asset,sum(quantity) from tax_lines group by 1,2").fetchall()}
+            carried_quantities = dict(con.execute("select source_event_id,sum(quantity_total) from tax_lots group by 1").fetchall())
+        has_current_fee_run = fee_marker is not None and fee_marker[0] == json.dumps(fee_service.fee_input_binding())
+        for conversion in conversion_report["ready"]:
+            if (not has_current_fee_run
+                    or carried_quantities.get(conversion.target.event_id) != conversion.target.quantity):
+                issues.append(ReviewIssue(code="token_conversion_recalculation_required", severity="high",
+                    scope=f"token_conversion:{conversion.mapping.mapping_id}", blocks_export=True,
+                    message="Belegbindung ist vorhanden, aber gespeicherte Konvertierungslots sind nicht durch einen aktuellen Berechnungslauf nachgewiesen. Keine automatische Uebernahme oder Jahresfreigabe."))
         for event in self.store.list_canonical_events():
             fee = fee_service.trade_fee_accounting(event)
             if fee is None:
                 continue
+            expected_quantity = fee.quantity
+            if fee.separate_disposal:
+                if event.quantity < 0 and event.asset.upper() == fee.asset:
+                    expected_quantity += abs(event.quantity)
+                elif event.quantity > 0 and str(event.quote_asset or "").upper() == fee.asset:
+                    expected_quantity += abs(event.quote_quantity or Decimal("0"))
+            if (not has_current_fee_run or fee.separate_disposal
+                    and fee_line_quantities.get((event.event_id, fee.asset), Decimal("0")) != expected_quantity):
+                issues.append(ReviewIssue(code="fee_accounting_recalculation_required", severity="high",
+                    scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),
+                    message="Gespeicherter Gebuehrenverbrauch ist nicht durch einen aktuellen gebundenen Berechnungslauf belegt. Vorschau neu berechnen und pruefen; ein vorhandener Kurs allein reicht nicht."))
             if fee.allocation == "review_required":
                 issues.append(ReviewIssue(code="swap_fee_allocation_review_required", severity="high",
                     scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),

@@ -146,9 +146,16 @@ class AssetIdentityIndex:
             if identity:
                 row["asset_identity"] = {"network": identity.network, "contract_address": identity.contract,
                                          "decimals": identity.decimals, "basis": "original_raw_object"}
-                if not reason and provider == "defillama":
+                mapping = mappings.get(symbol, {})
+                if (provider == "coingecko" and identity.network != "solana"
+                        and not (mapping.get("network") and mapping.get("contract_address"))):
+                    reason = "price_mapping_identity_unbound"
+                if (not reason and provider == "defillama"
+                        and (identity.network != "solana" or not row.get("provider_id"))):
                     row["provider_id"] = identity.provider_id
                     if row.get("reason") == "asset_not_configured":
                         row.update(status="planned", reason=None)
             if reason:
-                row.update(status="blocked", reason=reason, price_eur=None, priced_at=None, source=None)
+                existing_reason = row.get("reason") if row.get("status") == "blocked" else None
+                row.update(status="blocked", reason=existing_reason if existing_reason and existing_reason != "asset_not_configured" else reason,
+                           price_eur=None, priced_at=None, source=None)

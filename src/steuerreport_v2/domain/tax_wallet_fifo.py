@@ -2378,7 +2378,7 @@ class WalletFifoPreviewService:
                     acquired_at=source_lot.acquired_at,
                     quantity=used * anchor.factor,
                     cost_basis_eur_total=source_lot.cost_basis_eur_total * ratio,
-                    source_event_id=source_lot.source_event_id,
+                    source_event_id=target_event.event_id,
                     origin_lot_id=source_lot.origin_lot_id or source_lot.lot_id,
                 )
             )

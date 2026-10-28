@@ -120,11 +120,16 @@ def test_g19_ratio_preserves_basis_date_and_quantity(tmp_path, monkeypatch):
 
 def test_g19_changed_primary_evidence_invalidates_run_binding(tmp_path, monkeypatch):
     from steuerreport_v2.domain.token_conversion import config_binding
+    from steuerreport_v2.domain.ai_changes import _fingerprint
     store, path, mapping = conversion_fixture(tmp_path, monkeypatch)
     path.write_text(json.dumps({"schema_version": 1, "mappings": [mapping]}))
     before = config_binding()
+    with store.connect() as con:
+        preview_before = _fingerprint(con)
     path.with_name("conversion-evidence.txt").write_text("Changed primary evidence")
     assert config_binding() != before
+    with store.connect() as con:
+        assert _fingerprint(con) != preview_before
     assert not TokenConversionService(store).report()["ready"]
 
 

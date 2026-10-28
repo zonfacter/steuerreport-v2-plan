@@ -239,7 +239,7 @@ def main():
             assert mapping["solana_mint"] == original_mint
             assert mapping["coingecko_id"] == "synthetic-token"
             assert (mapping["network"], mapping["contract_address"], mapping["decimals"]) == ("solana", original_mint, 9)
-            region.get_by_label("Vorhandene Preiszuordnung", exact=True).select_option(original_mint.upper())
+            region.get_by_role("combobox", name="Vorhandene Preiszuordnung", exact=False).select_option(original_mint.upper())
             expect(region.get_by_label("Netzwerk", exact=True)).to_have_value("solana")
             expect(region.get_by_label("Contractadresse", exact=True)).to_have_value(original_mint)
             expect(region.get_by_label("Token-Dezimalstellen", exact=True)).to_have_value("9")

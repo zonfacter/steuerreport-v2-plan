@@ -728,6 +728,7 @@ class WalletFifoParallelRunService:
                     """
                     select key, value_json
                     from admin_settings
+                    where key <> 'tax.fee_accounting_binding'
                     order by key
                     """,
                 ),

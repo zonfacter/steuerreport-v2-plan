@@ -46,6 +46,7 @@ const reasons: Record<string, string> = {
   asset_decimals_conflict: "Widersprüchliche Token-Dezimalstellen: Originaldaten prüfen",
   asset_quantity_decimals_mismatch: "Tokenmenge passt nicht zu Rohmenge und Dezimalstellen",
   price_mapping_identity_mismatch: "Preiszuordnung widerspricht der belegten Chain-/Contractidentität",
+  price_mapping_identity_unbound: "CoinGecko-Zuordnung zuerst an Netzwerk und Contractadresse binden",
   asset_mint_conflict: "Mehrere Mint-Adressen für dasselbe Asset: Tokenidentität prüfen",
   solana_mint_invalid: "Solana-Mint-Adresse ist ungültig",
   solana_mint_identity_mismatch: "Solana-Mint stimmt nicht mit der nachgewiesenen Tokenidentität überein",

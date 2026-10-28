@@ -80,6 +80,8 @@ def _fingerprint(con, *, excluded_admin_prefixes=(), excluded_tables=()):
     for path in sorted(files):
         checksum.update(str(path).encode())
         checksum.update(path.read_bytes())
+    from steuerreport_v2.domain.token_conversion import config_binding
+    checksum.update(config_binding().encode())
     return checksum.hexdigest()
 
 

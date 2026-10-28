@@ -7,6 +7,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
+import hashlib
+import json
 
 import pandas as pd
 
@@ -94,9 +96,19 @@ class TaxService:
         )
 
     def rebuild_fifo(self) -> TaxRunResult:
-        if active_fifo_scope(self.store) == WALLET_DEPOT_FIFO_SCOPE:
-            return self._rebuild_wallet_fifo()
-        return self._rebuild_global_fifo()
+        with self.store.exclusive_access():
+            if active_fifo_scope(self.store) == WALLET_DEPOT_FIFO_SCOPE:
+                return self._rebuild_wallet_fifo()
+            return self._rebuild_global_fifo()
+
+    def fee_input_binding(self) -> str:
+        from steuerreport_v2.domain.token_conversion import config_binding
+        payload = {"policy": "explicit_trade_fee_and_conversion_v1",
+            "events": [event.model_dump(mode="json") for event in self.store.list_canonical_events()],
+            "prices": [point.model_dump(mode="json") for asset in sorted(self.price_lookup._points)
+                       for point in self.price_lookup._points[asset]],
+            "fifo_scope": active_fifo_scope(self.store), "conversion_inputs": config_binding()}
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     def crypto_to_crypto_valuation_events(self) -> list[CanonicalEvent]:
         """Return economic positive swap events after service-route normalization."""
@@ -114,8 +126,9 @@ class TaxService:
         ]
 
     def _rebuild_global_fifo(self) -> TaxRunResult:
+        fee_binding = self.fee_input_binding()
         result = self.preview_global_fifo()
-        self._replace_tax_tables(result.lots, result.tax_lines, result.unmatched)
+        self._replace_tax_tables(result.lots, result.tax_lines, result.unmatched, fee_binding=fee_binding)
         return result
 
     def preview_global_fifo(
@@ -160,7 +173,7 @@ class TaxService:
                 def create_converted_lot(original, quantity, basis):
                     lot = self._lot_from_values(asset=conversion.target.asset,
                         acquired_at=original.acquired_at, quantity=quantity,
-                        cost_basis_eur_total=basis, source_event_id=original.source_event_id)
+                        cost_basis_eur_total=basis, source_event_id=conversion.target.event_id)
                     return lot.model_copy(update={"origin_lot_id": original.origin_lot_id or original.lot_id})
                 old_lots = lots_by_asset[conversion.source.asset]
                 available = sum((lot.quantity_remaining for lot in old_lots), Decimal("0"))
@@ -283,6 +296,7 @@ class TaxService:
         from steuerreport_v2.domain.wallet_fifo_persistence import wallet_fifo_tax_rows
         from steuerreport_v2.domain.wallet_fifo_runs import WalletFifoParallelRunService
 
+        fee_binding = self.fee_input_binding()
         as_of = datetime.now(timezone.utc)
         fingerprint = WalletFifoParallelRunService(self.store).input_fingerprint(as_of)
         state = WalletFifoPreviewService(self.store).replay(as_of=as_of)
@@ -298,6 +312,7 @@ class TaxService:
             [],
             fifo_method=WALLET_DEPOT_FIFO_SCOPE,
             input_fingerprint_digest=fingerprint.digest,
+            fee_binding=fee_binding,
         )
         return TaxRunResult(
             lots=lots,
@@ -1143,6 +1158,7 @@ class TaxService:
         *,
         fifo_method: str = GLOBAL_ASSET_FIFO_SCOPE,
         input_fingerprint_digest: str | None = None,
+        fee_binding: str | None = None,
     ) -> None:
         created_at = datetime.now(timezone.utc)
         with self.store.connect() as con:
@@ -1380,4 +1396,10 @@ class TaxService:
                     "Atomarer Tax-Tabellentausch hat die internen "
                     f"Integritaetschecks nicht bestanden: {counts} != {expected}."
                 )
+            if fee_binding is None:
+                con.execute("delete from admin_settings where key='tax.fee_accounting_binding'")
+            else:
+                con.execute("insert into admin_settings (key,value_json,updated_at) values (?,?,?) "
+                    "on conflict(key) do update set value_json=excluded.value_json,updated_at=excluded.updated_at",
+                    ["tax.fee_accounting_binding", json.dumps(fee_binding), created_at])
             con.execute("commit")
