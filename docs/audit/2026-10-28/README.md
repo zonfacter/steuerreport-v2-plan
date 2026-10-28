@@ -1,5 +1,9 @@
 # Docker-Migrationsaudit 28.10.2026
 
+Der eigenstaendige [Audit-Abschlussbericht](AUDIT_ABSCHLUSSBERICHT.md) enthaelt
+Commit- und binaeren Diffbezug, PaketstatusA-F, alle25Referenzfaelle sowie
+originale JUnit-Anlagen. Diese README ist nur der Einstieg, nicht die Abnahme.
+
 **Unveroeffentlichter Entwicklungsstand 0.2.0rc33.dev0. Keine produktive
 Umschaltung, Neuberechnung oder Methodenaktivierung. Keine fachliche Freigabe.**
 Basis ist rc32 / `1aecfb131d189267a01a6303f5a9b67a5a99efe2`.
