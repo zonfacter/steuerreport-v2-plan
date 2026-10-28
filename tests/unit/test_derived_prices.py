@@ -26,6 +26,11 @@ def test_derived_prices_create_direct_eur_and_stable_quote_prices(tmp_path):
         ),
     )
     RawNormalizer(store).normalize_batch(batch.batch_id)
+    # The quote leg needs its own same-day evidence, not yesterday's deposit rate.
+    store.add_price_point(PricePointCreate(
+        asset="USDT", price_eur=Decimal("0.82"), priced_at=datetime(2021, 1, 2),
+        source="fixture:same-day-EUR-quote",
+    ))
 
     result = DerivedPriceService(store).rebuild_from_event_quotes()
     prices = {
@@ -57,6 +62,10 @@ def test_derived_prices_make_stable_quote_fifo_lot_nonzero(tmp_path):
         ),
     )
     RawNormalizer(store).normalize_batch(batch.batch_id)
+    store.add_price_points([PricePointCreate(
+        asset="USDT", price_eur=Decimal("0.82"), priced_at=at,
+        source="fixture:same-day-EUR-quote",
+    ) for at in [datetime(2021, 1, 2), datetime(2021, 3, 1)]])
     DerivedPriceService(store).rebuild_from_event_quotes()
 
     result = TaxService(store).rebuild_fifo()
@@ -228,3 +237,23 @@ def test_price_requirements_require_same_day_primary_price(tmp_path):
         item.asset == "IOT" and item.price_date.isoformat() == "2024-10-06"
         for item in requirements
     )
+
+
+def test_derivation_prefers_eligible_same_day_primary_over_later_derived_quote(tmp_path):
+    store = DuckDbStore(tmp_path / "prices.duckdb")
+    store.add_price_points([
+        PricePointCreate(asset="USDT", price_eur=Decimal("0.8"),
+                         priced_at=datetime(2025, 7, 1, 0), source="fixture:primary"),
+        PricePointCreate(asset="USDT", price_eur=Decimal("9"),
+                         priced_at=datetime(2025, 7, 1, 11), source="derived:other"),
+    ])
+    store.add_canonical_event(CanonicalEventCreate(
+        source="manual-test", event_time=datetime(2025, 7, 1, 12), event_type="trade",
+        asset="HNT", quantity=Decimal("10"), quote_asset="USDT", quote_quantity=Decimal("50"),
+    ))
+
+    result = DerivedPriceService(store).rebuild_from_event_quotes()
+    point = next(point for point in store.list_price_points() if point.asset == "HNT")
+
+    assert result.created == 1
+    assert point.price_eur == Decimal("4")  # 50 * 0.8 / 10, not 50 * 9 / 10.
