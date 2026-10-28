@@ -1,6 +1,6 @@
 """G08/G09: echte Preisconsumer mit synthetischen HTTP-Originalantworten."""
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 import hashlib
 import json
@@ -14,15 +14,18 @@ import pytest
 
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.historical_prices import HistoricalPriceFetch, HistoricalPriceQuery, PriceMapping
+from steuerreport_v2.contracts.prices import AsOfPriceGateBackfillRequest
 from steuerreport_v2.contracts.request_limits import RequestLimitProfile, RequestLimitsConfig
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain import historical_prices as module
+from steuerreport_v2.domain.as_of_price_gate import AsOfPriceGateService
 from steuerreport_v2.domain.external_http import managed_client, outbound_scope
 from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
 from steuerreport_v2.domain.bmf_event_price_remediation import BmfEventPriceRemediationService
 from steuerreport_v2.domain.historical_prices import HistoricalPriceService
 from steuerreport_v2.domain.request_limits import RequestLimiter
 from steuerreport_v2.domain.v1_fx_cache_importer import V1FxCacheImporter
+from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 
 TOLERANCE = Decimal("0.00000000000000001")
@@ -286,3 +289,57 @@ def test_G09_malformed_original_body_yields_no_bmf_fx(tmp_path, body):
     with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, content=body))) as client:
         result = BmfEventPriceRemediationService(legacy_store(tmp_path))._fetch_fx(client, date(2024, 6, 2))
     assert result is None
+
+
+@pytest.mark.parametrize("pair,rate", [(("USD", "EUR"), "0.9"), (("EUR", "USD"), "1.111111111111111111")])
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_G08_G09_asof_caller_binds_actual_fx_reference_in_job_and_price(tmp_path, monkeypatch, pair, rate, dry_run):
+    from steuerreport_v2.domain import as_of_price_gate as asof
+    store = legacy_store(tmp_path)
+    BalanceLedgerBuilder(store).rebuild()
+    cache = legacy_cache(tmp_path, pair=pair, rate=rate)
+    config = tmp_path / "asof-prices.json"
+    config.write_text(json.dumps({"assets": [{"symbol": "BTC", "coingecko_id": "bitcoin"}]}))
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        assert request.url.host == "coins.llama.fi"
+        assert request.url.path.endswith("/coingecko:bitcoin")
+        instant = int(request.url.path.split("/")[3])
+        return httpx.Response(200, json={"coins": {"coingecko:bitcoin": {"price": "100", "timestamp": instant}}})
+
+    monkeypatch.setattr(asof, "managed_client", lambda **kw: httpx.Client(transport=httpx.MockTransport(handle), **kw))
+    result = AsOfPriceGateService(store, artifact_root=tmp_path / "asof-artifacts").backfill(
+        AsOfPriceGateBackfillRequest(as_of=datetime(2024, 6, 2, 12, tzinfo=timezone.utc),
+            config_path=str(config), v1_fx_db_path=str(cache), provider="coingecko", assets=["BTC"], dry_run=dry_run))
+    assert len(result.jobs) == 1
+    job = result.jobs[0]
+    assert job.price_date == date(2024, 6, 2)
+    assert reference_metadata(job.source) == {"base": pair[0], "quote": pair[1], "rate": rate,
+        "source": "fixture:ecb", "reference_date": "2024-05-31",
+        "policy_id": "fx_reference_on_or_before_max_7_calendar_days_v1"}
+    if dry_run:
+        assert result.imported_prices == 0 and not calls
+        assert store.list_price_points() == []
+    else:
+        assert result.imported_prices == len(calls) == 1
+        assert abs(job.price_eur - Decimal("90")) <= TOLERANCE
+        point = store.list_price_points()[0]
+        assert point.source == job.source
+        assert abs(point.price_eur - Decimal("90")) <= TOLERANCE
+        assert point.priced_at.date() == date(2024, 6, 2)
+
+
+@pytest.mark.parametrize("reference", ["2024-05-25", "2024-06-03"])
+def test_G09_asof_caller_rejects_invalid_reference_before_provider_request(tmp_path, monkeypatch, reference):
+    from steuerreport_v2.domain import as_of_price_gate as asof
+    store = legacy_store(tmp_path)
+    BalanceLedgerBuilder(store).rebuild()
+    cache = legacy_cache(tmp_path, reference=reference)
+    calls = []
+    monkeypatch.setattr(asof, "managed_client", lambda **kw: calls.append(kw))
+    with pytest.raises(ValueError, match="Kein belegter USD/EUR-Kurs"):
+        AsOfPriceGateService(store).backfill(AsOfPriceGateBackfillRequest(
+            as_of=datetime(2024, 6, 2, 12, tzinfo=timezone.utc), v1_fx_db_path=str(cache), assets=["BTC"], dry_run=False))
+    assert calls == [] and store.list_price_points() == []

@@ -173,11 +173,54 @@ env PYTHONPATH=src:/tmp/steuerreport-connector-tools-20261026:/tmp/steuerreport-
   --junitxml=/tmp/steuerreport-fx-tests-20261028-verified.xml
 ```
 
-Quellcode blieb im Lauf eingefroren. Der Core wird separat geliefert, damit
+Quellcode blieb im Lauf eingefroren. Der Core wurde separat geliefert, damit
 der Koordinator ihn vor dem anschliessend genehmigten AsOf-Callerfix
-integrieren kann. AsOf benutzt bislang den Scalar mit begrenzter Auswahl;
-die zusaetzliche Originalpaar-/Referenztagbindung wird im zweiten Commit
+integrieren kann. Im Core-Commit benutzte AsOf noch den Scalar mit begrenzter Auswahl;
+die zusaetzliche Originalpaar-/Referenztagbindung ist im zweiten Commit
 separat nachgewiesen. Kein Portfolio-/Tax-Lookup wird dafuer geaendert.
+
+Core-Commit: `d0c8d4f1a49ae5c64bb68a3e1ba7659fd8e530c1`.
+JUnit `/tmp/steuerreport-fx-tests-20261028-verified.xml`, SHA256
+`ff0280789717cc0759f6ef3f73754e2f333f848178bb6916a1ae17f1159166dd`.
+
+## Zweiter Commit: AsOf-Referenzbindung
+
+Die kleine Caller-Erweiterung wurde anschliessend explizit genehmigt:
+AsOfPriceGateService.backfill konsumiert jetzt _usd_eur_reference und bindet
+das originale Paar, die originale Rate, Quelle und den tatsaechlichen
+Referenztag an Job-/PricePoint-source. Zieltag und FX-Referenztag werden nicht
+gleichgesetzt. Das gilt auch fuer Dry-run-Jobs. Konvertierung mit Decimal60
+und 18 Speicher-Nachkommastellen, keine neue Methode oder Finalfreigabe.
+
+Neue Caller-Proben pruefen beide Richtungen mit Referenz Freitag 31.05.2024
+und Ziel Sonntag 02.06.2024, jeweils Dry-run und echten Import in eine eigene
+synthetische Test-DuckDB. Dry-run fuehrt keinen Providerrequest aus.
+Stale/future Originalreferenzen werden vor dem ersten Providerrequest
+abgelehnt; weder Preise noch FX1 entstehen. Der importierte PricePoint traegt
+exakt dieselbe Referenzstruktur wie der Job. Der unveraenderte bestehende
+AsOf-Providerwahlpfad wird mit einem DefiLlama-HTTP-Mock konsumiert.
+
+Ein erster Caller-Testadapter erwartete faelschlich CoinGecko; diese zwei
+neuen Mock-Erwartungen wurden auf den tatsaechlichen bestehenden Providerpfad
+korrigiert. Kein Produkt-Provider-Routing und kein alter Sollwert wurden
+dafuer veraendert. Ebenso wurde der gemeldete ungenutzte timedelta-Testimport
+entfernt.
+
+```bash
+env PYTHONPATH=src:/tmp/steuerreport-connector-tools-20261026:/tmp/steuerreport-release-tools-20261025 \
+  STEUERREPORT_TEST_PRUNE_PASSED_DBS=1 python3 -m pytest -q -n 4 \
+  tests/unit/test_fx_reference_cases.py tests/unit/test_as_of_price_gate.py \
+  tests/unit/test_price_gate_diagnostics.py tests/unit/test_price_policy_regressions.py \
+  --basetemp=/tmp/steuerreport-fx-tests-20261028-caller-final \
+  --junitxml=/tmp/steuerreport-fx-tests-20261028-caller-final.xml
+```
+
+Ergebnis: **139 bestanden** in 53.33 s, keine Fehler/Skips. Ruff --select F
+auf allen betroffenen Domain-/Testdateien: bestanden. git diff --check:
+bestanden. Die Core-Abnahme mit 277 Proben bleibt ein separater Nachweis;
+die 139 Caller-Proben sind keine neue Vollsuite oder produktive Abnahme.
+Caller-JUnit SHA256:
+`c3adce3e981c775bb8efcbd59c7da9994851d8649193f8a6b84deb9f53b16c06`.
 
 Keine produktive Datenbank geoeffnet, kein Restore/Release/Push/Deployment.
 Current-Portfolio-/Latest-FX-Logik und Reparaturskripte ausserhalb der hier

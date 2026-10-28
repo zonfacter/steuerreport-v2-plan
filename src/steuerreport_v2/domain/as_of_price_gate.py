@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import json
 from pathlib import Path
 
@@ -299,13 +299,14 @@ class AsOfPriceGateService:
             resolve_project_path(request.config_path)
         )
         price_date = valuation_at.date()
-        usd_eur = backfill_service._usd_eur_rate(
+        fx_reference = backfill_service._usd_eur_reference(
             request.v1_fx_db_path, price_date.isoformat()
         )
-        if usd_eur <= 0:
+        if fx_reference is None:
             raise ValueError(
                 f"Kein belegter USD/EUR-Kurs fuer {price_date.isoformat()} vorhanden."
             )
+        usd_eur = fx_reference.rate_eur_per_usd
         with managed_client(
             timeout=request.timeout_seconds,
             headers={"user-agent": "steuerreport-v2/0.1"},
@@ -322,7 +323,8 @@ class AsOfPriceGateService:
                             provider_id=candidate.provider_id,
                             status="planned",
                             usd_eur=usd_eur,
-                            source="defillama_coingecko_history:usd_eur:v1_fx_cache:as_of_gate",
+                            source=("defillama_coingecko_history:usd_eur:v1_fx_cache:as_of_gate:"
+                                    + fx_reference.source_suffix()),
                         )
                     )
                     continue
@@ -352,9 +354,11 @@ class AsOfPriceGateService:
                         )
                     )
                     continue
-                price_eur = price_usd * usd_eur
+                with localcontext() as arithmetic:
+                    arithmetic.prec = 60
+                    price_eur = (price_usd * usd_eur).quantize(Decimal("0.000000000000000001"))
                 source_label = (
-                    f"{source}:usd_eur:v1_fx_cache:as_of_gate:{price_date.isoformat()}"
+                    f"{source}:usd_eur:v1_fx_cache:as_of_gate:{price_date.isoformat()}:{fx_reference.source_suffix()}"
                 )
                 prices.append(
                     PricePointCreate(
