@@ -10,6 +10,7 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from steuerreport_v2.contracts.bmf_event_evidence import (
     BmfCanonicalEventEvidence,
@@ -28,6 +29,8 @@ from steuerreport_v2.contracts.bmf_fifo_staging import BmfCombinedFifoEventRow
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.bmf_fifo_staging import BmfCombinedFifoStagingService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.lot_origin import LotOriginIndex
+from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.tax_time import (
     event_reporting_year_sql,
     reporting_tax_year,
@@ -194,6 +197,8 @@ class BmfFifoEventEvidenceService:
             for event_id in (
                 row.disposal_event_id,
                 *row.acquisition_source_event_ids,
+                *row.direct_acquisition_event_ids,
+                *row.lineage_event_ids,
             )
         }
         ledger_event_ids: set[str] = set()
@@ -207,6 +212,11 @@ class BmfFifoEventEvidenceService:
                 years=staging.years,
                 as_of=staging.as_of,
             )
+            # Full-Ledger umfasst auch Vorjahresherkunft ausserhalb der Prioritaetsgruppen.
+            for row in staging.top_events:
+                tax_graph_roles.setdefault(row.disposal_event_id, set()).add("disposal")
+                for event_id in set(row.acquisition_source_event_ids) | set(row.direct_acquisition_event_ids) | set(row.lineage_event_ids):
+                    tax_graph_roles.setdefault(event_id, set()).add("acquisition")
             event_ids.update(ledger_event_ids)
             event_ids.update(tax_graph_roles)
         synthetic_fee_rows = {
@@ -600,6 +610,16 @@ class BmfFifoEventEvidenceService:
         result: dict[str, set[str]] = defaultdict(set)
         for event_id, event_role in rows:
             result[str(event_id)].add(str(event_role))
+        with self.store.connect() as con:
+            cursor = con.execute(f"""select line.* from tax_lines line
+                where {disposal_year} in ({placeholders}) and line.disposed_at <= ?""",
+                [*years, self._as_utc(as_of).replace(tzinfo=None)])
+            columns = [item[0] for item in cursor.description]
+            lines = [SimpleNamespace(**dict(zip(columns, row))) for row in cursor.fetchall()]
+        index = LotOriginIndex(TaxService(self.store).list_tax_lots(), self.store.list_canonical_events())
+        for line in lines:
+            for event_id in index.source_event_ids(index.resolve(line)):
+                result[event_id].add("acquisition")
         return dict(result)
 
     def _origin_evidence_groups(
@@ -1618,17 +1638,17 @@ class BmfFifoEventEvidenceService:
         if scope is None:
             raise ValueError("Event liegt ausserhalb des Eventbeleg-Pruefumfangs.")
         disposal = evidence_by_id[row.disposal_event_id]
-        acquisition_ids = sorted(set(row.acquisition_source_event_ids))
+        acquisition_ids = sorted(set(row.acquisition_source_event_ids) | set(row.direct_acquisition_event_ids) | set(row.lineage_event_ids))
         acquisition_evidence = [evidence_by_id[item] for item in acquisition_ids]
         resolved_origin_classifications = sorted(
             {
                 self._origin_classification(item)
-                for item in acquisition_evidence
+                for item in acquisition_evidence if item.event_id in row.acquisition_source_event_ids
             }
         )
         if row.lineage_issue_codes:
             resolved_origin_classifications = sorted(set(resolved_origin_classifications) | {"missing_origin"})
-        elif not acquisition_evidence:
+        elif not row.acquisition_source_event_ids:
             resolved_origin_classifications = sorted(set(row.origin_classifications) & self.REVIEW_ORIGIN_CLASSIFICATIONS)
         issue_event_ids = [
             item.event_id for item in acquisition_evidence if item.status != "ready"
@@ -1706,6 +1726,7 @@ class BmfFifoEventEvidenceService:
             origin_classifications=resolved_origin_classifications,
             lineage_issue_codes=row.lineage_issue_codes,
             direct_acquisition_event_ids=row.direct_acquisition_event_ids,
+            lineage_event_ids=row.lineage_event_ids,
             status=status,
             issue_codes=issue_codes,
             asset_fifo_drilldown_endpoint=(
@@ -1726,6 +1747,8 @@ class BmfFifoEventEvidenceService:
             for event_id in (
                 row.disposal_event_id,
                 *row.acquisition_source_event_ids,
+                *row.direct_acquisition_event_ids,
+                *row.lineage_event_ids,
             )
         }
         evidence = [evidence_by_id[item] for item in sorted(event_ids)]

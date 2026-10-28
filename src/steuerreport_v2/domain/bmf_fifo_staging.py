@@ -526,7 +526,7 @@ class BmfCombinedFifoStagingService:
         keys = set().union(*(values.keys() for values in totals.values()))
         wallet_context: dict[
             tuple[int, str, str], dict[str, set[str]]
-        ] = defaultdict(lambda: {"pools": set(), "origins": set(), "classes": set(), "direct": set(), "issues": set()})
+        ] = defaultdict(lambda: {"pools": set(), "origins": set(), "classes": set(), "direct": set(), "issues": set(), "lineage": set()})
         disposed_at_by_key: dict[tuple[int, str, str], datetime] = {}
         for line in received_wallet_lines:
             key = (
@@ -536,6 +536,7 @@ class BmfCombinedFifoStagingService:
             )
             wallet_context[key]["pools"].add(line.pool_id)
             trace = origin_index.resolve(line)
+            wallet_context[key]["lineage"].update(origin_index.source_event_ids(trace))
             if trace.direct_event_id:
                 wallet_context[key]["direct"].add(trace.direct_event_id)
             if trace.origin_event_id:
@@ -596,6 +597,7 @@ class BmfCombinedFifoStagingService:
                     origin_classifications=classifications,
                     lineage_issue_codes=sorted(context["issues"]),
                     direct_acquisition_event_ids=sorted(context["direct"]),
+                    lineage_event_ids=sorted(context["lineage"]),
                     active_global_quantity=values["active_global"].quantity,
                     received_first_global_quantity=values["received_global"].quantity,
                     active_wallet_quantity=values["active_wallet"].quantity,

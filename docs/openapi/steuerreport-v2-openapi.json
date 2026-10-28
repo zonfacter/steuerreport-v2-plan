@@ -22016,6 +22016,13 @@
             "title": "Interaction Delta Eur",
             "type": "string"
           },
+          "lineage_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Event Ids",
+            "type": "array"
+          },
           "lineage_issue_codes": {
             "items": {
               "type": "string"
@@ -23375,6 +23382,13 @@
               "type": "string"
             },
             "title": "Issue Codes",
+            "type": "array"
+          },
+          "lineage_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Event Ids",
             "type": "array"
           },
           "lineage_issue_codes": {

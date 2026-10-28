@@ -116,6 +116,12 @@ class LotOriginIndex:
                                       tuple(path), direct, event.event_id, lot.asset.upper(), None)
             lot_id = lot.origin_lot_id
 
+    def source_event_ids(self, trace: LotOriginTrace) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(
+            self._lots[lot_id].source_event_id for lot_id in trace.lot_ids
+            if lot_id in self._lots and self._lots[lot_id].source_event_id
+        ))
+
     @staticmethod
     def _acquires(event: CanonicalEvent, asset: str) -> bool:
         asset = asset.upper()
