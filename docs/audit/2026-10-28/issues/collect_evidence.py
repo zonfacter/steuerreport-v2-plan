@@ -66,6 +66,7 @@ def main():
         "endpoint-drift.log": "/tmp/sr-issues-20261028/endpoint-drift.log",
         "import-drift.log": "/tmp/sr-issues-20261028/import-drift.log",
         "ai-guide-drift.log": "/tmp/sr-issues-20261028/ai-guide-drift.log",
+        "production-metadata.json": "/tmp/sr-issues-20261028/production-metadata.json",
     }
     for name, source in originals.items():
         shutil.copyfile(source, out / name)
@@ -87,8 +88,13 @@ def main():
     for name in ("reference-source-freeze.json", "updates-source-freeze.json"):
         assert json.loads((out / name).read_text())["unchanged"]
     assert json.loads((out / "source-secret-review.json").read_text())["unreviewed_findings"] == 0
+    production = json.loads((out / "production-metadata.json").read_text())
+    baseline = json.loads((ROOT / "docs/audit/2026-10-28/lot-origin/evidence/manifest.json").read_text())["production_metadata"]
+    assert all(production[key] == baseline[key] for key in ("container_id", "image_id", "started_at"))
+    assert production["running"]
     manifest = {"created_at_utc": datetime.now(timezone.utc).isoformat(), "source_commit": commit,
         "diff_base": BASE, "tests": tests, "financial_approval": False, "production_deployed": False,
+        "production_metadata_unchanged": True, "production_scope": "Docker-Metadaten; kein DB-/API-Zugriff und keine Datenparitaetsaussage",
         "frontend_build": [{"path": p.relative_to(ROOT).as_posix(), "sha256": sha(p)}
                            for p in sorted((ROOT / "frontend/dist").rglob("*")) if p.is_file()],
         "original_reproducer_sha256": sha(ROOT / "docs/audit/2026-10-28/issues/issue2-original.py"),
