@@ -1,0 +1,111 @@
+{
+  "passed": true,
+  "backend": "actual UpdateService and FastAPI router",
+  "github": "httpx.MockTransport only",
+  "external_requests": [],
+  "production_requests": 0,
+  "financial_tables_unchanged": true,
+  "github_calls": [
+    {
+      "at": "2026-10-28T22:01:00+00:00",
+      "path": "/repos/zonfacter/steuerreport-v2-plan/releases"
+    },
+    {
+      "at": "2026-10-28T22:02:01+00:00",
+      "path": "/repos/zonfacter/steuerreport-v2-plan/releases"
+    },
+    {
+      "at": "2026-10-29T04:03:02+00:00",
+      "path": "/repos/zonfacter/steuerreport-v2-plan/releases"
+    }
+  ],
+  "browser_calls": [
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace/environment"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/updates"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/updates/check"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/updates/handoff"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/updates"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/updates/check"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/updates/settings"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/updates"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/updates/check"
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "updates-backend-390.png",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "route": "#admin?tab=updates",
+      "data": "synthetic"
+    },
+    {
+      "file": "updates-backend-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 1000
+      },
+      "route": "#admin?tab=updates",
+      "data": "synthetic"
+    },
+    {
+      "file": "updates-backend-1280.png",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "route": "#admin?tab=updates",
+      "data": "synthetic"
+    },
+    {
+      "file": "updates-backend-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "route": "#admin?tab=updates",
+      "data": "synthetic"
+    }
+  ],
+  "errors": [],
+  "checks": [
+    "initial cache-only",
+    "manual RC recognition",
+    "real cooldown and local refresh",
+    "pinned TXT/JSON handoff",
+    "automatic opt-in and six-hour check",
+    "four viewports without page overflow"
+  ]
+}

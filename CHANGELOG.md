@@ -14,6 +14,11 @@
 - Update-Praeferenzen und Metadatencache sind explizit von finanziellen
   Vorschau-Fingerprints ausgenommen; neue Fingerprint-Version erfordert fuer
   bereits gebundene alte Vorschauen eine erneute ausdrueckliche Berechnung.
+- GitHub-Issue-Abschlusspruefung: 2722 Unit-Tests bestanden, vier bekannte
+  private Belegskips; 52 urspruengliche, 104 erweiterte Referenzen und der
+  unveraenderte 15-Fall-Bitget-Reproducer bestanden. Gemeinsamer HTTP-Limiter
+  auch fuer GitHub, keine Ausnahme vom bestehenden Architektur-Guard.
+  Originalnachweise und Browserbilder unter `docs/audit/2026-10-28/issues/`.
 - Historische Ersatzkurse, SQL-Coverage und Ableitungen verwenden denselben
   konservativen Tages-/Zeitvertrag; keine verdeckte Altpreis-Wiederverwendung.
 - Private Kalenderjahresfrist in Europe/Berlin fuer Python, SQL, Planung und

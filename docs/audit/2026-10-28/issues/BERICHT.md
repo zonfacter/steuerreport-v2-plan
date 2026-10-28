@@ -48,6 +48,10 @@ gepruefter Stand uebernommen werden darf.
 
 ## Testnachweise
 
+Abschluss: 2722 Unit-Tests bestanden, vier bekannte private Belegskips,
+keine Fehler. Gepruefter Quellcommit:
+`db07a8ef2bbd0cbec9ba78651de4a45ccf593078`.
+
 Die Originalausgaben liegen bytegleich unter `evidence/`, SHA256 und exakter
 Quellcommit in `evidence/manifest.json`. `changes.patch` ist der binaersichere
 Diff gegen den vorher auf GitHub vorhandenen Auditstand. Vorherfehler werden
@@ -124,3 +128,9 @@ geschlossen. Gleiches gilt fuer eine produktive Migration mit neuem Image und
 Restore-Nachweis. Die vorherige G01-G25-Matrix bleibt eine begrenzte synthetische
 Referenzabnahme; die 52+104 Referenzlaeufe ersetzen keine fehlenden Originalbelege.
 GHCR-Sichtbarkeit wird durch eine Release-Erkennung nicht bestaetigt.
+
+Nach Abschluss wurden ausschliesslich 273 geschlossene synthetische
+DuckDB-/Prepared-Dateien aus den eigenen Testverzeichnissen entfernt,
+1.824.579.584 belegte Bytes freigegeben. Originalprotokolle, Screenshots,
+Quellcode, Sicherungen und Docker-Volumes bleiben erhalten. Der private
+Bereinigungsnachweis liegt ausserhalb des Repositories.

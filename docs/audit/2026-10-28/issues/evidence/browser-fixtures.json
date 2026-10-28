@@ -1,0 +1,256 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "passed": true,
+      "case": "manual",
+      "checks": [
+        "manual",
+        "manual"
+      ],
+      "calls": [
+        [
+          "GET",
+          "/api/v1/updates",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "POST",
+          "/api/v1/updates/check",
+          {
+            "mode": "manual"
+          }
+        ],
+        [
+          "POST",
+          "/api/v1/updates/handoff",
+          {
+            "release_id": 33,
+            "snapshot_digest": "3333333333333333333333333333333333333333333333333333333333333333"
+          }
+        ],
+        [
+          "POST",
+          "/api/v1/updates/check",
+          {
+            "mode": "manual"
+          }
+        ],
+        [
+          "POST",
+          "/api/v1/updates/handoff",
+          {
+            "release_id": 34,
+            "snapshot_digest": "4444444444444444444444444444444444444444444444444444444444444444"
+          }
+        ],
+        [
+          "PUT",
+          "/api/v1/updates/settings",
+          {
+            "channel": "stable",
+            "automatic": false
+          }
+        ]
+      ],
+      "errors": [],
+      "external_requests": []
+    },
+    {
+      "passed": true,
+      "case": "automatic",
+      "checks": [
+        "automatic",
+        "automatic"
+      ],
+      "calls": [
+        [
+          "GET",
+          "/api/v1/updates",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "POST",
+          "/api/v1/updates/check",
+          {
+            "mode": "automatic"
+          }
+        ],
+        [
+          "POST",
+          "/api/v1/updates/check",
+          {
+            "mode": "automatic"
+          }
+        ]
+      ],
+      "errors": [],
+      "external_requests": []
+    },
+    {
+      "passed": true,
+      "case": "blocked",
+      "checks": [],
+      "calls": [
+        [
+          "GET",
+          "/api/v1/updates",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ]
+      ],
+      "errors": [],
+      "external_requests": []
+    },
+    {
+      "passed": true,
+      "case": "unavailable",
+      "checks": [
+        "manual"
+      ],
+      "calls": [
+        [
+          "GET",
+          "/api/v1/updates",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "POST",
+          "/api/v1/updates/check",
+          {
+            "mode": "manual"
+          }
+        ]
+      ],
+      "errors": [],
+      "external_requests": []
+    },
+    {
+      "passed": true,
+      "case": "checking",
+      "checks": [],
+      "calls": [
+        [
+          "GET",
+          "/api/v1/updates",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/workspace/environment",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/admin/installation",
+          null
+        ],
+        [
+          "GET",
+          "/api/v1/updates",
+          null
+        ]
+      ],
+      "errors": [],
+      "external_requests": []
+    }
+  ],
+  "viewports": [
+    380,
+    768,
+    1280,
+    1440
+  ],
+  "mode": "dev_server_real_components_synthetic_api",
+  "production_build": false,
+  "github_docker_ai_calls": 0
+}

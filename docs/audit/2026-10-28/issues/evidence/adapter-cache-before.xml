@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.498" timestamp="2026-10-28T21:21:16.216724+00:00" hostname="ai-control"><testcase classname="tests.unit.test_updates_coherence" name="test_missing_following_page_cannot_claim_up_to_date" time="0.488"><failure message="RuntimeError: Cannot open a client instance more than once.">tmp_path = PosixPath('/tmp/sr-issues-20261028/coherence-before/test_missing_following_page_ca0')
+
+    def test_missing_following_page_cannot_claim_up_to_date(tmp_path):
+        store, service, success, client = service_and_success(tmp_path)
+&gt;       with client:
+
+tests/unit/test_updates_coherence.py:29: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;httpx.Client object at 0x7ec66ab92b10&gt;
+
+    def __enter__(self: T) -&gt; T:
+        if self._state != ClientState.UNOPENED:
+            msg = {
+                ClientState.OPENED: "Cannot open a client instance more than once.",
+                ClientState.CLOSED: (
+                    "Cannot reopen a client instance, once it has been closed."
+                ),
+            }[self._state]
+&gt;           raise RuntimeError(msg)
+E           RuntimeError: Cannot open a client instance more than once.
+
+/usr/local/lib/python3.11/dist-packages/httpx/_client.py:1283: RuntimeError</failure></testcase><testcase classname="tests.unit.test_updates_coherence" name="test_status_reads_success_completed_while_taking_lock" time="0.433"><failure message="RuntimeError: Cannot open a client instance more than once.">tmp_path = PosixPath('/tmp/sr-issues-20261028/coherence-before/test_status_reads_success_comp0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7ec690bde050&gt;
+
+    def test_status_reads_success_completed_while_taking_lock(tmp_path, monkeypatch):
+        store, service, success, client = service_and_success(tmp_path)
+&gt;       with client:
+
+tests/unit/test_updates_coherence.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;httpx.Client object at 0x7ec66b04e7d0&gt;
+
+    def __enter__(self: T) -&gt; T:
+        if self._state != ClientState.UNOPENED:
+            msg = {
+                ClientState.OPENED: "Cannot open a client instance more than once.",
+                ClientState.CLOSED: (
+                    "Cannot reopen a client instance, once it has been closed."
+                ),
+            }[self._state]
+&gt;           raise RuntimeError(msg)
+E           RuntimeError: Cannot open a client instance more than once.
+
+/usr/local/lib/python3.11/dist-packages/httpx/_client.py:1283: RuntimeError</failure></testcase></testsuite></testsuites>
