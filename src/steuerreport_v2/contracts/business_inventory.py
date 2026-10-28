@@ -45,6 +45,7 @@ class BusinessRewardInventoryReviewReport(BaseModel):
     assets: list[str] = Field(default_factory=list)
     affected_years: list[int] = Field(default_factory=list)
     strict_ready: bool = False
+    origin_trace_policy: str = "legacy_direct_origin_v1"
     total_tax_lines_count: int = 0
     potential_business_tax_lines_count: int = 0
     unresolved_tax_lines_count: int = 0

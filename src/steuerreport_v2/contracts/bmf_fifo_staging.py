@@ -113,6 +113,7 @@ class BmfCombinedFifoStagingReport(BaseModel):
     status: BmfFifoStagingStatus
     strict_ready: bool = False
     read_only: Literal[True] = True
+    origin_trace_policy: str = "legacy_direct_origin_v1"
     active_global_policy: str
     received_first_global_policy: str
     active_wallet_policy: str
