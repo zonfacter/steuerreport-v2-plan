@@ -230,11 +230,19 @@ def main():
             original_mint = "Ab" + "1" * 30
             region.get_by_label("Asset-Kennung", exact=True).fill(original_mint)
             region.get_by_label("CoinGecko-ID", exact=True).fill("synthetic-token")
+            region.get_by_label("Netzwerk", exact=True).fill("solana")
+            region.get_by_label("Contractadresse", exact=True).fill(original_mint)
+            region.get_by_label("Token-Dezimalstellen", exact=True).fill("9")
             region.get_by_role("button", name="Preiszuordnung speichern", exact=True).click()
             expect(region.get_by_text("Preiszuordnung gespeichert.", exact=False)).to_be_visible()
             mapping = service.mappings()[original_mint.upper()]
             assert mapping["solana_mint"] == original_mint
             assert mapping["coingecko_id"] == "synthetic-token"
+            assert (mapping["network"], mapping["contract_address"], mapping["decimals"]) == ("solana", original_mint, 9)
+            region.get_by_label("Vorhandene Preiszuordnung", exact=True).select_option(original_mint.upper())
+            expect(region.get_by_label("Netzwerk", exact=True)).to_have_value("solana")
+            expect(region.get_by_label("Contractadresse", exact=True)).to_have_value(original_mint)
+            expect(region.get_by_label("Token-Dezimalstellen", exact=True)).to_have_value("9")
             assert len(provider_calls) == 4, "Eine Preiszuordnung darf keine Anbieteranfrage starten"
             region.get_by_role("combobox", name="Jahr", exact=True).select_option("2024")
             expect(page).to_have_url(re.compile(r"[?&]year=2024(?:&|$)"))
