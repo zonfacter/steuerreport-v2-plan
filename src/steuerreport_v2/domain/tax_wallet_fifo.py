@@ -12345,6 +12345,9 @@ class WalletFifoPreviewService:
                 )
                 created_lines.extend(lines)
                 unmatched.extend(missing)
+            lines, missing = self._consume_trade_fee(event, pool_id, lots_by_pool_asset)
+            created_lines.extend(lines)
+            unmatched.extend(missing)
             return created_lots, created_lines, unmatched
         if event.event_type == "trade" and event.quantity < 0:
             lines, missing = self._consume(
@@ -12377,12 +12380,36 @@ class WalletFifoPreviewService:
                 )
                 lots_by_pool_asset[(pool_id, lot.asset)].append(lot)
                 created_lots.append(lot)
+            lines, missing = self._consume_trade_fee(event, pool_id, lots_by_pool_asset)
+            created_lines.extend(lines)
+            unmatched.extend(missing)
             return created_lots, created_lines, unmatched
         if event.quantity > 0 and event.event_type in LOT_ACQUISITION_EVENT_TYPES:
             lot = self._lot_from_event(event, pool_id, event_value_eur)
             lots_by_pool_asset[(pool_id, asset)].append(lot)
             created_lots.append(lot)
         return created_lots, created_lines, unmatched
+
+    def _consume_trade_fee(
+        self,
+        event: CanonicalEvent,
+        pool_id: str,
+        lots_by_pool_asset: defaultdict[tuple[str, str], deque[WalletFifoPreviewLot]],
+    ) -> tuple[list[WalletFifoPreviewLine], list[WalletFifoPreviewUnmatched]]:
+        fee = self.tax_service.trade_fee_accounting(event)
+        if fee is None or not fee.separate_disposal:
+            return [], []
+        fee_event = event.model_copy(update={
+            "event_type": "fee", "asset": fee.asset, "quantity": -fee.quantity,
+            "quote_asset": "EUR", "quote_quantity": fee.value_eur,
+            "fee_asset": None, "fee_quantity": None,
+        })
+        return self._consume(
+            event=fee_event, pool_id=pool_id, asset=fee.asset, quantity=fee.quantity,
+            proceeds_total=fee.value_eur if fee.value_eur is not None else Decimal("0"),
+            lots=lots_by_pool_asset[(pool_id, fee.asset)],
+            reason="trade_fee_without_wallet_lot",
+        )
 
     def _process_exchange_internal_cross_pool_pair(
         self,
@@ -13099,7 +13126,7 @@ class WalletFifoPreviewService:
             asset=event.asset.upper(),
             acquired_at=event.event_time,
             quantity=quantity,
-            cost_basis_eur_total=cost_basis,
+            cost_basis_eur_total=self.tax_service._trade_acquisition_cost(event, cost_basis),
             source_event_id=event.event_id,
         )
 
@@ -13112,6 +13139,9 @@ class WalletFifoPreviewService:
         value = self.tax_service._eur_value(
             event, prefer_received_asset=prefer_received_asset
         )
+        fee = self.tax_service.trade_fee_accounting(event)
+        if fee is not None and fee.allocation == "disposal_cost":
+            return value - fee.value_eur if fee.value_eur is not None else value
         if (
             event.event_type == "trade"
             and event.quantity < 0

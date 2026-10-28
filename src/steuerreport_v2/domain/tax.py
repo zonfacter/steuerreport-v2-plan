@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 import pandas as pd
@@ -53,6 +54,17 @@ STABLE_VALUE_ANCHOR_ASSETS = {
     "EURC",
     "EURS",
 }
+
+
+@dataclass(frozen=True)
+class _TradeFeeAccounting:
+    asset: str
+    quantity: Decimal
+    value_eur: Decimal | None
+    separate_disposal: bool
+    allocation: Literal[
+        "included_in_net_quantity", "acquisition_cost", "disposal_cost", "review_required",
+    ]
 
 
 @dataclass(frozen=True)
@@ -190,6 +202,11 @@ class TaxService:
                     )
                     tax_lines.extend(created)
                     unmatched.extend(missing)
+                created, missing = self._consume_trade_fee(
+                    event, lots_by_asset
+                )
+                tax_lines.extend(created)
+                unmatched.extend(missing)
                 continue
             if event.event_type == "trade" and event.quantity < 0:
                 created, missing = self._consume_fifo(event, lots_by_asset[event.asset])
@@ -210,6 +227,11 @@ class TaxService:
                     )
                     lots_by_asset[lot.asset].append(lot)
                     all_lots.append(lot)
+                created, missing = self._consume_trade_fee(
+                    event, lots_by_asset
+                )
+                tax_lines.extend(created)
+                unmatched.extend(missing)
                 continue
             if event.quantity > 0:
                 lot = self._lot_from_buy(event)
@@ -650,10 +672,7 @@ class TaxService:
 
     def _lot_from_buy(self, event: CanonicalEvent, *, value_eur: Decimal | None = None) -> TaxLot:
         cost_basis = value_eur if value_eur is not None else self._eur_value(event)
-        if (event.event_type == "trade" and event.quantity > 0
-                and event.quote_asset == "EUR" and event.fee_asset == "EUR"
-                and event.fee_quantity):
-            cost_basis += abs(event.fee_quantity)
+        cost_basis = self._trade_acquisition_cost(event, cost_basis)
         return self._lot_from_values(
             asset=event.asset,
             acquired_at=event.event_time,
@@ -664,6 +683,52 @@ class TaxService:
             ),
             cost_basis_eur_total=cost_basis,
             source_event_id=event.event_id,
+        )
+
+    def trade_fee_accounting(self, event: CanonicalEvent) -> _TradeFeeAccounting | None:
+        """Fee role and valuation, independent of any private/business approval."""
+        if (event.event_type != "trade" or not event.quantity
+                or not event.fee_asset or not event.fee_quantity):
+            return None
+        asset = event.fee_asset.upper()
+        quantity = abs(event.fee_quantity)
+        acquired_asset = event.asset if event.quantity > 0 else event.quote_asset
+        if acquired_asset and acquired_asset.upper() != "EUR" and asset == acquired_asset.upper():
+            return _TradeFeeAccounting(
+                asset, quantity, None, False,
+                "included_in_net_quantity" if str(event.quote_asset or "").upper() == "EUR"
+                else "review_required",
+            )
+        allocation = "review_required"
+        if str(event.quote_asset or "").upper() == "EUR":
+            allocation = "acquisition_cost" if event.quantity > 0 else "disposal_cost"
+        return _TradeFeeAccounting(
+            asset, quantity, self._asset_value_eur(asset, quantity, event.event_time),
+            asset != "EUR", allocation,
+        )
+
+    def _trade_acquisition_cost(self, event: CanonicalEvent, value_eur: Decimal) -> Decimal:
+        fee = self.trade_fee_accounting(event)
+        if fee is not None and fee.allocation == "acquisition_cost" and fee.value_eur is not None:
+            return value_eur + fee.value_eur
+        return value_eur
+
+    def _consume_trade_fee(
+        self, event: CanonicalEvent, lots_by_asset: defaultdict[str, deque[TaxLot]],
+    ) -> tuple[list[TaxLine], list[TaxUnmatchedDisposal]]:
+        fee = self.trade_fee_accounting(event)
+        if fee is None or not fee.separate_disposal:
+            return [], []
+        # None is retained in fee accounting for the gate; Decimal rows are provisional.
+        proceeds = fee.value_eur if fee.value_eur is not None else Decimal("0")
+        fee_event = event.model_copy(update={
+            "event_type": "fee", "asset": fee.asset, "quantity": -fee.quantity,
+            "quote_asset": "EUR", "quote_quantity": fee.value_eur,
+            "fee_asset": None, "fee_quantity": None,
+        })
+        return self._consume_fifo_asset(
+            asset=fee.asset, quantity=fee.quantity, disposed_at=event.event_time,
+            proceeds_total=proceeds, event=fee_event, lots=lots_by_asset[fee.asset],
         )
 
     def _lot_from_values(
@@ -868,7 +933,7 @@ class TaxService:
 
         while quantity_to_sell > 0:
             if not lots:
-                if self._is_ignored_dust_disposal(asset, quantity_to_sell, proceeds_total):
+                if event.event_type != "fee" and self._is_ignored_dust_disposal(asset, quantity_to_sell, proceeds_total):
                     break
                 matched_quantity = quantity - quantity_to_sell
                 unmatched.append(
@@ -993,6 +1058,9 @@ class TaxService:
 
     def _disposal_value_eur(self, event: CanonicalEvent) -> Decimal:
         value = self._eur_value(event)
+        fee = self.trade_fee_accounting(event)
+        if fee is not None and fee.allocation == "disposal_cost":
+            return value - fee.value_eur if fee.value_eur is not None else value
         if (
             event.event_type == "trade"
             and event.quantity < 0
