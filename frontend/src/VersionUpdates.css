@@ -1,0 +1,44 @@
+.versionUpdates { margin-top: 24px; padding-top: 24px; border-top: 1px solid #dce1e5; min-width: 0; color: inherit; }
+.versionUpdates h2 { font-size: 20px; margin: 0; }
+.versionUpdates h3 { font-size: 17px; margin: 16px 0 12px; }
+.versionUpdates h4 { font-size: 14px; margin: 16px 0 8px; }
+.updatesFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; margin: 20px 0; }
+.updatesFacts > div { min-width: 0; }
+.updatesFacts dt { color: #57616a; font-size: 13px; margin-bottom: 5px; }
+.updatesFacts dd { margin: 0; overflow-wrap: anywhere; }
+.updatesFacts code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.updatesSettings, .updatesRelease, .updatesHandoff { display: grid; gap: 10px; min-width: 0; }
+.updatesSettings { padding-bottom: 20px; }
+.updatesSettings > label, .updatesRelease > label, .updatesHandoff > label { font-weight: 600; }
+.versionUpdates select, .versionUpdates textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; font: inherit; padding: 9px 10px; border: 1px solid #aeb7bf; border-radius: 4px; background: #fff; color: #182026; }
+.versionUpdates select { text-overflow: ellipsis; }
+.versionUpdates textarea { resize: vertical; font-family: monospace; font-size: 13px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.versionUpdates button { border: 1px solid #b7c7bd; border-radius: 4px; padding: 8px 12px; background: #edf3ef; color: #243b31; font: inherit; font-size: 13px; cursor: pointer; }
+.versionUpdates button.primaryButton { background: #234c3b; border-color: #234c3b; color: #fff; }
+.versionUpdates button:hover:not(:disabled) { background: #e2eee7; color: #243b31; }
+.versionUpdates button:disabled { opacity: .55; cursor: default; }
+.versionUpdates a { color: #23627a; }
+.versionUpdates label.updatesAutomatic { display: flex; flex-direction: row; gap: 9px; align-items: flex-start; margin: 6px 0; line-height: 1.5; }
+.versionUpdates .updatesAutomatic input[type="checkbox"] { margin: 4px 0 0; padding: 0; width: 17px; min-height: 17px; height: 17px; flex: 0 0 17px; }
+.updatesActions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.updatesActions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; max-width: 100%; white-space: normal; }
+.updatesActions button svg { flex-shrink: 0; }
+.updatesReleaseDetails { padding: 16px 0; border-top: 1px solid #dce1e5; }
+.updatesReleaseDetails a { display: inline-flex; align-items: center; gap: 7px; }
+.updatesReleaseDetails p, .updatesReleaseDetails li, .updatesHandoff p { overflow-wrap: anywhere; }
+.updatesReleaseNotes { margin: 0 0 20px; padding: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; max-height: 350px; overflow-y: auto; }
+.updatesHandoff { border-top: 1px solid #dce1e5; padding-top: 16px; }
+.updatesHandoff p { display: flex; gap: 7px; align-items: flex-start; }
+.updatesHandoff svg { flex-shrink: 0; }
+.updateIndicator { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; max-width: 100%; border: 0; border-radius: 4px; padding: 6px 8px; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.updateIndicator:hover { background: #edf2f0; color: #234c3d; }
+.updateIndicator svg { flex-shrink: 0; }
+.updateIndicator span { overflow-wrap: anywhere; }
+.updateIndicatorHint { color: #35664c; font-weight: 600; }
+@media (max-width: 600px) {
+  .updatesFacts { grid-template-columns: minmax(0, 1fr); }
+  .updatesActions { align-items: stretch; }
+  .updatesActions button { flex: 1 1 220px; }
+  .versionUpdates h2 { font-size: 18px; }
+  .updateIndicator { flex-wrap: wrap; }
+}

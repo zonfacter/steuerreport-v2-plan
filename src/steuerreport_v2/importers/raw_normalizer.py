@@ -14,6 +14,7 @@ from pathlib import Path
 from steuerreport_v2.contracts.events import CanonicalEvent, CanonicalEventCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.derivative_cash import BITGET_NEUTRAL_ACTIONS, bitget_financial_row
 from steuerreport_v2.importers.source_profiles import (
     SourceProfile,
     normalize_column_name,
@@ -567,6 +568,9 @@ class RawNormalizer:
         if profile.source == "helium" and event_type == "transfer":
             sign_context = self._helium_transfer_sign_context(normalized, account, raw_type)
         quantity = self._signed_quantity(quantity, event_type, sign_context)
+        if (profile.source == "bitget" and bitget_financial_row(normalized)
+                and raw_type.strip().lower() in BITGET_NEUTRAL_ACTIONS):
+            quantity = Decimal("0")
         if profile.source == "solana_rpc" and raw_type.strip().lower() == "network_fee":
             quantity = -abs(quantity)
         if (
@@ -1713,6 +1717,8 @@ class RawNormalizer:
     def _event_type(self, row: dict[str, str | None], profile: SourceProfile) -> str:
         raw_type = str(self._first_value(row, list(profile.type_columns)) or "")
         lowered = raw_type.strip().lower()
+        if lowered == "derivative":
+            return "derivative"
         if profile.source == "bitget":
             return self._bitget_event_type(row, lowered)
         if profile.source == "binance":
@@ -2045,7 +2051,9 @@ class RawNormalizer:
             token in combined for token in ("buy", "sell")
         ):
             return "trade"
-        if any(token in combined for token in ("open_long", "close_long", "open_short", "close_short")):
+        if any(token in combined for token in ("open_long", "close_long", "open_short", "close_short", "contract_margin_settle_fee")):
+            return "derivative"
+        if lowered in BITGET_NEUTRAL_ACTIONS and bitget_financial_row(row):
             return "derivative"
         if any(token in combined for token in ("trans_from", "trans_to", "strategy")):
             return "transfer"

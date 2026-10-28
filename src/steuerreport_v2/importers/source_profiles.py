@@ -250,6 +250,7 @@ PROFILES: dict[str, SourceProfile] = {
         label="Bitget CSV",
         time_columns=(
             "time",
+            "date",
             "timestamp utc+8 (completion)",
             "timestamp utc+8 (created)",
             "timestamp utc+8 (order)",
@@ -260,10 +261,11 @@ PROFILES: dict[str, SourceProfile] = {
         ),
         asset_columns=("asset", "coin", "currency"),
         quantity_columns=(
+            "surplus/deduction (after fee)",
+            "surplus/deduction (before fee)",
             "amount",
             "quantity",
             "executed",
-            "surplus/deduction (after fee)",
             "size",
         ),
         type_columns=("type", "action", "action (english)", "status", "sub category"),

@@ -15,6 +15,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.domain.sources import SourceService
 from steuerreport_v2.domain.tax_methodology import TaxMethodologyService
+from steuerreport_v2.domain.filing_binding import snapshot_binding_status
 
 
 class ProductReadinessService:
@@ -32,13 +33,16 @@ class ProductReadinessService:
         review_gate = ReviewService(self.store).gate()
         bmf_snapshot = TaxMethodologyService(self.store).bmf_filing_readiness_snapshot()
         bmf_report = bmf_snapshot.report if bmf_snapshot.status == "available" else None
+        binding_status = snapshot_binding_status(self.store, bmf_report)
+        qualified_report = bmf_report if binding_status == "current" else None
 
         source_rows = self._source_rows(sources_overview.sources, diagnostics.diagnostics)
         checks = [
             self._sources_check(source_rows, diagnostics.missing_credentials),
             self._review_gate_check(review_gate.allow_export, review_gate.issues_open),
-            self._tax_years_check(bmf_snapshot.status, bmf_report),
-            self._evidence_package_check(bmf_snapshot.status, bmf_report),
+            self._historical_reference_check(),
+            self._tax_years_check(binding_status if bmf_report else bmf_snapshot.status, qualified_report),
+            self._evidence_package_check(binding_status if bmf_report else bmf_snapshot.status, qualified_report),
             self._portfolio_live_check(source_rows, sources_overview.health.status if sources_overview.health else "missing"),
         ]
         overall = self._overall_status(checks, source_rows)
@@ -72,7 +76,18 @@ class ProductReadinessService:
                 "Connectoren abgefragt, keine Importe gestartet und keine Steuer-/FIFO-Daten "
                 "veraendert."
             ),
+            snapshot_binding_status=binding_status,
         )
+
+    def _historical_reference_check(self) -> ProductReadinessCheck:
+        with self.store.connect() as con:
+            count = con.execute("select count(*) from price_ledger where starts_with(source, 'historical:v2:')").fetchone()[0]
+        return ProductReadinessCheck(key="historical_reference_method", label="Historische Referenzkursmethode",
+            status="warning" if count else "info", count=1 if count else 0,
+            detail=(f"{count} historische Referenzkurse vorhanden. Preisbelege allein bestaetigen keine freigegebene gleichmaessige Tageskursmethode."
+                    if count else "Keine Kurse des automatischen historischen Referenzverfahrens vorhanden."),
+            next_action="Zeitanker, Quellenkonstanz und Bewertungsmethode anhand des Methodenkatalogs fachlich pruefen." if count else "Keine Aktion erforderlich.",
+            action_path="/api/v1/tax-methodology")
 
     def _source_rows(
         self,

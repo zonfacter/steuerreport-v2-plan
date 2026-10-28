@@ -1,0 +1,26 @@
+ID,Implementierter Umfang,Technischer Status,Proben,Offen,Fachlich abgenommen
+G01,"EUR-Kauf, Teilverkauf, Restbasis, Jahreswerte",passed_scoped,1,Separater PDF-Fachzahlenabgleich aller Faelle,nein
+G02,EUR-Erwerbs- und Verkaufskosten einmalig,passed_scoped,1,Individuelle steuerliche Kostenrolle,nein
+G03,"Erwerbsassetgebuehr reduziert Nettomenge, keine zweite Verwertung",passed_scoped,1,Nicht jeder Connector-/Nettoexportvertrag,nein
+G04,"Drittasset-FIFO-Verbrauch, historischer EUR-Wert, Kostenrolle und eigene Verwertung",passed_scoped,3,Swapkostenrolle bleibt gesperrt; keine individuelle Kostenbasisherkunft freigegeben,nein
+G05,Verknuepfter Token-Swap ohne fiktive EUR-Einzahlung,passed_scoped,1,Slippage-/Sonderprotokoll-/Gebuehrenmethoden nicht allgemein abgenommen,nein
+G06,Historischer Stablecoin-EUR-PricePoint konsumiert,passed_scoped,2,Nicht jeder Stablecoin-/Originalbelegbeschaffungsweg,nein
+G07,Depegwert statt pauschaler USD-Paritaet,passed_scoped,2,Echtheit/Abdeckung aller produktiven Depegkurse,nein
+G08,"USD/EUR direkt und EUR/USD invers, 100USD ergeben90EUR",passed_scoped,2,Keine Ausfuehrungskursbehauptung fuer Tagesreferenzen,nein
+G09,"Juengster belegter Vortag bis sieben Kalendertage; Wochenende/Feiertag, missing/stale/future",passed_scoped,12,"Technische Policy, keine universelle steuerliche Freigabe",nein
+G10,Lookup/Coverage/Tax/Review/Derived/Export ohne stillen Altpreis; keine Zukunftsrueckdatierung,passed_scoped,7,Nicht jede Altprovenienz und Preisquelle geheilt,nein
+G11,Globale Methode und Wallet-Vorschau getrennt,passed_scoped,1,Keine produktive Depotmethodenaktivierung,nein
+G12,Eigenuebertrag fuehrt Anschaffungsdatum und Basis fort,passed_scoped,1,Alle Netzwerkgebuehren und Fremdbelege,nein
+G13,Rewardzugang und Verwertung getrennt; Konvertierung verdoppelt Income nicht,passed_scoped,1,Privat-/Betriebsherkunft bleibt Sachverhaltsentscheidung,nein
+G14,Unklares Income bleibt Review,passed_scoped,1,Vollstaendige Reward-/Sphaerenklassifikation,nein
+G15,Kalenderjahrestag/Folgetag/Schaltjahr im Jahres-/CSV-/Planungsconsumer,passed_scoped,10,Reale Quellzeit und Einzelfallscope,nein
+G16,"Berlin-Jahr, UTC-/DST-Grenzen konsistent",passed_scoped,9,Kein exhaustiver Zeitzonenbeweis,nein
+G17,Fehlender Preis/Kauf/Anfangsbestand und Nullbasis nicht final,passed_scoped,3,Positive unbelegte Basis und vollstaendige Gaptaxonomie,nein
+G18,"Original-Chain/Contract/Mint/Dezimalstellen, Symbolkollision blockiert; explizit gebundene Preiszuordnung",passed_scoped,7,Kein allgemein positiver getrennter FIFO fuer gleichnamige Multichain-Assets,nein
+G19,"Belegte 100:1-Umstellung im selben Pool/UTC-Zeitpunkt, Basis/Datum, Teilverkauf; keine unbelegte Paritaet1",passed_scoped,15,"Keine generische steuerneutrale Bridge/LP, zeitversetzte Umstellung oder Gebuehrenumstellung",nein
+G20,Identischer CSV-Import idempotent; begrenzte Konto-/API-Proben vorhanden,passed_scoped,1,Nicht jeder Anbieter-/Formatwechsel,nein
+G21,Vorschau bei geaenderten Daten/Preisen/Methodenmarkern gesperrt; jetzt auch TXT-Konvertierungsbeleg,passed_scoped,3,Nicht alle sonstigen privaten Quelldateien universell bewertet,nein
+G22,Offline-FIFO und CSV semantisch reproduzierbar,passed_scoped,1,Separater Prozess-/PDF-Bytevergleich und jede neue Herkunftskette,nein
+G23,Technische Exportmoeglichkeit ist keine finale Jahresfreigabe; Vorschauinhalt gebunden,passed_scoped,3,Fachzahlengleichheit PDF/CSV/JSON fuer alle Spezialfaelle,nein
+G24,"Jahresabhaengige Freigrenze, strikter Vergleich, Zusatzkontext keine implizite0",passed_scoped,11,Keine persoenliche Einkommensteuerrechnung oder alle moeglichen Jahre,nein
+G25,"Archiv unveraendert, Revision und synthetischer Restore; voriger isolierter Docker-Restore bleibt historischer Nachweis",passed_scoped,1,Kein neuer Image-/Restore-/Rollback-/Engineparitaetsnachweis fuer diese Revision,nein

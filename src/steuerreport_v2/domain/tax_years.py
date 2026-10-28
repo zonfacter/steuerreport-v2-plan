@@ -100,9 +100,13 @@ from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
 from steuerreport_v2.domain.tax_time import (
+    as_utc,
     event_reporting_year_sql,
+    private_disposal_within_year,
+    reporting_time,
     reporting_tax_year,
     reporting_year_sql,
+    tax_line_within_year_sql,
 )
 from steuerreport_v2.domain.valuation import PriceCoverageService
 from steuerreport_v2.paths import PROJECT_ROOT
@@ -180,7 +184,7 @@ class TaxYearService:
                 "Income/Reward/Mining/Staking-Events. Die Logik schreibt keine "
                 "Steuerdaten und ersetzt nicht das globale Review-/Export-Gate. "
                 "Private Veraeusserungen werden fuer die steuerpflichtige Summe "
-                "nach Haltezeit getrennt: bis 365 Tage steuerpflichtig, darueber "
+                "nach privater Kalenderjahresfrist getrennt: bis einschliesslich Jahrestag steuerbar, danach "
                 "nachrichtlich steuerfrei."
             ),
         )
@@ -210,6 +214,11 @@ class TaxYearService:
                 "Punkte dort werden als historisch markiert."
             ),
         )
+
+    def private_disposal_threshold(self, year, request):
+        from steuerreport_v2.domain.private_disposal_threshold import assess_private_disposal_threshold
+
+        return assess_private_disposal_threshold(year, self._status_for_year(year).realized_gain_loss_eur, request)
 
     def payment_overview(self, *, years: list[int] | None = None) -> TaxPaymentOverview:
         rows: list[TaxPaymentOverviewRow] = []
@@ -397,14 +406,14 @@ class TaxYearService:
                 f"""
                 select
                     {reporting_year_sql("disposed_at")} as year,
-                    coalesce(sum(case when holding_days <= 365 then gain_loss_eur else 0 end), 0) as gain_loss,
-                    coalesce(sum(case when holding_days <= 365 then disposal_proceeds_eur else 0 end), 0) as proceeds,
-                    coalesce(sum(case when holding_days <= 365 then acquisition_cost_eur else 0 end), 0) as acquisition_cost,
-                    count(*) filter (where holding_days <= 365)::integer as tax_lines_count,
-                    coalesce(sum(case when holding_days > 365 then gain_loss_eur else 0 end), 0) as tax_free_gain_loss,
-                    coalesce(sum(case when holding_days > 365 then disposal_proceeds_eur else 0 end), 0) as tax_free_proceeds,
-                    coalesce(sum(case when holding_days > 365 then acquisition_cost_eur else 0 end), 0) as tax_free_acquisition_cost,
-                    count(*) filter (where holding_days > 365)::integer as tax_free_lines_count
+                    coalesce(sum(case when {tax_line_within_year_sql()} then gain_loss_eur else 0 end), 0) as gain_loss,
+                    coalesce(sum(case when {tax_line_within_year_sql()} then disposal_proceeds_eur else 0 end), 0) as proceeds,
+                    coalesce(sum(case when {tax_line_within_year_sql()} then acquisition_cost_eur else 0 end), 0) as acquisition_cost,
+                    count(*) filter (where {tax_line_within_year_sql()})::integer as tax_lines_count,
+                    coalesce(sum(case when not {tax_line_within_year_sql()} then gain_loss_eur else 0 end), 0) as tax_free_gain_loss,
+                    coalesce(sum(case when not {tax_line_within_year_sql()} then disposal_proceeds_eur else 0 end), 0) as tax_free_proceeds,
+                    coalesce(sum(case when not {tax_line_within_year_sql()} then acquisition_cost_eur else 0 end), 0) as tax_free_acquisition_cost,
+                    count(*) filter (where not {tax_line_within_year_sql()})::integer as tax_free_lines_count
                 from tax_lines
                 group by year
                 order by year
@@ -617,7 +626,7 @@ class TaxYearService:
                     sign="neutral",
                     evidence_ref="/api/v1/export/tax-lines.csv",
                     note=(
-                        "FIFO-Zeilen mit Haltezeit ueber 365 Tagen. Diese werden nicht in den "
+                        "FIFO-Zeilen ausserhalb der privaten Jahresfrist. Diese werden nicht in den "
                         "steuerpflichtigen Anlage-SO-Saldo eingerechnet."
                     ),
                 )
@@ -749,7 +758,7 @@ class TaxYearService:
             targets.append("Derivate/Termingeschaefte separat pruefen")
         if status.tax_free_lines_count:
             targets.append(
-                "Steuerfreie >365-Tage-Verkaeufe nur nachrichtlich/belegseitig aufbewahren"
+                "Verkaeufe ausserhalb der privaten Jahresfrist nur nachrichtlich/belegseitig aufbewahren"
             )
         return (
             " | ".join(targets)
@@ -789,7 +798,7 @@ class TaxYearService:
                     amount_eur=status.realized_gain_loss_eur,
                     target="Anlage SO: Gewinn/Verlust aus Kryptowerten",
                     detail=(
-                        "Saldo aus steuerpflichtigen FIFO-Tax-Lines bis 365 Tage. "
+                        "Saldo aus FIFO-Tax-Lines innerhalb der privaten Jahresfrist (Europe/Berlin). "
                         "Erloese und Anschaffungskosten mit dem Tax-Line-Export belegen."
                     ),
                     evidence_ref="/api/v1/export/tax-lines.csv",
@@ -836,7 +845,7 @@ class TaxYearService:
                     amount_eur=status.tax_free_gain_loss_eur,
                     target="Nicht in den steuerpflichtigen Anlage-SO-Saldo uebernehmen",
                     detail=(
-                        f"{status.tax_free_lines_count} FIFO-Zeile(n) mit Haltezeit ueber 365 Tagen. "
+                        f"{status.tax_free_lines_count} FIFO-Zeile(n) ausserhalb der privaten Jahresfrist. "
                         "Nur nachrichtlich und als Beleg fuer den Stichtagsverlauf aufbewahren."
                     ),
                     evidence_ref="/api/v1/export/tax-lines.csv",
@@ -1038,7 +1047,7 @@ class TaxYearService:
                     declaration_target="Anlage SO: Gewinn/Verlust aus privaten Veraeusserungsgeschaeften mit Kryptowerten",
                     evidence_ref="/api/v1/export/tax-lines.csv",
                     note=(
-                        "FIFO-Saldo aus steuerpflichtigen Veraeusserungen bis 365 Tage. "
+                        "FIFO-Saldo aus Veraeusserungen innerhalb der privaten Jahresfrist (Europe/Berlin). "
                         f"Erloese {self._fmt_eur(status.taxable_disposal_proceeds_eur)}, "
                         f"Anschaffungskosten {self._fmt_eur(status.acquisition_cost_eur)}."
                     ),
@@ -1098,7 +1107,7 @@ class TaxYearService:
                 TaxYearFilingSummaryLine(
                     order=order,
                     topic="tax_free",
-                    label="Steuerfreie Veraeusserungen > 365 Tage",
+                    label="Veraeusserungen ausserhalb der privaten Jahresfrist",
                     amount_eur=status.tax_free_gain_loss_eur,
                     tax_treatment="nicht steuerpflichtig nach Haltefrist",
                     declaration_target="Nicht in den steuerpflichtigen Anlage-SO-Saldo uebernehmen",
@@ -1775,7 +1784,7 @@ class TaxYearService:
                 TaxYearCorrectionMapLine(
                     order=order,
                     topic="tax_free",
-                    label="Steuerfreie Veraeusserungen > 365 Tage",
+                    label="Veraeusserungen ausserhalb der privaten Jahresfrist",
                     action_category="archivieren",
                     amount_eur=tax_free,
                     declaration_target="Nicht in den steuerpflichtigen Anlage-SO-Saldo uebernehmen",
@@ -3200,7 +3209,7 @@ class TaxYearService:
                 from tax_lines l
                 join canonical_events de on de.event_id = l.source_event_id
                 where {reporting_year_sql("l.disposed_at")} = ?
-                  and l.holding_days <= 365
+                  and {tax_line_within_year_sql('l')}
                   and de.event_id is not null
                   and de.quote_asset is not null
                   and de.quote_quantity is not null
@@ -3362,7 +3371,7 @@ class TaxYearService:
                 join tax_lots lot on lot.lot_id = l.lot_id
                 join canonical_events ae on ae.event_id = lot.source_event_id
                 where {reporting_year_sql("l.disposed_at")} = ?
-                  and l.holding_days <= 365
+                  and {tax_line_within_year_sql('l')}
                   and ae.event_id is not null
                   and ae.quote_asset is not null
                   and ae.quote_quantity is not null
@@ -4076,7 +4085,8 @@ class TaxYearService:
             methodology=(
                 "Read-only Plausibilitaetsbericht aus bestehenden Tax-Lines. "
                 "Top-Zeilen sind nach absolutem Gewinn/Verlust sortiert; "
-                "steuerpflichtig bedeutet holding_days <= 365."
+                "Die private Jahresfrist endet mit Ablauf des Jahrestags in Europe/Berlin; "
+                "holding_days ist nur beschreibend, keine Sphaeren- oder Freigrenzenpruefung."
             ),
         )
 
@@ -4254,7 +4264,7 @@ class TaxYearService:
                 select
                     l.tax_line_id,
                     l.asset,
-                    lot.acquired_at,
+                    coalesce(l.acquired_at, lot.acquired_at),
                     l.disposed_at,
                     l.holding_days,
                     l.quantity,
@@ -4283,7 +4293,7 @@ class TaxYearService:
                 left join canonical_events ae on ae.event_id = lot.source_event_id
                 left join canonical_events de on de.event_id = l.source_event_id
                 where {reporting_year_sql("l.disposed_at")} = ?
-                  and l.holding_days <= 365
+                  and {tax_line_within_year_sql('l')}
                 order by abs(l.gain_loss_eur) desc, l.disposed_at, l.tax_line_id
                 limit ?
                 """,
@@ -4579,7 +4589,9 @@ class TaxYearService:
                 action_note = "Aktuell kein Verlust-Lot; nur zur Vollstaendigkeit bei materieller offener Position sichtbar."
             if status == "not_a_loss" and lot.current_value_eur < min_value_eur:
                 continue
-            last_tax_relevant = (lot.tax_free_at - timedelta(days=1)).date().isoformat()
+            last_tax_relevant = (
+                reporting_time(lot.tax_free_at).date() - timedelta(days=1)
+            ).isoformat()
             rows.append(
                 TaxLossRealizationLot(
                     lot_id=lot.lot_id,
@@ -4691,7 +4703,7 @@ class TaxYearService:
                     l.tax_line_id,
                     l.asset,
                     l.quantity,
-                    lot.acquired_at,
+                    coalesce(l.acquired_at, lot.acquired_at),
                     l.disposed_at,
                     l.holding_days,
                     l.acquisition_cost_eur,
@@ -4757,7 +4769,7 @@ class TaxYearService:
         for row in rows:
             acquired_at = row[3]
             disposed_at = row[4]
-            taxable = int(row[5]) <= 365
+            taxable = private_disposal_within_year(acquired_at, disposed_at)
             acquisition_event = self._asset_fifo_event(row[11:24])
             disposal_event = self._asset_fifo_event(row[24:37])
             acquisition_raw = self._asset_fifo_raw(row[37:43])
@@ -6094,7 +6106,7 @@ class TaxYearService:
                 required=bool(tax_line_total or status.export_blocked),
                 note=(
                     "Belegt steuerpflichtige Veraeusserungen, Anschaffungskosten, "
-                    "Erloese, Gewinne/Verluste und steuerfreie >365-Tage-Zeilen."
+                    "Erloese, Gewinne/Verluste und Zeilen ausserhalb der privaten Jahresfrist."
                 ),
             ),
             TaxYearEvidenceItem(
@@ -7029,7 +7041,7 @@ class TaxYearService:
 
     @staticmethod
     def _is_taxable_private_disposal(line: object) -> bool:
-        return int(getattr(line, "holding_days", 0) or 0) <= 365
+        return private_disposal_within_year(line.acquired_at, line.disposed_at)
 
     @staticmethod
     def _is_stablecoin_like(asset: str) -> bool:
@@ -7698,7 +7710,9 @@ class TaxYearService:
             defaultdict(list)
         )
         for asset, priced_at, price_eur, source, confidence, price_id in rows:
-            grouped[asset].append((priced_at, price_eur, source, confidence, price_id))
+            grouped[asset].append((
+                as_utc(priced_at).replace(tzinfo=None), price_eur, source, confidence, price_id,
+            ))
         return {
             asset: ([item[0] for item in items], items)
             for asset, items in grouped.items()
@@ -7718,10 +7732,16 @@ class TaxYearService:
         if entry is None:
             return None
         times, items = entry
+        event_time = as_utc(event_time).replace(tzinfo=None)
         index = bisect_right(times, event_time) - 1
         if index < 0:
             return None
-        candidates = items[: index + 1]
+        candidates = [
+            item for item in items[: index + 1]
+            if item[0].date() == event_time.date() and item[1] > 0
+        ]
+        if not candidates:
+            return None
         same_day_primary = [
             item
             for item in candidates
@@ -8262,7 +8282,7 @@ class TaxYearService:
                     {reporting_year_sql("l.disposed_at")} as year,
                     l.asset,
                     l.quantity,
-                    lot.acquired_at,
+                    coalesce(l.acquired_at, lot.acquired_at),
                     l.disposed_at,
                     l.holding_days,
                     l.acquisition_cost_eur,
@@ -8335,7 +8355,7 @@ class TaxYearService:
                     acquired_at=row[4].isoformat(),
                     disposed_at=row[5].isoformat(),
                     holding_days=holding_days,
-                    taxable=holding_days <= 365,
+                    taxable=private_disposal_within_year(row[4], row[5]),
                     acquisition_cost_eur=row[7],
                     disposal_proceeds_eur=row[8],
                     gain_loss_eur=row[9],

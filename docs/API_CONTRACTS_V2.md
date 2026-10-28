@@ -3439,3 +3439,46 @@ Ein positiver Preis ergibt false, unbekannte oder ungueltige Preise ohne
 positiven Gegenbeleg ergeben null. Der Namenszusatz `:free` ersetzt diese
 Preispruefung nicht. Diese Metadaten sind ein Katalogstand, keine Preisgarantie;
 der Abruf startet keine Modellinferenz und aendert keine gespeicherte Auswahl.
+
+## Versionsstatus und Releasegebundener Updateauftrag
+
+`GET /api/v1/updates` liest Backend-Version, gespeicherte Praeferenzen und
+Release-Cache ohne GitHub-Aufruf. `PUT /api/v1/updates/settings` speichert nur
+`channel` (`stable` oder `stable_rc`) und `automatic` (bool, anfangs false).
+Ein RC als installierte Version waehlt anfangs `stable_rc`; eine gespeicherte
+explizite Auswahl bleibt auch bei spaeteren Versionen erhalten.
+
+`POST /api/v1/updates/check` mit `mode=manual|automatic` verwendet ausschliesslich
+die oeffentliche GitHub-Releases-API des festen Projekt-Repositories. Automatik
+erfordert gespeichertes Opt-in und mindestens sechs Stunden seit der letzten
+Pruefung; manuell mindestens 60 Sekunden. Ein hostlokaler `flock` unter `/state`
+koordiniert Prozesse mit demselben Volume. Kein Mehrhost-Koordinator. Die
+Browserautomatik benoetigt einen geoeffneten Browser; kein neuer Hintergrundjob.
+Maximal fuenf Seiten zu je 100 Releases, begrenzte Antwortgroessen und Timeouts,
+ETag/304 und begrenzte Anbieterwartezeiten. Teilantworten und Fehler beweisen
+keine Aktualitaet. Statuswerte sind `disabled`, `not_checked`, `checking`,
+`up_to_date`, `update_available`, `unavailable`; Alter und Unvollstaendigkeit
+werden zusaetzlich ausgewiesen. RC-Erkennung folgt der geparsten Version,
+nicht dem GitHub-Prerelease-Flag. Entwuerfe, Dev-/Alpha-/Beta-Staende und
+Downgrades sind keine Updateziele.
+
+Der produktive GitHub-Pfad verwendet den gemeinsamen `managed_client` und
+das gemeinsame IP-/Anbieterbudget `github_updates`. Zusaetzliche lokale
+Schranken verschaerfen nur: 512 KiB je Antwort, maximal fuenf Starts,
+keine Transport-Retries und begrenzte Auftragsdeadline. Ein Koordinatorfehler
+blockiert den Abruf; er aktiviert keinen unlimitierten Ersatzclient.
+
+`POST /api/v1/updates/handoff` verlangt `release_id` und `snapshot_digest` aus
+dem gespeicherten Status und liefert Schema 1, installierte Version, den
+exakten Ziel-Snapshot, Erstellungszeit und einen deutschen Textauftrag.
+Bei widerspruechlichem Snapshot 409 statt stiller Zielaenderung. Kein externer
+Abruf, keine KI-Ausfuehrung, kein Dockerzugriff. Quellcommit und Image-Digest
+werden nicht aus einem Branchnamen erfunden und bleiben derzeit null mit
+offenen Verifikationspunkten. Fremde Release-Notizen sind nur begrenzter Text,
+niemals Teil der ausfuehrbaren Anweisungen im Auftrag.
+
+Demo-/Sandboxbetrieb sperrt Speichern, Pruefen und Auftrag mit 403. Validierung
+422 und Betriebsfehler 503 spiegeln keine Eingaben oder Anbieterantworten.
+`updates.settings.v1` und `updates.cache.v1` sind die beiden exakt benannten
+nichtfinanziellen Admin-Schluessel. Der finanzielle Vorschau-Fingerprint v3
+schliesst nur diese zusaetzlich aus; andere Admin-Regeln bleiben gebunden.

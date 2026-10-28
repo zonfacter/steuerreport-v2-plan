@@ -19,6 +19,38 @@ Kein `docker compose down -v` verwenden. Die Anwendung besitzt weiterhin keine
 globale Benutzeranmeldung; nur im vertrauenswuerdigen LAN/VPN oder hinter TLS
 und einem geeigneten Authentifizierungszugang betreiben.
 
+## Version und Updates (Entwicklungsstand nach rc32)
+
+Die Versionsanzeige im Kopfbereich oeffnet **Einrichtung -> Version & Updates**
+(`/#admin?tab=updates`). Die installierte Version kommt vom eigenen Backend,
+nicht aus einem Image-Namen. Stabile Versionen und stabile Versionen mit RC
+sind getrennte Kanaele. Ein RC bleibt anhand seiner Versionsnummer ein RC,
+auch wenn GitHub ihn als Latest ohne Prerelease-Flag fuehrt.
+
+Automatische Pruefungen sind anfangs ausgeschaltet. Eine Checkbox-Aenderung
+erst mit **Einstellungen speichern** uebernehmen. **Jetzt pruefen** fragt nur
+oeffentliche Release-Metadaten des festen Projekt-Repositories ab; es werden
+keine Finanzdaten, Provider-Zugangsdaten oder KI-Anfragen uebertragen.
+Automatische Pruefungen im geoeffneten Browser erfolgen hoechstens alle sechs
+Stunden, manuelle Pruefungen mit mindestens einer Minute Wartefrist. Mehrere
+Fenster verwenden dieselbe serverseitige Sperre und denselben Cache. Die
+gespeicherte Anzeige neu laden liest nur den lokalen Cache. Demo-/Testvorschauen
+erlauben keine externen Pruefungen oder Einstellungsaenderungen.
+
+Ein gefundenes Release ist weder eine Installationsfreigabe noch ein Beleg
+fuer ein oeffentlich verfuegbares Docker-Image. Quellcommit und Image-Digest
+bleiben als unbekannt markiert, solange sie nicht verifiziert wurden.
+**Updateauftrag fuer KI kopieren** erzeugt einen auf das ausgewaehlte Release
+und dessen Metadatenhash gebundenen Text. TXT und JSON enthalten denselben
+Auftrag; ein spaeter gefundenes Release ersetzt das Ziel nicht automatisch.
+Ohne Browser-Zwischenablage wird der vollstaendige Text zur manuellen Auswahl
+angeboten, ohne falsche Erfolgsmeldung. Fremde Versionshinweise werden als Text
+angezeigt und nicht als Handlungsanweisung in den Auftrag uebernommen.
+
+Kein Button installiert Software, startet Docker, akzeptiert eine steuerliche
+Entscheidung oder korrigiert Finanzdaten. Ein Update bleibt ein separater
+administrativer Auftrag mit Sicherung, geprueftem Image und Rueckweg.
+
 ## Abrufgeschwindigkeit einstellen
 
 Unter **Einrichtung -> Abrufsteuerung** lassen sich gemeinsame IP-, Anbieter-

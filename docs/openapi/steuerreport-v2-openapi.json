@@ -8006,6 +8006,50 @@
         "title": "ApiResponse[PrivateConfigDocument]",
         "type": "object"
       },
+      "ApiResponse_PrivateDisposalThresholdAssessment_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrivateDisposalThresholdAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[PrivateDisposalThresholdAssessment]",
+        "type": "object"
+      },
       "ApiResponse_ProductReadinessReport_": {
         "properties": {
           "data": {
@@ -12008,6 +12052,94 @@
           }
         },
         "title": "ApiResponse[Union[WalletFifoParallelRunReport, NoneType]]",
+        "type": "object"
+      },
+      "ApiResponse_UpdateHandoff_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateHandoff"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[UpdateHandoff]",
+        "type": "object"
+      },
+      "ApiResponse_UpdateStatus_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[UpdateStatus]",
         "type": "object"
       },
       "ApiResponse_V1CexCredentialTakeoverReport_": {
@@ -21950,6 +22082,13 @@
             "title": "Combined Delta Eur",
             "type": "string"
           },
+          "direct_acquisition_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Direct Acquisition Event Ids",
+            "type": "array"
+          },
           "disposal_event_id": {
             "title": "Disposal Event Id",
             "type": "string"
@@ -21964,6 +22103,20 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Interaction Delta Eur",
             "type": "string"
+          },
+          "lineage_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Event Ids",
+            "type": "array"
+          },
+          "lineage_issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Issue Codes",
+            "type": "array"
           },
           "origin_classifications": {
             "items": {
@@ -22203,6 +22356,11 @@
             },
             "title": "Next Actions",
             "type": "array"
+          },
+          "origin_trace_policy": {
+            "default": "legacy_direct_origin_v1",
+            "title": "Origin Trace Policy",
+            "type": "string"
           },
           "potential_business_inventory_tax_lines_count": {
             "default": 0,
@@ -23276,6 +23434,13 @@
             "title": "Combined Delta Eur",
             "type": "string"
           },
+          "direct_acquisition_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Direct Acquisition Event Ids",
+            "type": "array"
+          },
           "disposal_event_id": {
             "title": "Disposal Event Id",
             "type": "string"
@@ -23305,6 +23470,20 @@
               "type": "string"
             },
             "title": "Issue Codes",
+            "type": "array"
+          },
+          "lineage_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Event Ids",
+            "type": "array"
+          },
+          "lineage_issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Issue Codes",
             "type": "array"
           },
           "origin_classifications": {
@@ -24577,6 +24756,11 @@
             "title": "Next Actions",
             "type": "array"
           },
+          "origin_trace_policy": {
+            "default": "legacy_direct_origin_v1",
+            "title": "Origin Trace Policy",
+            "type": "string"
+          },
           "potential_business_acquisition_cost_eur": {
             "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -24696,6 +24880,27 @@
             ],
             "title": "Last Disposal At"
           },
+          "lineage_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Reason"
+          },
+          "lineage_status": {
+            "default": "direct",
+            "enum": [
+              "direct",
+              "carried",
+              "unresolved"
+            ],
+            "title": "Lineage Status",
+            "type": "string"
+          },
           "origin_account": {
             "anyOf": [
               {
@@ -24744,6 +24949,17 @@
             "title": "Reason",
             "type": "string"
           },
+          "sample_direct_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Direct Event Id"
+          },
           "sample_disposal_event_id": {
             "anyOf": [
               {
@@ -24754,6 +24970,14 @@
               }
             ],
             "title": "Sample Disposal Event Id"
+          },
+          "sample_lot_path": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Sample Lot Path",
+            "type": "array"
           },
           "sample_origin_event_id": {
             "anyOf": [
@@ -32094,6 +32318,17 @@
             ],
             "title": "Block Reason"
           },
+          "calculation_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Run Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -32102,6 +32337,26 @@
           "file_index": {
             "title": "File Index",
             "type": "integer"
+          },
+          "filing_status": {
+            "default": "unbound",
+            "enum": [
+              "unbound",
+              "preview"
+            ],
+            "title": "Filing Status",
+            "type": "string"
+          },
+          "input_binding_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Binding Sha256"
           },
           "kind": {
             "const": "pdf",
@@ -32179,6 +32434,20 @@
             "default": "0",
             "title": "Derivative Realized Pnl Eur",
             "type": "string"
+          },
+          "filing_status": {
+            "default": "blocked",
+            "enum": [
+              "technical_only",
+              "blocked"
+            ],
+            "title": "Filing Status",
+            "type": "string"
+          },
+          "final_filing_allowed": {
+            "default": false,
+            "title": "Final Filing Allowed",
+            "type": "boolean"
           },
           "latest_derivative_run_id": {
             "anyOf": [
@@ -32267,6 +32536,11 @@
           "tax_lines_count": {
             "title": "Tax Lines Count",
             "type": "integer"
+          },
+          "technical_export_allowed": {
+            "default": false,
+            "title": "Technical Export Allowed",
+            "type": "boolean"
           },
           "unmatched_disposals": {
             "title": "Unmatched Disposals",
@@ -43797,6 +44071,32 @@
             ],
             "title": "Coingecko Id"
           },
+          "contract_address": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Address"
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "maximum": 255.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decimals"
+          },
           "defillama_id": {
             "anyOf": [
               {
@@ -43808,6 +44108,18 @@
               }
             ],
             "title": "Defillama Id"
+          },
+          "network": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9:_-]{0,60}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Network"
           },
           "solana_mint": {
             "anyOf": [
@@ -47077,6 +47389,137 @@
         "title": "PrivateConfigWrite",
         "type": "object"
       },
+      "PrivateDisposalThresholdAssessment": {
+        "properties": {
+          "calculated_crypto_gain_loss_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Calculated Crypto Gain Loss Eur",
+            "type": "string"
+          },
+          "final_filing_allowed": {
+            "default": false,
+            "title": "Final Filing Allowed",
+            "type": "boolean"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "other_private_gain_loss_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Private Gain Loss Eur"
+          },
+          "policy_version": {
+            "default": "de_estg23_freigrenze_2009_2026_v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "context_required",
+              "below_threshold",
+              "threshold_reached",
+              "unsupported_year"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "threshold_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold Eur"
+          },
+          "threshold_reached": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold Reached"
+          },
+          "total_private_gain_loss_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Private Gain Loss Eur"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "threshold_eur",
+          "calculated_crypto_gain_loss_eur",
+          "other_private_gain_loss_eur",
+          "total_private_gain_loss_eur",
+          "status",
+          "threshold_reached",
+          "methodology",
+          "source_refs"
+        ],
+        "title": "PrivateDisposalThresholdAssessment",
+        "type": "object"
+      },
+      "PrivateDisposalThresholdRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_other_private_disposals_complete": {
+            "default": false,
+            "title": "Confirm Other Private Disposals Complete",
+            "type": "boolean"
+          },
+          "other_private_gain_loss_eur": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Private Gain Loss Eur"
+          }
+        },
+        "title": "PrivateDisposalThresholdRequest",
+        "type": "object"
+      },
       "ProductReadinessCheck": {
         "properties": {
           "action_path": {
@@ -47224,6 +47667,17 @@
             "default": 0,
             "title": "Setup Required Sources",
             "type": "integer"
+          },
+          "snapshot_binding_status": {
+            "default": "unbound",
+            "enum": [
+              "missing",
+              "unbound",
+              "stale",
+              "current"
+            ],
+            "title": "Snapshot Binding Status",
+            "type": "string"
           },
           "sources": {
             "items": {
@@ -54272,6 +54726,28 @@
             "title": "Change Kind",
             "type": "string"
           },
+          "classification_policy_new": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Policy New"
+          },
+          "classification_policy_old": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Policy Old"
+          },
           "counterpart_event_ids": {
             "items": {
               "type": "string"
@@ -54577,6 +55053,28 @@
             ],
             "title": "Tax Inclusion Status",
             "type": "string"
+          },
+          "taxable_new": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxable New"
+          },
+          "taxable_old": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxable Old"
           },
           "value_delta_eur": {
             "anyOf": [
@@ -56040,6 +56538,17 @@
             "title": "Available Years",
             "type": "array"
           },
+          "binding_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Version"
+          },
           "blocked_years": {
             "items": {
               "type": "integer"
@@ -56064,6 +56573,28 @@
           "generated_at": {
             "title": "Generated At",
             "type": "string"
+          },
+          "input_binding_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Binding Sha256"
+          },
+          "latest_tax_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Tax Run Id"
           },
           "methodology": {
             "title": "Methodology",
@@ -68911,6 +69442,308 @@
         "title": "TransferCandidateReport",
         "type": "object"
       },
+      "UpdateCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "automatic"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "UpdateCheckRequest",
+        "type": "object"
+      },
+      "UpdateHandoff": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "handoff_schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Handoff Schema Version",
+            "type": "integer"
+          },
+          "installed_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed Version"
+          },
+          "target": {
+            "$ref": "#/components/schemas/UpdateRelease"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "installed_version",
+          "target",
+          "text",
+          "created_at"
+        ],
+        "title": "UpdateHandoff",
+        "type": "object"
+      },
+      "UpdateHandoffRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "release_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Release Id",
+            "type": "integer"
+          },
+          "snapshot_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "snapshot_digest"
+        ],
+        "title": "UpdateHandoffRequest",
+        "type": "object"
+      },
+      "UpdateRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 8000,
+            "title": "Body",
+            "type": "string"
+          },
+          "channel": {
+            "enum": [
+              "stable",
+              "rc"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "github_prerelease": {
+            "title": "Github Prerelease",
+            "type": "boolean"
+          },
+          "image_digest": {
+            "title": "Image Digest",
+            "type": "null"
+          },
+          "image_reference": {
+            "title": "Image Reference",
+            "type": "null"
+          },
+          "open_checks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Open Checks",
+            "type": "array"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "release_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Release Id",
+            "type": "integer"
+          },
+          "snapshot_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Digest",
+            "type": "string"
+          },
+          "source_commit": {
+            "title": "Source Commit",
+            "type": "null"
+          },
+          "tag": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Tag",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 512,
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "tag",
+          "version",
+          "channel",
+          "github_prerelease",
+          "published_at",
+          "url",
+          "body",
+          "open_checks",
+          "snapshot_digest"
+        ],
+        "title": "UpdateRelease",
+        "type": "object"
+      },
+      "UpdateSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic": {
+            "default": false,
+            "title": "Automatic",
+            "type": "boolean"
+          },
+          "channel": {
+            "default": "stable",
+            "enum": [
+              "stable",
+              "stable_rc"
+            ],
+            "title": "Channel",
+            "type": "string"
+          }
+        },
+        "title": "UpdateSettings",
+        "type": "object"
+      },
+      "UpdateStatus": {
+        "properties": {
+          "check_allowed": {
+            "title": "Check Allowed",
+            "type": "boolean"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "incomplete": {
+            "default": false,
+            "title": "Incomplete",
+            "type": "boolean"
+          },
+          "installed_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed Version"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/UpdateRelease"
+            },
+            "title": "Releases",
+            "type": "array"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/UpdateSettings"
+          },
+          "settings_writable": {
+            "title": "Settings Writable",
+            "type": "boolean"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "disabled",
+              "not_checked",
+              "checking",
+              "up_to_date",
+              "update_available",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "installed_version",
+          "status",
+          "settings",
+          "message",
+          "check_allowed",
+          "settings_writable"
+        ],
+        "title": "UpdateStatus",
+        "type": "object"
+      },
       "V1CexCredentialTakeoverItem": {
         "properties": {
           "can_take_over": {
@@ -81572,7 +82405,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc32"
+    "version": "0.2.0rc33"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -98230,6 +99063,62 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/tax-years/{year}/private-disposal-threshold-assessment": {
+      "post": {
+        "description": "Private disposal threshold assessment. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "private_disposal_threshold_assessment_api_v1_tax_years__year__private_disposal_threshold_assessment_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrivateDisposalThresholdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PrivateDisposalThresholdAssessment_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Private Disposal Threshold Assessment",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/tax-years/{year}/solana-program-income-review": {
       "get": {
         "description": "Tax year solana program income review. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -102573,6 +103462,166 @@
           "Transactions"
         ],
         "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/updates": {
+      "get": {
+        "description": "Status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "status_api_v1_updates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UpdateStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "System"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/updates/check": {
+      "post": {
+        "description": "Check. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "check_api_v1_updates_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UpdateStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check",
+        "tags": [
+          "System"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/updates/handoff": {
+      "post": {
+        "description": "Handoff. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "handoff_api_v1_updates_handoff_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHandoffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UpdateHandoff_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Handoff",
+        "tags": [
+          "System"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/updates/settings": {
+      "put": {
+        "description": "Settings. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "settings_api_v1_updates_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UpdateStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings",
+        "tags": [
+          "System"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

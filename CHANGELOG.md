@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0rc33 - 2026-10-28 (Releasekandidat)
+
+- GitHub #2: Bitget-Financial-CSV mit Date, signierten Futures-Gebuehren,
+  Funding und neutralen Margin-Aktionen; explizite Nettoexporte ohne doppelten
+  Gebuehrenabzug. Generische Derivative-Zeilen erhalten ihre Gebuehrenbeine.
+  Alte Ableitungen und widerspruechliche Brutto-/Netto-Normalisierung erzeugen
+  Review-Sperren statt einer stillen produktiven Datenkorrektur.
+- GitHub #3: Backend-Versionsanzeige und Einrichtung fuer stabile/RC-Releases,
+  ausdrueckliches Opt-in, begrenzte GitHub-Abfragen und persistenter lokaler Cache.
+  Releasegebundener KI-Updateauftrag mit Zwischenablagefallback und TXT/JSON;
+  kein automatisches Deployment und keine erfundenen Commit-/Image-Nachweise.
+- Update-Praeferenzen und Metadatencache sind explizit von finanziellen
+  Vorschau-Fingerprints ausgenommen; neue Fingerprint-Version erfordert fuer
+  bereits gebundene alte Vorschauen eine erneute ausdrueckliche Berechnung.
+- GitHub-Issue-Abschlusspruefung: 2722 Unit-Tests bestanden, vier bekannte
+  private Belegskips; 52 urspruengliche, 104 erweiterte Referenzen und der
+  unveraenderte 15-Fall-Bitget-Reproducer bestanden. Gemeinsamer HTTP-Limiter
+  auch fuer GitHub, keine Ausnahme vom bestehenden Architektur-Guard.
+  Originalnachweise und Browserbilder unter `docs/audit/2026-10-28/issues/`.
+- Historische Ersatzkurse, SQL-Coverage und Ableitungen verwenden denselben
+  konservativen Tages-/Zeitvertrag; keine verdeckte Altpreis-Wiederverwendung.
+- Private Kalenderjahresfrist in Europe/Berlin fuer Python, SQL, Planung und
+  CSV; Archivvergleiche erhalten die urspruenglich gespeicherte Klassifikation.
+- Technische Vorschau und finale Jahresfreigabe getrennt; gebundene PDF- und
+  Jahrespakete sowie Daten-/Methodenbindung der BMF-Pruefstaende.
+- Separat ausgewiesene EUR-Erwerbsgebuehren in der Kostenbasis; ungepruefte
+  Nullbasis und nicht vollstaendig modellierte Gebuehren-Token bleiben Review.
+- Lesende, jahresabhaengige Freigrenzen-Arithmetik erfordert ausdrueckliche
+  Angaben zu anderen privaten Veraeusserungen und erteilt keine Jahresfreigabe.
+- Drittassetgebuehren mit eigenem Lotverbrauch, richtungsgebundene historische
+  FX-Referenzen sowie beleggebundene Tokenidentitaet und Umstellungen.
+- Lesende Lot-Herkunft durch Transfers und Umstellungen einschliesslich
+  Zwischenbelegen, Vorjahresurspruengen und konsistenten Review-Sperren.
+  Herkunftsdetails bleiben im Steuerjahr einsehbar; keine Sphaerenfreigabe.
+- Vorherige Lot-Herkunft-Pruefung: 2629 Unit-Tests bestanden, vier bekannte
+  private Belegskips; 52 urspruengliche und 87 zusaetzliche Referenztests
+  bestanden. Originalausgaben, Matrix, Diff und Grenzen im Auditordner.
+- Isolierte Restore-/Browser-/Referenzpruefungen und verbleibende Grenzen im
+  Auditordner. Die urspruenglichen Nachweise bleiben als Entwicklungsnachweise
+  unveraendert erhalten; der gesonderte rc33-Release aktualisiert keine
+  Finanzdaten automatisch und aktiviert keine neue produktive FIFO-Methode.
+
 ## 0.2.0rc32 - 2026-10-28 (Releasekandidat)
 
 - Automatische historische Preissuche mit nahen DefiLlama-Zielzeitpunkten

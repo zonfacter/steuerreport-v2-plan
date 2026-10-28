@@ -64,6 +64,7 @@ class _SphereTotals(_Totals):
 
 
 class BmfCombinedFifoStagingService:
+    ORIGIN_TRACE_POLICY = "linked_lot_origin_v1"
     MATERIAL_DELTA_EUR = Decimal("0.01")
     PROJECT_ROOT = SOFTWARE_ROOT
     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
@@ -150,9 +151,12 @@ class BmfCombinedFifoStagingService:
         events_by_id = {
             event.event_id: event for event in received_wallet_state.canonical_events
         }
+        from steuerreport_v2.domain.lot_origin import LotOriginIndex
+        origin_index = LotOriginIndex(received_wallet_state.all_lots, received_wallet_state.canonical_events)
         sphere_rows, sphere_by_year_asset = self._sphere_rows(
             received_wallet_lines,
             events_by_id,
+            origin_index,
         )
         scenario_lines = {
             "active_global": active_global_lines,
@@ -180,6 +184,7 @@ class BmfCombinedFifoStagingService:
             scenario_lines,
             received_wallet_lines,
             events_by_id,
+            origin_index,
         )
 
         active_global = self._scenario_totals(
@@ -250,6 +255,7 @@ class BmfCombinedFifoStagingService:
             years=years,
             status=status,
             strict_ready=False,
+            origin_trace_policy=self.ORIGIN_TRACE_POLICY,
             active_global_policy=self.ACTIVE_GLOBAL_POLICY,
             received_first_global_policy=self.RECEIVED_GLOBAL_POLICY,
             active_wallet_policy=self.ACTIVE_WALLET_POLICY,
@@ -472,6 +478,7 @@ class BmfCombinedFifoStagingService:
         self,
         lines: list[WalletFifoPreviewLine],
         events_by_id: dict[str, CanonicalEvent],
+        origin_index,
     ) -> tuple[
         list[BmfCombinedFifoSphereRow],
         dict[tuple[int, str, str], _SphereTotals],
@@ -481,11 +488,13 @@ class BmfCombinedFifoStagingService:
         )
         for line in lines:
             asset = line.asset.upper()
-            origin = events_by_id.get(line.acquisition_source_event_id or "")
-            classification = self._origin_classification(asset, origin)
-            totals[(reporting_tax_year(line.disposed_at), asset, classification)].add_line(
-                line
-            )
+            trace = origin_index.resolve(line)
+            origin = events_by_id.get(trace.origin_event_id or "")
+            classification = "missing_origin" if trace.status == "unresolved" else self._origin_classification(trace.origin_asset or asset, origin)
+            total = totals[(reporting_tax_year(line.disposed_at), asset, classification)]
+            total.add(line)
+            if trace.origin_event_id:
+                total.origin_event_ids.add(trace.origin_event_id)
         rows = [
             BmfCombinedFifoSphereRow(
                 year=year,
@@ -508,6 +517,7 @@ class BmfCombinedFifoStagingService:
         scenarios: dict[str, list[TaxLineLike]],
         received_wallet_lines: list[WalletFifoPreviewLine],
         events_by_id: dict[str, CanonicalEvent],
+        origin_index,
     ) -> list[BmfCombinedFifoEventRow]:
         totals = {
             name: self._aggregate(lines, key="event")
@@ -516,7 +526,7 @@ class BmfCombinedFifoStagingService:
         keys = set().union(*(values.keys() for values in totals.values()))
         wallet_context: dict[
             tuple[int, str, str], dict[str, set[str]]
-        ] = defaultdict(lambda: {"pools": set(), "origins": set(), "classes": set()})
+        ] = defaultdict(lambda: {"pools": set(), "origins": set(), "classes": set(), "direct": set(), "issues": set(), "lineage": set()})
         disposed_at_by_key: dict[tuple[int, str, str], datetime] = {}
         for line in received_wallet_lines:
             key = (
@@ -525,11 +535,17 @@ class BmfCombinedFifoStagingService:
                 line.source_event_id,
             )
             wallet_context[key]["pools"].add(line.pool_id)
-            if line.acquisition_source_event_id:
-                wallet_context[key]["origins"].add(line.acquisition_source_event_id)
-            origin = events_by_id.get(line.acquisition_source_event_id or "")
+            trace = origin_index.resolve(line)
+            wallet_context[key]["lineage"].update(origin_index.source_event_ids(trace))
+            if trace.direct_event_id:
+                wallet_context[key]["direct"].add(trace.direct_event_id)
+            if trace.origin_event_id:
+                wallet_context[key]["origins"].add(trace.origin_event_id)
+            if trace.reason:
+                wallet_context[key]["issues"].add(trace.reason)
+            origin = events_by_id.get(trace.origin_event_id or "")
             wallet_context[key]["classes"].add(
-                self._origin_classification(line.asset.upper(), origin)
+                "missing_origin" if trace.status == "unresolved" else self._origin_classification(trace.origin_asset or line.asset.upper(), origin)
             )
             disposed_at_by_key[key] = line.disposed_at
 
@@ -579,6 +595,9 @@ class BmfCombinedFifoStagingService:
                     wallet_pool_ids=sorted(context["pools"]),
                     acquisition_source_event_ids=sorted(context["origins"]),
                     origin_classifications=classifications,
+                    lineage_issue_codes=sorted(context["issues"]),
+                    direct_acquisition_event_ids=sorted(context["direct"]),
+                    lineage_event_ids=sorted(context["lineage"]),
                     active_global_quantity=values["active_global"].quantity,
                     received_first_global_quantity=values["received_global"].quantity,
                     active_wallet_quantity=values["active_wallet"].quantity,

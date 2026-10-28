@@ -212,7 +212,7 @@ def test_wallet_fifo_input_fingerprint_is_stable_across_fifo_rebuild(tmp_path):
     TaxService(store).rebuild_fifo()
     after = service.input_fingerprint(as_of)
 
-    assert before.fingerprint_version == "wallet_fifo_input_v2_semantic"
+    assert before.fingerprint_version == "wallet_fifo_input_v3_nonfinancial_updates_excluded"
     assert before.component_sha256
     assert after.digest == before.digest
     assert after.component_sha256 == before.component_sha256
@@ -1787,6 +1787,9 @@ def test_wallet_fifo_carries_owned_legacy_staking_principal_and_marks_excess_rew
             source="unit",
         )
     )
+    for day in (datetime(2022, 7, 12, tzinfo=timezone.utc), datetime(2022, 12, 31, tzinfo=timezone.utc)):
+        store.add_price_point(PricePointCreate(asset="HNT", price_eur=Decimal("1"),
+            priced_at=day, source="unit"))
     store.add_canonical_events(
         [
             CanonicalEventCreate(

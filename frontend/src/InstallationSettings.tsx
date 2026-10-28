@@ -3,6 +3,7 @@ import { RefreshCw, Save, Trash2 } from "lucide-react";
 import { API_BASE } from "./api-base";
 import { HelpTip } from "./Help";
 import { AdminEnvironmentState, useAdminEnvironment } from "./ConnectionSettings";
+import { VersionUpdates } from "./VersionUpdates";
 
 type Field = {
   key: string; label: string; group: string; kind: "account" | "path" | "url" | "text";
@@ -17,7 +18,8 @@ type Settings = {
 type ConfigDocument = { filename: string; content: string; revision: string };
 const CONFIGS = [
   "source_registry.json", "solana_v1_ownership_scope.json", "solana_service_swap_tax_mappings.json",
-  "pionex_hnt_reconciliation.json", "fairspot_hnt_staking_reconciliation.json", "solana_staking_position_reconciliations.json"
+  "pionex_hnt_reconciliation.json", "fairspot_hnt_staking_reconciliation.json", "solana_staking_position_reconciliations.json",
+  "token_conversion_mappings.json"
 ];
 const HIDDEN_FIELDS = ["v1_fx_db_file", "v1_connector_base_url", "local_llm_base", "local_llm_model"];
 const PROFILE_ISSUES: Record<string, string> = {
@@ -40,7 +42,7 @@ async function request<T>(path: string, method = "GET", body?: unknown, signal?:
     const errors: Record<string, string> = {
       profile_revision_conflict: "Die Konfiguration wurde zwischenzeitlich geändert. Vor erneutem Speichern neu laden.",
       config_revision_conflict: "Die Datei wurde zwischenzeitlich geändert. Vor erneutem Speichern neu laden.",
-      config_json_or_schema_invalid: "JSON oder Quellenregister-Schema ist ungültig.",
+      config_json_or_schema_invalid: "JSON oder Konfigurationsschema ist ungültig.",
       encrypted_secret_vault_required: "Ein verschlüsselter Secret-Vault ist erforderlich. Die Administration muss den Schlüssel sicher bereitstellen.",
       profile_url_invalid_or_contains_credentials: "Die Dienstadresse muss eine HTTP(S)-URL ohne Zugangsdaten, Query-Parameter oder Fragment sein.",
       profile_location_not_writable: "Das private Profil muss außerhalb des Softwareverzeichnisses liegen und für den Dienstbenutzer beschreibbar sein.",
@@ -168,6 +170,7 @@ export function InstallationSettings() {
         <button type="submit" className="primaryButton" disabled={busy || environment.locked || demo || !document || content === document.content}><Save size={16} /> Belegdatei speichern</button>
       </form>
     </details>
+    <VersionUpdates />
   </section>;
 }
 

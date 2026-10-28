@@ -30,6 +30,11 @@ def test_flow_summary_uses_net_eur_transfers_not_trades(tmp_path):
         )
     )
 
+    store.add_price_point(PricePointCreate(
+        asset="USDT", price_eur=Decimal("0.90"),
+        priced_at=datetime(2021, 4, 29, tzinfo=timezone.utc), source="manual-test:same-day",
+    ))
+
     entries = FlowService(store).rebuild()
     summary = FlowService(store).summary()
 
@@ -61,6 +66,11 @@ def test_flow_summary_nets_bidirectional_edges(tmp_path):
             source="manual-test",
         )
     )
+
+    store.add_price_point(PricePointCreate(
+        asset="USDT", price_eur=Decimal("0.90"),
+        priced_at=datetime(2021, 4, 29, tzinfo=timezone.utc), source="manual-test:same-day",
+    ))
 
     FlowService(store).rebuild()
     summary = FlowService(store).summary()
@@ -112,6 +122,11 @@ def test_flow_summary_merges_unique_truncated_wallet_alias(tmp_path):
             source="manual-test",
         )
     )
+
+    store.add_price_point(PricePointCreate(
+        asset="HNT", price_eur=Decimal("5.00"),
+        priced_at=datetime(2024, 1, 2, tzinfo=timezone.utc), source="manual-test:same-day",
+    ))
 
     FlowService(store).rebuild()
     summary = FlowService(store).summary()

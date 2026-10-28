@@ -23,6 +23,9 @@ class ExportPackage(BaseModel):
     status: ExportStatus
     block_reason: str | None = None
     created_at: datetime
+    filing_status: Literal["unbound", "preview"] = "unbound"
+    input_binding_sha256: str | None = None
+    calculation_run_id: str | None = None
 
 
 class ExportResult(BaseModel):
@@ -53,6 +56,9 @@ class ExportReadiness(BaseModel):
     latest_tax_run_id: str | None = None
     latest_derivative_run_id: str | None = None
     max_pdf_pages_per_file: int
+    technical_export_allowed: bool = False
+    final_filing_allowed: bool = False
+    filing_status: Literal["technical_only", "blocked"] = "blocked"
 
 
 class ExportPackageDeleteResult(BaseModel):

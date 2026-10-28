@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 from steuerreport_v2.private_settings import private_alias
 
 from datetime import datetime, timezone
 from decimal import Decimal
 from hashlib import sha1
 import json
+from types import SimpleNamespace
 
 from steuerreport_v2.contracts.review import (
     ReviewDecisionSuggestion,
@@ -25,6 +28,10 @@ from steuerreport_v2.domain.account_aliases import (
     unresolved_truncated_account_labels,
 )
 from steuerreport_v2.domain.derivatives import DerivativesManager
+from steuerreport_v2.domain.derivative_cash import (
+    BITGET_DERIVATIVE_ACTIONS, BITGET_NEUTRAL_ACTIONS, bitget_financial_row,
+    derivative_cash, derivative_raw_rows,
+)
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.pionex_reconciliation import (
     PionexHntReconciliationService,
@@ -48,12 +55,143 @@ class ReviewService:
 
     def gate(self, price_coverage: PriceCoverageReport | None = None) -> ReviewGate:
         issues: list[ReviewIssue] = []
+        from steuerreport_v2.domain.asset_identity import AssetIdentityIndex
+        from steuerreport_v2.domain.historical_prices import HistoricalPriceService
+        identity_problems = AssetIdentityIndex(self.store).problems_for_mappings(
+            HistoricalPriceService(self.store).mappings())
+        for asset, reason in sorted(identity_problems.items()):
+            issues.append(ReviewIssue(code=reason, severity="high", scope=f"asset_identity:{asset}",
+                blocks_export=True, message=f"Tokenidentitaet fuer {asset} nicht eindeutig oder Mengeneinheit widerspruechlich ({reason}). Originale Chain-/Contract-/Dezimalstellen pruefen; keine Freigabe aufgrund des Symbols."))
+        from steuerreport_v2.domain.token_conversion import TokenConversionService
+        conversion_report = TokenConversionService(self.store).report()
+        for item in conversion_report["issues"]:
+            issues.append(ReviewIssue(code=item["reason"], severity="high",
+                scope=f"token_conversion:{item['event_id'] or 'config'}", blocks_export=True,
+                message="Migration/Wrapping ohne aktuelle eindeutige Beleg-, Mengen- oder Methodenbindung. Keine automatische 1:1-Paritaet oder neutrale Fortschreibung."))
         from steuerreport_v2.db.ai_corrections import conflicts
         with self.store.connect() as con:
+            derivative_calculated = con.execute("select count(*) from derivative_run_summaries").fetchone()[0] > 0
             for kind, target_id, code in conflicts(con):
                 issues.append(ReviewIssue(code=code, severity="high", scope=f"correction:{kind}:{target_id}",
                                           message="Freigegebene Datenkorrektur stimmt nicht mit dem aktuellen Datenstand ueberein.", blocks_export=True))
         positions = BalanceLedgerBuilder(self.store).positions()
+
+        from steuerreport_v2.domain.lot_origin import LotOriginIndex
+        origin_events = self.store.list_canonical_events()
+        derivative_rows = derivative_raw_rows(self.store)
+        stored_cash = defaultdict(dict)
+        stored_derivatives = defaultdict(dict)
+        with self.store.connect() as con:
+            for event_id, asset, amount in con.execute("""select l.event_id,l.asset,sum(l.delta_quantity)
+                from balance_ledger l join canonical_events e on e.event_id=l.event_id
+                where e.event_type='derivative' group by 1,2""").fetchall():
+                stored_cash[event_id][asset.upper()] = amount
+            for event_id, asset, amount in con.execute(
+                "select event_id,asset,sum(quantity) from derivative_lines group by 1,2").fetchall():
+                stored_derivatives[event_id][asset.upper()] = amount
+        for event in origin_events:
+            row = derivative_rows.get(event.event_id, {})
+            action = str(row.get("type") or row.get("action") or row.get("action (english)") or "").strip().lower()
+            neutral = action in BITGET_NEUTRAL_ACTIONS and bitget_financial_row(row)
+            normalization_required = event.source.lower() == "bitget" and (
+                (action in BITGET_DERIVATIVE_ACTIONS or neutral) and event.event_type != "derivative"
+                or neutral and event.quantity != 0
+            )
+            if normalization_required:
+                issues.append(ReviewIssue(code="derivative_normalization_required", severity="high",
+                    scope=f"event:{event.event_id}", tax_year=reporting_tax_year(event.event_time), blocks_export=True,
+                    message="Die gespeicherte Bitget-Einordnung entspricht nicht dem belegten Funding-/Futures-Schema oder enthaelt eine Sicherheitenumbuchung als Geldfluss. Rohimport in einer neuen Vorschau normalisieren und pruefen; kein automatisches Umschreiben alter Daten."))
+            if event.event_type != "derivative":
+                continue
+            cash = derivative_cash(event, row)
+            if cash.review_reason:
+                raw_mismatch = cash.review_reason.startswith("principal_")
+                issues.append(ReviewIssue(code="derivative_normalization_required" if raw_mismatch else "derivative_fee_semantics_required", severity="high",
+                    scope=f"event:{event.event_id}", tax_year=reporting_tax_year(event.event_time), blocks_export=True,
+                    message=(f"Die gespeicherte Derivate-Menge stimmt nicht mit der ausdruecklichen Brutto-/Nettospalte ueberein ({cash.review_reason}). Rohimport in einer neuen Vorschau normalisieren und pruefen."
+                             if raw_mismatch else f"Derivategebuehren sind nicht abschliessend belegt ({cash.review_reason}). Brutto-/Nettokonvention, Gebuehrenwaehrung und gegebenenfalls eigener Token-Lotverbrauch pruefen; keine pauschale Kostenfreigabe.")))
+            expected = {}
+            for asset, amount in cash.legs:
+                key = asset.upper()
+                expected[key] = expected.get(key, Decimal("0")) + amount
+            if (not derivative_calculated and any(expected.values())) or any(
+                calculated and any(stored.get(key, Decimal("0")) != expected.get(key, Decimal("0"))
+                                   for key in expected.keys() | stored.keys())
+                for stored, calculated in ((stored_cash.get(event.event_id, {}), bool(stored_cash)),
+                    (stored_derivatives.get(event.event_id, {}), derivative_calculated))
+            ):
+                issues.append(ReviewIssue(code="derivative_cash_recalculation_required", severity="high",
+                    scope=f"event:{event.event_id}", tax_year=reporting_tax_year(event.event_time), blocks_export=True,
+                    message="Gespeicherte Derivate-/Ledger-Geldbeine weichen von der belegten Gebuehrenkonvention ab. Einen neuen gebundenen Berechnungslauf pruefen; alte Berichte und Abgabestaende bleiben unveraendert."))
+        origin_index = LotOriginIndex(TaxService(self.store).list_tax_lots(), origin_events)
+        with self.store.connect() as con:
+            origin_lines = con.execute("""select tax_line_id,source_event_id,lot_id,asset,acquired_at,
+                disposed_at,pool_id,origin_lot_id,acquisition_source_event_id from tax_lines
+                order by disposed_at,tax_line_id""").fetchall()
+        for values in origin_lines:
+            line = SimpleNamespace(**dict(zip(("tax_line_id", "source_event_id", "lot_id", "asset",
+                "acquired_at", "disposed_at", "pool_id", "origin_lot_id", "acquisition_source_event_id"), values)))
+            trace = origin_index.resolve(line)
+            if trace.status == "unresolved":
+                issues.append(ReviewIssue(code="lot_origin_unresolved", severity="high",
+                    scope=f"event:{line.source_event_id}:lot:{line.lot_id}", blocks_export=True,
+                    tax_year=reporting_tax_year(line.disposed_at),
+                    message=f"Die gespeicherte Anschaffungsherkunft fuer {line.asset} ist nicht vollstaendig oder widerspruchsfrei verknuepft ({trace.reason}). Originale Ereignis- und Lotverweise pruefen; keine automatische private Einordnung."))
+
+        with self.store.connect() as con:
+            zero_basis = con.execute("""
+                select lot.lot_id, lot.asset, lot.source_event_id, min(line.disposed_at)
+                from tax_lots lot left join tax_lines line on line.lot_id=lot.lot_id
+                where lot.quantity_total > 0 and lot.cost_basis_eur_total=0
+                group by lot.lot_id, lot.asset, lot.source_event_id
+                order by lot.lot_id
+            """).fetchall()
+        for lot_id, asset, event_id, disposed_at in zero_basis:
+            issues.append(ReviewIssue(code="unproven_zero_cost_basis", severity="high",
+                scope=f"lot:{lot_id}:event:{event_id}", blocks_export=True,
+                tax_year=reporting_tax_year(disposed_at) if disposed_at else None,
+                message=f"Fuer {asset} ist eine Nullkostenbasis gespeichert. Anschaffung, Herkunft und ein gegebenenfalls begruendeter Nullansatz sind gesondert zu belegen; keine automatische Anerkennung."))
+
+        fee_service = TaxService(self.store)
+        with self.store.connect() as con:
+            fee_marker = con.execute("select value_json from admin_settings where key='tax.fee_accounting_binding'").fetchone()
+            fee_line_quantities = {(event_id, asset.upper()): quantity for event_id, asset, quantity in con.execute(
+                "select source_event_id,asset,sum(quantity) from tax_lines group by 1,2").fetchall()}
+            carried_quantities = dict(con.execute("select source_event_id,sum(quantity_total) from tax_lots group by 1").fetchall())
+        has_current_fee_run = fee_marker is not None and fee_marker[0] == json.dumps(fee_service.fee_input_binding())
+        for conversion in conversion_report["ready"]:
+            if (not has_current_fee_run
+                    or carried_quantities.get(conversion.target.event_id) != conversion.target.quantity):
+                issues.append(ReviewIssue(code="token_conversion_recalculation_required", severity="high",
+                    scope=f"token_conversion:{conversion.mapping.mapping_id}", blocks_export=True,
+                    message="Belegbindung ist vorhanden, aber gespeicherte Konvertierungslots sind nicht durch einen aktuellen Berechnungslauf nachgewiesen. Keine automatische Uebernahme oder Jahresfreigabe."))
+        for event in self.store.list_canonical_events():
+            fee = fee_service.trade_fee_accounting(event)
+            if fee is None:
+                continue
+            expected_quantity = fee.quantity
+            if fee.separate_disposal:
+                if event.quantity < 0 and event.asset.upper() == fee.asset:
+                    expected_quantity += abs(event.quantity)
+                elif event.quantity > 0 and str(event.quote_asset or "").upper() == fee.asset:
+                    expected_quantity += abs(event.quote_quantity or Decimal("0"))
+            if (not has_current_fee_run or fee.separate_disposal
+                    and fee_line_quantities.get((event.event_id, fee.asset), Decimal("0")) != expected_quantity):
+                issues.append(ReviewIssue(code="fee_accounting_recalculation_required", severity="high",
+                    scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),
+                    message="Gespeicherter Gebuehrenverbrauch ist nicht durch einen aktuellen gebundenen Berechnungslauf belegt. Vorschau neu berechnen und pruefen; ein vorhandener Kurs allein reicht nicht."))
+            if fee.allocation == "review_required":
+                issues.append(ReviewIssue(code="swap_fee_allocation_review_required", severity="high",
+                    scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),
+                    message="Gebuehrenmenge ist beruecksichtigt; die Kostenrolle beim Token-Tausch ist noch nicht belegt. Erwerbs- und Verwertungskosten getrennt pruefen."))
+            if fee.separate_disposal and fee.value_eur is None:
+                issues.append(ReviewIssue(code="fee_token_valuation_missing", severity="high",
+                    scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),
+                    message="Gebuehren-Token wurde mengenmaessig verbraucht, sein historischer EUR-Wert fehlt. Ein vorlaeufiger Nullerloes ist kein belegter Nullwert."))
+            if fee.allocation == "disposal_cost" and fee_service._disposal_value_eur(event) < 0:
+                issues.append(ReviewIssue(code="negative_net_disposal_proceeds", severity="high",
+                    scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),
+                    message="Verkaufskosten uebersteigen den Erloes. Nettoerloes und Gebuehrenbeleg fachlich pruefen."))
 
         with self.store.connect() as con:
             pending_history = con.execute(
@@ -1033,6 +1171,9 @@ class ReviewService:
             "zero_cost_tax_lots": "FIFO-Lots mit 0 EUR Kosten pruefen",
             "zero_proceeds_tax_lines": "Steuerzeilen mit 0 EUR Erloes pruefen",
             "derivative_missing_prices": "Derivate-Preisbewertung ergaenzen",
+            "derivative_fee_semantics_required": "Derivategebuehren und Nettokonvention pruefen",
+            "derivative_cash_recalculation_required": "Derivateberechnung aktualisieren",
+            "derivative_normalization_required": "Bitget-Funding und Sicherheitenzuordnung pruefen",
             "solana_history_classification_required": "Solana-Bewegung fachlich einordnen",
             "api_history_classification_required": "API-Beleg fachlich einordnen",
         }

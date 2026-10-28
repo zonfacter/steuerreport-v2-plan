@@ -82,6 +82,30 @@ def test_auth_failure_never_retries(setup):
     assert len(calls) == 1
 
 
+def test_caller_can_only_tighten_retry_and_response_limits(setup):
+    clock, limiter = setup
+    calls = []
+    with managed_client(transport=httpx.MockTransport(lambda request: calls.append(request) or httpx.Response(429)),
+                        limiter=limiter, provider="github_updates", clock=clock, monotonic=clock, max_retries=0) as client:
+        assert client.get("https://synthetic.invalid/").status_code == 429
+    assert len(calls) == 1
+    clock.sleep(5)
+    with managed_client(transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"too-large")),
+                        limiter=limiter, provider="github_updates", clock=clock, monotonic=clock, max_response_bytes=4) as client:
+        with pytest.raises(httpx.TransportError):
+            client.get("https://synthetic.invalid/")
+    assert all(row.in_flight == 0 for row in limiter.status().groups)
+
+
+@pytest.mark.parametrize("options", [
+    {"max_response_bytes": 0}, {"max_response_bytes": -1}, {"max_response_bytes": True},
+    {"max_response_bytes": 64 * 1024 * 1024 + 1}, {"max_retries": -1}, {"max_retries": True},
+])
+def test_invalid_caller_transport_limits_fail_closed(options):
+    with pytest.raises(ValueError):
+        managed_client(**options)
+
+
 def test_cancellation_stops_following_requests_and_releases_parallelism(setup):
     cancel = Event()
     def handler(request):

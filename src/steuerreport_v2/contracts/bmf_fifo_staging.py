@@ -89,6 +89,9 @@ class BmfCombinedFifoEventRow(BaseModel):
     wallet_pool_ids: list[str] = Field(default_factory=list)
     acquisition_source_event_ids: list[str] = Field(default_factory=list)
     origin_classifications: list[str] = Field(default_factory=list)
+    lineage_issue_codes: list[str] = Field(default_factory=list)
+    direct_acquisition_event_ids: list[str] = Field(default_factory=list)
+    lineage_event_ids: list[str] = Field(default_factory=list)
     active_global_quantity: Decimal = Decimal("0")
     received_first_global_quantity: Decimal = Decimal("0")
     active_wallet_quantity: Decimal = Decimal("0")
@@ -111,6 +114,7 @@ class BmfCombinedFifoStagingReport(BaseModel):
     status: BmfFifoStagingStatus
     strict_ready: bool = False
     read_only: Literal[True] = True
+    origin_trace_policy: str = "legacy_direct_origin_v1"
     active_global_policy: str
     received_first_global_policy: str
     active_wallet_policy: str

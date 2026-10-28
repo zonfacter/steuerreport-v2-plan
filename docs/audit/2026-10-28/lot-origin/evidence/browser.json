@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "viewports": [
+    390,
+    768,
+    1280,
+    1440
+  ],
+  "actual_business_api": true,
+  "unrelated_api": "synthetic fixtures",
+  "database_unchanged": true,
+  "browser_writes": 0,
+  "external_requests": 0,
+  "errors": [],
+  "checks": [
+    "carried_root_visible",
+    "unresolved_visible",
+    "gain_column_not_hidden",
+    "detail_basis_36_gain_24",
+    "focus_return",
+    "old_policy_stale"
+  ],
+  "api_reads": 179
+}

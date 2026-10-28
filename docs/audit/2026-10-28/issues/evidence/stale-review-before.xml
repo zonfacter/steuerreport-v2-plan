@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="5.055" timestamp="2026-10-28T21:14:01.520132+00:00" hostname="ai-control"><testcase classname="sr-issues-20261028-bitget-review.test_issue2_readonly_review" name="test_funding_renormalization_does_not_silently_approve_stale_zero_derivative_summary" time="2.059"><failure message="AssertionError: assert 'derivative_cash_recalculation_required' in []">case = &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x745110032010&gt;
+
+    def test_funding_renormalization_does_not_silently_approve_stale_zero_derivative_summary(case):
+        store = case
+        content = (
+            "Order;Date;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\n"
+            "opening;2024-02-01T11:00:00Z;USDT;DEMOUSDT;Single-asset;trans_from_exchange;100;0;100\n"
+            "funding;2024-02-01T12:00:00Z;USDT;DEMOUSDT;Single-asset;contract_margin_settle_fee;-2.30;0;97.70\n"
+        )
+        batch, events = ingest(store, content)
+        funding = next(e for e in events if e.event_type == "derivative")
+        # Alter Normalizer klassifizierte Funding als fee, nicht derivative.
+        with store.connect() as con:
+            con.execute("update canonical_events set event_type='fee' where event_id=?", [funding.event_id])
+        BalanceLedgerBuilder(store).rebuild()
+        old = DerivativesManager(store).rebuild()
+        assert old.summary.realized_pnl_eur == D("0")
+        assert old.summary.derivative_lines_count == 0
+        RawNormalizer(store).normalize_batch(batch.batch_id)
+        assert any(e.event_type == "derivative" and e.quantity == D("-2.30") for e in store.list_canonical_events())
+        before = snapshot(store)
+        gate = ReviewService(store).gate()
+        assert snapshot(store) == before
+        codes = sorted(issue.code for issue in gate.issues)
+        fresh = DerivativesManager(store).rebuild()
+        assert fresh.summary.realized_pnl_eur == D("-2.07")
+        report = dict(
+            synthetic_only=True, old_summary_eur="0", expected_eur="-2.07",
+            fresh_summary_eur=str(fresh.summary.realized_pnl_eur), gate_allow_export=gate.allow_export,
+            issue_codes=codes, raw_sha256=hashlib.sha256(content.encode()).hexdigest(),
+        )
+        (ROOT / "funding-stale-summary.json").write_text(json.dumps(report, indent=2) + "\n")
+&gt;       assert "derivative_cash_recalculation_required" in codes
+E       AssertionError: assert 'derivative_cash_recalculation_required' in []
+
+../sr-issues-20261028-bitget-review/test_issue2_readonly_review.py:110: AssertionError</failure></testcase><testcase classname="sr-issues-20261028-bitget-review.test_issue2_readonly_review" name="test_existing_gross_canonical_must_not_be_reinterpreted_as_after_fee_net" time="2.040"><failure message="AssertionError: assert ('derivative_normalization_required' in [] or 'derivative_fee_semantics_required' in [])">case = &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x745110031f10&gt;
+
+    def test_existing_gross_canonical_must_not_be_reinterpreted_as_after_fee_net(case):
+        store = case
+        content = (
+            "Coin;Trading Pair;Action (English);Amount;Surplus/deduction (after fee);Fee;Timestamp UTC+8 (Order)\n"
+            "USDT;DEMOUSDT_UMCBL;close_long;12.80;12.60;-0.20;2024-02-01 12:00:00\n"
+        )
+        batch, events = ingest(store, content)
+        assert len(events) == 1 and events[0].quantity == D("12.60")
+        # HEAD-Profil waehlte Amount vor After-fee: gespeicherter Altwert 12.80.
+        with store.connect() as con:
+            con.execute("update canonical_events set quantity=12.80")
+        ledger = BalanceLedgerBuilder(store).rebuild()
+        old = DerivativesManager(store).rebuild()
+        assert sum((entry.delta_quantity for entry in ledger), D("0")) == D("12.80")
+        assert old.summary.realized_pnl_eur == D("11.52")
+        before = snapshot(store)
+        gate = ReviewService(store).gate()
+        assert snapshot(store) == before
+        codes = sorted(issue.code for issue in gate.issues)
+        RawNormalizer(store).normalize_batch(batch.batch_id)
+        corrected = DerivativesManager(store).rebuild()
+        assert corrected.summary.realized_pnl_eur == D("11.34")
+        report = dict(
+            synthetic_only=True, stored_canonical="12.80", raw_net="12.60",
+            incorrectly_interpreted_eur="11.52", expected_eur="11.34",
+            gate_allow_export=gate.allow_export, issue_codes=codes,
+            raw_sha256=hashlib.sha256(content.encode()).hexdigest(),
+        )
+        (ROOT / "canonical-gross-vs-net.json").write_text(json.dumps(report, indent=2) + "\n")
+&gt;       assert "derivative_normalization_required" in codes or "derivative_fee_semantics_required" in codes
+E       AssertionError: assert ('derivative_normalization_required' in [] or 'derivative_fee_semantics_required' in [])
+
+../sr-issues-20261028-bitget-review/test_issue2_readonly_review.py:142: AssertionError</failure></testcase></testsuite></testsuites>

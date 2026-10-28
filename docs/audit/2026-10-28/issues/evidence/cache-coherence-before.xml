@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.638" timestamp="2026-10-28T21:23:36.307388+00:00" hostname="ai-control"><testcase classname="tests.unit.test_updates_coherence" name="test_missing_following_page_cannot_claim_up_to_date" time="0.519"><failure message="AssertionError: assert 'up_to_date' == 'unavailable'&#10;  &#10;  - unavailable&#10;  + up_to_date">tmp_path = PosixPath('/tmp/sr-issues-20261028/coherence-repro/test_missing_following_page_ca0')
+
+    def test_missing_following_page_cannot_claim_up_to_date(tmp_path):
+        store, service, success, client = service_and_success(tmp_path)
+        try:
+            success["pages"]["1"]["has_next"] = True
+            write_cache(store, success)
+            result = service.status()
+&gt;           assert result.status == "unavailable"
+E           AssertionError: assert 'up_to_date' == 'unavailable'
+E             
+E             - unavailable
+E             + up_to_date
+
+tests/unit/test_updates_coherence.py:33: AssertionError</failure></testcase><testcase classname="tests.unit.test_updates_coherence" name="test_status_reads_success_completed_while_taking_lock" time="0.553"><failure message="AssertionError: assert 'unavailable' == 'up_to_date'&#10;  &#10;  - up_to_date&#10;  + unavailable">tmp_path = PosixPath('/tmp/sr-issues-20261028/coherence-repro/test_status_reads_success_comp0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x71b4f5339b10&gt;
+
+    def test_status_reads_success_completed_while_taking_lock(tmp_path, monkeypatch):
+        store, service, success, client = service_and_success(tmp_path)
+        try:
+            unfinished = {**success, "error": "Die letzte Update-Pruefung wurde nicht abgeschlossen."}
+            write_cache(store, unfinished)
+    
+            @contextmanager
+            def completed_during_lock(*, create):
+                write_cache(store, success)
+                yield True
+    
+            monkeypatch.setattr(service, "_lock", completed_during_lock)
+            result = service.status()
+&gt;           assert result.status == "up_to_date"
+E           AssertionError: assert 'unavailable' == 'up_to_date'
+E             
+E             - up_to_date
+E             + unavailable
+
+tests/unit/test_updates_coherence.py:52: AssertionError</failure></testcase></testsuite></testsuites>

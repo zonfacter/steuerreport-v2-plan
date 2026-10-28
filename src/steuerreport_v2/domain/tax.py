@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
+import hashlib
+import json
 
 import pandas as pd
 
@@ -34,6 +37,7 @@ from steuerreport_v2.domain.fifo_methods import (
     active_fifo_scope,
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
+from steuerreport_v2.domain.tax_time import private_disposal_tax_free_at, reporting_time
 from steuerreport_v2.domain.service_swap_tax_mapping import (
     ServiceSwapTaxMappingService,
 )
@@ -52,6 +56,17 @@ STABLE_VALUE_ANCHOR_ASSETS = {
     "EURC",
     "EURS",
 }
+
+
+@dataclass(frozen=True)
+class _TradeFeeAccounting:
+    asset: str
+    quantity: Decimal
+    value_eur: Decimal | None
+    separate_disposal: bool
+    allocation: Literal[
+        "included_in_net_quantity", "acquisition_cost", "disposal_cost", "review_required",
+    ]
 
 
 @dataclass(frozen=True)
@@ -81,9 +96,19 @@ class TaxService:
         )
 
     def rebuild_fifo(self) -> TaxRunResult:
-        if active_fifo_scope(self.store) == WALLET_DEPOT_FIFO_SCOPE:
-            return self._rebuild_wallet_fifo()
-        return self._rebuild_global_fifo()
+        with self.store.exclusive_access():
+            if active_fifo_scope(self.store) == WALLET_DEPOT_FIFO_SCOPE:
+                return self._rebuild_wallet_fifo()
+            return self._rebuild_global_fifo()
+
+    def fee_input_binding(self) -> str:
+        from steuerreport_v2.domain.token_conversion import config_binding
+        payload = {"policy": "explicit_trade_fee_and_conversion_v1",
+            "events": [event.model_dump(mode="json") for event in self.store.list_canonical_events()],
+            "prices": [point.model_dump(mode="json") for asset in sorted(self.price_lookup._points)
+                       for point in self.price_lookup._points[asset]],
+            "fifo_scope": active_fifo_scope(self.store), "conversion_inputs": config_binding()}
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     def crypto_to_crypto_valuation_events(self) -> list[CanonicalEvent]:
         """Return economic positive swap events after service-route normalization."""
@@ -101,8 +126,9 @@ class TaxService:
         ]
 
     def _rebuild_global_fifo(self) -> TaxRunResult:
+        fee_binding = self.fee_input_binding()
         result = self.preview_global_fifo()
-        self._replace_tax_tables(result.lots, result.tax_lines, result.unmatched)
+        self._replace_tax_tables(result.lots, result.tax_lines, result.unmatched, fee_binding=fee_binding)
         return result
 
     def preview_global_fifo(
@@ -120,6 +146,10 @@ class TaxService:
         )
 
         events = self.store.list_canonical_events()
+        from steuerreport_v2.domain.token_conversion import TokenConversionService, carry_conversion_lots
+        conversions = {event_id: item for item in TokenConversionService(self.store).report(events)["ready"]
+                       for event_id in (item.source.event_id, item.target.event_id)}
+        converted_events: set[str] = set()
         clawback_reward_event_ids = locked_redemption_clawback_reward_event_ids(
             self.store, events
         )
@@ -136,6 +166,35 @@ class TaxService:
                 unmatched.extend(missing)
                 continue
             event = operation
+            if event.event_id in converted_events:
+                continue
+            conversion = conversions.get(event.event_id)
+            if conversion is not None:
+                def create_converted_lot(original, quantity, basis):
+                    lot = self._lot_from_values(asset=conversion.target.asset,
+                        acquired_at=original.acquired_at, quantity=quantity,
+                        cost_basis_eur_total=basis, source_event_id=conversion.target.event_id)
+                    return lot.model_copy(update={"origin_lot_id": original.origin_lot_id or original.lot_id})
+                old_lots = lots_by_asset[conversion.source.asset]
+                available = sum((lot.quantity_remaining for lot in old_lots), Decimal("0"))
+                created, missing_quantity = carry_conversion_lots(old_lots, conversion, create_converted_lot)
+                target_lots = lots_by_asset[conversion.target.asset]
+                target_lots.extend(created)
+                lots_by_asset[conversion.target.asset] = deque(sorted(target_lots,
+                    key=lambda lot: (self._normalize_datetime(lot.acquired_at), lot.source_event_id, lot.lot_id)))
+                all_lots.extend(created)
+                if missing_quantity:
+                    unmatched.append(TaxUnmatchedDisposal(unmatched_id=str(uuid4()),
+                        source_event_id=conversion.source.event_id, source=conversion.source.source,
+                        raw_object_id=conversion.source.raw_object_id, source_ref=conversion.source.source_ref,
+                        event_time=conversion.source.event_time, event_type="transfer",
+                        account=conversion.source.account, asset=conversion.source.asset,
+                        quantity=abs(conversion.source.quantity),
+                        matched_quantity=abs(conversion.source.quantity) - missing_quantity,
+                        missing_quantity=missing_quantity, available_before=available,
+                        proceeds_total_eur=Decimal("0")))
+                converted_events.update((conversion.source.event_id, conversion.target.event_id))
+                continue
             if event.asset in FIAT_TAX_EXCLUDED_ASSETS:
                 continue
             moonpay_evidence = moonpay_cost_basis_by_event.get(event.event_id)
@@ -189,6 +248,11 @@ class TaxService:
                     )
                     tax_lines.extend(created)
                     unmatched.extend(missing)
+                created, missing = self._consume_trade_fee(
+                    event, lots_by_asset
+                )
+                tax_lines.extend(created)
+                unmatched.extend(missing)
                 continue
             if event.event_type == "trade" and event.quantity < 0:
                 created, missing = self._consume_fifo(event, lots_by_asset[event.asset])
@@ -209,6 +273,11 @@ class TaxService:
                     )
                     lots_by_asset[lot.asset].append(lot)
                     all_lots.append(lot)
+                created, missing = self._consume_trade_fee(
+                    event, lots_by_asset
+                )
+                tax_lines.extend(created)
+                unmatched.extend(missing)
                 continue
             if event.quantity > 0:
                 lot = self._lot_from_buy(event)
@@ -227,6 +296,7 @@ class TaxService:
         from steuerreport_v2.domain.wallet_fifo_persistence import wallet_fifo_tax_rows
         from steuerreport_v2.domain.wallet_fifo_runs import WalletFifoParallelRunService
 
+        fee_binding = self.fee_input_binding()
         as_of = datetime.now(timezone.utc)
         fingerprint = WalletFifoParallelRunService(self.store).input_fingerprint(as_of)
         state = WalletFifoPreviewService(self.store).replay(as_of=as_of)
@@ -242,6 +312,7 @@ class TaxService:
             [],
             fifo_method=WALLET_DEPOT_FIFO_SCOPE,
             input_fingerprint_digest=fingerprint.digest,
+            fee_binding=fee_binding,
         )
         return TaxRunResult(
             lots=lots,
@@ -595,14 +666,17 @@ class TaxService:
                 continue
             cost_basis_remaining = self._remaining_cost_basis(lot, sellable_quantity)
             tax_free_at = self._tax_free_at(lot.acquired_at)
-            days_until = max((tax_free_at.date() - as_of.date()).days, 0)
+            days_until = max(
+                (reporting_time(tax_free_at).date() - reporting_time(as_of).date()).days,
+                0,
+            )
             context = event_context.get(lot.source_event_id, {})
             lots.append(
                 TaxHoldingPeriodLot(
                     lot_id=lot.lot_id,
                     asset=lot.asset,
                     acquired_at=lot.acquired_at,
-                    tax_free_at=datetime.combine(tax_free_at.date(), time.min, tzinfo=timezone.utc),
+                    tax_free_at=tax_free_at,
                     days_until_tax_free=days_until,
                     bucket=self._holding_bucket(days_until),
                     quantity_remaining=sellable_quantity,
@@ -637,14 +711,16 @@ class TaxService:
             lots=lots,
             methodology=(
                 "Read-only Haltefristansicht aus offenen FIFO-Lots und aktuellen "
-                "sichtbaren Portfolio-Mengen. Steuerfrei-Datum konservativ: Tag "
-                "nach dem einjaehrigen Anschaffungsjubilauem. Lots unter "
+                "sichtbaren Portfolio-Mengen. Modellierte private Jahresfrist in "
+                "Europe/Berlin: Jahrestag noch innerhalb, Folgetag ausserhalb; "
+                "keine Entscheidung ueber Privat-/Betriebsvermoegen. Lots unter "
                 "min_value_eur werden als Dust ausgeblendet."
             ),
         )
 
     def _lot_from_buy(self, event: CanonicalEvent, *, value_eur: Decimal | None = None) -> TaxLot:
         cost_basis = value_eur if value_eur is not None else self._eur_value(event)
+        cost_basis = self._trade_acquisition_cost(event, cost_basis)
         return self._lot_from_values(
             asset=event.asset,
             acquired_at=event.event_time,
@@ -655,6 +731,52 @@ class TaxService:
             ),
             cost_basis_eur_total=cost_basis,
             source_event_id=event.event_id,
+        )
+
+    def trade_fee_accounting(self, event: CanonicalEvent) -> _TradeFeeAccounting | None:
+        """Fee role and valuation, independent of any private/business approval."""
+        if (event.event_type != "trade" or not event.quantity
+                or not event.fee_asset or not event.fee_quantity):
+            return None
+        asset = event.fee_asset.upper()
+        quantity = abs(event.fee_quantity)
+        acquired_asset = event.asset if event.quantity > 0 else event.quote_asset
+        if acquired_asset and acquired_asset.upper() != "EUR" and asset == acquired_asset.upper():
+            return _TradeFeeAccounting(
+                asset, quantity, None, False,
+                "included_in_net_quantity" if str(event.quote_asset or "").upper() == "EUR"
+                else "review_required",
+            )
+        allocation = "review_required"
+        if str(event.quote_asset or "").upper() == "EUR":
+            allocation = "acquisition_cost" if event.quantity > 0 else "disposal_cost"
+        return _TradeFeeAccounting(
+            asset, quantity, self._asset_value_eur(asset, quantity, event.event_time),
+            asset != "EUR", allocation,
+        )
+
+    def _trade_acquisition_cost(self, event: CanonicalEvent, value_eur: Decimal) -> Decimal:
+        fee = self.trade_fee_accounting(event)
+        if fee is not None and fee.allocation == "acquisition_cost" and fee.value_eur is not None:
+            return value_eur + fee.value_eur
+        return value_eur
+
+    def _consume_trade_fee(
+        self, event: CanonicalEvent, lots_by_asset: defaultdict[str, deque[TaxLot]],
+    ) -> tuple[list[TaxLine], list[TaxUnmatchedDisposal]]:
+        fee = self.trade_fee_accounting(event)
+        if fee is None or not fee.separate_disposal:
+            return [], []
+        # None is retained in fee accounting for the gate; Decimal rows are provisional.
+        proceeds = fee.value_eur if fee.value_eur is not None else Decimal("0")
+        fee_event = event.model_copy(update={
+            "event_type": "fee", "asset": fee.asset, "quantity": -fee.quantity,
+            "quote_asset": "EUR", "quote_quantity": fee.value_eur,
+            "fee_asset": None, "fee_quantity": None,
+        })
+        return self._consume_fifo_asset(
+            asset=fee.asset, quantity=fee.quantity, disposed_at=event.event_time,
+            proceeds_total=proceeds, event=fee_event, lots=lots_by_asset[fee.asset],
         )
 
     def _lot_from_values(
@@ -720,14 +842,7 @@ class TaxService:
 
     @staticmethod
     def _tax_free_at(acquired_at: datetime) -> datetime:
-        normalized = acquired_at if acquired_at.tzinfo is not None else acquired_at.replace(tzinfo=timezone.utc)
-        normalized = normalized.astimezone(timezone.utc)
-        acquired_date = normalized.date()
-        try:
-            anniversary = acquired_date.replace(year=acquired_date.year + 1)
-        except ValueError:
-            anniversary = acquired_date.replace(year=acquired_date.year + 1, day=28)
-        return datetime.combine(anniversary + timedelta(days=1), time.min, tzinfo=timezone.utc)
+        return private_disposal_tax_free_at(acquired_at)
 
     @staticmethod
     def _holding_bucket(days_until: int) -> str:
@@ -866,7 +981,7 @@ class TaxService:
 
         while quantity_to_sell > 0:
             if not lots:
-                if self._is_ignored_dust_disposal(asset, quantity_to_sell, proceeds_total):
+                if event.event_type != "fee" and self._is_ignored_dust_disposal(asset, quantity_to_sell, proceeds_total):
                     break
                 matched_quantity = quantity - quantity_to_sell
                 unmatched.append(
@@ -991,6 +1106,9 @@ class TaxService:
 
     def _disposal_value_eur(self, event: CanonicalEvent) -> Decimal:
         value = self._eur_value(event)
+        fee = self.trade_fee_accounting(event)
+        if fee is not None and fee.allocation == "disposal_cost":
+            return value - fee.value_eur if fee.value_eur is not None else value
         if (
             event.event_type == "trade"
             and event.quantity < 0
@@ -1040,6 +1158,7 @@ class TaxService:
         *,
         fifo_method: str = GLOBAL_ASSET_FIFO_SCOPE,
         input_fingerprint_digest: str | None = None,
+        fee_binding: str | None = None,
     ) -> None:
         created_at = datetime.now(timezone.utc)
         with self.store.connect() as con:
@@ -1277,4 +1396,10 @@ class TaxService:
                     "Atomarer Tax-Tabellentausch hat die internen "
                     f"Integritaetschecks nicht bestanden: {counts} != {expected}."
                 )
+            if fee_binding is None:
+                con.execute("delete from admin_settings where key='tax.fee_accounting_binding'")
+            else:
+                con.execute("insert into admin_settings (key,value_json,updated_at) values (?,?,?) "
+                    "on conflict(key) do update set value_json=excluded.value_json,updated_at=excluded.updated_at",
+                    ["tax.fee_accounting_binding", json.dumps(fee_binding), created_at])
             con.execute("commit")

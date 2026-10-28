@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.380" timestamp="2026-10-28T19:13:43.231984+00:00" hostname="ai-control"><testcase classname="tests.acceptance.test_lot_origin_evidence_reference" name="test_blocked_intermediate_evidence_blocks_discrepancy_and_group" time="0.001"><failure message="AssertionError: ('Missing intermediate raw evidence must not become ready merely because root and sale are ready', 'ready', [], 'ready', [])&#10;assert ('ready', 'ready') == ('blocked', 'blocked')&#10;  &#10;  At index 0 diff: 'ready' != 'blocked'&#10;  Use -v to get more diff">tests/acceptance/test_lot_origin_evidence_reference.py:46: in test_blocked_intermediate_evidence_blocks_discrepancy_and_group
+    assert (discrepancy.status, group.status) == ("blocked", "blocked"), (
+E   AssertionError: ('Missing intermediate raw evidence must not become ready merely because root and sale are ready', 'ready', [], 'ready', [])
+E   assert ('ready', 'ready') == ('blocked', 'blocked')
+E     
+E     At index 0 diff: 'ready' != 'blocked'
+E     Use -v to get more diff</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_evidence_reference" name="test_full_ledger_roles_include_prior_year_root_outside_disposal_asset_scope" time="0.464"><failure message="AssertionError: ('Full-ledger evidence must retain prior-year root and direct carry event even for XYZ disposals', {'9944399b-8419-48f...5c45d': {'acquisition'}, 'f9a79ac5-8def-4094-9d55-efccd215a42a': {'disposal'}}, '591d6b6c-8c36-4956-99b0-900d81f2d7fd')&#10;assert {'591d6b6c-8c...efccd215a42a'} &lt;= {'9944399b-84...efccd215a42a'}&#10;  &#10;  Extra items in the left set:&#10;  '591d6b6c-8c36-4956-99b0-900d81f2d7fd'">tests/acceptance/test_lot_origin_evidence_reference.py:77: in test_full_ledger_roles_include_prior_year_root_outside_disposal_asset_scope
+    assert {root.event_id, target.event_id, sale.event_id} &lt;= set(roles), (
+E   AssertionError: ('Full-ledger evidence must retain prior-year root and direct carry event even for XYZ disposals', {'9944399b-8419-48f...5c45d': {'acquisition'}, 'f9a79ac5-8def-4094-9d55-efccd215a42a': {'disposal'}}, '591d6b6c-8c36-4956-99b0-900d81f2d7fd')
+E   assert {'591d6b6c-8c...efccd215a42a'} &lt;= {'9944399b-84...efccd215a42a'}
+E     
+E     Extra items in the left set:
+E     '591d6b6c-8c36-4956-99b0-900d81f2d7fd'</failure></testcase></testsuite></testsuites>

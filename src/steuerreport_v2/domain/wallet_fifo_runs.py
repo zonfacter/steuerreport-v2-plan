@@ -59,7 +59,7 @@ class WalletFifoParallelRunService:
     QUANTITY_TOLERANCE = Decimal("0.000000000001")
     PROCEEDS_TOLERANCE_EUR = Decimal("0.01")
     PROCEEDS_RECONCILIATION_TOLERANCE_EUR = Decimal("0.000001")
-    INPUT_FINGERPRINT_VERSION = "wallet_fifo_input_v2_semantic"
+    INPUT_FINGERPRINT_VERSION = "wallet_fifo_input_v3_nonfinancial_updates_excluded"
     RUN_REPORT_VERSION = "wallet_fifo_run_v2_provider_basis_classification"
 
     def __init__(self, store: DuckDbStore, *, artifact_root: Path | None = None) -> None:
@@ -728,10 +728,13 @@ class WalletFifoParallelRunService:
                     """
                     select key, value_json
                     from admin_settings
+                    where key not in ('tax.fee_accounting_binding', 'updates.settings.v1', 'updates.cache.v1')
                     order by key
                     """,
                 ),
             }
+        from steuerreport_v2.domain.token_conversion import config_binding
+        component_sha256["token_conversion_config"] = config_binding()
         payload = {
             "as_of": as_of.isoformat(),
             "schema_version": schema_version,

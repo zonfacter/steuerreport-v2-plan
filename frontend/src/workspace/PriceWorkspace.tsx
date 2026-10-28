@@ -42,6 +42,11 @@ function phaseLabel(phase: string) {
 }
 const reasons: Record<string, string> = {
   asset_not_configured: "Preisquelle zuordnen", token_risk_spam_review: "Token zunächst prüfen – Spamverdacht",
+  asset_identity_conflict: "Gleiches Symbol auf verschiedenen Chains oder Contracts: Identität klären",
+  asset_decimals_conflict: "Widersprüchliche Token-Dezimalstellen: Originaldaten prüfen",
+  asset_quantity_decimals_mismatch: "Tokenmenge passt nicht zu Rohmenge und Dezimalstellen",
+  price_mapping_identity_mismatch: "Preiszuordnung widerspricht der belegten Chain-/Contractidentität",
+  price_mapping_identity_unbound: "CoinGecko-Zuordnung zuerst an Netzwerk und Contractadresse binden",
   asset_mint_conflict: "Mehrere Mint-Adressen für dasselbe Asset: Tokenidentität prüfen",
   solana_mint_invalid: "Solana-Mint-Adresse ist ungültig",
   solana_mint_identity_mismatch: "Solana-Mint stimmt nicht mit der nachgewiesenen Tokenidentität überein",
@@ -92,7 +97,8 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
   const [recent, setRecent] = useState<Preview[]>([]), [busy, setBusy] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [external, setExternal] = useState(false), [prices, setPrices] = useState(false), [recalculate, setRecalculate] = useState(false), [actor, setActor] = useState("");
   const [mappingAsset, setMappingAsset] = useState(""), [coinId, setCoinId] = useState(""), [mintId, setMintId] = useState(""), [originalMint, setOriginalMint] = useState("");
-  const [mappings, setMappings] = useState<Record<string, { coingecko_id?: string; defillama_id?: string; solana_mint?: string | null }>>({});
+  const [mappingNetwork, setMappingNetwork] = useState(""), [mappingContract, setMappingContract] = useState(""), [mappingDecimals, setMappingDecimals] = useState("");
+  const [mappings, setMappings] = useState<Record<string, { coingecko_id?: string; defillama_id?: string; solana_mint?: string | null; network?: string | null; contract_address?: string | null; decimals?: number | null }>>({});
   const [recoveryId, setRecoveryId] = useState(rememberedRequest), [pollingId, setPollingId] = useState("");
   const [progress, setProgress] = useState<CollectionStatus>(), [pollingStopped, setPollingStopped] = useState(false);
   const [collectionRun, setCollectionRun] = useState<CollectionRun>();
@@ -320,14 +326,17 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
     </>}
     <details className="wsTechnical"><summary>Gespeicherte Preisvorschauen</summary><button type="button" disabled={!!busy} onClick={() => void command("Vorschauen aktualisieren", refreshRecent)}><RefreshCw size={16} /> Liste aktualisieren</button>{recent.length ? recent.map((item) => <div key={item.id}><button type="button" disabled={!!busy || (!!recoveryId && item.id !== recoveryId)} onClick={() => void loadPreview(item.id)}>{timestamp(item.created_at)} · {item.prices_count} Preise · {item.applied ? "übernommen" : "Vorschau"}</button></div>) : <p>Noch keine gespeicherte Preisvorschau.</p>}</details>
     <details className="wsTechnical"><summary>Preisquellen zuordnen</summary><p>Exakte Anbieter-ID verwenden. Bei Solana-Token den Mint prüfen; gleiche Symbole beweisen keine Tokenidentität. Eine Zuordnung ist keine Eigentums- oder Spamfreigabe.</p>
-      <label>Vorhandene Preiszuordnung<select disabled={!!busy || !!recoveryId} value={mappings[mappingAsset] ? mappingAsset : ""} onChange={(e) => { const asset = e.target.value; setMappingAsset(asset); setCoinId(mappings[asset]?.coingecko_id || ""); setMintId(mappings[asset]?.defillama_id || ""); setOriginalMint(mappings[asset]?.solana_mint || ""); }}><option value="">Neue Zuordnung</option>{Object.keys(mappings).sort().map((asset) => <option key={asset}>{asset}</option>)}</select></label>
+      <label>Vorhandene Preiszuordnung<select disabled={!!busy || !!recoveryId} value={mappings[mappingAsset] ? mappingAsset : ""} onChange={(e) => { const asset = e.target.value; setMappingAsset(asset); setCoinId(mappings[asset]?.coingecko_id || ""); setMintId(mappings[asset]?.defillama_id || ""); setOriginalMint(mappings[asset]?.solana_mint || ""); setMappingNetwork(mappings[asset]?.network || ""); setMappingContract(mappings[asset]?.contract_address || ""); setMappingDecimals(mappings[asset]?.decimals?.toString() ?? ""); }}><option value="">Neue Zuordnung</option>{Object.keys(mappings).sort().map((asset) => <option key={asset}>{asset}</option>)}</select></label>
       <form onSubmit={(e) => { e.preventDefault(); void command("Preiszuordnung speichern", async () => {
-        await fetchMapping({ asset: mappingAsset.trim(), coingecko_id: coinId.trim() || null, defillama_id: mintId.trim() || null, solana_mint: originalMint.trim() || null });
+        await fetchMapping({ asset: mappingAsset.trim(), coingecko_id: coinId.trim() || null, defillama_id: mintId.trim() || null, solana_mint: originalMint.trim() || null, network: mappingNetwork.trim() || null, contract_address: mappingContract.trim() || null, decimals: mappingDecimals === "" ? null : Number(mappingDecimals) });
         setMappings(await readApi<typeof mappings>(base + "/mappings")); setPlan(undefined); setPreview(undefined); setExternal(false); setPrices(false); setRecalculate(false); rememberRequest(""); setNotice("Preiszuordnung gespeichert. Preisbedarf erneut planen.");
       }); }}><fieldset disabled={!!busy || !!recoveryId}><legend>Eigene Preiszuordnung</legend>
         <label>Asset-Kennung<input required maxLength={100} pattern="[A-Za-z0-9_:./-]+" value={mappingAsset} onChange={(e) => setMappingAsset(e.target.value)} /></label>
         <label>CoinGecko-ID<input pattern="[a-z0-9-]+" value={coinId} onChange={(e) => setCoinId(e.target.value)} placeholder="zum Beispiel solana" /></label>
         <label>Originale Solana-Mint-Adresse<input pattern="[1-9A-HJ-NP-Za-km-z]{32,44}" value={originalMint} onChange={(e) => setOriginalMint(e.target.value)} /></label>
+        <label>Netzwerk<input pattern="[a-z0-9][a-z0-9:_-]{0,60}" value={mappingNetwork} onChange={(e) => setMappingNetwork(e.target.value)} /></label>
+        <label>Contractadresse<input maxLength={150} value={mappingContract} onChange={(e) => setMappingContract(e.target.value)} /></label>
+        <label>Token-Dezimalstellen<input type="number" min={0} max={255} step={1} value={mappingDecimals} onChange={(e) => setMappingDecimals(e.target.value)} /></label>
         <HelpTip label="Mint-Bindung der Preiszuordnung">Die originale Mint-Adresse bleibt mit ihrer Groß-/Kleinschreibung gespeichert. Bei einer CoinGecko-Zuordnung bindet sie die Anbieter-ID an den beobachteten Solana-Token; ein gleiches Symbol allein genügt nicht.</HelpTip>
         <label>DefiLlama-ID<input pattern="[A-Za-z0-9_-]+:[A-Za-z0-9_-]+" value={mintId} onChange={(e) => setMintId(e.target.value)} placeholder="solana:exakterMint" /></label>
         <button type="submit" disabled={!mappingAsset.trim() || (!coinId.trim() && !mintId.trim())}><Save size={16} /> Preiszuordnung speichern</button>

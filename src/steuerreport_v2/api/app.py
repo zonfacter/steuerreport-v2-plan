@@ -8,6 +8,7 @@ from steuerreport_v2.private_settings import private_config_path, private_value
 from steuerreport_v2.contracts.installation import InstallationSettings, InstallationSettingsWrite, PrivateConfigDocument, PrivateConfigWrite, ProviderSecretWrite
 from steuerreport_v2.domain.installation import InstallationSettingsError, InstallationSettingsService
 from steuerreport_v2.api.connections import build_connections_router
+from steuerreport_v2.api.updates import build_updates_router
 from steuerreport_v2.api.history import build_history_router
 from steuerreport_v2.api.historical_prices import build_historical_prices_router
 from steuerreport_v2.api.request_limits import build_request_limits_router
@@ -289,6 +290,7 @@ from steuerreport_v2.contracts.pipeline import (
     PipelineResult,
 )
 from steuerreport_v2.contracts.product_readiness import ProductReadinessReport
+from steuerreport_v2.contracts.private_disposal_threshold import PrivateDisposalThresholdRequest, PrivateDisposalThresholdAssessment
 from steuerreport_v2.contracts.review import (
     ReviewDecision,
     ReviewDecisionCreate,
@@ -564,10 +566,12 @@ from steuerreport_v2.domain.service_swap_tax_mapping import (
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.tax_methodology import TaxMethodologyService
 from steuerreport_v2.domain.tax_time import (
+    PRIVATE_HOLDING_POLICY_VERSION,
     TaxTimePolicyService,
     event_reporting_year_sql,
     reporting_tax_year,
     reporting_year_utc_bounds,
+    private_disposal_within_year,
 )
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
 from steuerreport_v2.domain.wallet_fifo_acceptance import (
@@ -735,6 +739,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             return await call_next(request)
     db = store if isinstance(store, DuckDbStore) else DuckDbStore(store)
     app.include_router(build_connections_router(db))
+    app.include_router(build_updates_router(db))
     app.include_router(build_history_router(db, lambda: clear_response_cache()))
     app.include_router(build_historical_prices_router(db, lambda: clear_response_cache()))
     app.include_router(build_request_limits_router())
@@ -4937,6 +4942,10 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             )
         )
 
+    @app.post("/api/v1/tax-years/{year}/private-disposal-threshold-assessment")
+    def private_disposal_threshold_assessment(year: int, request: PrivateDisposalThresholdRequest) -> ApiResponse[PrivateDisposalThresholdAssessment]:
+        return ApiResponse(data=TaxYearService(db).private_disposal_threshold(year, request))
+
     def wants_html_response(accept: str | None) -> bool:
         if not isinstance(accept, str) or not accept:
             return False
@@ -6448,11 +6457,17 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     def download_export_package_pdf(package_id: str) -> Response:
         rendered = ExportService(db).render_pdf_package(package_id)
         if rendered is None:
+            package = ExportService(db).get_package(package_id)
+            exists = package is not None
             payload = ApiResponse(
                 status="error",
                 errors=[
                     {
-                        "code": "export_package_not_downloadable",
+                        "code": (
+                            "export_package_blocked" if package and package.status != "created"
+                            else "export_package_stale_or_unbound" if exists
+                            else "export_package_not_downloadable"
+                        ),
                         "message": f"Exportpaket nicht gefunden oder blockiert: {package_id}",
                         "field": "package_id",
                     }
@@ -6461,7 +6476,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             return Response(
                 content=json.dumps(payload, ensure_ascii=False),
                 media_type="application/json",
-                status_code=404,
+                status_code=409 if exists else 404,
             )
         package, content = rendered
         safe_label = (
@@ -6959,6 +6974,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 "Haltedauer_Tage",
                 "Steuerpflichtig",
                 "Steuerliche_Behandlung",
+                "Frist_Methodenversion",
                 "Source_Event_ID",
                 "Lot_ID",
                 "Anschaffungs_Event_ID",
@@ -6981,12 +6997,13 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                     "Veraeusserungserloes_EUR": line.disposal_proceeds_eur,
                     "Gewinn_Verlust_EUR": line.gain_loss_eur,
                     "Haltedauer_Tage": line.holding_days,
-                    "Steuerpflichtig": "ja" if line.holding_days <= 365 else "nein",
+                    "Steuerpflichtig": "ja" if private_disposal_within_year(line.acquired_at, line.disposed_at) else "nein",
                     "Steuerliche_Behandlung": (
-                        "steuerpflichtig_bis_365_tage"
-                        if line.holding_days <= 365
+                        "innerhalb_privater_kalenderjahresfrist"
+                        if private_disposal_within_year(line.acquired_at, line.disposed_at)
                         else "steuerfrei_nach_haltefrist"
                     ),
+                    "Frist_Methodenversion": PRIVATE_HOLDING_POLICY_VERSION,
                     "Source_Event_ID": line.source_event_id,
                     "Lot_ID": line.lot_id,
                     "Anschaffungs_Event_ID": acquisition_event_by_lot_id.get(
@@ -8273,6 +8290,10 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
 
     @app.get("/api/v1/export/tax-years/{year}/evidence-package.zip")
     def download_tax_year_evidence_package_zip(year: int) -> Response:
+        from steuerreport_v2.domain.filing_binding import BINDING_VERSION, current_filing_binding
+        from steuerreport_v2.domain.workspace import WorkspaceService
+
+        input_binding, calculation_run_id = current_filing_binding(db)
         project_root = SOFTWARE_ROOT
         cache_inputs = [
             db.path,
@@ -8327,6 +8348,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             "schema": "tax_year_evidence_package_v2",
             "app_version": __version__,
             "year": year,
+            "input_binding_sha256": input_binding,
             "inputs": [
                 {
                     "path": str(path.relative_to(project_root))
@@ -8366,6 +8388,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             year
         )
         tax_year_service = TaxYearService(db)
+        annual_status = WorkspaceService(db).status(year)
         wallet_fifo_service = WalletFifoPreviewService(db)
         filing_summary = tax_year_service.filing_summary(year)
         correction_map = tax_year_service.year_correction_map(year)
@@ -9245,7 +9268,16 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             "label": f"steuerreport-v2-tax-year-{year}-evidence-package",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "year": year,
-            "export_ready": filing_summary.export_ready,
+            "export_ready": annual_status.final_available,
+            "technical_export_ready": filing_summary.export_ready,
+            "filing_status": "final" if annual_status.final_available else "preview",
+            "readiness_summary": annual_status.summary,
+            "readiness_dimensions": annual_status.dimensions,
+            "open_review_issues": annual_status.review.issues_open,
+            "input_binding_sha256": input_binding,
+            "binding_version": BINDING_VERSION,
+            "calculation_run_id": calculation_run_id,
+            "holding_period_policy_version": PRIVATE_HOLDING_POLICY_VERSION,
             "filing_summary": filing_summary.plain_language_summary,
             "required_refs": sorted(required_refs),
             "files": package_files,
@@ -9263,6 +9295,8 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 "README.txt",
                 (
                     f"steuerreport-v2 Jahres-Belegpaket {year}\n"
+                    f"Status: {'freigegebener Jahresstand' if annual_status.final_available else 'VORSCHAU - KEINE FINALE JAHRESFREIGABE'}\n"
+                    f"Berechnungslauf: {calculation_run_id or 'nicht vorhanden'}\n"
                     "Read-only Export. Dieses Paket wurde on demand erzeugt und "
                     "schreibt keine Steuerdaten, FIFO-Lots, Imports, Preise oder "
                     "Review-Entscheidungen.\n\n"
@@ -9286,6 +9320,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
 
         buffer.seek(0)
         content = buffer.getvalue()
+        if current_filing_binding(db) != (input_binding, calculation_run_id):
+            return JSONResponse(status_code=409, content={"status": "error", "data": None,
+                "errors": [{"code": "year_export_inputs_changed", "message": "Daten oder Methode haben sich während der Paketerstellung geändert. Vorschau erneut erstellen."}]})
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
             temporary_cache_path = cache_path.with_suffix(f".{uuid4().hex}.tmp")

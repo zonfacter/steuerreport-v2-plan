@@ -1,0 +1,168 @@
+{
+  "runs": {
+    "v1-baseline-evidence-2026-10-28": {
+      "exit_code": 0,
+      "input_snapshots": [
+        {
+          "full_blob_match": false,
+          "manifest_sha256_match": null,
+          "path": "src/tax_engine/core/processor.py",
+          "sha256": "075b74ecd2b4ebb54f6e2eae43a1d2a2534ab1d826df8429dab03c54a1818000"
+        },
+        {
+          "full_blob_match": false,
+          "manifest_sha256_match": null,
+          "path": "src/tax_engine/rulesets/__init__.py",
+          "sha256": "d2507b76536f23868af127a605d45bac7085c2fc4768e038238add34186dff4c"
+        },
+        {
+          "full_blob_match": false,
+          "manifest_sha256_match": null,
+          "path": "src/tax_engine/rulesets/models.py",
+          "sha256": "80fecac788646a8c35bac942977f052e0dce23ebfbdd809130873a37a45cde9f"
+        },
+        {
+          "full_blob_match": false,
+          "manifest_sha256_match": null,
+          "path": "src/tax_engine/rulesets/strategy.py",
+          "sha256": "96ccc578c43df5a324be8ec9fb720915be1d0db957a902676ae4e594ef862101"
+        },
+        {
+          "full_blob_match": false,
+          "manifest_sha256_match": null,
+          "path": "src/tax_engine/rulesets/de_standard.py",
+          "sha256": "f1fe47325a17e38817dd94dcccc590f8f07403d054961ee7710ac322bff865b0"
+        },
+        {
+          "full_blob_match": false,
+          "manifest_sha256_match": null,
+          "path": "src/tax_engine/rulesets/registry.py",
+          "sha256": "cb2ce7a1a35e660a92e98c249bed0b570484d6fc5d2e7f82cd44352551fe411c"
+        },
+        {
+          "full_blob_match": false,
+          "manifest_sha256_match": null,
+          "path": "src/tax_engine/integrity/fingerprint.py",
+          "sha256": "03aa4e0989f695e78ea1ad77e826c57fe6ae294c9ed50ca55b130ff2239b248d"
+        }
+      ],
+      "original_files_unchanged": true,
+      "stdout_json": {
+        "results": [
+          {
+            "actual_unit_eur": "0",
+            "case": "Price alias ignored",
+            "expected_unit_eur_from_given_inputs": "100"
+          },
+          {
+            "actual_unit_eur": "10",
+            "case": "USD total fallback",
+            "expected_unit_eur_from_given_inputs": "9"
+          },
+          {
+            "actual_fee_eur": "0.001",
+            "case": "Non EUR fee",
+            "problem": "BTC amount treated as EUR without historical price"
+          },
+          {
+            "actual_cost_basis_eur": "100",
+            "case": "Wallet pooling",
+            "expected_wallet_B_basis_eur": "200"
+          },
+          {
+            "actual_cost_basis_eur": "0",
+            "case": "Reward acquisition missing from lots",
+            "gain_loss_eur": "150"
+          },
+          {
+            "actual_cost_basis_eur": "0",
+            "case": "Missing acquisition price",
+            "problem": "Missing value is not represented as unresolved by core result",
+            "short_sell_violations": 0
+          },
+          {
+            "actual_status": "exempt",
+            "case": "Exact anniversary boundary",
+            "note": "Check against legally approved boundary; existing V1 unit test expects exempt"
+          }
+        ],
+        "scope": "7 isolated synthetic reproductions, not the full repository test suite",
+        "source_revision": "b143e95723967b30061456f23b338940f681b388"
+      }
+    },
+    "v2-baseline-evidence-2026-10-28": {
+      "exit_code": 0,
+      "input_snapshots": [
+        {
+          "full_blob_match": true,
+          "manifest_sha256_match": true,
+          "path": "price_lookup.py",
+          "sha256": "fac9d4d928e1afae43f6cb00335a89e4472f1b17f2dfce27ca2433642decab15"
+        },
+        {
+          "full_blob_match": true,
+          "manifest_sha256_match": true,
+          "path": "tax.py",
+          "sha256": "c2343109674d6bcc6be09e7ff547a0414c565ca641c892f3de189dae736e9927"
+        },
+        {
+          "full_blob_match": null,
+          "manifest_sha256_match": true,
+          "path": "tax_years.lines391-417.txt",
+          "sha256": "1a0626c820902858db67c005e308fecd419bc59492a6f0fd2adc6c83744b5f80"
+        },
+        {
+          "full_blob_match": null,
+          "manifest_sha256_match": true,
+          "path": "valuation.lines336-422.txt",
+          "sha256": "ccaeda82c975f2e6d6cfb46c7bd9c66afe69f842edee87335135bf0435bc4639"
+        }
+      ],
+      "original_files_unchanged": true,
+      "stdout_json": {
+        "python": "3.11.2",
+        "repository": "zonfacter/steuerreport-v2-plan",
+        "revision": "1aecfb131d189267a01a6303f5a9b67a5a99efe2",
+        "scope": "Unchanged lookup snapshot with PricePoint/Store stubs; unchanged _tax_free_at method body and isolated SQL comparison expression. No full app, DuckDB, review gates, exports or legal result tested.",
+        "snapshot_hashes_verified": true,
+        "synthetic_cases": [
+          {
+            "age_days": 1642,
+            "conclusion": "HistoricalPriceLookup accepts multi-year-old primary price; full export implications untested.",
+            "event_at": "2025-07-01T12:00:00+00:00",
+            "id": "V2-LOOKUP-OLD",
+            "implied_arithmetic_value_eur": "20",
+            "quantity": "2",
+            "result": "reproduced",
+            "selected_at": "2021-01-01T00:00:00+00:00",
+            "selected_price_eur": "10"
+          },
+          {
+            "conclusion": "Future-only quote is rejected.",
+            "id": "V2-LOOKUP-FUTURE",
+            "result": "control_passed"
+          },
+          {
+            "conclusion": "Available same-day primary quote is selected.",
+            "id": "V2-LOOKUP-SAME-DAY",
+            "result": "control_passed"
+          },
+          {
+            "acquired_at": "2023-03-01T12:00:00+00:00",
+            "conclusion": "365-day aggregate expression and calendar helper disagree across leap year; legal expected result and entire reporting path not tested.",
+            "disposed_at": "2024-03-01T12:00:00+00:00",
+            "holding_days": 366,
+            "holding_period_helper_tax_free_at": "2024-03-02T00:00:00+00:00",
+            "holding_period_helper_tax_free_at_disposal": false,
+            "id": "V2-HOLDING-MODELS",
+            "result": "divergence_reproduced",
+            "year_aggregate_condition": "holding_days > 365",
+            "year_aggregate_expression_tax_free": true
+          }
+        ],
+        "synthetic_cases_completed": 4
+      }
+    }
+  },
+  "scope": "Originalstdout aus einmaliger Offline-Ausfuehrung unveraenderter Snapshot-Repros in eigenen Kopien. Ausschliesslich synthetische Angaben; kein Beweis bytegleicher V1-Upstreamquellen."
+}

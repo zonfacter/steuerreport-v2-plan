@@ -10,6 +10,7 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from steuerreport_v2.contracts.bmf_event_evidence import (
     BmfCanonicalEventEvidence,
@@ -28,6 +29,8 @@ from steuerreport_v2.contracts.bmf_fifo_staging import BmfCombinedFifoEventRow
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.bmf_fifo_staging import BmfCombinedFifoStagingService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.lot_origin import LotOriginIndex
+from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.tax_time import (
     event_reporting_year_sql,
     reporting_tax_year,
@@ -95,6 +98,7 @@ class BmfFifoEventEvidenceService:
         "missing_raw_evidence",
         "missing_onchain_identifier",
         "received_price_missing",
+        "lot_origin_unresolved",
     }
     SCOPES = (
         _Scope(
@@ -168,6 +172,7 @@ class BmfFifoEventEvidenceService:
         ).input_fingerprint(staging.as_of)
         staging_matches_current_input = (
             staging.input_fingerprint_digest == current_input_fingerprint.digest
+            and staging.origin_trace_policy == BmfCombinedFifoStagingService.ORIGIN_TRACE_POLICY
         )
         staging_matches_current = (
             staging.productive_tax_component_sha256 == productive_before
@@ -177,7 +182,9 @@ class BmfFifoEventEvidenceService:
             row
             for row in staging.top_events
             if self._scope_for(row) is not None
-            and self._material_delta(row) >= request.min_abs_delta_eur
+            and (self._material_delta(row) >= request.min_abs_delta_eur
+                 or row.lineage_issue_codes
+                 or set(row.origin_classifications) & self.REVIEW_ORIGIN_CLASSIFICATIONS)
         ]
         eligible.sort(key=self._row_sort_key)
         selected = eligible[: request.limit]
@@ -190,6 +197,8 @@ class BmfFifoEventEvidenceService:
             for event_id in (
                 row.disposal_event_id,
                 *row.acquisition_source_event_ids,
+                *row.direct_acquisition_event_ids,
+                *row.lineage_event_ids,
             )
         }
         ledger_event_ids: set[str] = set()
@@ -203,6 +212,11 @@ class BmfFifoEventEvidenceService:
                 years=staging.years,
                 as_of=staging.as_of,
             )
+            # Full-Ledger umfasst auch Vorjahresherkunft ausserhalb der Prioritaetsgruppen.
+            for row in staging.top_events:
+                tax_graph_roles.setdefault(row.disposal_event_id, set()).add("disposal")
+                for event_id in set(row.acquisition_source_event_ids) | set(row.direct_acquisition_event_ids) | set(row.lineage_event_ids):
+                    tax_graph_roles.setdefault(event_id, set()).add("acquisition")
             event_ids.update(ledger_event_ids)
             event_ids.update(tax_graph_roles)
         synthetic_fee_rows = {
@@ -314,6 +328,9 @@ class BmfFifoEventEvidenceService:
         counts = self._evidence_counts(unique_evidence)
         status = self._report_status(
             blocked_events_count=len(blocked_events),
+            blocked_origin_rows_count=sum(
+                1 for row in all_discrepancy_rows if row.status == "blocked"
+            ),
             review_events_count=len(review_events),
             unresolved_origin_rows_count=unresolved_origin_rows,
             scope_complete=scope_complete,
@@ -356,6 +373,8 @@ class BmfFifoEventEvidenceService:
             ),
             full_ledger_scope=full_ledger_scope,
         )
+        if staging.origin_trace_policy != BmfCombinedFifoStagingService.ORIGIN_TRACE_POLICY:
+            findings.append("Der gespeicherte Prueflauf verwendet noch die fruehere direkte Herkunftszuordnung. Eine neue isolierte Herkunftsvorschau ist erforderlich; alte Artefakte bleiben unveraendert.")
         if full_ledger_scope:
             unknown_tax_graph_events = sum(
                 1
@@ -591,6 +610,16 @@ class BmfFifoEventEvidenceService:
         result: dict[str, set[str]] = defaultdict(set)
         for event_id, event_role in rows:
             result[str(event_id)].add(str(event_role))
+        with self.store.connect() as con:
+            cursor = con.execute(f"""select line.* from tax_lines line
+                where {disposal_year} in ({placeholders}) and line.disposed_at <= ?""",
+                [*years, self._as_utc(as_of).replace(tzinfo=None)])
+            columns = [item[0] for item in cursor.description]
+            lines = [SimpleNamespace(**dict(zip(columns, row))) for row in cursor.fetchall()]
+        index = LotOriginIndex(TaxService(self.store).list_tax_lots(), self.store.list_canonical_events())
+        for line in lines:
+            for event_id in index.source_event_ids(index.resolve(line)):
+                result[event_id].add("acquisition")
         return dict(result)
 
     def _origin_evidence_groups(
@@ -1609,18 +1638,25 @@ class BmfFifoEventEvidenceService:
         if scope is None:
             raise ValueError("Event liegt ausserhalb des Eventbeleg-Pruefumfangs.")
         disposal = evidence_by_id[row.disposal_event_id]
-        acquisition_ids = sorted(set(row.acquisition_source_event_ids))
+        acquisition_ids = sorted(set(row.acquisition_source_event_ids) | set(row.direct_acquisition_event_ids) | set(row.lineage_event_ids))
         acquisition_evidence = [evidence_by_id[item] for item in acquisition_ids]
         resolved_origin_classifications = sorted(
             {
                 self._origin_classification(item)
-                for item in acquisition_evidence
+                for item in acquisition_evidence if item.event_id in row.acquisition_source_event_ids
             }
         )
+        if row.lineage_issue_codes:
+            resolved_origin_classifications = sorted(set(resolved_origin_classifications) | {"missing_origin"})
+        elif not row.acquisition_source_event_ids:
+            resolved_origin_classifications = sorted(set(row.origin_classifications) & self.REVIEW_ORIGIN_CLASSIFICATIONS)
         issue_event_ids = [
             item.event_id for item in acquisition_evidence if item.status != "ready"
         ]
         issue_codes = list(disposal.issue_codes)
+        if row.lineage_issue_codes:
+            issue_codes.append("lot_origin_unresolved")
+            issue_codes.extend("lot_origin:" + code for code in row.lineage_issue_codes)
         issue_codes.extend(
             code
             for item in acquisition_evidence
@@ -1688,6 +1724,9 @@ class BmfFifoEventEvidenceService:
             acquisition_issue_event_ids_truncated=len(issue_event_ids) > 50,
             acquisition_evidence_digest=acquisition_digest,
             origin_classifications=resolved_origin_classifications,
+            lineage_issue_codes=row.lineage_issue_codes,
+            direct_acquisition_event_ids=row.direct_acquisition_event_ids,
+            lineage_event_ids=row.lineage_event_ids,
             status=status,
             issue_codes=issue_codes,
             asset_fifo_drilldown_endpoint=(
@@ -1708,6 +1747,8 @@ class BmfFifoEventEvidenceService:
             for event_id in (
                 row.disposal_event_id,
                 *row.acquisition_source_event_ids,
+                *row.direct_acquisition_event_ids,
+                *row.lineage_event_ids,
             )
         }
         evidence = [evidence_by_id[item] for item in sorted(event_ids)]
@@ -1727,10 +1768,14 @@ class BmfFifoEventEvidenceService:
                 ]
                 if classification in self.REVIEW_ORIGIN_CLASSIFICATIONS
             }
+            | {"lot_origin_unresolved" for row in selected if row.lineage_issue_codes}
+            | {"lot_origin:" + code for row in selected for code in row.lineage_issue_codes}
+            | {"origin:" + classification for row in selected if not row.acquisition_source_event_ids
+               for classification in row.origin_classifications if classification in self.REVIEW_ORIGIN_CLASSIFICATIONS}
         )
         if not selected:
             status = "not_applicable"
-        elif any(item.status == "blocked" for item in evidence):
+        elif any(item.status == "blocked" for item in evidence) or set(issue_codes) & self.BLOCKING_EVENT_CODES:
             status = "blocked"
         elif issue_codes:
             status = "review"
@@ -1882,8 +1927,9 @@ class BmfFifoEventEvidenceService:
         unresolved_origin_rows_count: int,
         scope_complete: bool,
         staging_matches_current: bool,
+        blocked_origin_rows_count: int = 0,
     ) -> str:
-        if blocked_events_count or not staging_matches_current:
+        if blocked_events_count or blocked_origin_rows_count or not staging_matches_current:
             return "blocked"
         if review_events_count or unresolved_origin_rows_count or not scope_complete:
             return "review"

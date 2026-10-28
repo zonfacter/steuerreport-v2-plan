@@ -13,6 +13,7 @@ from steuerreport_v2.domain.account_aliases import (
     build_account_alias_map_for_store,
     canonical_account_label,
 )
+from steuerreport_v2.domain.derivative_cash import derivative_cash, derivative_raw_rows
 
 MIN_DECIMAL_DUST = Decimal("0.000000000001")
 STABLE_BALANCE_DUST = Decimal("0.00001")
@@ -25,6 +26,7 @@ class BalanceLedgerBuilder:
 
     def rebuild(self) -> list[BalanceLedgerEntry]:
         events = self.store.list_canonical_events()
+        derivative_rows = derivative_raw_rows(self.store)
         account_aliases = build_account_alias_map_for_store(self.store)
         bitget_quote_mirrors = {
             (
@@ -44,6 +46,8 @@ class BalanceLedgerBuilder:
         for event in events:
             account = canonical_account_label(event.account, account_aliases)
             movements: list[tuple[str, Decimal]] = [(event.asset, event.quantity)]
+            if event.event_type == "derivative":
+                movements = list(derivative_cash(event, derivative_rows.get(event.event_id)).legs)
             if (
                 event.event_type == "trade"
                 and event.quote_asset is not None

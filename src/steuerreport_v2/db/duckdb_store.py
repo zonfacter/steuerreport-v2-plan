@@ -1393,16 +1393,15 @@ class DuckDbStore:
         prices = self.latest_price_points()
         return [prices[asset] for asset in sorted(prices)]
 
-    def list_price_points(self, limit: int = 500) -> list[PricePoint]:
+    def list_price_points(self, limit: int | None = 500) -> list[PricePoint]:
         with self.connect() as con:
             rows = con.execute(
                 """
                 select price_id, asset, price_eur, priced_at, source, confidence
                 from price_ledger
                 order by priced_at desc, created_at desc, price_id desc
-                limit ?
-                """,
-                [limit],
+                """ + (" limit ?" if limit is not None else ""),
+                [limit] if limit is not None else [],
             ).fetchall()
         return [
             PricePoint(

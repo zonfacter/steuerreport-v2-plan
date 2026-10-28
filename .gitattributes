@@ -1,0 +1,5 @@
+# Originale Auditbelege duerfen beim Checkout nicht umformatiert werden.
+docs/audit/2026-10-28/blocker-closure/evidence/** -text
+docs/audit/2026-10-28/lot-origin/evidence/** -text
+docs/audit/2026-10-28/issues/evidence/** -text
+docs/audit/2026-10-28/issues/issue2-original.py -text

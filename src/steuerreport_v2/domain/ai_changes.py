@@ -54,11 +54,11 @@ def fail(code):
     raise AiChangeError(code)
 
 
-def _fingerprint(con, *, excluded_admin_prefixes=()):
+def _fingerprint(con, *, excluded_admin_prefixes=(), excluded_tables=()):
     checksum = hashlib.sha256(__version__.encode())
     tables = [row[0] for row in con.execute("select table_name from information_schema.tables where table_schema='main' and table_type='BASE TABLE' order by table_name").fetchall()]
     for table in tables:
-        if table in {"ai_tasks", "ai_change_sets", "ai_change_generations"}:
+        if table in {"ai_tasks", "ai_change_sets", "ai_change_generations"} or table in excluded_tables:
             continue
         safe = '"' + table.replace('"', '""') + '"'
         checksum.update(table.encode())
@@ -80,6 +80,8 @@ def _fingerprint(con, *, excluded_admin_prefixes=()):
     for path in sorted(files):
         checksum.update(str(path).encode())
         checksum.update(path.read_bytes())
+    from steuerreport_v2.domain.token_conversion import config_binding
+    checksum.update(config_binding().encode())
     return checksum.hexdigest()
 
 

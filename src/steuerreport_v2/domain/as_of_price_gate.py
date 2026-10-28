@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import json
 from pathlib import Path
 
@@ -23,6 +23,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.divorce import DivorceEqualizationService
 from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
 from steuerreport_v2.domain.portfolio import PortfolioService
+from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.stichtag_token_valuation import (
     StichtagTokenValuationService,
 )
@@ -56,10 +57,12 @@ class AsOfPriceGateService:
             raise ValueError("Der Preisstichtag darf nicht in der Zukunft liegen.")
         portfolio = PortfolioService(self.store).as_of_snapshot(valuation_at)
         divorce_service = DivorceEqualizationService(self.store)
+        diagnostics = HistoricalPriceLookup(self.store)
         gate = divorce_service._valuation_gate(
             portfolio.positions,
             divorce_service._naive(valuation_at),
             materiality_threshold_eur,
+            diagnostics=diagnostics,
         )
         valuation_date = divorce_service._local_date(valuation_at)
         provider_sources = self._provider_sources(resolve_project_path(config_path))
@@ -79,6 +82,12 @@ class AsOfPriceGateService:
             priced_at = latest.priced_at if latest is not None else None
             price_source = latest.price_source if latest is not None else None
             price_eur = latest.price_eur if latest is not None else None
+            diagnostic_only = False
+            if priced_at is None:
+                reference = diagnostics.last_known_for_diagnostics(asset, valuation_at).point
+                if reference is not None and self._as_utc(reference.priced_at).date() < valuation_at.date():
+                    priced_at, price_source, price_eur = reference.priced_at, reference.source, reference.price_eur
+                    diagnostic_only = True
             age_days, price_status = divorce_service._price_status(
                 priced_at=priced_at,
                 price_source=price_source,
@@ -126,6 +135,8 @@ class AsOfPriceGateService:
                     if token_review_status == "not_required"
                     else "Same-Day-Preis und stichtagsbezogene Tokenentscheidung sind belegt."
                 )
+            if diagnostic_only:
+                reason += " Letzter Kurs nur zur Altersdiagnose; kein zugelassener Portfolio- oder Steuerwert."
             candidates.append(
                 AsOfPriceGateCandidate(
                     asset=asset,
@@ -190,6 +201,8 @@ class AsOfPriceGateService:
                 "aus dem Jupiter-Metadatenbeleg bestimmt und benoetigen pro Stichtag eine explizite "
                 "Bewertungsentscheidung. Fetchable bedeutet nur, dass Provider-ID und FX-Pfad "
                 "konfiguriert sind."
+                " Letzte unabhaengige Altkurse erklaeren nur stale/prior_day statt missing; "
+                "sie ersetzen keine fehlenden Portfolio-Werte und begruenden keine Materialitaetsfreigabe."
             ),
         )
 
@@ -286,13 +299,14 @@ class AsOfPriceGateService:
             resolve_project_path(request.config_path)
         )
         price_date = valuation_at.date()
-        usd_eur = backfill_service._usd_eur_rate(
+        fx_reference = backfill_service._usd_eur_reference(
             request.v1_fx_db_path, price_date.isoformat()
         )
-        if usd_eur <= 0:
+        if fx_reference is None:
             raise ValueError(
                 f"Kein belegter USD/EUR-Kurs fuer {price_date.isoformat()} vorhanden."
             )
+        usd_eur = fx_reference.rate_eur_per_usd
         with managed_client(
             timeout=request.timeout_seconds,
             headers={"user-agent": "steuerreport-v2/0.1"},
@@ -309,7 +323,8 @@ class AsOfPriceGateService:
                             provider_id=candidate.provider_id,
                             status="planned",
                             usd_eur=usd_eur,
-                            source="defillama_coingecko_history:usd_eur:v1_fx_cache:as_of_gate",
+                            source=("defillama_coingecko_history:usd_eur:v1_fx_cache:as_of_gate:"
+                                    + fx_reference.source_suffix()),
                         )
                     )
                     continue
@@ -339,9 +354,11 @@ class AsOfPriceGateService:
                         )
                     )
                     continue
-                price_eur = price_usd * usd_eur
+                with localcontext() as arithmetic:
+                    arithmetic.prec = 60
+                    price_eur = (price_usd * usd_eur).quantize(Decimal("0.000000000000000001"))
                 source_label = (
-                    f"{source}:usd_eur:v1_fx_cache:as_of_gate:{price_date.isoformat()}"
+                    f"{source}:usd_eur:v1_fx_cache:as_of_gate:{price_date.isoformat()}:{fx_reference.source_suffix()}"
                 )
                 prices.append(
                     PricePointCreate(

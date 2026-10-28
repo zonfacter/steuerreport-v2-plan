@@ -1,0 +1,572 @@
+{
+  "application_version": "0.2.0rc33.dev0",
+  "synthetic_data_only": true,
+  "disposable_databases_only": true,
+  "production_data_access": false,
+  "network_operations_in_test": false,
+  "tested_layers": [
+    "CSV preview",
+    "raw import",
+    "canonical normalization",
+    "balance ledger"
+  ],
+  "summary": {
+    "cases": 15,
+    "passed": 15,
+    "failed": 0,
+    "execution_errors": 0
+  },
+  "cases": [
+    {
+      "name": "native_date_header",
+      "source": "bitget",
+      "csv": "Order;Date;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;open_long;0;-0.37;99.63\n",
+      "note": "Aktuelles Financial-Schema: Date mit explizitem Offset; keine TZ-Annahme noetig.",
+      "expected": {
+        "usdt_delta": "-0.37",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": "2031-07-09T11:00:00+00:00"
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "0",
+            "fee_asset": "USDT",
+            "fee_quantity": "-0.37",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-0.370000000000000000"
+      }
+    },
+    {
+      "name": "native_open_gross_fee",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;open_long;0;-0.37;99.63\n",
+      "note": "Nur Date zu Time umbenannt, um den Gebuehrenfehler getrennt zu pruefen.",
+      "expected": {
+        "usdt_delta": "-0.37",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "0",
+            "fee_asset": "USDT",
+            "fee_quantity": "-0.37",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-0.370000000000000000"
+      }
+    },
+    {
+      "name": "native_close_profit_gross_fee",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;close_long;12.80;-0.20;112.60\n",
+      "note": "",
+      "expected": {
+        "usdt_delta": "12.60",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "12.80",
+            "fee_asset": "USDT",
+            "fee_quantity": "-0.20",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "12.600000000000000000"
+      }
+    },
+    {
+      "name": "native_close_loss_gross_fee",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;close_short;-8.40;-0.15;91.45\n",
+      "note": "",
+      "expected": {
+        "usdt_delta": "-8.55",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "-8.40",
+            "fee_asset": "USDT",
+            "fee_quantity": "-0.15",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-8.550000000000000000"
+      }
+    },
+    {
+      "name": "native_funding_paid",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;contract_margin_settle_fee;-2.30;0;97.70\n",
+      "note": "Sollklassifikation: signierter Derivate-Funding-Cashflow; derzeit kein eigener Funding-EventType.",
+      "expected": {
+        "usdt_delta": "-2.30",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "-2.30",
+            "fee_asset": "USDT",
+            "fee_quantity": "0",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-2.300000000000000000"
+      }
+    },
+    {
+      "name": "native_funding_received",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;contract_margin_settle_fee;1.10;0;101.10\n",
+      "note": "Funding kann positiv sein. Cash-Vorzeichen und Klassifikation getrennt beurteilen.",
+      "expected": {
+        "usdt_delta": "1.10",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "1.10",
+            "fee_asset": "USDT",
+            "fee_quantity": "0",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "1.100000000000000000"
+      }
+    },
+    {
+      "name": "native_funding_separate_fee_cash_control",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;contract_margin_settle_fee;-2.30;-0.02;97.68\n",
+      "note": "Nur Cash-Kontrolle: hypothetisches Bruttoschema mit separat erhobener Fee.",
+      "expected": {
+        "usdt_delta": "-2.32",
+        "event_types": null,
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "-2.30",
+            "fee_asset": "USDT",
+            "fee_quantity": "-0.02",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-2.320000000000000000"
+      }
+    },
+    {
+      "name": "native_collateral_adjustment",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-opening;2031-07-09T11:00:00+01:00;USDT;DEMOUSDT;Single-asset;trans_from_exchange;100;0;100\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;adjust_margin_ifm;25;0;100\n",
+      "note": "Reine Sicherheitenumbuchung: Wallet balance bleibt unveraendert, Amount ist kein Walletzufluss.",
+      "expected": {
+        "usdt_delta": "100",
+        "event_types": null,
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 2,
+          "created_events": 2,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "transfer",
+            "asset": "USDT",
+            "quantity": "100",
+            "fee_asset": "USDT",
+            "fee_quantity": "0",
+            "utc_time": "2031-07-09T10:00:00+00:00"
+          },
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "0",
+            "fee_asset": "USDT",
+            "fee_quantity": "0",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "100.000000000000000000"
+      }
+    },
+    {
+      "name": "native_leverage_adjustment",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-opening;2031-07-09T11:00:00+01:00;USDT;DEMOUSDT;Single-asset;trans_from_exchange;100;0;100\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;adjust_down_leverage;-10;0;100\n",
+      "note": "Reine Hebel-/Sicherheitenanpassung, keine Aenderung des Gesamt-Walletbestands.",
+      "expected": {
+        "usdt_delta": "100",
+        "event_types": null,
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 2,
+          "created_events": 2,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "transfer",
+            "asset": "USDT",
+            "quantity": "100",
+            "fee_asset": "USDT",
+            "fee_quantity": "0",
+            "utc_time": "2031-07-09T10:00:00+00:00"
+          },
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "0",
+            "fee_asset": "USDT",
+            "fee_quantity": "0",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "100.000000000000000000"
+      }
+    },
+    {
+      "name": "legacy_after_fee_derivative_control",
+      "source": "bitget",
+      "csv": "Coin;Trading Pair;Action (English);Surplus/deduction (after fee);Fee;Timestamp UTC+8 (Order)\nUSDT;DEMOUSDT_UMCBL;open_long;-0.37;-0.37;2031-07-09 12:00:00\n",
+      "note": "Regression-Schutz: altes explizites AFTER-FEE-Schema darf Fee nicht nochmals abbuchen.",
+      "expected": {
+        "usdt_delta": "-0.37",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": "2031-07-09T04:00:00+00:00"
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "-0.37",
+            "fee_asset": "USDT",
+            "fee_quantity": "-0.37",
+            "utc_time": "2031-07-09T04:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-0.370000000000000000"
+      }
+    },
+    {
+      "name": "legacy_after_fee_funding_once",
+      "source": "bitget",
+      "csv": "Coin;Trading Pair;Action (English);Surplus/deduction (after fee);Fee;Timestamp UTC+8 (Order)\nUSDT;DEMOUSDT_UMCBL;contract_margin_settle_fee;-2.32;-0.02;2031-07-09 12:00:00\n",
+      "note": "Synthetisches AFTER-FEE-Funding: Nettowert enthaelt die separat ausgewiesene Fee schon.",
+      "expected": {
+        "usdt_delta": "-2.32",
+        "event_types": null,
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "-2.32",
+            "fee_asset": "USDT",
+            "fee_quantity": "-0.02",
+            "utc_time": "2031-07-09T04:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-2.320000000000000000"
+      }
+    },
+    {
+      "name": "generic_explicit_derivative",
+      "source": "manual-csv",
+      "csv": "timestamp;type;asset;amount;fee_asset;fee_quantity;account;id\n2031-07-09T12:00:00+01:00;derivative;USDT;-8.55;;;Synthetic Futures Account;synthetic-event-A\n",
+      "note": "Der Event-Vertrag erlaubt derivative; explizites generisches Mapping sollte ihn erhalten.",
+      "expected": {
+        "usdt_delta": "-8.55",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "-8.55",
+            "fee_asset": null,
+            "fee_quantity": null,
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-8.550000000000000000"
+      }
+    },
+    {
+      "name": "generic_derivative_with_separate_fee",
+      "source": "manual-csv",
+      "csv": "timestamp;type;asset;amount;fee_asset;fee_quantity;account;id\n2031-07-09T12:00:00+01:00;derivative;USDT;-8.40;USDT;-0.15;Synthetic Futures Account;synthetic-event-A\n",
+      "note": "Eine reine Type-Alias-Korrektur darf nicht ploetzlich diese separate Fee verlieren.",
+      "expected": {
+        "usdt_delta": "-8.55",
+        "event_types": [
+          "derivative"
+        ],
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "derivative",
+            "asset": "USDT",
+            "quantity": "-8.40",
+            "fee_asset": "USDT",
+            "fee_quantity": "-0.15",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-8.550000000000000000"
+      }
+    },
+    {
+      "name": "explicit_offset_control",
+      "source": "bitget",
+      "csv": "Order;Time;Coin;Futures;Margin Mode;Type;Amount;Fee;Wallet balance\nsynthetic-order-A;2031-07-09T12:00:00+01:00;USDT;DEMOUSDT;Single-asset;trans_from_exchange;10;0;110\n",
+      "note": "Ein vorhandener Offset muss Vorrang vor dem historischen Bitget-Default UTC+8 haben.",
+      "expected": {
+        "usdt_delta": "10",
+        "event_types": [
+          "transfer"
+        ],
+        "utc_time": "2031-07-09T11:00:00+00:00"
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 1,
+          "created_events": 1,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "transfer",
+            "asset": "USDT",
+            "quantity": "10",
+            "fee_asset": "USDT",
+            "fee_quantity": "0",
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "10.000000000000000000"
+      }
+    },
+    {
+      "name": "explicit_cash_workaround_control",
+      "source": "manual-csv",
+      "csv": "timestamp;type;asset;amount;account;id\n2031-07-09T12:00:00+01:00;unknown;USDT;-8.40;Synthetic Account;demo-principal\n2031-07-09T12:00:00+01:00;fee;USDT;-0.15;Synthetic Account;demo-fee\n2031-07-09T12:00:00+01:00;unknown;USDT;0;Synthetic Account;demo-collateral\n",
+      "note": "Kontrolle: signierte Cash-Beine und neutrale Rohdatenbelege; ausdruecklich keine Steuerfreigabe.",
+      "expected": {
+        "usdt_delta": "-8.55",
+        "event_types": [
+          "unknown",
+          "fee",
+          "unknown"
+        ],
+        "utc_time": null
+      },
+      "passed": true,
+      "failed_checks": [],
+      "actual": {
+        "preview_can_import": true,
+        "missing_required_groups": [],
+        "normalization": {
+          "raw_objects": 3,
+          "created_events": 3,
+          "skipped_raw_objects": 0
+        },
+        "events": [
+          {
+            "event_type": "unknown",
+            "asset": "USDT",
+            "quantity": "-8.40",
+            "fee_asset": null,
+            "fee_quantity": null,
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          },
+          {
+            "event_type": "fee",
+            "asset": "USDT",
+            "quantity": "-0.15",
+            "fee_asset": null,
+            "fee_quantity": null,
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          },
+          {
+            "event_type": "unknown",
+            "asset": "USDT",
+            "quantity": "0",
+            "fee_asset": null,
+            "fee_quantity": null,
+            "utc_time": "2031-07-09T11:00:00+00:00"
+          }
+        ],
+        "usdt_delta": "-8.550000000000000000"
+      }
+    }
+  ]
+}

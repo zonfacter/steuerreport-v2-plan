@@ -535,6 +535,8 @@ def test_external_inflow_report_excludes_multi_event_solana_program_income(tmp_p
             source="manual-test",
         )
     )
+    store.add_price_point(PricePointCreate(asset="USDT", price_eur=Decimal("0.92"),
+        priced_at=datetime(2024, 3, 13, tzinfo=timezone.utc), source="manual-test"))
 
     income = TaxYearService(store).income_report(2024)
     external = TaxYearService(store).external_inflow_report(2024)
@@ -1653,7 +1655,7 @@ def test_tax_year_filing_summary_explains_entry_targets(tmp_path):
     checklist_by_label = {item.label: item for item in report.checklist}
     assert checklist_by_label["Privates Veraeusserungsergebnis"].category == "eintragen"
     assert checklist_by_label["Einzutragende Rewards / Mining / Staking"].category == "eintragen"
-    assert checklist_by_label["Steuerfreie Veraeusserungen > 365 Tage"].category == "archivieren"
+    assert checklist_by_label["Veraeusserungen ausserhalb der privaten Jahresfrist"].category == "archivieren"
     assert checklist_by_label["Belegpaket"].category == "archivieren"
     assert "Jahr" in report.checklist_ascii
     assert "eintragen" in report.checklist_ascii

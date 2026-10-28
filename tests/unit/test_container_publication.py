@@ -28,9 +28,11 @@ def test_release_versions_match_runtime_package_frontend_and_container_defaults(
     assert json.loads((root / "frontend/package.json").read_text())["version"] == frontend_version
     lock = json.loads((root / "frontend/package-lock.json").read_text())
     assert lock["version"] == lock["packages"][""]["version"] == frontend_version
-    for name in ("compose.yml", "compose.ghcr.yml"):
-        assert "steuerreport-v2:" + version in (root / name).read_text()
-    assert "default: v" + version in (root / ".github/workflows/publish-image.yml").read_text()
+    assert "steuerreport-v2:" + version in (root / "compose.yml").read_text()
+    # Ein unveroeffentlichter Auditstand darf kein nicht vorhandenes GHCR-Image anbieten.
+    published = "0.2.0rc32" if ".dev" in version else version
+    assert "steuerreport-v2:" + published in (root / "compose.ghcr.yml").read_text()
+    assert "default: v" + published in (root / ".github/workflows/publish-image.yml").read_text()
 
 
 @pytest.fixture

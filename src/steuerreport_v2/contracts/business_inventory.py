@@ -31,6 +31,10 @@ class BusinessRewardInventoryReviewRow(BaseModel):
     last_disposal_at: str | None = None
     sample_origin_event_id: str | None = None
     sample_disposal_event_id: str | None = None
+    lineage_status: Literal["direct", "carried", "unresolved"] = "direct"
+    lineage_reason: str | None = None
+    sample_lot_path: list[str] = Field(default_factory=list, max_length=64)
+    sample_direct_event_id: str | None = None
     classification: BusinessRewardOriginStatus
     blocks_private_fifo_classification: bool = False
     reason: str
@@ -41,6 +45,7 @@ class BusinessRewardInventoryReviewReport(BaseModel):
     assets: list[str] = Field(default_factory=list)
     affected_years: list[int] = Field(default_factory=list)
     strict_ready: bool = False
+    origin_trace_policy: str = "legacy_direct_origin_v1"
     total_tax_lines_count: int = 0
     potential_business_tax_lines_count: int = 0
     unresolved_tax_lines_count: int = 0

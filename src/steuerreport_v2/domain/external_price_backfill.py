@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from datetime import UTC, date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,7 @@ from steuerreport_v2.contracts.prices import (
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.valuation import PriceCoverageService
+from steuerreport_v2.domain.historical_fx import FxReference, cache_fx_reference
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 from steuerreport_v2.paths import PROJECT_ROOT, resolve_project_path
 
@@ -103,8 +104,8 @@ class ExternalPriceBackfillService:
                         )
                     )
                     continue
-                usd_eur = self._usd_eur_rate(v1_fx_db_path, requirement.price_date.isoformat())
-                if usd_eur <= 0:
+                fx_reference = self._usd_eur_reference(v1_fx_db_path, requirement.price_date.isoformat())
+                if fx_reference is None:
                     skipped += 1
                     jobs.append(
                         ExternalPriceBackfillJob(
@@ -116,6 +117,7 @@ class ExternalPriceBackfillService:
                         )
                     )
                     continue
+                usd_eur = fx_reference.rate_eur_per_usd
                 if dry_run:
                     attempted += 1
                     jobs.append(
@@ -140,29 +142,7 @@ class ExternalPriceBackfillService:
                     fetch_kwargs["defillama_id"] = asset.defillama_id
                 price_usd, source = self._fetch_price_usd(**fetch_kwargs)
                 price_source_date = requirement.price_date.isoformat()
-                if price_usd <= 0:
-                    price_usd, source, price_source_date = self._fetch_first_available_price_usd_after(
-                        client=client,
-                        coingecko_id=asset.coingecko_id,
-                        defillama_id=asset.defillama_id,
-                        date_str=requirement.price_date.isoformat(),
-                        provider=provider,
-                    )
-                    if price_usd > 0:
-                        usd_eur = self._usd_eur_rate(v1_fx_db_path, price_source_date)
-                        source = f"{source}:first_available_after:{price_source_date}"
-                        if usd_eur <= 0:
-                            skipped += 1
-                            jobs.append(
-                                ExternalPriceBackfillJob(
-                                    asset=requirement.asset,
-                                    price_date=requirement.price_date,
-                                    provider_id=asset.coingecko_id or asset.defillama_id,
-                                    status="skipped",
-                                    reason="usd_eur_missing",
-                                )
-                            )
-                            continue
+                # A later first quote is not evidence for this historical event day.
                 if price_usd <= 0:
                     failed += 1
                     jobs.append(
@@ -175,8 +155,10 @@ class ExternalPriceBackfillService:
                         )
                     )
                     continue
-                price_eur = price_usd * usd_eur
-                source_label = f"{source}:usd_eur:v1_fx_cache:{price_source_date}"
+                with localcontext() as arithmetic:
+                    arithmetic.prec = 60
+                    price_eur = (price_usd * usd_eur).quantize(Decimal("0.000000000000000001"))
+                source_label = f"{source}:usd_eur:v1_fx_cache:{price_source_date}:{fx_reference.source_suffix()}"
                 prices.append(
                     PricePointCreate(
                         asset=requirement.asset,
@@ -465,23 +447,15 @@ class ExternalPriceBackfillService:
         return result
 
     def _usd_eur_rate(self, db_path: str, rate_date: str) -> Decimal:
+        reference = self._usd_eur_reference(db_path, rate_date)
+        return reference.rate_eur_per_usd if reference else Decimal("0")
+
+    def _usd_eur_reference(self, db_path: str, rate_date: str) -> FxReference | None:
         path = Path(db_path).expanduser()
         if not path.exists():
-            return Decimal("0")
+            return None
         with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as con:
-            row = con.execute(
-                """
-                select rate
-                from fx_cache
-                where rate_date <= ? and base_ccy = 'USD' and quote_ccy = 'EUR'
-                order by rate_date desc
-                limit 1
-                """,
-                (rate_date,),
-            ).fetchone()
-        if row is None:
-            return Decimal("0")
-        return self._decimal(row[0])
+            return cache_fx_reference(con, date.fromisoformat(rate_date))
 
     def _fetch_price_usd(
         self,

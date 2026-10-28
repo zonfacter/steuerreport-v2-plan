@@ -1,0 +1,74 @@
+"""Produktiver Defaultpfad nutzt denselben Limiter wie alle Connectoren."""
+from datetime import datetime, timezone
+
+import httpx
+import pytest
+
+from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.external_http import managed_client
+from steuerreport_v2.domain.request_limits import RequestLimiter, RequestLimitError
+from steuerreport_v2.domain import updates
+
+
+NOW = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
+
+
+class Clock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+@pytest.mark.parametrize("rate_limited", [False, True])
+def test_default_path_pagination_and_429_reserve_shared_budget(tmp_path, monkeypatch, rate_limited):
+    clock = Clock()
+    limiter = RequestLimiter(state_root=tmp_path, clock=clock, monotonic=clock, sleep=clock.sleep, random=lambda: 0)
+    calls = []
+
+    def handler(request):
+        calls.append((clock.now, request.url.params["page"]))
+        assert request.url.host == "api.github.com" and "authorization" not in request.headers
+        if rate_limited:
+            return httpx.Response(429, headers={"Retry-After": "120"})
+        headers = {"Link": f'<{updates.RELEASE_API}?per_page=100&page=2>; rel="next"'} if len(calls) == 1 else {}
+        return httpx.Response(200, json=[], headers=headers)
+
+    def factory(**kwargs):
+        assert kwargs["provider"] == "github_updates"
+        assert kwargs["max_response_bytes"] == updates.MAX_PAGE_BYTES
+        assert kwargs["max_retries"] == 0
+        kwargs["limiter"] = limiter
+        return managed_client(transport=httpx.MockTransport(handler), clock=clock, monotonic=clock, **kwargs)
+
+    monkeypatch.setattr(updates, "managed_client", factory)
+    service = updates.UpdateService(DuckDbStore(tmp_path / "synthetic.duckdb"), state_dir=tmp_path,
+                                    installed_version="0.2.0rc32", clock=lambda: NOW)
+    result = service.check()
+    count = 1 if rate_limited else 2
+    assert len(calls) == count
+    assert result.status == ("unavailable" if rate_limited else "up_to_date")
+    assert all(row.requests_last_minute == count for row in limiter.status().groups)
+    assert {row.group for row in limiter.status().groups} >= {"ip:global", "provider:github_updates"}
+    assert all(row.in_flight == 0 for row in limiter.status().groups)
+    if rate_limited:
+        assert (result.retry_at - NOW).total_seconds() == 120
+    else:
+        assert calls[1][0] - calls[0][0] >= 1
+
+
+def test_coordinator_failure_is_fail_closed_without_secret_echo(tmp_path, monkeypatch):
+    def fail(**kwargs):
+        raise RequestLimitError("synthetic-sensitive-coordinator-detail")
+
+    monkeypatch.setattr(updates, "RequestLimiter", fail)
+    monkeypatch.setattr(updates, "managed_client", lambda **kwargs: pytest.fail("Limiter darf nicht umgangen werden"))
+    service = updates.UpdateService(DuckDbStore(tmp_path / "synthetic.duckdb"), state_dir=tmp_path,
+                                    installed_version="0.2.0rc32", clock=lambda: NOW)
+    result = service.check()
+    assert result.status == "unavailable"
+    assert "synthetic-sensitive" not in result.model_dump_json()

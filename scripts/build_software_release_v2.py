@@ -29,6 +29,9 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc33.md",
+    "docs/audit/2026-10-28/acceptance_tests.py",
+    "docs/audit/2026-10-28/issues/issue2-original.py",
     "docs/RELEASE_0.2.0rc32.md",
     "docs/RELEASE_0.2.0rc31.md",
     "docs/RELEASE_0.2.0rc30.md",

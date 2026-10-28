@@ -1,0 +1,351 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="15" skipped="0" tests="17" time="15.106" timestamp="2026-10-28T18:59:02.569559+00:00" hostname="ai-control"><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets0]" time="0.529"><failure message="AssertionError: assert 0 == 1&#10; +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:04.145023+00:00', assets=['HNT'], affected_years=[]...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').total_tax_lines_count">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_reward_root_surviv0'), PosixPath('/tmp/sr-orig...t_stored_reward_root_surviv0/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x72470131a4d0&gt;)
+assets = ('HNT',)
+
+    @pytest.mark.parametrize("assets", [("HNT",), ("NEW",), None])
+    def test_stored_reward_root_survives_transfer_conversion_and_asset_filter(case, assets):
+        _, _, store = case
+        lots, events, line = _objects()
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(
+            **({"assets": assets} if assets else {})
+        )
+        assert _snapshot(store) == before
+&gt;       assert report.total_tax_lines_count == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:04.145023+00:00', assets=['HNT'], affected_years=[]...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').total_tax_lines_count
+
+tests/acceptance/test_lot_origin_reference.py:289: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets1]" time="0.505"><failure message="AssertionError: assert 0 == 1&#10; +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:04.691311+00:00', assets=['NEW'], affected_years=[2...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').potential_business_tax_lines_count">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_reward_root_surviv1'), PosixPath('/tmp/sr-orig...t_stored_reward_root_surviv1/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x724701232090&gt;)
+assets = ('NEW',)
+
+    @pytest.mark.parametrize("assets", [("HNT",), ("NEW",), None])
+    def test_stored_reward_root_survives_transfer_conversion_and_asset_filter(case, assets):
+        _, _, store = case
+        lots, events, line = _objects()
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(
+            **({"assets": assets} if assets else {})
+        )
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+&gt;       assert report.potential_business_tax_lines_count == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:04.691311+00:00', assets=['NEW'], affected_years=[2...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').potential_business_tax_lines_count
+
+tests/acceptance/test_lot_origin_reference.py:290: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_reward_root_survives_transfer_conversion_and_asset_filter[None]" time="0.501"><failure message="AssertionError: assert 0 == 1&#10; +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:05.201393+00:00', assets=['HNT', 'IOT', 'MOBILE'], ...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').total_tax_lines_count">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_reward_root_surviv2'), PosixPath('/tmp/sr-orig...t_stored_reward_root_surviv2/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x724701263d50&gt;)
+assets = None
+
+    @pytest.mark.parametrize("assets", [("HNT",), ("NEW",), None])
+    def test_stored_reward_root_survives_transfer_conversion_and_asset_filter(case, assets):
+        _, _, store = case
+        lots, events, line = _objects()
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(
+            **({"assets": assets} if assets else {})
+        )
+        assert _snapshot(store) == before
+&gt;       assert report.total_tax_lines_count == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:05.201393+00:00', assets=['HNT', 'IOT', 'MOBILE'], ...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').total_tax_lines_count
+
+tests/acceptance/test_lot_origin_reference.py:289: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_real_bmf_preview_keeps_helium_root_and_literal_partial_sale" time="2.551"><failure message="AssertionError: assert 'ready_for_pr...sional_review' == 'blocked'&#10;  &#10;  - blocked&#10;  + ready_for_professional_review">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_real_bmf_preview_keeps_he0'), PosixPath('/tmp/sr-orig...t_real_bmf_preview_keeps_he0/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x724701297210&gt;)
+
+    def test_real_bmf_preview_keeps_helium_root_and_literal_partial_sale(case):
+        store, staging, events = _replay_inputs(case)
+        before = _snapshot(store)
+        income_before = TaxYearService(store).income_report(2024).model_dump(mode="json")
+        assert Decimal(income_before["total_income_eur"]) == Decimal("90")
+        assert income_before["events_count"] == 1
+        state = WalletFifoPreviewService(store).replay(as_of=AS_OF)
+        lines = [line for line in state.tax_lines if line.asset == "NEW"]
+        assert len(lines) == 1
+        assert (
+            lines[0].quantity,
+            lines[0].acquisition_cost_eur,
+            lines[0].disposal_proceeds_eur,
+            lines[0].gain_loss_eur,
+        ) == (
+            Decimal("0.4"),
+            Decimal("36"),
+            Decimal("60"),
+            Decimal("24"),
+        )
+        remaining = [lot for lot in state.all_lots if lot.asset == "NEW"]
+        assert len(remaining) == 1
+        assert remaining[0].quantity_remaining == Decimal("0.6")
+        assert remaining[0].cost_basis_eur_total == Decimal("90")
+        report = staging.run(BmfFifoStagingRunRequest(years=[2024], as_of=AS_OF))
+        assert _snapshot(store) == before
+        income_after = TaxYearService(store).income_report(2024).model_dump(mode="json")
+        income_before.pop("generated_at", None)
+        income_after.pop("generated_at", None)
+        assert income_before == income_after
+        for totals in (
+            report.active_global,
+            report.received_first_global,
+            report.active_wallet,
+            report.received_first_wallet,
+        ):
+            assert totals.tax_lines_count == 1
+            assert totals.acquisition_cost_eur == Decimal("36")
+            assert totals.disposal_proceeds_eur == Decimal("60")
+            assert totals.gain_loss_eur == Decimal("24")
+        assert report.strict_ready is False
+&gt;       assert report.status == "blocked"
+E       AssertionError: assert 'ready_for_pr...sional_review' == 'blocked'
+E         
+E         - blocked
+E         + ready_for_professional_review
+
+tests/acceptance/test_lot_origin_reference.py:492: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_zero_eur_delta_origin_review_is_not_dropped_from_event_evidence" time="1.966"><failure message="AssertionError: assert 0 == 1&#10; +  where 0 = BmfFifoEventEvidenceReport(run_id='bmf-event-evidence-20261028T185909615597Z-1b41e8b9cd40', generated_at=datetime.date... die API liefert nur Gruppen und begrenzte Issues. Der Lauf schreibt keine Steuer-, Ledger-, Preis- oder Importdaten.').selected_discrepancy_rows_count">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_zero_eur_delta_origin_rev0'), PosixPath('/tmp/sr-orig...t_zero_eur_delta_origin_rev0/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x724701297450&gt;)
+
+    def test_zero_eur_delta_origin_review_is_not_dropped_from_event_evidence(case):
+        path, _, _ = case
+        store, staging, events = _replay_inputs(case, convert=False)
+        preview = staging.run(BmfFifoStagingRunRequest(years=[2024], as_of=AS_OF))
+        assert preview.combined_delta_eur == Decimal("0")
+        assert len(preview.top_events) == 1
+        before = _snapshot(store)
+        evidence = BmfFifoEventEvidenceService(
+            store,
+            artifact_root=path / "evidence",
+            staging_service=staging,
+        ).run(BmfFifoEventEvidenceRunRequest())
+        assert _snapshot(store) == before
+        assert evidence.strict_ready is False
+&gt;       assert evidence.selected_discrepancy_rows_count == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = BmfFifoEventEvidenceReport(run_id='bmf-event-evidence-20261028T185909615597Z-1b41e8b9cd40', generated_at=datetime.date... die API liefert nur Gruppen und begrenzte Issues. Der Lauf schreibt keine Steuer-, Ledger-, Preis- oder Importdaten.').selected_discrepancy_rows_count
+
+tests/acceptance/test_lot_origin_reference.py:518: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_current]" time="0.509"><failure message="AssertionError: assert 'direct' == 'unresolved'&#10;  &#10;  - unresolved&#10;  + direct">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_broken_lineage_nev0'), PosixPath('/tmp/sr-orig...t_stored_broken_lineage_nev0/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x7247294d5550&gt;)
+mode = 'missing_current'
+
+    @pytest.mark.parametrize("mode", BROKEN_STORED)
+    def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
+        _, _, store = case
+        lots, events, line = _broken_objects(mode)
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+        assert report.strict_ready is False
+        assert report.unresolved_tax_lines_count == 1
+        assert len(report.rows) == 1
+        row = report.rows[0]
+&gt;       assert row.lineage_status == "unresolved"
+E       AssertionError: assert 'direct' == 'unresolved'
+E         
+E         - unresolved
+E         + direct
+
+tests/acceptance/test_lot_origin_reference.py:578: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[orphan]" time="0.598"><failure message="AssertionError: assert 'direct' == 'unresolved'&#10;  &#10;  - unresolved&#10;  + direct">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_broken_lineage_nev1'), PosixPath('/tmp/sr-orig...t_stored_broken_lineage_nev1/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x7247013e5610&gt;)
+mode = 'orphan'
+
+    @pytest.mark.parametrize("mode", BROKEN_STORED)
+    def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
+        _, _, store = case
+        lots, events, line = _broken_objects(mode)
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+        assert report.strict_ready is False
+        assert report.unresolved_tax_lines_count == 1
+        assert len(report.rows) == 1
+        row = report.rows[0]
+&gt;       assert row.lineage_status == "unresolved"
+E       AssertionError: assert 'direct' == 'unresolved'
+E         
+E         - unresolved
+E         + direct
+
+tests/acceptance/test_lot_origin_reference.py:578: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[cycle]" time="0.620"><failure message="AssertionError: assert 'direct' == 'unresolved'&#10;  &#10;  - unresolved&#10;  + direct">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_broken_lineage_nev2'), PosixPath('/tmp/sr-orig...t_stored_broken_lineage_nev2/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x7247013e6510&gt;)
+mode = 'cycle'
+
+    @pytest.mark.parametrize("mode", BROKEN_STORED)
+    def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
+        _, _, store = case
+        lots, events, line = _broken_objects(mode)
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+        assert report.strict_ready is False
+        assert report.unresolved_tax_lines_count == 1
+        assert len(report.rows) == 1
+        row = report.rows[0]
+&gt;       assert row.lineage_status == "unresolved"
+E       AssertionError: assert 'direct' == 'unresolved'
+E         
+E         - unresolved
+E         + direct
+
+tests/acceptance/test_lot_origin_reference.py:578: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_event_conflict]" time="0.751"><failure message="AssertionError: assert 0 == 1&#10; +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:12.310869+00:00', assets=['NEW'], affected_years=[2...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').unresolved_tax_lines_count">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_broken_lineage_nev3'), PosixPath('/tmp/sr-orig...t_stored_broken_lineage_nev3/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x7247012a4290&gt;)
+mode = 'line_event_conflict'
+
+    @pytest.mark.parametrize("mode", BROKEN_STORED)
+    def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
+        _, _, store = case
+        lots, events, line = _broken_objects(mode)
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+        assert report.strict_ready is False
+&gt;       assert report.unresolved_tax_lines_count == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:12.310869+00:00', assets=['NEW'], affected_years=[2...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').unresolved_tax_lines_count
+
+tests/acceptance/test_lot_origin_reference.py:575: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_lot_conflict]" time="0.671"><failure message="AssertionError: assert 'direct' == 'unresolved'&#10;  &#10;  - unresolved&#10;  + direct">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_broken_lineage_nev4'), PosixPath('/tmp/sr-orig...t_stored_broken_lineage_nev4/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x7247011a7e90&gt;)
+mode = 'line_lot_conflict'
+
+    @pytest.mark.parametrize("mode", BROKEN_STORED)
+    def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
+        _, _, store = case
+        lots, events, line = _broken_objects(mode)
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+        assert report.strict_ready is False
+        assert report.unresolved_tax_lines_count == 1
+        assert len(report.rows) == 1
+        row = report.rows[0]
+&gt;       assert row.lineage_status == "unresolved"
+E       AssertionError: assert 'direct' == 'unresolved'
+E         
+E         - unresolved
+E         + direct
+
+tests/acceptance/test_lot_origin_reference.py:578: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[acquired_at_conflict]" time="0.615"><failure message="AssertionError: assert 'direct' == 'unresolved'&#10;  &#10;  - unresolved&#10;  + direct">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_broken_lineage_nev5'), PosixPath('/tmp/sr-orig...t_stored_broken_lineage_nev5/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x72470101a550&gt;)
+mode = 'acquired_at_conflict'
+
+    @pytest.mark.parametrize("mode", BROKEN_STORED)
+    def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
+        _, _, store = case
+        lots, events, line = _broken_objects(mode)
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+        assert report.strict_ready is False
+        assert report.unresolved_tax_lines_count == 1
+        assert len(report.rows) == 1
+        row = report.rows[0]
+&gt;       assert row.lineage_status == "unresolved"
+E       AssertionError: assert 'direct' == 'unresolved'
+E         
+E         - unresolved
+E         + direct
+
+tests/acceptance/test_lot_origin_reference.py:578: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[parent_acquired_at_conflict]" time="0.693"><failure message="AssertionError: assert 'direct' == 'unresolved'&#10;  &#10;  - unresolved&#10;  + direct">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_broken_lineage_nev6'), PosixPath('/tmp/sr-orig...t_stored_broken_lineage_nev6/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x724701297890&gt;)
+mode = 'parent_acquired_at_conflict'
+
+    @pytest.mark.parametrize("mode", BROKEN_STORED)
+    def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
+        _, _, store = case
+        lots, events, line = _broken_objects(mode)
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+        assert report.strict_ready is False
+        assert report.unresolved_tax_lines_count == 1
+        assert len(report.rows) == 1
+        row = report.rows[0]
+&gt;       assert row.lineage_status == "unresolved"
+E       AssertionError: assert 'direct' == 'unresolved'
+E         
+E         - unresolved
+E         + direct
+
+tests/acceptance/test_lot_origin_reference.py:578: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_root_event]" time="0.763"><failure message="AssertionError: assert 'direct' == 'unresolved'&#10;  &#10;  - unresolved&#10;  + direct">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_broken_lineage_nev7'), PosixPath('/tmp/sr-orig...t_stored_broken_lineage_nev7/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x724701296750&gt;)
+mode = 'missing_root_event'
+
+    @pytest.mark.parametrize("mode", BROKEN_STORED)
+    def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
+        _, _, store = case
+        lots, events, line = _broken_objects(mode)
+        _persist(store, lots, events, [line])
+        before = _snapshot(store)
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
+        assert _snapshot(store) == before
+        assert report.total_tax_lines_count == 1
+        assert report.strict_ready is False
+        assert report.unresolved_tax_lines_count == 1
+        assert len(report.rows) == 1
+        row = report.rows[0]
+&gt;       assert row.lineage_status == "unresolved"
+E       AssertionError: assert 'direct' == 'unresolved'
+E         
+E         - unresolved
+E         + direct
+
+tests/acceptance/test_lot_origin_reference.py:578: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_unknown_root_type_is_review_not_non_reward_clearance[True]" time="0.641" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_unknown_root_type_is_review_not_non_reward_clearance[False]" time="0.582"><failure message="AssertionError: assert True is False&#10; +  where True = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:16.346267+00:00', assets=['HNT', 'NEW'], affected_y...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').strict_ready">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_unknown_root_type_1'), PosixPath('/tmp/sr-orig...t_stored_unknown_root_type_1/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x724701100150&gt;)
+carried = False
+
+    @pytest.mark.parametrize("carried", [True, False])
+    def test_stored_unknown_root_type_is_review_not_non_reward_clearance(case, carried):
+        _, _, store = case
+        lots, events, line = _objects()
+        events[0].event_type = "unknown"
+        if not carried:
+            lots = [lots[0]]
+            line = line.model_copy(
+                update={
+                    "asset": "HNT",
+                    "lot_id": "reward-lot",
+                    "origin_lot_id": None,
+                    "acquisition_source_event_id": "reward",
+                }
+            )
+        _persist(store, lots, events, [line])
+        report = BusinessRewardInventoryReviewService(store).review(assets=("NEW", "HNT"))
+        assert report.total_tax_lines_count == 1
+&gt;       assert report.strict_ready is False
+E       AssertionError: assert True is False
+E        +  where True = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:16.346267+00:00', assets=['HNT', 'NEW'], affected_y...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').strict_ready
+
+tests/acceptance/test_lot_origin_reference.py:613: AssertionError</failure></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_direct_eur_buy_is_not_fabricated_as_business_reward" time="0.619" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_two_lines_one_root_do_not_duplicate_origin_or_totals" time="0.685"><failure message="AssertionError: assert 0 == 2&#10; +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:17.651651+00:00', assets=['HNT', 'NEW'], affected_y...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').potential_business_tax_lines_count">case = (PosixPath('/tmp/sr-origin-20261028-independent/baseline-v3/test_stored_two_lines_one_root0'), PosixPath('/tmp/sr-orig...t_stored_two_lines_one_root0/private-configs'), &lt;steuerreport_v2.db.duckdb_store.DuckDbStore object at 0x724701260310&gt;)
+
+    def test_stored_two_lines_one_root_do_not_duplicate_origin_or_totals(case):
+        _, _, store = case
+        lots, events, line = _objects()
+        first = line.model_copy(
+            update={
+                "quantity": Decimal("0.1"),
+                "acquisition_cost_eur": Decimal("9"),
+                "disposal_proceeds_eur": Decimal("15"),
+                "gain_loss_eur": Decimal("6"),
+            }
+        )
+        second = line.model_copy(
+            update={
+                "tax_line_id": "sale-line-2",
+                "quantity": Decimal("0.3"),
+                "acquisition_cost_eur": Decimal("27"),
+                "disposal_proceeds_eur": Decimal("45"),
+                "gain_loss_eur": Decimal("18"),
+            }
+        )
+        _persist(store, lots, events, [first, second])
+        before = _snapshot(store)
+        for _ in range(2):
+            report = BusinessRewardInventoryReviewService(store).review(
+                assets=("NEW", "HNT")
+            )
+            assert report.total_tax_lines_count == 2
+&gt;           assert report.potential_business_tax_lines_count == 2
+E           AssertionError: assert 0 == 2
+E            +  where 0 = BusinessRewardInventoryReviewReport(generated_at='2026-10-28T18:59:17.651651+00:00', assets=['HNT', 'NEW'], affected_y...ende Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, Tax-Lines, Preise oder Erklaerungswerte.').potential_business_tax_lines_count
+
+tests/acceptance/test_lot_origin_reference.py:675: AssertionError</failure></testcase></testsuite></testsuites>

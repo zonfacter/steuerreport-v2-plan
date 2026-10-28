@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bisect import bisect_right, insort
+from bisect import bisect_left, bisect_right, insort
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -8,6 +8,12 @@ from decimal import Decimal
 from steuerreport_v2.contracts.events import CanonicalEvent
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.price_policy import (
+    as_utc,
+    is_derived_source,
+    price_rejection_reason,
+    price_selection_key,
+)
 
 DERIVED_EVENT_QUOTE_SOURCE = "derived:event_quote"
 
@@ -24,11 +30,12 @@ class DerivedPriceService:
 
     def rebuild_from_event_quotes(self, max_passes: int = 4) -> DerivedPriceBackfillResult:
         deleted = self.store.delete_price_points_by_source(DERIVED_EVENT_QUOTE_SOURCE)
-        history: dict[str, list[tuple[datetime, Decimal]]] = {}
+        history: dict[str, list[PricePointCreate]] = {}
         known_keys: set[tuple[str, datetime]] = set()
-        for point in self.store.list_price_points(limit=1_000_000):
+        for point in self.store.list_price_points(limit=None):
+            point = point.model_copy(update={"priced_at": as_utc(point.priced_at)})
             asset = point.asset.upper()
-            insort(history.setdefault(asset, []), (point.priced_at, point.price_eur))
+            insort(history.setdefault(asset, []), point, key=lambda item: item.priced_at)
             known_keys.add((asset, point.priced_at))
 
         derived: list[PricePointCreate] = []
@@ -125,7 +132,7 @@ class DerivedPriceService:
         self,
         *,
         events: list[CanonicalEvent],
-        history: dict[str, list[tuple[datetime, Decimal]]],
+        history: dict[str, list[PricePointCreate]],
         known_keys: set[tuple[str, datetime]],
         derived: list[PricePointCreate],
     ) -> int:
@@ -153,7 +160,7 @@ class DerivedPriceService:
             if len(positive_assets) != 1:
                 continue
             target_asset = positive_assets[0]
-            if (target_asset, event_time) in known_keys:
+            if (target_asset, as_utc(event_time)) in known_keys:
                 continue
 
             value_eur = Decimal("0")
@@ -182,7 +189,7 @@ class DerivedPriceService:
     def _append_price(
         self,
         *,
-        history: dict[str, list[tuple[datetime, Decimal]]],
+        history: dict[str, list[PricePointCreate]],
         known_keys: set[tuple[str, datetime]],
         derived: list[PricePointCreate],
         asset: str,
@@ -192,20 +199,20 @@ class DerivedPriceService:
     ) -> int:
         if asset == "EUR" or price_eur <= 0:
             return 0
+        priced_at = as_utc(priced_at)
         key = (asset, priced_at)
         if key in known_keys:
             return 0
         known_keys.add(key)
-        insort(history.setdefault(asset, []), (priced_at, price_eur))
-        derived.append(
-            PricePointCreate(
-                asset=asset,
-                price_eur=price_eur,
-                priced_at=priced_at,
-                source=DERIVED_EVENT_QUOTE_SOURCE,
-                confidence=confidence,
-            )
+        point = PricePointCreate(
+            asset=asset,
+            price_eur=price_eur,
+            priced_at=priced_at,
+            source=DERIVED_EVENT_QUOTE_SOURCE,
+            confidence=confidence,
         )
+        insort(history.setdefault(asset, []), point, key=lambda item: item.priced_at)
+        derived.append(point)
         return 1
 
     @staticmethod
@@ -228,7 +235,7 @@ class DerivedPriceService:
 
     def _price_at_or_before(
         self,
-        history: dict[str, list[tuple[datetime, Decimal]]],
+        history: dict[str, list[PricePointCreate]],
         asset: str,
         priced_at: datetime,
     ) -> Decimal | None:
@@ -237,7 +244,17 @@ class DerivedPriceService:
         asset_history = history.get(asset)
         if not asset_history:
             return None
-        index = bisect_right(asset_history, (priced_at, Decimal("Infinity"))) - 1
-        if index < 0:
+        priced_at = as_utc(priced_at)
+        start = bisect_left(
+            asset_history, priced_at.replace(hour=0, minute=0, second=0, microsecond=0),
+            key=lambda item: item.priced_at,
+        )
+        end = bisect_right(asset_history, priced_at, key=lambda item: item.priced_at)
+        candidates = [
+            point for point in asset_history[start:end]
+            if price_rejection_reason(point, priced_at) is None
+        ]
+        if not candidates:
             return None
-        return asset_history[index][1]
+        primary = [point for point in candidates if not is_derived_source(point.source)]
+        return max(primary or candidates, key=price_selection_key).price_eur

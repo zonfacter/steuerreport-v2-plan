@@ -10,6 +10,44 @@ permissions:
   contents: read
 
 jobs:
+  reference-acceptance:
+    name: Mandatory independent reference gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install locked reference-test dependencies
+        run: python -m pip install -c requirements-runtime.lock -e '.[dev]'
+      - name: Immutable independent reference probes
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/check_reference_baseline_v2.py
+          python -m pytest docs/audit/2026-10-28/acceptance_tests.py -q --junitxml=reference-original.xml
+      - name: Independent FX, identity and lot-origin probes
+        env:
+          PYTHONPATH: src
+        run: python -m pytest tests/acceptance -q --basetemp="${RUNNER_TEMP}/reference-additional" --junitxml=reference-additional.xml
+      - name: Unchanged public Bitget reproducer
+        env:
+          PYTHONPATH: src
+        run: >-
+          python docs/audit/2026-10-28/issues/issue2-original.py
+          --expected-version "$(python -c 'from steuerreport_v2 import __version__; print(__version__)')"
+          > bitget-original-reference.json
+      - name: Original reference results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mandatory-reference-results
+          path: |
+            reference-*.xml
+            bitget-original-reference.json
+          if-no-files-found: error
+
   backend:
     runs-on: ubuntu-latest
     steps:
@@ -82,6 +120,9 @@ jobs:
       - name: Review context browser checks against actual isolated backend
         working-directory: .
         run: python scripts/check_review_backend_browser_v2.py
+      - name: Lot-origin details with isolated backend and synthetic companion data
+        working-directory: .
+        run: python scripts/check_lot_origin_browser_v2.py --output "${RUNNER_TEMP}/lot-origin-browser"
       - name: Protected wallet setup against actual isolated backend
         working-directory: .
         run: python scripts/check_wallet_setup_browser_v2.py
@@ -100,6 +141,12 @@ jobs:
       - name: Historical EUR prices against isolated backend and mock providers
         working-directory: .
         run: python scripts/check_historical_prices_browser_v2.py --output "${RUNNER_TEMP}/historical-prices-browser"
+      - name: Update settings, selection and clipboard with controlled responses
+        working-directory: .
+        run: python scripts/check_updates_browser_v2.py --output "${RUNNER_TEMP}/updates-browser"
+      - name: Update cooldown, persistence and pinned handoff against isolated backend
+        working-directory: .
+        run: python scripts/check_updates_backend_browser_v2.py --output "${RUNNER_TEMP}/updates-backend-browser"
       - name: UX browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -108,9 +155,12 @@ jobs:
           path: |
             artifacts/ux-browser/
             artifacts/ux-review-fixes/
+            ${{ runner.temp }}/lot-origin-browser/
             artifacts/source-history-browser/
             artifacts/source-history-backend-browser/
             ${{ runner.temp }}/history-provider-eta-browser/
             ${{ runner.temp }}/solana-limits-browser/
             ${{ runner.temp }}/historical-prices-browser/
+            ${{ runner.temp }}/updates-browser/
+            ${{ runner.temp }}/updates-backend-browser/
           if-no-files-found: ignore

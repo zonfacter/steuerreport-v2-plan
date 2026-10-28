@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
+import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
 import { ConnectorSetupSettings } from "./ConnectorSetupSettings";
 import { ConnectionSettings, RequestLimitSettings, useAdminEnvironment } from "./ConnectionSettings";
 import { FileImportWizard } from "./FileImportWizard";
@@ -13,10 +14,12 @@ import { ActivityWorkspace } from "./workspace/Transactions";
 import { ReviewWorkspace } from "./workspace/ReviewWorkspace";
 import { YearWorkspace } from "./workspace/YearWorkspace";
 import { PriceWorkspace } from "./workspace/PriceWorkspace";
+import { LotOriginDetails, LOT_CLASS_LABELS, LOT_LINEAGE_LABELS } from "./workspace/LotOriginDetails";
 import { navigateView, useViewState } from "./workspace/view-state";
 import {
   AlertTriangle,
   Archive,
+  ArrowLeft,
   ArrowRight,
   Bot,
   BookOpen,
@@ -2611,6 +2614,7 @@ type Snapshot = {
     status: "blocked" | "review" | "ready_for_professional_review";
     strict_ready: boolean;
     read_only: boolean;
+    origin_trace_policy?: string;
     productive_tax_tables_unchanged: boolean;
     active_global: Record<string, unknown>;
     received_first_global: Record<string, unknown>;
@@ -3254,7 +3258,8 @@ function App() {
   const { view: routeView } = useViewState("dashboard", true);
   const active = routeView.section as Section;
   const setActive = (section: Section) => navigateView(section);
-  const managed = ["dashboard", "sources", "flows", "review", "tax", "export"].includes(active);
+  const managed = ["dashboard", "sources", "flows", "review", "tax", "export"].includes(active)
+    || (active === "admin" && routeView.tab === "updates");
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [loading, setLoading] = useState(false);
@@ -3327,6 +3332,15 @@ function App() {
     const frame = window.requestAnimationFrame(() => document.getElementById("page-heading")?.focus({ preventScroll: true }));
     return () => window.cancelAnimationFrame(frame);
   }, [active]);
+
+  useEffect(() => {
+    if (active !== "admin" || routeView.tab !== "updates") return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById("version-updates")?.scrollIntoView({ block: "start" });
+      document.getElementById("version-updates-heading")?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active, routeView.tab]);
 
   useEffect(() => {
     if (!mobileNavOpen) {
@@ -3779,7 +3793,7 @@ function App() {
           "reportEvidenceManifest", "reportEvidencePackageIndex",
           ...(exportViewMode === "expert" ? ["exports", "priceQuality"] : [])
         ] : [],
-        admin: ["health", "admin", "adminSettings", "sourceConnectorDiagnostics", "jupiterMetadataCache"],
+        admin: routeView.tab === "updates" ? ["health"] : ["health", "admin", "adminSettings", "sourceConnectorDiagnostics", "jupiterMetadataCache"],
         ai: ["health", "ai", "localAiYearPackageQa"],
         help: []
       };
@@ -5512,6 +5526,12 @@ function App() {
             {snapshot.productReadiness?.next_action ? <em>{snapshot.productReadiness.next_action}</em> : null}
           </div>}
           {active !== "help" && <div className="buttonRow topbarActions"><a className="ghostButton" href={`?hilfethema=${active}#help`} target="_blank" rel="noreferrer" title="Hilfe in neuem Tab oeffnen; Eingaben bleiben erhalten"><BookOpen size={16} /> Hilfe zum Bereich <ExternalLink size={14} /></a>
+          <UpdateIndicator onNavigate={() => {
+            setMobileNavOpen(false);
+            navigateView("admin", { tab: "updates" });
+            document.getElementById("version-updates")?.scrollIntoView({ block: "start" });
+            document.getElementById("version-updates-heading")?.focus({ preventScroll: true });
+          }} />
           {["dashboard", "tax", "export"].includes(active) && <label className="wsYearContext">Steuerjahr<select aria-label="Gemeinsames Steuerjahr" value={routeView.year} onChange={(event) => navigateView(active, { year: event.target.value, page: 1 })}>{Array.from({ length: 12 }, (_, index) => String(2020 + index)).map((year) => <option key={year}>{year}</option>)}{(Number(routeView.year) < 2020 || Number(routeView.year) > 2031) && <option>{routeView.year}</option>}</select></label>}
           <button className="statusButton" type="button" title="Vorhandene Daten erneut lesen; kein Anbieterabruf und keine fachliche Neuberechnung" onClick={() => void refresh()} disabled={pageLoading}>
             <RefreshCcw className={pageLoading ? "spin" : ""} size={16} />
@@ -5528,7 +5548,10 @@ function App() {
           lastRefreshAt={lastRefreshAt}
           lastLoadFailureCount={lastLoadFailureCount}
         />}
-        {active === "help" ? <HelpCenter key={helpTopic} initialTopic={helpTopic} /> : <Content
+        {active === "help" ? <HelpCenter key={helpTopic} initialTopic={helpTopic} /> : active === "admin" && routeView.tab === "updates" ? <>
+          <button type="button" className="statusButton" onClick={() => navigateView("admin", { tab: "overview" })}><ArrowLeft size={16} /> Zur Einrichtung</button>
+          <VersionUpdates />
+        </> : <Content
           active={active}
           snapshot={snapshot}
           legacyLoading={pageLoading || loaderStatuses.length === 0}
@@ -7673,15 +7696,15 @@ function CockpitDashboard({
     : !summary.export_allowed
       ? "Export ist blockiert"
       : hasWarnings
-        ? "Steuerexport frei, aber Pruefung offen"
-        : "Steuerstatus sauber";
+        ? "Vorschau exportierbar, Prüfung offen"
+        : "Technische Vorschau verfügbar";
   const filingDetail = !cockpitReady
     ? "Portfolio, Review-Gate und Quellenstatus werden getrennt geladen. Bereits fertige Bereiche erscheinen sofort."
     : !summary.export_allowed
       ? "Mindestens ein Review- oder Belegproblem verhindert aktuell einen sauberen Export."
       : hasWarnings
-        ? "Die Steuerfreigabe ist offen, aber Live-Abgleich oder Quellenstatus sollten vor Abgabe nachvollziehbar dokumentiert werden."
-        : "Keine priorisierten Aufgaben offen. Die Ansicht kann als Einstieg fuer Belege und Steuerjahre genutzt werden.";
+        ? "Keine finale Jahresfreigabe. Live-Abgleich, Quellen und fachliche Voraussetzungen prüfen."
+        : "Keine priorisierten technischen Aufgaben offen. Fachliche Jahresvoraussetzungen bleiben gesondert zu prüfen.";
   const nextStepLabel = !cockpitReady
     ? "Status wird ermittelt"
     : primaryTask?.title ?? (summary.export_allowed ? "Steuerjahre pruefen" : "Review oeffnen");
@@ -8106,7 +8129,7 @@ function BlockpitWorkspaceOverview({
           <span className={`statusPill ${readinessToneValue}`}>{readiness ? readinessLabel(readiness.overall_status) : "laedt"}</span>
         </div>
         <strong>Review & Export</strong>
-        <em>{cockpitReady ? summary.export_allowed ? "freigegeben" : "blockiert" : "wird geladen"}</em>
+        <em>{cockpitReady ? summary.export_allowed ? "Vorschau möglich" : "blockiert" : "wird geladen"}</em>
         <p>{summary?.review?.detail ?? "Review-Gate wird geladen"}{cockpitReady ? ` · ${openTasks} Aufgabe(n)` : ""}</p>
       </button>
 
@@ -12867,7 +12890,7 @@ function ReportCenterPanel({
       <section className={`reportHero ${exportAllowed ? "ok" : "blocked"}`}>
         <div>
           <span className="heroKicker">Report-Center</span>
-          <h2>{exportAllowed ? "Export freigegeben" : "Export blockiert"}</h2>
+          <h2>{exportAllowed ? "Vorschau technisch erzeugbar" : center || readiness ? "Export blockiert" : "Exportvoraussetzungen werden geprüft"}</h2>
           <p>{center?.methodology ?? "Reportstatus wird geladen."}</p>
         </div>
         <div className="reportHeroStats">
@@ -13255,9 +13278,9 @@ function ExportReadinessPanel({
     <Stack>
       <div className={`panel reviewStatusPanel ${readiness?.allow_export ? "ok" : "blocked"}`}>
         <div className="panelToolbar">
-          <strong>Export-Freigabe</strong>
+          <strong>Technischer Exportcheck</strong>
           <span className={`statusPill ${readiness?.allow_export ? "ok" : "blocked"}`}>
-            {readiness?.allow_export ? "freigegeben" : "blockiert"}
+            {!readiness ? "wird geprüft" : readiness.allow_export ? "Nur Vorschau" : "blockiert"}
           </span>
         </div>
         <div className="reviewSummary">
@@ -14852,6 +14875,8 @@ function TaxPanel({
   const activeBusinessInventoryRows = (taxBusinessRewardInventoryReview?.rows ?? []).filter(
     (row) => String(row.disposal_year) === activeYearValue
   );
+  const [selectedLotOrigin, setSelectedLotOrigin] = useState<Record<string, unknown>>();
+  const currentOriginPreview = taxBmfCombinedFifoStaging?.origin_trace_policy === "linked_lot_origin_v1";
   const activeBusinessInventoryTotals = activeBusinessInventoryRows.reduce(
     (
       totals: { potentialLines: number; unresolvedLines: number; potentialGainLoss: number },
@@ -18074,18 +18099,20 @@ function TaxPanel({
             title={`Ursprungssphaere der Verwertungen ${activeYearValue}`}
             rows={activeBusinessInventoryRows.map((row) => ({
               asset: row.asset,
-              origin_source: row.origin_source,
-              origin_event_type: row.origin_event_type,
-              origin_account: row.origin_account,
+              ursprung: [row.origin_source, row.origin_event_type].filter(Boolean).join(" · ") || "Nicht verfügbar",
+              herkunftskette: LOT_LINEAGE_LABELS[String(row.lineage_status)] ?? "Noch nicht verfolgt",
               tax_lines: row.tax_lines_count,
               anschaffung_eur: formatCurrency(row.acquisition_cost_eur),
               veraeusserung_eur: formatCurrency(row.disposal_proceeds_eur),
               gewinn_verlust_eur: formatCurrency(row.gain_loss_eur),
-              classification: row.classification
+              einordnung: LOT_CLASS_LABELS[String(row.classification)] ?? "Noch nicht eingeordnet",
+              lineage_details_full: row
             }))}
+            rowActions={[{ label: "Ursprungslot anzeigen", icon: <GitBranch size={16} />, onClick: (row) => setSelectedLotOrigin(row.lineage_details_full as Record<string, unknown>) }]}
             footer={taxBusinessRewardInventoryReview?.methodology ?? "Reward-Ursprungslot-Audit wird geladen."}
             compact
           />
+          {selectedLotOrigin && <LotOriginDetails row={selectedLotOrigin} onClose={() => setSelectedLotOrigin(undefined)} />}
         </div>
         <TablePanel
           title="Review-only Income Event Preview"
@@ -18403,8 +18430,8 @@ function TaxPanel({
             <span>{formatDateTime(taxBmfCombinedFifoStaging?.generated_at)}</span>
           </div>
           <div className="buttonRow">
-            <span className={`statusPill ${taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "ok" : "blocked"}`}>
-              {taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "pruefbereit" : "fachlich blockiert"}
+            <span className={`statusPill ${currentOriginPreview && taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "ok" : "blocked"}`}>
+              {!taxBmfCombinedFifoStaging ? "Noch kein Prüflauf" : !currentOriginPreview ? "Herkunftsvorschau veraltet" : taxBmfCombinedFifoStaging.status === "ready_for_professional_review" ? "prüfbereit" : "fachlich blockiert"}
             </span>
             <button
               type="button"
@@ -18469,7 +18496,7 @@ function TaxPanel({
               preisdelta_eur: formatCurrency(row.price_policy_delta_eur),
               wallet_delta_eur: formatCurrency(row.wallet_scope_delta_eur),
               kombiniert_eur: formatCurrency(row.combined_delta_eur),
-              ursprung: Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : "",
+              ursprung: [Array.isArray(row.lineage_issue_codes) && row.lineage_issue_codes.length ? "Herkunftskette offen" : "", Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : ""].filter(Boolean).join(" · "),
               disposal_event_id: row.disposal_event_id
             }))}
             footer="Vollstaendige IDs bleiben im API-Artefakt und im Zellen-Tooltip erhalten."

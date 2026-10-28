@@ -1,9 +1,12 @@
 # Steuerreport V2
 
-Version 0.2.0rc32. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc33, Releasekandidat mit geprueften Bewertungs-, Lot- und
+Importkorrekturen sowie Versions-/Updateeinrichtung. Kein amtliches
+Guetesiegel und keine automatische steuerliche Jahresfreigabe.
+Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc32](docs/RELEASE_0.2.0rc32.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc33](docs/RELEASE_0.2.0rc33.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
@@ -20,7 +23,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc32
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc33
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -32,7 +35,7 @@ Die zusaetzliche Kennung `sha-<vollstaendiger Release-Commit>` bezeichnet
 denselben veroeffentlichten Quellstand. Vorabversionen erhalten kein `latest`.
 Aktuell wird `linux/amd64` gebaut und geprueft, nicht ARM64.
 
-rc32 ist ein Releasekandidat. Die obige Image-Referenz ist die Zielversion;
+rc33 ist ein Releasekandidat. Die obige Image-Referenz ist die Zielversion;
 Build, Veroeffentlichung und produktives Deployment sind erst nach den
 gesonderten Nachweisen im Release bestaetigt.
 

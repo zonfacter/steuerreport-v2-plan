@@ -250,6 +250,9 @@ def test_divorce_capital_flow_gate_separates_internal_transfer_and_material_revi
             source="test",
         )
     )
+    for day in (datetime(2025, 7, 1, tzinfo=timezone.utc), datetime(2025, 7, 2, tzinfo=timezone.utc)):
+        store.add_price_point(PricePointCreate(asset="SOL", price_eur=Decimal("10"),
+            priced_at=day, source="test"))
 
     gate = DivorceCapitalFlowService(store).report(
         cutoff_at=datetime(2025, 6, 13, 21, 59, 59, tzinfo=timezone.utc),

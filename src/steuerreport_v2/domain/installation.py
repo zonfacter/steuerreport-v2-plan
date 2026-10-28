@@ -58,6 +58,7 @@ CONFIG_FILES = {
     "source_registry.json", "solana_v1_ownership_scope.json",
     "solana_service_swap_tax_mappings.json", "pionex_hnt_reconciliation.json",
     "fairspot_hnt_staking_reconciliation.json", "solana_staking_position_reconciliations.json",
+    "token_conversion_mappings.json",
 }
 _WRITE_LOCK = RLock()
 
@@ -240,6 +241,9 @@ class InstallationSettingsService:
                 raise ValueError()
             if filename == "source_registry.json":
                 SourceRegistryConfig.model_validate(value)
+            elif filename == "token_conversion_mappings.json":
+                from steuerreport_v2.contracts.token_conversion import TokenConversionConfig
+                TokenConversionConfig.model_validate(value)
         except (ValueError, TypeError):
             raise InstallationSettingsError("config_json_or_schema_invalid") from None
         with _WRITE_LOCK:

@@ -195,11 +195,17 @@ def _protect_http_logs():
 
 
 class LimitedTransport(httpx.BaseTransport):
-    def __init__(self, inner=None, *, limiter=None, provider=None, clock=time.time, monotonic=time.monotonic):
+    def __init__(self, inner=None, *, limiter=None, provider=None, clock=time.time, monotonic=time.monotonic,
+                 max_response_bytes=64 * 1024 * 1024, max_retries=None):
+        if type(max_response_bytes) is not int or not 1 <= max_response_bytes <= 64 * 1024 * 1024:
+            raise ValueError("response_limit_invalid")
+        if max_retries is not None and (type(max_retries) is not int or max_retries < 0):
+            raise ValueError("retry_limit_invalid")
         self.inner = inner if inner is not None else httpx.HTTPTransport(retries=0, trust_env=False)
         self.limiter = limiter
         self.provider = provider
         self.clock, self.monotonic = clock, monotonic
+        self.max_response_bytes, self.max_retries = max_response_bytes, max_retries
 
     def handle_request(self, request):
         limiter = self.limiter or RequestLimiter()
@@ -267,7 +273,7 @@ class LimitedTransport(httpx.BaseTransport):
                         if self.monotonic() >= deadline:
                             raise RequestDeadlineExceeded("request_deadline_exceeded")
                         size += len(chunk)
-                        if size > 64 * 1024 * 1024:
+                        if size > self.max_response_bytes:
                             raise httpx.TransportError("provider_response_too_large")
                         chunks.append(chunk)
                     content = b"".join(chunks)
@@ -287,7 +293,8 @@ class LimitedTransport(httpx.BaseTransport):
                 headers.pop("content-length", None)
                 result = httpx.Response(response.status_code, headers=headers, content=content,
                                         extensions=response.extensions, request=clean_request)
-                if not safe or result.status_code not in {429, 502, 503, 504} or attempt >= profile.max_retries:
+                retries = profile.max_retries if self.max_retries is None else min(profile.max_retries, self.max_retries)
+                if not safe or result.status_code not in {429, 502, 503, 504} or attempt >= retries:
                     return result
                 attempt += 1
                 delay = limiter.retry_delay(provider, attempt, retryable=True, idempotent=True, retry_after=wait, groups=groups, endpoint=endpoint)
@@ -359,11 +366,13 @@ class BudgetHttpClient(httpx.Client):
         return response
 
 
-def managed_client(*, transport=None, limiter=None, provider=None, clock=time.time, monotonic=time.monotonic, **kwargs):
+def managed_client(*, transport=None, limiter=None, provider=None, clock=time.time, monotonic=time.monotonic,
+                   max_response_bytes=64 * 1024 * 1024, max_retries=None, **kwargs):
     _protect_http_logs()
     kwargs.setdefault("trust_env", False)
     # Redirect hops and pagination each enter handle_request and reserve their own budget.
-    client = BudgetHttpClient(transport=LimitedTransport(transport, limiter=limiter, provider=provider, clock=clock, monotonic=monotonic), **kwargs)
+    client = BudgetHttpClient(transport=LimitedTransport(transport, limiter=limiter, provider=provider, clock=clock, monotonic=monotonic,
+        max_response_bytes=max_response_bytes, max_retries=max_retries), **kwargs)
     client.budget_provider = provider
     return client
 

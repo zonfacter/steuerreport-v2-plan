@@ -96,6 +96,10 @@ class TaxAuditDelta(BaseModel):
     value_delta_eur: Decimal | None = None
     holding_days_old: int | None = None
     holding_days_new: int | None = None
+    taxable_old: bool | None = None
+    taxable_new: bool | None = None
+    classification_policy_old: str | None = None
+    classification_policy_new: str | None = None
     cause: TaxAuditCause
     cause_explanation: str
     source_role: TaxAuditSourceRole = "unknown"

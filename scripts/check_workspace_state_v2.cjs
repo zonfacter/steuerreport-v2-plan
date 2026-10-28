@@ -26,6 +26,7 @@ for (const invalid of ["#constructor", "#__proto__", "#unknown?key=secret"]) {
 const normalized = route.viewHash(route.parseView("#flows?tab=no&page=0&size=17&sort=issues&status=failed&start=2025-02-30&q=private&api_key=secret"));
 assert.equal(normalized, "#flows");
 const state = route.parseView("#flows?tab=ledger&year=2024&page=3&size=10&sort=oldest&asset=BTC&source=s_aaaaaaaaaaaaaaaaaaaa&detail=evt-001");
+assert.equal(route.viewHash(route.parseView("#admin?tab=updates")), "#admin?tab=updates");
 assert.equal(route.viewHash(route.parseView(route.viewHash(state))), route.viewHash(state));
 assert.equal(state.page, 3);
 assert.equal(state.tab, "ledger");

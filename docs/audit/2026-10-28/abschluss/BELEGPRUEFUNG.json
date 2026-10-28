@@ -1,0 +1,487 @@
+{
+  "scope": "documentary_verification_not_fiscal_approval",
+  "baseline_commit": "1aecfb131d189267a01a6303f5a9b67a5a99efe2",
+  "code_commit": "b036b8ad4212d08d719fedec7dbc7115cf5704a9",
+  "handoff_commit": "33bbdbf976405f2fade4fe45b6d167b6c950b740",
+  "patch_sha256": "2fca6d36a4f19d3dde38dcbc03916f96f6adcb577d90cb972e190614eda12986",
+  "independent_test_sha256": "09f674b350a9a83943df8980bbceafd88821ee1400e03b5b22ea1ee0f8cd6bfb",
+  "runtime_unchanged_since_code_freeze": true,
+  "unit": {
+    "path": "/tmp/steuerreport-migration-final-unit.xml",
+    "sha256": "3b27bfb8510dfb7b4aa364ec82e5062c3349b7c658219307e1c0306cb2c67960",
+    "counts": {
+      "passed": 2464,
+      "skipped": 4
+    }
+  },
+  "focus_rerun": {
+    "path": "/tmp/steuerreport-audit-abschluss-20261028/fokus.xml",
+    "sha256": "a75921281cf68bb1a90ed4eb5186f095c7943490c4d179d7c1c6ad84955fadc7",
+    "counts": {
+      "passed": 115
+    }
+  },
+  "acceptance_baseline": {
+    "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/baseline-complete.xml",
+    "sha256": "b1203aa0b3db8506b2d4879855fb576034757087cbf9db707c563477294f2818",
+    "counts": {
+      "passed": 22,
+      "failure": 30
+    },
+    "cases": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G01_csv_fifo_restbasis_und_jahreswerte",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G02_eur_erwerbskosten_und_verkaufskosten",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G03_erwerbsassetgebuehr_netto_menge",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G04_drittassetgebuehr_lotverbrauch_teilprobe",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G05_swap_beide_beine_gewinne_ohne_fiatdeposit",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G06_G07_stablecoin_tatsaechlicher_eur_kurs[G06-FX]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G06_G07_stablecoin_tatsaechlicher_eur_kurs[G07-Depeg]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_lookup_alte_und_zukuenftige_preise_abgelehnt[alt]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_lookup_alte_und_zukuenftige_preise_abgelehnt[zukunft]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_coverage_sql_meldet_altkurs_als_luecke",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_tax_kein_unmarkierter_altkurs",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_review_altkurs_darf_final_nicht_freigeben",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_derived_preis_darf_altkurs_nicht_zeitlich_waschen",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_altkurs_jahresarchiv_nicht_final",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G11_wallet_global_vorschau_ohne_aktivierung",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G12_eigenuebertrag_originaldatum_basis_teilprobe",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G13_reward_einnahme_basis_und_veraeusserung_getrennt",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G14_unklares_income_als_review_teilprobe",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-366-Jahrestag]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-Folgetag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-29Feb-Jahrestag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-29Feb-Folgetag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Berlin-Winter]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Berlin-Sommer]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Winter-365]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Sommer-365]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G16_berlin_jahr_dst_und_sql",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_jahrestag_csv_klassifikation",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_berlin_planungszeitpunkt",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[basis]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[historie]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[preis]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G20_doppelimport_keine_ereignis_oder_lotverschiebung",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G22_offline_neulauf_semantisch_inkl_export",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_technisch_exportierbar_ist_keine_jahresfreigabe",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_echtes_jahresarchiv_inhalt_als_vorschau",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[daten]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[preise]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[regeln]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2023-599.99-below_threshold]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2023-600-threshold_reached]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2024-999.99-below_threshold]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2024-1000-threshold_reached]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body0]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body1]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body2]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body3]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unterstuetzte_jahre_nicht_still_ausdehnen[2008]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unterstuetzte_jahre_nicht_still_ausdehnen[2027]",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_bestaetigung_strikter_bool_keine_stringfreigabe",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_pdf_ist_inhaltlich_vorschau",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G25_originalarchiv_revision_raw_review_synthetischer_restore",
+        "status": "passed"
+      }
+    ]
+  },
+  "acceptance_final": {
+    "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/freeze-b036b8a.xml",
+    "sha256": "e2782bc8ae498995dcdbe05313c6d153bac0674a81cd6792f3e441bf00d0175f",
+    "counts": {
+      "passed": 51,
+      "failure": 1
+    },
+    "cases": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G01_csv_fifo_restbasis_und_jahreswerte",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G02_eur_erwerbskosten_und_verkaufskosten",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G03_erwerbsassetgebuehr_netto_menge",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G04_drittassetgebuehr_lotverbrauch_teilprobe",
+        "status": "failure"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G05_swap_beide_beine_gewinne_ohne_fiatdeposit",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G06_G07_stablecoin_tatsaechlicher_eur_kurs[G06-FX]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G06_G07_stablecoin_tatsaechlicher_eur_kurs[G07-Depeg]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_lookup_alte_und_zukuenftige_preise_abgelehnt[alt]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_lookup_alte_und_zukuenftige_preise_abgelehnt[zukunft]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_coverage_sql_meldet_altkurs_als_luecke",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_tax_kein_unmarkierter_altkurs",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_review_altkurs_darf_final_nicht_freigeben",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_derived_preis_darf_altkurs_nicht_zeitlich_waschen",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_altkurs_jahresarchiv_nicht_final",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G11_wallet_global_vorschau_ohne_aktivierung",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G12_eigenuebertrag_originaldatum_basis_teilprobe",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G13_reward_einnahme_basis_und_veraeusserung_getrennt",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G14_unklares_income_als_review_teilprobe",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-366-Jahrestag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-Folgetag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-29Feb-Jahrestag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-29Feb-Folgetag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Berlin-Winter]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Berlin-Sommer]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Winter-365]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Sommer-365]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G16_berlin_jahr_dst_und_sql",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_jahrestag_csv_klassifikation",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_berlin_planungszeitpunkt",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[basis]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[historie]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[preis]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G20_doppelimport_keine_ereignis_oder_lotverschiebung",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G22_offline_neulauf_semantisch_inkl_export",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_technisch_exportierbar_ist_keine_jahresfreigabe",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_echtes_jahresarchiv_inhalt_als_vorschau",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[daten]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[preise]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[regeln]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2023-599.99-below_threshold]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2023-600-threshold_reached]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2024-999.99-below_threshold]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2024-1000-threshold_reached]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body0]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body1]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body2]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body3]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unterstuetzte_jahre_nicht_still_ausdehnen[2008]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unterstuetzte_jahre_nicht_still_ausdehnen[2027]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_bestaetigung_strikter_bool_keine_stringfreigabe",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_pdf_ist_inhaltlich_vorschau",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G25_originalarchiv_revision_raw_review_synthetischer_restore",
+        "status": "passed"
+      }
+    ]
+  },
+  "data_parity": {
+    "status": "not_proven",
+    "private_inventory_sha256": "e730e70455c4cf7b87b909ac1554d317c075ede79ea5b0c5c5413eadfef92443",
+    "legacy_disk_database_runtime_mapping_confirmed": false,
+    "docker_database_runtime_mapping_confirmed": true,
+    "observed_table_counts_equal": false,
+    "observed_latest_method_name_equal": true,
+    "limits": "Counts/method names do not establish event, lot, tax-line or filing parity."
+  },
+  "restore": {
+    "sha256": "c44bfef54db1898e6ae4921458a02675049cc7568566400155f8d20321adcef1",
+    "image_id": "sha256:fa5ea2b2b817e38b6374d939f03842319cec9776f46abf4af69086e98986dc94",
+    "network": "none",
+    "checks": {
+      "passed": true,
+      "cleanup": true,
+      "isolation_verified": true,
+      "private_key_token_profile_preserved": true,
+      "restore_all_tables_preserved_start": true,
+      "restore_all_tables_preserved_restart": true,
+      "restore_all_non_database_files_preserved": true,
+      "source_all_tables_unchanged": true,
+      "source_all_non_database_files_unchanged": true,
+      "source_container_identity_and_config_unchanged": true
+    }
+  },
+  "full_fiscal_approval": false
+}

@@ -14,6 +14,18 @@ class PriceMapping(BaseModel):
     coingecko_id: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,100}$")
     defillama_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$")
     solana_mint: str | None = Field(default=None, pattern=r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
+    network: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9:_-]{0,60}$")
+    contract_address: str | None = Field(default=None, min_length=1, max_length=150)
+    decimals: int | None = Field(default=None, strict=True, ge=0, le=255)
+
+    @model_validator(mode="after")
+    def validate_contract(self):
+        if self.contract_address is not None:
+            from steuerreport_v2.domain.asset_identity import identity_from_payload
+            identity = identity_from_payload({"network": self.network, "contract_address": self.contract_address,
+                "decimals": self.decimals}, role="asset", source="", quantity=Decimal("0"))
+            self.network, self.contract_address = identity.network, identity.contract
+        return self
 
     @model_validator(mode="before")
     @classmethod

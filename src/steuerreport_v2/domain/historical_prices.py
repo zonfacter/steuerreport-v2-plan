@@ -190,6 +190,8 @@ class HistoricalPriceService:
         return rows
 
     def _finish_plan(self, query, rows):
+        from steuerreport_v2.domain.asset_identity import AssetIdentityIndex
+        AssetIdentityIndex(self.store).apply_to_plan(rows, self.mappings(), provider=query.provider)
         if len(rows) > 50_000:
             fail("historical_price_plan_too_large")
         context = self._source_context(query)
@@ -271,18 +273,11 @@ class HistoricalPriceService:
             fail("historical_price_timestamp_mismatch")
         usd = positive(coin.get("price"))
         if day not in fx_cache:
+            from steuerreport_v2.domain.historical_price_collection import historical_fx
             quotes = self._request(client, "fx", "https://api.frankfurter.dev/v2/providers/ecb/rates",
                                   {"base": "USD", "quotes": "EUR", "from": (day - timedelta(days=7)).isoformat(), "to": day.isoformat()}, evidence)
-            if not isinstance(quotes, list) or not quotes:
-                fail("historical_price_fx_date_invalid")
-            for quote in quotes:
-                if not isinstance(quote, dict) or quote.get("base") != "USD" or quote.get("quote") != "EUR" or date.fromisoformat(quote["date"]) > day:
-                    fail("historical_price_fx_date_invalid")
-            fx = max(quotes, key=lambda q: q["date"])
-            fx_day = date.fromisoformat(fx["date"])
-            if not 0 <= (day - fx_day).days <= 7:
-                fail("historical_price_fx_date_invalid")
-            fx_cache[day] = (positive(fx.get("rate")), fx_day.isoformat(), evidence[-1])
+            rate, fx_date = historical_fx(quotes, day, positive, fail)
+            fx_cache[day] = (rate, fx_date, evidence[-1])
         rate, fx_date, fx_evidence = fx_cache[day]
         if fx_evidence not in evidence:
             evidence.append(fx_evidence)

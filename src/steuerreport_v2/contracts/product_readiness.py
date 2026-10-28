@@ -55,3 +55,4 @@ class ProductReadinessReport(BaseModel):
     review_items_count: int = 0
     blocking_items_count: int = 0
     methodology: str
+    snapshot_binding_status: Literal["missing", "unbound", "stale", "current"] = "unbound"

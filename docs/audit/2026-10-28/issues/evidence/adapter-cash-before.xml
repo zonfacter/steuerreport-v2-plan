@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="10" time="13.615" timestamp="2026-10-28T21:10:41.881285+00:00" hostname="ai-control"><testcase classname="tests.unit.test_derivative_cash" name="test_native_signed_fee_and_rebate_are_not_lost[0--0.37--0.37]" time="0.985"><failure message="AssertionError: assert {'account': '...4a0faa5', ...} == {'account': '...4a0faa5', ...}&#10;  &#10;  Omitting 15 identical items, use -vv to show&#10;  Differing items:&#10;  {'event_time': datetime.datetime(2031, 7, 9, 11, 0)} != {'event_time': datetime.datetime(2031, 7, 9, 11, 0, tzinfo=datetime.timezone.utc)}&#10;  Use -v to get more diff">tmp_path = PosixPath('/tmp/sr-issues-20261028/cash/test_native_signed_fee_and_reb0')
+amount = '0', fee = '-0.37', expected = '-0.37'
+
+    @pytest.mark.parametrize("amount,fee,expected", [("0", "-0.37", "-0.37"), ("12.8", "-0.2", "12.6"), ("0", "0.05", "0.05")])
+    def test_native_signed_fee_and_rebate_are_not_lost(tmp_path, amount, fee, expected):
+        store, _, events = prepare(tmp_path, HEADER + f"a;{STAMP};USDT;DEMOUSDT;Single-asset;close_long;{amount};{fee};100\n")
+        before = events[0].model_dump()
+        ledger = BalanceLedgerBuilder(store).rebuild()
+        result = DerivativesManager(store).rebuild()
+        assert sum((x.delta_quantity for x in ledger), D("0")) == D(expected)
+        assert result.summary.realized_pnl_eur == D(expected) * D("0.9")
+        assert result.summary.missing_price_count == 0
+&gt;       assert store.list_canonical_events()[0].model_dump() == before
+E       AssertionError: assert {'account': '...4a0faa5', ...} == {'account': '...4a0faa5', ...}
+E         
+E         Omitting 15 identical items, use -vv to show
+E         Differing items:
+E         {'event_time': datetime.datetime(2031, 7, 9, 11, 0)} != {'event_time': datetime.datetime(2031, 7, 9, 11, 0, tzinfo=datetime.timezone.utc)}
+E         Use -v to get more diff
+
+tests/unit/test_derivative_cash.py:44: AssertionError</failure></testcase><testcase classname="tests.unit.test_derivative_cash" name="test_native_signed_fee_and_rebate_are_not_lost[12.8--0.2-12.6]" time="0.960"><failure message="AssertionError: assert {'account': '...37a8492', ...} == {'account': '...37a8492', ...}&#10;  &#10;  Omitting 15 identical items, use -vv to show&#10;  Differing items:&#10;  {'event_time': datetime.datetime(2031, 7, 9, 11, 0)} != {'event_time': datetime.datetime(2031, 7, 9, 11, 0, tzinfo=datetime.timezone.utc)}&#10;  Use -v to get more diff">tmp_path = PosixPath('/tmp/sr-issues-20261028/cash/test_native_signed_fee_and_reb1')
+amount = '12.8', fee = '-0.2', expected = '12.6'
+
+    @pytest.mark.parametrize("amount,fee,expected", [("0", "-0.37", "-0.37"), ("12.8", "-0.2", "12.6"), ("0", "0.05", "0.05")])
+    def test_native_signed_fee_and_rebate_are_not_lost(tmp_path, amount, fee, expected):
+        store, _, events = prepare(tmp_path, HEADER + f"a;{STAMP};USDT;DEMOUSDT;Single-asset;close_long;{amount};{fee};100\n")
+        before = events[0].model_dump()
+        ledger = BalanceLedgerBuilder(store).rebuild()
+        result = DerivativesManager(store).rebuild()
+        assert sum((x.delta_quantity for x in ledger), D("0")) == D(expected)
+        assert result.summary.realized_pnl_eur == D(expected) * D("0.9")
+        assert result.summary.missing_price_count == 0
+&gt;       assert store.list_canonical_events()[0].model_dump() == before
+E       AssertionError: assert {'account': '...37a8492', ...} == {'account': '...37a8492', ...}
+E         
+E         Omitting 15 identical items, use -vv to show
+E         Differing items:
+E         {'event_time': datetime.datetime(2031, 7, 9, 11, 0)} != {'event_time': datetime.datetime(2031, 7, 9, 11, 0, tzinfo=datetime.timezone.utc)}
+E         Use -v to get more diff
+
+tests/unit/test_derivative_cash.py:44: AssertionError</failure></testcase><testcase classname="tests.unit.test_derivative_cash" name="test_native_signed_fee_and_rebate_are_not_lost[0-0.05-0.05]" time="0.973"><failure message="AssertionError: assert {'account': '...7b3ac58', ...} == {'account': '...7b3ac58', ...}&#10;  &#10;  Omitting 15 identical items, use -vv to show&#10;  Differing items:&#10;  {'event_time': datetime.datetime(2031, 7, 9, 11, 0)} != {'event_time': datetime.datetime(2031, 7, 9, 11, 0, tzinfo=datetime.timezone.utc)}&#10;  Use -v to get more diff">tmp_path = PosixPath('/tmp/sr-issues-20261028/cash/test_native_signed_fee_and_reb2')
+amount = '0', fee = '0.05', expected = '0.05'
+
+    @pytest.mark.parametrize("amount,fee,expected", [("0", "-0.37", "-0.37"), ("12.8", "-0.2", "12.6"), ("0", "0.05", "0.05")])
+    def test_native_signed_fee_and_rebate_are_not_lost(tmp_path, amount, fee, expected):
+        store, _, events = prepare(tmp_path, HEADER + f"a;{STAMP};USDT;DEMOUSDT;Single-asset;close_long;{amount};{fee};100\n")
+        before = events[0].model_dump()
+        ledger = BalanceLedgerBuilder(store).rebuild()
+        result = DerivativesManager(store).rebuild()
+        assert sum((x.delta_quantity for x in ledger), D("0")) == D(expected)
+        assert result.summary.realized_pnl_eur == D(expected) * D("0.9")
+        assert result.summary.missing_price_count == 0
+&gt;       assert store.list_canonical_events()[0].model_dump() == before
+E       AssertionError: assert {'account': '...7b3ac58', ...} == {'account': '...7b3ac58', ...}
+E         
+E         Omitting 15 identical items, use -vv to show
+E         Differing items:
+E         {'event_time': datetime.datetime(2031, 7, 9, 11, 0)} != {'event_time': datetime.datetime(2031, 7, 9, 11, 0, tzinfo=datetime.timezone.utc)}
+E         Use -v to get more diff
+
+tests/unit/test_derivative_cash.py:44: AssertionError</failure></testcase><testcase classname="tests.unit.test_derivative_cash" name="test_generic_foreign_fee_keeps_cash_but_requires_lot_review" time="1.504" /><testcase classname="tests.unit.test_derivative_cash" name="test_explicit_generic_fee_is_a_cost_in_either_export_sign[0.15]" time="0.958" /><testcase classname="tests.unit.test_derivative_cash" name="test_explicit_generic_fee_is_a_cost_in_either_export_sign[-0.15]" time="0.952" /><testcase classname="tests.unit.test_derivative_cash" name="test_unproven_existing_derivative_fee_is_not_guessed_or_approved" time="0.949" /><testcase classname="tests.unit.test_derivative_cash" name="test_old_cash_calculation_is_visible_until_explicit_rebuild" time="2.282" /><testcase classname="tests.unit.test_derivative_cash" name="test_old_funding_classification_requires_renormalization" time="1.857" /><testcase classname="tests.unit.test_derivative_cash" name="test_repeated_import_preserves_raw_rows_and_does_not_double_cash" time="1.342" /></testsuite></testsuites>

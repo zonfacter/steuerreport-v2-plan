@@ -186,3 +186,11 @@
 .wsPriceWorkspace .wsPager button { width: 38px; height: 38px; padding: 0; flex: 0 0 38px; }
 .wsPriceWorkspace .wsPriceRecovery { border-left: 3px solid #448a9b; padding: 12px; background: #eaf3f6; }
 .wsPriceWorkspace code { overflow-wrap: anywhere; }
+.lotOriginDetails { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px 16px; }
+.lotOriginDetails dt { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.lotOriginDetails dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.lotOriginDetails code { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .lotOriginDetails { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .lotOriginDetails dd { margin-bottom: 12px; }
+}

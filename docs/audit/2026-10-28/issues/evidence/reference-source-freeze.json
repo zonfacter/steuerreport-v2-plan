@@ -1,0 +1,19 @@
+{
+  "before": {
+    "steuerreport_v2.domain.derivative_cash": "8876ec5bb949cc9773a4a06fcffcb4634c592f4d8eb3cf77020b807bd5ddb018",
+    "steuerreport_v2.domain.derivatives": "6334bd51d6c172073523e81dd9520a523ccad51eb603e44b7c24a5c2845cae17",
+    "steuerreport_v2.domain.review": "c31b7e817764063688c229c83dbdac0b16e4ef70f029749189fbb5d7d5c54a97",
+    "steuerreport_v2.importers.raw_normalizer": "0af368511f66c6fc0a4898cceca3731cd75d2f7de455aeeaa5e8d648a5084730",
+    "steuerreport_v2.importers.source_profiles": "5e36fcb7f8f4ac714a6e441ca2e60d555d1c22d69b39437aec584da8861da15f",
+    "steuerreport_v2.ledger.balance": "55383b45761d7821e5f7ba6c64da55212cd254cfbc6a77090c2c423711935880"
+  },
+  "after": {
+    "steuerreport_v2.domain.derivative_cash": "8876ec5bb949cc9773a4a06fcffcb4634c592f4d8eb3cf77020b807bd5ddb018",
+    "steuerreport_v2.domain.derivatives": "6334bd51d6c172073523e81dd9520a523ccad51eb603e44b7c24a5c2845cae17",
+    "steuerreport_v2.domain.review": "c31b7e817764063688c229c83dbdac0b16e4ef70f029749189fbb5d7d5c54a97",
+    "steuerreport_v2.importers.raw_normalizer": "0af368511f66c6fc0a4898cceca3731cd75d2f7de455aeeaa5e8d648a5084730",
+    "steuerreport_v2.importers.source_profiles": "5e36fcb7f8f4ac714a6e441ca2e60d555d1c22d69b39437aec584da8861da15f",
+    "steuerreport_v2.ledger.balance": "55383b45761d7821e5f7ba6c64da55212cd254cfbc6a77090c2c423711935880"
+  },
+  "unchanged": true
+}

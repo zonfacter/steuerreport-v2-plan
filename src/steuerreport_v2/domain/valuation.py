@@ -55,6 +55,7 @@ from steuerreport_v2.contracts.valuation import (
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.price_policy import eligible_price_sql
 
 TAX_VALUE_EVENT_TYPES = {"trade", "income", "reward", "staking", "mining", "fee"}
 STABLECOIN_FX_ASSETS = {"USDT", "USDC", "BUSD", "EUR"}
@@ -339,6 +340,9 @@ class PriceCoverageService:
         group_by_clause: str,
         order_by_clause: str,
     ) -> str:
+        eligible = eligible_price_sql(
+            price="price", event_time="req.event_time", allow_derived="req.source <> 'solana_rpc'",
+        )
         return f"""
             with required_prices as (
                 select
@@ -389,17 +393,8 @@ class PriceCoverageService:
             where not exists (
                 select 1
                 from price_ledger price
-                where price.asset = req.asset
-                  and price.price_eur > 0
-                  and price.priced_at <= req.event_time
-                  and (
-                    (
-                      req.source = 'solana_rpc'
-                      and cast(price.priced_at as date) = cast(req.event_time as date)
-                      and lower(price.source) not like 'derived:%'
-                    )
-                    or req.source <> 'solana_rpc'
-                  )
+                where upper(price.asset) = req.asset
+                  and {eligible}
             )
             group by {group_by_clause}
             order by {order_by_clause}
@@ -411,14 +406,9 @@ class PriceCoverageService:
         return f"({values})"
 
     def _has_acceptable_price(self, asset: str, event: CanonicalEvent) -> bool:
-        if event.source == "solana_rpc":
-            price = self.lookup.at_or_before(
-                asset,
-                event.event_time,
-                allow_derived=False,
-            )
-            return price is not None and price.priced_at.date() == event.event_time.date()
-        return self.lookup.at_or_before(asset, event.event_time) is not None
+        return self.lookup.at_or_before(
+            asset, event.event_time, allow_derived=event.source != "solana_rpc",
+        ) is not None
 
     @staticmethod
     def issue_scope(

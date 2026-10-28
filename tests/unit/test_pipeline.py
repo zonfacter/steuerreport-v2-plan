@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import json
 from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi.testclient import TestClient
 import httpx
@@ -751,7 +752,11 @@ def test_v1_fx_cache_import_converts_usd_prices_to_eur(tmp_path):
     price = store.list_price_points()[0]
     assert price.asset == "MOBILE"
     assert price.price_eur == Decimal("0.001820000000000000")
-    assert price.source == "v1_fx_cache:coingecko_history:usd_eur:ecb"
+    prefix = "v1_fx_cache:coingecko_history:usd_eur:ecb:fxref:"
+    assert price.source.startswith(prefix)
+    assert json.loads(unquote(price.source.removeprefix(prefix))) == {
+        "base": "USD", "quote": "EUR", "rate": "0.91", "source": "ecb",
+        "reference_date": "2023-12-29", "policy_id": "fx_reference_on_or_before_max_7_calendar_days_v1"}
 
 
 def test_external_price_backfill_dry_run_plans_configured_requirements(tmp_path):
@@ -890,7 +895,7 @@ def test_external_price_backfill_asset_filter_limits_attempts(tmp_path):
     assert [job["asset"] for job in body["jobs"]] == ["BTTC"]
 
 
-def test_external_price_backfill_uses_first_available_following_price(tmp_path, monkeypatch):
+def test_external_price_backfill_never_backdates_first_available_following_price(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_canonical_event(
         CanonicalEventCreate(
@@ -932,7 +937,9 @@ def test_external_price_backfill_uses_first_available_following_price(tmp_path, 
             ("2023-04-23", "USD", "EUR", "0.92", "ecb", "2023-04-23", "now"),
         )
 
+    requested_dates = []
     def fake_fetch(self, *, client, coingecko_id, date_str, provider):
+        requested_dates.append(date_str)
         if date_str == "2023-04-23":
             return Decimal("0.50"), "defillama_coingecko_history"
         return Decimal("0"), ""
@@ -953,15 +960,11 @@ def test_external_price_backfill_uses_first_available_following_price(tmp_path, 
 
     assert response.status_code == 200
     body = response.json()["data"]
-    assert body["imported_prices"] == 1
-    assert Decimal(body["jobs"][0]["price_eur"]) == Decimal("0.46")
-    price = store.latest_price_points()["IOT"]
-    assert price.price_eur == Decimal("0.460000000000000000")
-    assert price.priced_at.date().isoformat() == "2023-04-20"
-    assert (
-        price.source
-        == "defillama_coingecko_history:first_available_after:2023-04-23:usd_eur:v1_fx_cache:2023-04-23"
-    )
+    assert body["imported_prices"] == 0
+    assert body["jobs"][0]["reason"] == "asset_usd_missing"
+    assert store.latest_price_points() == {}
+    assert requested_dates == ["2023-04-20"]
+    assert not ExportService(store).readiness().allow_export
 
 
 def test_current_portfolio_price_backfill_imports_live_price(tmp_path, monkeypatch):

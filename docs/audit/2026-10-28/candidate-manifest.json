@@ -1,0 +1,77 @@
+{
+  "status": "development_audit_only_not_released_or_deployed",
+  "date_utc": "2026-10-28",
+  "branch": "audit/docker-migration-20261028",
+  "baseline_commit": "1aecfb131d189267a01a6303f5a9b67a5a99efe2",
+  "code_freeze_commit": "b036b8ad4212d08d719fedec7dbc7115cf5704a9",
+  "application_version": "0.2.0rc33.dev0",
+  "frontend_version": "0.2.0-rc.33.dev0",
+  "image": {
+    "local_tag": "steuerreport-v2:migration-audit-20261028-b036b8a",
+    "id": "sha256:fa5ea2b2b817e38b6374d939f03842319cec9776f46abf4af69086e98986dc94",
+    "revision_label": "b036b8ad4212d08d719fedec7dbc7115cf5704a9",
+    "version_label": "0.2.0rc33.dev0",
+    "registry_digest": null,
+    "published": false,
+    "tested_runtime": {
+      "python": "3.11.17",
+      "duckdb": "1.5.2",
+      "pydantic": "2.13.1",
+      "fastapi": "0.136.0",
+      "cryptography": "50.0.2",
+      "PyNaCl": "1.6.2",
+      "application_module": "/usr/local/lib/python3.11/site-packages/steuerreport_v2/__init__.py"
+    }
+  },
+  "host_unit_runtime": {
+    "python": "3.11.2",
+    "duckdb": "1.5.2",
+    "pydantic": "2.13.1",
+    "fastapi": "0.136.0",
+    "pytest": "8.4.2",
+    "database_scope": "per_test_synthetic_databases_only"
+  },
+  "empty_start": {
+    "network": "none",
+    "v1_dependency": false,
+    "health_http": 200,
+    "schema_version": 1,
+    "canonical_events": 0,
+    "state": "disposable_tmpfs",
+    "image_filesystem": "read_only"
+  },
+  "final_restore": {
+    "private_evidence": "/root/.local/share/steuerreport/migration-audit-20261028/coordinator/final-restore-b036b8a",
+    "source_manifest": "deployment-manifest.json",
+    "network": "none",
+    "published_ports": [],
+    "production_volume_mounted": false,
+    "same_image_id_first_start_and_restart": true,
+    "all_restored_tables_preserved": true,
+    "all_restored_non_database_files_preserved": true,
+    "vault_key_setup_token_profile_preserved": true,
+    "production_tables_and_files_unchanged": true,
+    "production_container_config_and_start_time_unchanged": true,
+    "owned_resources_removed": true
+  },
+  "method_context": {
+    "production_latest_run_method": "global_asset_with_wallet_fifo_evidence_overlay_v1",
+    "production_latest_run_created_at_utc": "2026-10-28T07:57:09.291667Z",
+    "active_method_changed": false,
+    "private_holding_policy": "de_private_calendar_holding_berlin_v1",
+    "historical_price_policy": "historical_same_utc_day_not_after_event",
+    "historical_price_policy_version": 1,
+    "artifact_binding_version": "filing_state_binding_v1",
+    "legacy_data_and_method_parity": "not_proven",
+    "source_note": "Methodenname aus ausschliesslich lesender privater Inventur; gleiche Namen beweisen keine gleiche Datenbasis."
+  },
+  "acceptance": {
+    "full_fiscal_approval": false,
+    "G04_third_asset_fee_lot_consumption": "failed_open",
+    "other_partial_or_unexecuted_G_cases": "ABNAHME_G01_G25.md",
+    "production_recalculation": false,
+    "production_method_activation": false,
+    "production_container_switch": false,
+    "github_push_tag_release_or_package_publish": false
+  }
+}

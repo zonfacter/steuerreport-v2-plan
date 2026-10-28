@@ -1,0 +1,11 @@
+{
+  "after": {
+    "contracts/updates.py": "0950172265a5ca8a2aae5bee727a97c41d6d10dcef92d8ec870795818bf86ae5",
+    "domain/updates.py": "c333028c0bb9b7ceeb5c262a66659105716458be6e8c417634d050881e6edaa3"
+  },
+  "before": {
+    "contracts/updates.py": "0950172265a5ca8a2aae5bee727a97c41d6d10dcef92d8ec870795818bf86ae5",
+    "domain/updates.py": "c333028c0bb9b7ceeb5c262a66659105716458be6e8c417634d050881e6edaa3"
+  },
+  "unchanged": true
+}

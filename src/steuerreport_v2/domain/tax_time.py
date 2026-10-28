@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 import json
 from zoneinfo import ZoneInfo
@@ -16,6 +16,7 @@ UTC = timezone.utc
 REPORTING_TIMEZONE_NAME = "Europe/Berlin"
 REPORTING_TIMEZONE = ZoneInfo(REPORTING_TIMEZONE_NAME)
 POLICY_VERSION = "de_calendar_year_v1"
+PRIVATE_HOLDING_POLICY_VERSION = "de_private_calendar_holding_berlin_v1"
 REPORTING_POLICY_APPLIED = True
 
 
@@ -31,6 +32,48 @@ def reporting_time(value: datetime) -> datetime:
 
 def reporting_tax_year(value: datetime) -> int:
     return reporting_time(value).year
+
+
+def private_holding_anniversary(acquired_at: datetime) -> date:
+    """End date of the modelled private annual period, not a scope decision."""
+    acquired_date = reporting_time(acquired_at).date()
+    try:
+        return acquired_date.replace(year=acquired_date.year + 1)
+    except ValueError:
+        return acquired_date.replace(year=acquired_date.year + 1, day=28)
+
+
+def private_disposal_tax_free_at(acquired_at: datetime) -> datetime:
+    return datetime.combine(
+        private_holding_anniversary(acquired_at) + timedelta(days=1),
+        time.min,
+        tzinfo=REPORTING_TIMEZONE,
+    ).astimezone(UTC)
+
+
+def private_disposal_within_year(acquired_at: datetime, disposed_at: datetime) -> bool:
+    return reporting_time(disposed_at).date() <= private_holding_anniversary(acquired_at)
+
+
+def private_disposal_within_year_sql(acquired_at: str, disposed_at: str) -> str:
+    """SQL for UTC-naive database timestamps; missing dates never prove expiry."""
+    def local_date(column: str) -> str:
+        return f"cast(timezone('Europe/Berlin', timezone('UTC', {column})) as date)"
+
+    return (
+        f"coalesce(({local_date(disposed_at)} <= "
+        f"({local_date(acquired_at)} + interval '1 year')::date), true)"
+    )
+
+
+def tax_line_within_year_sql(line_alias: str = "tax_lines") -> str:
+    # Older global runs have no line date; carried wallet line dates take precedence.
+    acquired_at = (
+        f"coalesce({line_alias}.acquired_at, "
+        f"(select acquired_at from tax_lots holding_lot "
+        f"where holding_lot.lot_id = {line_alias}.lot_id))"
+    )
+    return private_disposal_within_year_sql(acquired_at, f"{line_alias}.disposed_at")
 
 
 def reporting_year_utc_bounds(year: int) -> tuple[datetime, datetime]:

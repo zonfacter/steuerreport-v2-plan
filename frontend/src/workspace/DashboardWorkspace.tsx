@@ -54,5 +54,5 @@ export function DashboardWorkspace() {
 }
 
 export function StatusSummary({ status }: { status: Status }) {
-  return <section className="wsStatusSummary" aria-label="Zentrale Jahresvoraussetzungen"><div><ClipboardCheck size={18} /><strong>{status.summary}</strong><Badge tone={status.final_available ? "ok" : "warning"}>{status.final_available ? "Vorhandene Freigaben erfüllt" : "Keine finale Jahresfreigabe"}</Badge></div><dl>{Object.entries(status.dimensions).map(([key, value]) => <div key={key}><dt>{{ data: "Datenabdeckung", calculation: "Berechnung", review: "Review", year: "Jahresbestätigung", export: "Export" }[key] || key}</dt><dd>{value}</dd></div>)}</dl></section>;
+  return <section className="wsStatusSummary" aria-label="Zentrale Jahresvoraussetzungen"><div><ClipboardCheck size={18} /><strong>{status.summary}</strong><Badge tone={status.final_available ? "ok" : "warning"}>{status.final_available ? "Vorhandene Freigaben erfüllt" : "Keine finale Jahresfreigabe"}</Badge></div><dl>{Object.entries(status.dimensions).map(([key, value]) => <div key={key}><dt>{{ data: "Datenabdeckung", calculation: "Berechnung", methodology: "Methodenprüfung", review: "Review", year: "Jahresbestätigung", export: "Export" }[key] || key}</dt><dd>{value}</dd></div>)}</dl></section>;
 }
