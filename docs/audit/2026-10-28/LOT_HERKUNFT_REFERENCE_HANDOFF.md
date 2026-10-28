@@ -11,6 +11,9 @@ Zentrale Contracts und Resolver ausschliesslich als bereitgestellte Commits
 uebernommen: `a3e3ae5`, `0a088c4`, `84aca336`.
 Die zentrale Integration `4c51d8eb8fd80acdeb1d1ffc7089459d9940721f` wurde
 ebenfalls unveraendert als Abhaengigkeit uebernommen (lokal `d0ff4c4`).
+Der zentrale Statusfix `eecec786c6894d350e082ca1bd508fcf93dd9300` liegt
+lokal als `24ffe08` vor. Eigene Referenztests: `5569f9a` (im Coordinator
+`5e209fe`); anschliessende reine Testpfadkorrektur: `8db6c703ea34780e9fccfc29017252923a6b4a21`.
 
 Alle Inputs sind neu erzeugte synthetische Daten, keine exakte Wiederholung
 privater Nutzerfaelle. Keine Produktionsdaten/-datenbanken, externen Aufrufe,
@@ -89,7 +92,48 @@ SHA256 final.xml:
 `040dc8608e0fbfac375cc8c9c83c70c872e6771e2a39408cadf95c233c2ae5ec`.
 SHA256 final-source-freeze.json:
 `2d886a146c9125a25af95292d94444c68cbd5e34858a94f1dc4518ef8115c894`.
-Die endgueltige Abnahme steht bis zur Nachpruefung dieses Bugs aus.
+Der zentrale Fix zaehlt nun blockierte Herkunftszeilen aus allen ausgewerteten
+Zeilen, nicht nur dem sichtbaren Limit. Keine eigene Produktcodekorrektur.
+
+## Erfolgreiche Nachpruefung
+
+Nach `eecec786`, unveraenderte 47 Referenztests: **47 passed, 24.09 s**,
+`verified.xml`. Kein `skip`/`xfail`, keine Lockerung der blocked-Assertion oder
+der Zahlen 90/36/60/24/54. Zeile, Gruppe und Gesamtbericht sind beim reinen
+Lineage-Fehler jetzt blocked, obwohl beide Canonical Events keinen Blocker
+haben. Die Stored-/Staging-/Review-/Altartefakt-Referenzen bestehen ebenfalls.
+
+SHA256 verified.xml:
+`ef4705f7c2c0b154ff21a73fc73547de0d042dcb965c36f1fdd91fffc785c925`.
+SHA256 verified-source-freeze.json:
+`9436f027bcb7926543dcd4379612dab718d3217d6d6d9182612b98c285c472c6`.
+
+Anschliessend vom Coordinator gefundener Testadapterfehler: Der feste Tmp-Root
+war mit einem fremden CI-basetemp inkompatibel. Nur die eigene Testdatei wurde
+korrigiert: autouse Session-Fixture bindet ROOT an
+`tmp_path_factory.getbasetemp().resolve()` vor den Case-Fixtures. Budget,
+DB-Schutz und Quellhashbeleg verwenden diesen tatsaechlichen Pfad. Kein
+statischer /tmp-Pfad im Test und keine veraenderte fachliche Erwartung.
+
+Portabilitaetsnachweise mit demselben Runtime-Stand:
+
+- **47 passed, 20.50 s**, frei gewaehlter Basispfad
+  `/tmp/sr-origin-20261028-independent/arbitrary-ci-base`;
+  `portable-explicit.xml`, SHA256
+  `f97e13f9441b03b383e8ab125ead9a8b98a0054b5147119bd77ba2a44387c28a`.
+- **47 passed, 21.58 s**, ohne `--basetemp`, mit eigenem `TMPDIR` und
+  `RUNNER_TEMP`; `portable-factory.xml`, SHA256
+  `e069588af9c01f45246acf0c0ad950cf6160e582460a55ab64772409c1bc2eb6`.
+- Beide Quellhashbelege melden `unchanged=true`. Erster Beleg liegt unter
+  `arbitrary-ci-base/portable-explicit-source-freeze.json`, SHA256
+  `6be70ba7b427b1da85341ff7bdc478e8d31b238f21f5acaaebd468106c9d55b5`.
+  Zweiter unter
+  `runner-temp/pytest-of-root/pytest-0/portable-factory-source-freeze.json`,
+  SHA256 `d39cb8c477446f803412b03f7d10acb7e2a04cae827bcbdc9f1c6c104fb3c044`.
+
+`ruff check --no-cache --select F tests/acceptance/test_lot_origin_reference.py`
+und `git diff --check` bestanden. Kein Vollsuitelauf durch diesen Agenten;
+keine darueber hinausgehende steuerliche Abnahme behauptet.
 
 ## Reproduktion Und Speicher
 
@@ -106,12 +150,17 @@ Baseline-Selektor: `-k 'stored or real_bmf or zero_eur'`; Review-Baseline:
 `-k review_gate_reads`. Resolver-Zwischenlauf: `-k 'stored or resolver'`
 (dieser selektiert wegen des Namens auch die drei Stored-ReviewGate-Tests).
 
-Tmp-Budget wird im eigenen Fixture auf unter 500 MiB geprueft; keine
+Tmp-Budget wird im eigenen Fixture fuer den tatsaechlichen pytest-Basisordner
+auf unter 500 MiB geprueft; der gesamte eigene Audit-Tmp-Bestand wurde
+zusaetzlich gemessen. Keine
 Repository-/Datenbankkopien, kein Vollsuitelauf. Hoechster bisher gemessener
 Zwischenstand 297 MiB; nach Entfernen der synthetischen Baseline-DuckDBs
 und .prepared-Reste 2 MiB. XML, JSON und erzeugte Belegarchive bleiben erhalten.
 Bei erfolgreichen Proben entfernt das Fixture eigene DB-/WAL-/prepared-Dateien.
 Der Sessionbeleg haelt die verwendeten Consumer-Quellhashes vor/nach fest.
+Nach den erfolgreichen Nachpruefungen wurden auch die verbliebenen
+synthetischen Fehlerfall-DBs/.prepared-Reste entfernt. Verbleibender gesamter
+Audit-Tmp-Bestand: 5.3 MiB; Original-XML/JSON und Belegarchive erhalten.
 
 Keine automatische Privat-/Betriebszuordnung aus Herkunft. Eine konsistente
 ID-Kette prueft weder Belegechtheit noch Angemessenheit der positiven Basis.
