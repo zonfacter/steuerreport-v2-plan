@@ -43,6 +43,7 @@ def main():
         "issue2-before.json": "/tmp/sr-issues-20261028/issue2-before.json",
         "issue2-after.json": "/tmp/sr-issues-20261028/issue2-after-final-managed.json",
         "stale-review-before.xml": "/tmp/sr-issues-20261028-bitget-review/review.xml",
+        "stale-review-original.py": "/tmp/sr-issues-20261028-bitget-review/test_issue2_readonly_review.py",
         "stale-review-after.xml": "/tmp/sr-issues-20261028-bitget-stale/local-final.xml",
         "cache-coherence-before.xml": "/tmp/sr-issues-20261028/coherence-repro.xml",
         "adapter-cash-before.xml": "/tmp/sr-issues-20261028/cash.xml",
