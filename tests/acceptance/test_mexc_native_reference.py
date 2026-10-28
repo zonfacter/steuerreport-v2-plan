@@ -180,6 +180,14 @@ def _numeric_xlsx(uid, quantity):
     return output.getvalue()
 
 
+def _csv(rows, kind="funding_other"):
+    output = StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=HEADERS[kind], lineterminator="\r\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue().encode("utf-8")
+
+
 def _request(content, options, *, filename="synthetic.xlsx", sheet="Sheet1"):
     return {
         "source": "mexc", "filename": filename,
@@ -237,7 +245,7 @@ def _state(case):
         )}
 
 
-def _reject_before_batch(case, monkeypatch, content, options):
+def _reject_before_batch(case, monkeypatch, content, options, **kwargs):
     before = _state(case)
 
     def forbidden(*args, **kwargs):
@@ -246,7 +254,7 @@ def _reject_before_batch(case, monkeypatch, content, options):
     with monkeypatch.context() as patch:
         patch.setattr(case[0], "create_import_batch", forbidden)
         with pytest.raises(ValueError):
-            case[1].import_base64(**_request(content, options))
+            case[1].import_base64(**_request(content, options, **kwargs))
     assert _state(case) == before
 
 
@@ -657,6 +665,29 @@ def test_cross_export_candidate_blocks_until_linked_then_keeps_two_raws_one_even
     assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
 
 
+@pytest.mark.parametrize("action,expected_count,expected_quantity", [("link_existing", 1, "2.5"), ("separate", 2, "5.0")])
+def test_csv_cross_file_decisions_are_checked_independently_of_xlsx_empty_cells(case, monkeypatch, action, expected_count, expected_quantity):
+    root_batch, root = _seed(case)
+    before_root = root.payload_json
+    content = _csv([_funding()])
+    options = _options("funding_other")
+    kwargs = {"filename": "synthetic.csv", "sheet": None}
+    preview = _preview(case, content, options, **kwargs)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["status"] == "duplicate_candidate"
+    _reject_before_batch(case, monkeypatch, content, options, **kwargs)
+    options["decisions"] = {"2": _decision(action, root.raw_object_id if action == "link_existing" else None)}
+    batch, _ = _import(case, content, options, **kwargs)
+    _, meta = _metadata(_raw(case, batch)[0])
+    assert meta["role"] == ("linked" if action == "link_existing" else "book")
+    assert meta["decision_reason"] == REASON
+    if action == "link_existing":
+        assert meta["link_target_raw_object_id"] == root.raw_object_id
+    assert _raw(case, root_batch)[0].payload_json == before_root
+    assert len(case[0].list_canonical_events()) == expected_count
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D(expected_quantity)}
+
+
 def test_separate_decision_preserves_second_legitimate_equal_booking(case):
     _seed(case)
     options = _options("funding_other", decisions={"2": _decision("separate")})
@@ -799,7 +830,7 @@ def test_invalid_link_target_is_rejected_before_batch_creation(case, monkeypatch
         case[0].add_raw_objects(foreign.batch_id, [RawObjectCreate(row_number=2, payload_json=root.payload_json)])
         target = case[0].list_raw_objects(foreign.batch_id)[0].raw_object_id
     incoming = _options("funding_other", decisions={"2": _decision("link_existing", target)})
-    _reject_before_batch(case, monkeypatch, _xlsx([_funding()], "funding_other"), incoming)
+    _reject_before_batch(case, monkeypatch, _csv([_funding()]), incoming, filename="synthetic.csv", sheet=None)
 
 
 def test_link_to_link_is_rejected_instead_of_chaining_or_cycling(case, monkeypatch):
@@ -827,7 +858,7 @@ def test_invalid_second_row_decision_leaves_no_partial_first_row_or_batch(case, 
         "2": _decision("link_existing", root.raw_object_id),
         "3": _decision("link_existing", "synthetic-missing-target"),
     })
-    _reject_before_batch(case, monkeypatch, _xlsx([_funding(), _funding()], "funding_other"), options)
+    _reject_before_batch(case, monkeypatch, _csv([_funding(), _funding()]), options, filename="synthetic.csv", sheet=None)
 
 
 @pytest.mark.parametrize("action", ["separate", "link_existing"])
