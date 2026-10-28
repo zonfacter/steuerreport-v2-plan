@@ -67,6 +67,8 @@ def test_documented_examples_preview_and_normalize_with_real_importer(tmp_path, 
     args = dict(source=source, filename=f"beispiel.{file_format}", content_base64=base64.b64encode(content).decode())
     if file_format == "xlsx":
         args["sheet_name"] = source
+    if source == "mexc":
+        args["mexc"] = {"account": "synthetic-spot", "export_kind": "spot_statement"}
     preview = importer.preview_base64(**args)
     assert preview.can_import
     assert preview.row_count == 1
@@ -88,6 +90,9 @@ def test_documented_examples_preview_and_normalize_with_real_importer(tmp_path, 
     elif source == "helium":
         assert event.event_type == "mining"
         assert str(event.quantity) == "0.25"
+    elif source == "mexc":
+        assert event.event_type == "unknown"
+        assert event.quantity == 2.5
     else:
         assert event.event_type == "transfer"
         if source == "solana_rpc":

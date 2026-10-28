@@ -24,7 +24,10 @@ class CsvRawImporter:
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
 
-    def import_text(self, source: str, filename: str, content: str) -> ImportBatch:
+    def import_text(self, source: str, filename: str, content: str, mexc=None) -> ImportBatch:
+        if source.strip().lower() == "mexc":
+            from steuerreport_v2.importers.mexc_native import MexcNativeImporter
+            return MexcNativeImporter(self.store).import_file(filename, content.encode("utf-8"), mexc=mexc)
         file_hash = self.hash_text(content)
         reader = self._dict_reader(content)
         return self.import_rows(
@@ -41,6 +44,8 @@ class CsvRawImporter:
         file_hash: str,
         rows: Iterable[dict[str, object]],
     ) -> ImportBatch:
+        if source.strip().lower() == "mexc":
+            raise ValueError("MEXC benoetigt den nativen Dateiimport mit Konto-/Exportartzuordnung.")
         existing = self.store.get_import_batch_by_file_hash(source, file_hash)
         if existing is not None:
             return existing
@@ -73,7 +78,11 @@ class CsvRawImporter:
         filename: str,
         content: str,
         sample_limit: int = 5,
+        mexc=None,
     ) -> CsvImportPreview:
+        if source.strip().lower() == "mexc":
+            from steuerreport_v2.importers.mexc_native import MexcNativeImporter
+            return MexcNativeImporter(self.store).prepare(filename, content.encode("utf-8"), mexc=mexc)[0]
         reader = self._dict_reader(content)
         columns = list(reader.fieldnames or [])
         profile = profile_for_source(source)

@@ -234,6 +234,23 @@ class ReviewService:
                 blocks_export=True,
             ))
 
+        from steuerreport_v2.importers.mexc_native import metadata as mexc_metadata
+        with self.store.connect() as con:
+            mexc_rows = con.execute("""select r.raw_object_id,r.payload_json,e.event_id,e.event_type
+                from raw_objects r join raw_import_batches b on b.batch_id=r.batch_id
+                left join canonical_events e on e.raw_object_id=r.raw_object_id
+                where b.source='mexc'""").fetchall()
+        mexc_roots = {raw_id for raw_id, payload, _event_id, _event_type in mexc_rows if mexc_metadata(json.loads(payload)).get("role") == "book"}
+        for raw_id, payload, event_id, event_type in mexc_rows:
+            mexc = mexc_metadata(json.loads(payload))
+            if mexc.get("role") == "book" and event_type in {None, "unknown"}:
+                issues.append(ReviewIssue(code="mexc_classification_required", severity="high",
+                    scope="event:" + event_id if event_id else "raw_object:" + raw_id, blocks_export=True,
+                    message="MEXC-Mengenbewegung belegt, Ursache/Einkunftsart offen. Airdrop ist keine automatische Mining-/Reward- oder Privatzuordnung."))
+            if mexc.get("role") == "linked" and mexc.get("link_target_raw_object_id") not in mexc_roots:
+                issues.append(ReviewIssue(code="mexc_link_target_missing", severity="high", scope="raw_object:" + raw_id,
+                    blocks_export=True, message="Verknuepfter MEXC-Originalbeleg fehlt oder ist kein Buchungsbeleg mehr. Keine Ersatzbuchung erfunden."))
+
         for batch_id, count in self.store.unmapped_raw_object_counts().items():
             issues.append(
                 ReviewIssue(

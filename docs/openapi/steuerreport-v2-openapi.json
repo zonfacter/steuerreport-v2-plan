@@ -28492,6 +28492,16 @@
             "title": "Matched Columns",
             "type": "object"
           },
+          "mexc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MexcImportPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "missing_required_groups": {
             "items": {
               "type": "string"
@@ -35346,6 +35356,16 @@
             "title": "Import Mode",
             "type": "string"
           },
+          "mexc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MexcImportOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sheet_name": {
             "anyOf": [
               {
@@ -39025,6 +39045,305 @@
           "year"
         ],
         "title": "LocalAiYearPackageQaYear",
+        "type": "object"
+      },
+      "MexcCandidate": {
+        "properties": {
+          "export_kind": {
+            "title": "Export Kind",
+            "type": "string"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          },
+          "raw_object_id": {
+            "title": "Raw Object Id",
+            "type": "string"
+          },
+          "row_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Number"
+          }
+        },
+        "required": [
+          "raw_object_id",
+          "export_kind"
+        ],
+        "title": "MexcCandidate",
+        "type": "object"
+      },
+      "MexcImportOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Account",
+            "type": "string"
+          },
+          "decisions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MexcRowDecision"
+            },
+            "maxProperties": 10000,
+            "title": "Decisions",
+            "type": "object"
+          },
+          "export_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "spot_statement",
+                  "funding_other",
+                  "asset_snapshot",
+                  "futures_capital_flow",
+                  "futures_statement",
+                  "earn_fixed",
+                  "earn_flexible",
+                  "send_history"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Kind"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "enum": [
+                  "UTC",
+                  "UTC+01:00",
+                  "UTC+08:00",
+                  "Europe/Berlin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "MexcImportOptions",
+        "type": "object"
+      },
+      "MexcImportPreview": {
+        "properties": {
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Reasons",
+            "type": "array"
+          },
+          "bonus_rows": {
+            "default": 0,
+            "title": "Bonus Rows",
+            "type": "integer"
+          },
+          "bookable_rows": {
+            "default": 0,
+            "title": "Bookable Rows",
+            "type": "integer"
+          },
+          "detected_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Kind"
+          },
+          "disposition": {
+            "enum": [
+              "transactions",
+              "evidence_only",
+              "empty",
+              "unsupported"
+            ],
+            "title": "Disposition",
+            "type": "string"
+          },
+          "linked_rows": {
+            "default": 0,
+            "title": "Linked Rows",
+            "type": "integer"
+          },
+          "raw_rows": {
+            "title": "Raw Rows",
+            "type": "integer"
+          },
+          "review_rows": {
+            "default": 0,
+            "title": "Review Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MexcRowPreview"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "snapshot_rows": {
+            "default": 0,
+            "title": "Snapshot Rows",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "disposition",
+          "raw_rows"
+        ],
+        "title": "MexcImportPreview",
+        "type": "object"
+      },
+      "MexcRowDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "link_existing",
+              "separate"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_raw_object_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Raw Object Id"
+          }
+        },
+        "required": [
+          "action",
+          "reason"
+        ],
+        "title": "MexcRowDecision",
+        "type": "object"
+      },
+      "MexcRowPreview": {
+        "properties": {
+          "asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MexcCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "event_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Time"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "row_number": {
+            "title": "Row Number",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "review",
+              "duplicate_candidate",
+              "linked",
+              "evidence_only",
+              "invalid"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "row_number",
+          "status",
+          "reason"
+        ],
+        "title": "MexcRowPreview",
         "type": "object"
       },
       "MissingPriceCoverageItem": {
@@ -89658,6 +89977,50 @@
           "Import"
         ],
         "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/import/batches/{batch_id}/original": {
+      "get": {
+        "description": "Download mexc original. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "download_mexc_original_api_v1_import_batches__batch_id__original_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Mexc Original",
+        "tags": [
+          "Import"
+        ],
+        "x-data-effect": "read-only",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

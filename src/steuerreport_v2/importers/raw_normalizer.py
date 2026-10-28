@@ -104,12 +104,16 @@ class RawNormalizer:
         event_rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]] = []
         for raw in raw_objects:
             row = json.loads(raw.payload_json)
-            event = self._row_to_event(
-                batch.source,
-                raw.raw_object_id,
-                row,
-                default_timezone=batch_timezone,
-            )
+            if batch.source == "mexc":
+                from steuerreport_v2.importers.mexc_native import event_from_raw
+                event = event_from_raw(batch, raw)
+            else:
+                event = self._row_to_event(
+                    batch.source,
+                    raw.raw_object_id,
+                    row,
+                    default_timezone=batch_timezone,
+                )
             if event is not None:
                 event_rows.append((event, row))
             else:
@@ -467,6 +471,8 @@ class RawNormalizer:
         *,
         default_timezone: timezone | None = None,
     ) -> CanonicalEventCreate | None:
+        if source.strip().lower() == "mexc":
+            return None
         if row.get("history_evidence_only") == "1" and row.get("history_scope_identity"):
             return None
         profile = profile_for_source(source)

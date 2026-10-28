@@ -1,5 +1,20 @@
 # Changelog
 
+## Unveroeffentlicht - MEXC-Dateiimport (Issue #4)
+
+- Nativer erster XLSX-/CSV-Pfad fuer MEXC Spot Statement und Funding Other:
+  explizite Konto-/Exportart-/Zeitbasisbindung, physische Zeilen und private
+  hashadressierte Originale. Leere Exporte, Snapshot-/BONUS-Belege und offene
+  Produktarten werden getrennt angezeigt; kein pauschaler MEXC-Vollimport.
+- Manuelle, begruendete Belegverknuepfung statt automatischer Dublettenklaerung
+  nach Zeit/Betrag; Wiederholungen idempotent, fremde/veraltete Linkziele gesperrt.
+  Airdrop bleibt unknown mit Review statt automatischem Mining-/Reward-Ertrag.
+- Laufende Ledger-Salden addieren innerhalb eines ausreichend grossen lokalen
+  Decimal-Kontexts; lange belegte Mengen werden nicht schon bei 28 Stellen
+  gerundet. Keine Aenderung steuerlicher Fristen oder fachlicher Freigaben.
+- Entwicklung und synthetische Pruefung getrennt von Produktion rc35;
+  kein automatisches Deployment und keine historischen Datenkorrekturen.
+
 ## 0.2.0rc35 - 2026-10-28 (Releasekandidat)
 
 - Der reale GitHub-Releasekatalog enthaelt nach Entpacken etwa 606 KB inklusive

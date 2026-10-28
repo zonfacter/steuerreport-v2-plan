@@ -9,6 +9,7 @@
 <li><a href='#bitget'>Bitget CSV</a></li>
 <li><a href='#pionex'>Pionex CSV</a></li>
 <li><a href='#coinbase'>Coinbase Transaction History CSV</a></li>
+<li><a href='#mexc'>MEXC Account Data Export</a></li>
 <li><a href='#helium'>Helium Legacy/Fairspot</a></li>
 <li><a href='#solana_rpc'>Solana RPC Primaerdaten</a></li>
 </ul></nav><h2>Allgemeine Regeln</h2><ol>
@@ -116,6 +117,25 @@
 <tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td><code>account</code> / <code>portfolio</code></td></tr>
 <tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td><code>transaction id</code> / <code>txid</code> / <code>transaction hash</code> / <code>hash</code></td></tr>
 <tr><td>Quellreferenz: optional, z. B. Order-ID</td><td><code>transaction id</code> / <code>id</code> / <code>order id</code> / <code>trade id</code></td></tr>
+</tbody></table></section>
+<section id='mexc'><h2>MEXC Account Data Export <code>mexc</code></h2>
+<p>Nativer Account Data Export: XLSX oder UTF-8-CSV. Konto und Exportart ausdruecklich zuordnen. Diese Statement-Spalten unterscheiden Spot, Futures Statement, Earn und Send History nicht allein; nur Spot Statement und Funding Other bilden den ersten Mengenpfad. Funding Other verwendet UID,Time,Crypto,Type,Quantity,Status,Remark und benoetigt eine bestaetigte Zeitbasis. UTC+01:00 im Header ist ein fester Offset, keine Berliner Sommerzeit. Airdrop bleibt unknown mit blockierender fachlicher Pruefung, kein automatisches Mining/Reward oder steuerlich bestaetigter Erwerb. Unbekannte Produkttypen und BONUS bleiben Rohbelege; Asset Snapshots erzeugen keine Erwerbe aus Total/USDT Valuation. Gleiche Zeit/Menge anderer Dateien sind Kandidaten, keine automatischen Dubletten: vorhandenen Originalbeleg verknuepfen oder getrennte Buchung begruenden und erneut pruefen. Provider-Buchungs-IDs werden, soweit vorhanden, kontogebunden verglichen; UID ist keine Buchungs-ID. Identische Originale bleiben im selben Kontext idempotent. Physische Zeile, Blatt, Originaldatei und SHA256 bleiben abrufbar. Hoechstens 10000 Datenzeilen je nativer Datei, 25 MiB komprimiert/100 MiB entpackt; groessere Exporte aufteilen. Self-Service-Historie laut MEXC ab 01.10.2024 ist keine Zusicherung eigener Vollstaendigkeit. API-Optionen und Beispiele: docs/MEXC_IMPORT.md.</p><p class='downloads'><a href='/import-vorlagen/mexc.csv' download>Leere CSV-Vorlage fuer MEXC Account Data Export</a></p>
+<h3>Konkretes Layout und fiktives Beispiel</h3><p>Nur Erlaeuterung, keine echten Transaktionen. Die herunterladbare Vorlage enthaelt ausschliesslich die erste Zeile.</p>
+<pre>UID,Creation Time(UTC+01:00),Crypto,Transaction Type,Direction,Quantity
+beispiel-uid,2025-01-15 11:00:00,DEMOCOIN,Airdrop,Inflow,2.5
+</pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>Creation Time(UTC+01:00)</code> / <code>Time(UTC+01:00)</code> / <code>Time</code></td></tr>
+<tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>Crypto</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>Quantity</code> / <code>Amount</code></td></tr>
+<tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>Transaction Type</code> / <code>Type</code> / <code>Fund Type</code></td></tr>
+<tr><td>Handelspaar: optionaler Asset-Ersatz</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Gegenmenge: bei Handel erforderlich zur Rekonstruktion</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Gebuehrenasset: sofern eine Gebuehr anfaellt</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Gebuehrenmenge: sofern eine Gebuehr anfaellt</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Konto / Wallet: fuer nachvollziehbare Zuordnung</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Transaktions-ID: fuer Nachweis und Abgleich</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
+<tr><td>Quellreferenz: optional, z. B. Order-ID</td><td>Keine allgemeine Spaltenzuordnung in diesem Profil.</td></tr>
 </tbody></table></section>
 <section id='helium'><h2>Helium Legacy/Fairspot <code>helium</code></h2>
 <p>Legacy-/Fairspot- und tabellarische Reward-Daten, nicht jede beliebige Hotspot-Datei. Reward wird in diesem Profil als mining normalisiert; das entscheidet nicht ueber die individuelle steuerliche Vermoegenszuordnung. Alternative assetlose Layouts koennen z. B. hnt_amount, iot_amount, mobile_amount oder Mining Rewards HNT/IOT/MOBILE verwenden; keine Preis-/Oracle-Hilfsspalte als Tokenmenge einsetzen. Bei Period Start (UTC) wird auf das Monatsende 23:59:59 UTC datiert: Ein Monatsbericht belegt keinen exakten Einzelzufluss. Sender + Receiver + Amount ist ein besonderes Transferlayout; eigene Walletzuordnung und Richtung pruefen.</p><p class='downloads'><a href='/import-vorlagen/helium.csv' download>Leere CSV-Vorlage fuer Helium Legacy/Fairspot</a></p>

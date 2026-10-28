@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from steuerreport_v2.contracts.pipeline import ImportRunResult
+from steuerreport_v2.contracts.mexc_import import MexcImportOptions, MexcImportPreview
 
 ImportStatus = Literal["created", "loaded", "normalized", "failed"]
 
@@ -55,6 +56,7 @@ class CsvImportPreview(BaseModel):
     duplicate_batch_id: str | None = None
     file_sha256: str | None = None
     import_fingerprint: str | None = None
+    mexc: MexcImportPreview | None = None
 
 
 ImportAssistantMode = Literal["file", "api", "onchain", "v1_cache"]
@@ -67,6 +69,7 @@ class ImportAssistantRequest(BaseModel):
     content: str | None = None
     content_base64: str | None = None
     sheet_name: str | None = None
+    mexc: MexcImportOptions | None = None
 
 
 class ImportAssistantPriceNeed(BaseModel):

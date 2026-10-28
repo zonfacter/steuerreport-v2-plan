@@ -114,6 +114,9 @@ jobs:
       - name: Guided UX browser checks with synthetic data
         working-directory: .
         run: python scripts/check_ux_browser_v2.py
+      - name: Native MEXC file wizard with controlled synthetic responses
+        working-directory: .
+        run: python scripts/check_mexc_import_browser_v2.py --output "${RUNNER_TEMP}/mexc-import-browser"
       - name: Install backend for isolated review browser regression
         working-directory: .
         run: python -m pip install -c requirements-runtime.lock -e '.[dev]'
@@ -163,4 +166,5 @@ jobs:
             ${{ runner.temp }}/historical-prices-browser/
             ${{ runner.temp }}/updates-browser/
             ${{ runner.temp }}/updates-backend-browser/
+            ${{ runner.temp }}/mexc-import-browser/
           if-no-files-found: ignore

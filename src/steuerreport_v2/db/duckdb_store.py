@@ -748,6 +748,30 @@ class DuckDbStore:
             raise RuntimeError("created import batch could not be read back")
         return batch
 
+    def create_import_batch_with_raw(self, payload: ImportBatchCreate, payloads: list[RawObjectCreate]) -> ImportBatch:
+        """Persist a fully validated native file in one transaction."""
+        batch_id, created_at = str(uuid4()), datetime.now(timezone.utc)
+        rows = [(str(uuid4()), batch_id, p.row_number, p.payload_json, created_at) for p in payloads]
+        with self.connect() as con:
+            con.execute("begin transaction")
+            try:
+                con.execute("""insert into raw_import_batches
+                    (batch_id,source,filename,file_hash,status,created_at) values (?,?,?,?,?,?)""",
+                    [batch_id, payload.source, payload.filename, payload.file_hash, "loaded", created_at])
+                if rows:
+                    frame = pd.DataFrame(rows, columns=["raw_object_id", "batch_id", "row_number", "payload_json", "created_at"])
+                    con.register("native_raw_rows", frame)
+                    try:
+                        con.execute("""insert into raw_objects (raw_object_id,batch_id,row_number,payload_json,created_at)
+                            select raw_object_id,batch_id,row_number,payload_json,created_at from native_raw_rows""")
+                    finally:
+                        con.unregister("native_raw_rows")
+                con.execute("commit")
+            except Exception:
+                con.execute("rollback")
+                raise
+        return self.get_import_batch(batch_id)
+
     def get_import_batch(self, batch_id: str) -> ImportBatch | None:
         with self.connect() as con:
             row = con.execute(
@@ -1738,10 +1762,13 @@ class DuckDbStore:
                 """
                 select r.batch_id, count(*) as unmapped_count
                 from raw_objects r
+                join raw_import_batches b on b.batch_id = r.batch_id
                 left join canonical_events e on e.raw_object_id = r.raw_object_id
                 where e.event_id is null
-                  and lower(r.payload_json) not like '%bitget_withdrawal_evidence%'
-                  and coalesce(json_extract_string(r.payload_json, '$.history_evidence_only'), '') <> '1'
+                  and (b.source = 'mexc' or lower(r.payload_json) not like '%bitget_withdrawal_evidence%')
+                  and (b.source = 'mexc' or coalesce(json_extract_string(r.payload_json, '$.history_evidence_only'), '') <> '1')
+                  and not (b.source = 'mexc' and coalesce(json_extract_string(
+                    try_cast(json_extract_string(r.payload_json, '$._mexc') as json), '$.role'), '') in ('snapshot', 'linked'))
                 group by r.batch_id
                 order by r.batch_id
                 """

@@ -57,9 +57,17 @@ class ImportAssistantService:
             )
 
         preview = self._file_preview(request)
+        if preview.mexc:
+            warnings.extend(preview.mexc.warnings)
+            warnings.extend(preview.mexc.blocking_reasons)
         assets, years = self._detect_assets_and_years(preview.sample_rows)
+        if preview.mexc:
+            from steuerreport_v2.domain.tax_time import reporting_tax_year
+            assets = sorted({row.asset for row in preview.mexc.rows if row.asset})
+            years = sorted({reporting_tax_year(datetime.fromisoformat(row.event_time))
+                            for row in preview.mexc.rows if row.event_time})
         price_needs = self._price_needs(assets, years)
-        estimated_normalizable_rows = preview.row_count if preview.can_import else 0
+        estimated_normalizable_rows = (preview.mexc.bookable_rows if preview.mexc else preview.row_count) if preview.can_import else 0
         expected_issues = []
         if preview.missing_required_groups:
             expected_issues.append("missing_required_columns")
@@ -79,7 +87,7 @@ class ImportAssistantService:
             source=request.source,
             import_mode=request.import_mode,
             can_execute=can_execute,
-            blocked_reason=self._blocked_reason(preview),
+            blocked_reason=("; ".join(preview.mexc.blocking_reasons) if preview.mexc and preview.mexc.blocking_reasons else self._blocked_reason(preview)),
             preview=preview,
             price_needs=price_needs,
             tax_impact=ImportAssistantTaxImpact(
@@ -119,12 +127,14 @@ class ImportAssistantService:
                 filename=request.filename or "import.xlsx",
                 content_base64=request.content_base64,
                 sheet_name=request.sheet_name,
+                mexc=request.mexc,
             )
         else:
             batch = CsvRawImporter(self.store).import_text(
                 source=request.source,
                 filename=request.filename or "import.csv",
                 content=request.content or "",
+                mexc=request.mexc,
             )
         run = PipelineService(self.store).rebuild_after_import(batch.batch_id)
         return ImportAssistantExecuteResult(preview=preview, batch=batch, run=run)
@@ -136,11 +146,13 @@ class ImportAssistantService:
                 filename=request.filename or "import.xlsx",
                 content_base64=request.content_base64,
                 sheet_name=request.sheet_name,
+                mexc=request.mexc,
             )
         return CsvRawImporter(self.store).preview_text(
             source=request.source,
             filename=request.filename or "import.csv",
             content=request.content or "",
+            mexc=request.mexc,
         )
 
     def _price_needs(self, assets: list[str], years: list[int]) -> list[ImportAssistantPriceNeed]:
@@ -160,7 +172,7 @@ class ImportAssistantService:
         years: set[int] = set()
         for row in rows:
             normalized = {key.lower().strip(): value for key, value in row.items()}
-            for key in ("asset", "coin", "currency", "base asset"):
+            for key in ("asset", "coin", "currency", "base asset", "crypto"):
                 value = normalized.get(key)
                 if value:
                     assets.add(value.strip().upper())

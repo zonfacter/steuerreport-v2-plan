@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from uuid import uuid4
 
 import pandas as pd
@@ -83,7 +83,9 @@ class BalanceLedgerBuilder:
 
             for asset, delta_quantity in movements:
                 key = (account, asset)
-                balances[key] += delta_quantity
+                with localcontext() as context:
+                    context.prec = 80
+                    balances[key] += delta_quantity
                 balances[key] = self._zero_balance_dust(asset, balances[key])
                 entries.append(
                     BalanceLedgerEntry(

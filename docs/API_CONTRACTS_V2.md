@@ -3482,3 +3482,39 @@ Demo-/Sandboxbetrieb sperrt Speichern, Pruefen und Auftrag mit 403. Validierung
 `updates.settings.v1` und `updates.cache.v1` sind die beiden exakt benannten
 nichtfinanziellen Admin-Schluessel. Der finanzielle Vorschau-Fingerprint v3
 schliesst nur diese zusaetzlich aus; andere Admin-Regeln bleiben gebunden.
+
+## Nativer MEXC-Dateiimport (Entwicklung zu Issue #4)
+
+Die bestehenden Datei-/CSV- und Assistentenpfade akzeptieren fuer source=mexc
+eine optionale, streng validierte mexc-Zuordnung: export_kind, account,
+timezone und zeilenbezogene decisions. Der Assistentenvertrag beschreibt
+diese Felder im OpenAPI-Schema. Fehlende Zuordnung sperrt den Import;
+bare Time wird nicht als UTC angenommen. Ein expliziter Headeroffset hat
+eine andere Semantik als Europe/Berlin.
+
+CsvImportPreview.mexc trennt raw_rows, bookable_rows, linked_rows,
+review_rows, snapshot_rows, bonus_rows, blocking_reasons und rows.
+Mengenbuchung und fachlicher Review sind verschiedene Dimensionen;
+bookable_rows und review_rows koennen sich ueberschneiden. Entscheidungen
+verwenden physische Dateizeilen (erste Excel-Datenzeile 2), action
+link_existing/separate, passende target_raw_object_id und eine Begruendung.
+Der Import validiert frisch gegen den aktuellen gespeicherten Stand.
+
+MEXC Spot Statement und Funding Other besitzen einen ersten Airdrop-
+Mengenpfad als unknown mit Review-Sperre, nicht als automatisch anerkannter
+Mining-/Reward-Ertrag. Bestands-/BONUS- und weitere Produktbelege bleiben
+Rohbelege; keine erfundenen Erwerbe, Gegenwerte oder Lots. Fremde Bitget-/
+API-Belegmarker koennen MEXC-Rohzeilen nicht vom Review ausnehmen.
+
+Originalbytes werden privat hashadressiert archiviert; der Importfingerprint
+bindet Dateihash, Blatt, Konto, Exportart und Zeitbasis. Batch und Rohzeilen
+werden transaktional gespeichert. Ausfuehrung nutzt die bestehende Pipeline
+und berechnet damit Ledger-/Steuervorschauen neu; keine fachliche Freigabe.
+
+GET /api/v1/import/batches/{batch_id}/trace.json enthaelt bei MEXC das
+zusaetzliche Feld mexc_evidence mit verknuepften Originalspuren. MEXC-
+Canonical-Zeiten werden dort explizit in UTC ausgegeben. Der neue lesende
+GET /api/v1/import/batches/{batch_id}/original liefert Originalbytes nach
+SHA256-Pruefung oder 404/409, niemals einen ungeprueften Ersatzbeleg.
+
+Weitere Layouts, Grenzen, Herkunftsregeln und Beispiele: [MEXC_IMPORT.md](MEXC_IMPORT.md).

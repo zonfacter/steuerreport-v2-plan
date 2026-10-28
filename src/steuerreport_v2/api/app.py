@@ -660,6 +660,11 @@ def _import_preview_warnings(
     preview: CsvImportPreview, content_field: str
 ) -> list[dict[str, str]]:
     warnings = []
+    if preview.mexc:
+        warnings.extend({"code": "mexc_import_blocked", "message": reason, "field": "mexc"}
+                        for reason in preview.mexc.blocking_reasons)
+        warnings.extend({"code": "mexc_import_review", "message": reason, "field": "mexc"}
+                        for reason in preview.mexc.warnings)
     if preview.missing_required_groups:
         warnings.append(
             {
@@ -699,7 +704,7 @@ def _import_preview_errors(
     return [
         warning
         for warning in _import_preview_warnings(preview, content_field)
-        if warning["code"] in {"missing_required_columns", "empty_import_file"}
+        if warning["code"] in {"missing_required_columns", "empty_import_file", "mexc_import_blocked"}
     ]
 
 
@@ -1736,10 +1741,14 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 for item in db.list_raw_objects(batch_id=batch_id, limit=None)
             ],
             "canonical_events": [
-                item.model_dump(mode="json")
+                (item.model_copy(update={"event_time": item.event_time.replace(tzinfo=timezone.utc)})
+                 if item.source == "mexc" and item.event_time.tzinfo is None else item).model_dump(mode="json")
                 for item in db.list_canonical_events(batch_id=batch_id)
             ],
         }
+        if batch is not None and batch.source == "mexc":
+            from steuerreport_v2.importers.mexc_native import evidence_for_batch
+            payload["mexc_evidence"] = evidence_for_batch(db, batch_id)
         return Response(
             content=json.dumps(payload, indent=2, ensure_ascii=False),
             media_type="application/json",
@@ -1748,6 +1757,27 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             },
         )
 
+    @app.get("/api/v1/import/batches/{batch_id}/original")
+    def download_mexc_original(batch_id: str) -> Response:
+        from steuerreport_v2.importers.mexc_native import MexcNativeImporter, metadata
+        batch = db.get_import_batch(batch_id)
+        if batch is None or batch.source != "mexc":
+            raise HTTPException(status_code=404, detail="original_not_available")
+        raw = db.list_raw_objects(batch_id, limit=1)
+        meta = metadata(json.loads(raw[0].payload_json)) if raw else {}
+        digest = str(meta.get("file_sha256", "")).removeprefix("sha256:")
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise HTTPException(status_code=409, detail="original_integrity_failed")
+        original = MexcNativeImporter(db).archive / (digest + ".original")
+        if not original.is_file() or original.is_symlink() or original.stat().st_size > 25 * 1024 * 1024:
+            raise HTTPException(status_code=409, detail="original_integrity_failed")
+        content = original.read_bytes()
+        if hashlib.sha256(content).hexdigest() != digest:
+            raise HTTPException(status_code=409, detail="original_integrity_failed")
+        suffix = "xlsx" if meta.get("file_format") == "xlsx" else "csv"
+        return Response(content=content, media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="mexc-{batch_id}.{suffix}"'})
+
     @app.post("/api/v1/import/csv/raw")
     def import_csv_raw(payload: dict) -> ApiResponse[ImportBatch]:
         importer = CsvRawImporter(db)
@@ -1755,6 +1785,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             source=str(payload["source"]),
             filename=str(payload["filename"]),
             content=str(payload["content"]),
+            mexc=payload.get("mexc"),
         )
         errors = _import_preview_errors(preview, "content")
         if errors:
@@ -1763,6 +1794,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             source=str(payload["source"]),
             filename=str(payload["filename"]),
             content=str(payload["content"]),
+            mexc=payload.get("mexc"),
         )
         warnings = _import_preview_warnings(preview, "content")
         return ApiResponse(
@@ -1777,6 +1809,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             source=str(payload["source"]),
             filename=str(payload["filename"]),
             content=str(payload["content"]),
+            mexc=payload.get("mexc"),
         )
         warnings = _import_preview_warnings(preview, "content")
         return ApiResponse(
@@ -1792,6 +1825,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             filename=str(payload["filename"]),
             content_base64=str(payload["content_base64"]),
             sheet_name=payload.get("sheet_name"),
+            mexc=payload.get("mexc"),
         )
         warnings = _import_preview_warnings(preview, "content_base64")
         return ApiResponse(
@@ -1808,6 +1842,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             filename=str(payload["filename"]),
             content_base64=str(payload["content_base64"]),
             sheet_name=payload.get("sheet_name"),
+            mexc=payload.get("mexc"),
         )
         errors = _import_preview_errors(preview, "content_base64")
         if errors:
@@ -1817,6 +1852,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             filename=str(payload["filename"]),
             content_base64=str(payload["content_base64"]),
             sheet_name=payload.get("sheet_name"),
+            mexc=payload.get("mexc"),
         )
         warnings = _import_preview_warnings(preview, "content_base64")
         return ApiResponse(

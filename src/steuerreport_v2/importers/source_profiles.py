@@ -127,6 +127,12 @@ GENERIC_PROFILE = SourceProfile(
 )
 
 PROFILES: dict[str, SourceProfile] = {
+    "mexc": SourceProfile(
+        source="mexc", label="MEXC Account Data Export",
+        time_columns=("Creation Time(UTC+01:00)", "Time(UTC+01:00)", "Time"),
+        asset_columns=("Crypto",), quantity_columns=("Quantity", "Amount"),
+        type_columns=("Transaction Type", "Type", "Fund Type"),
+    ),
     GENERIC_PROFILE.source: GENERIC_PROFILE,
     "manual": GENERIC_PROFILE,
     "demo": SourceProfile(

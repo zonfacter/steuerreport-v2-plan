@@ -27,8 +27,12 @@ class FileRawImporter:
         filename: str,
         content_base64: str,
         sheet_name: str | None = None,
+        mexc=None,
     ) -> CsvImportPreview:
         content = self._decode(content_base64)
+        if source.strip().lower() == "mexc":
+            from steuerreport_v2.importers.mexc_native import MexcNativeImporter
+            return MexcNativeImporter(self.csv_importer.store).prepare(filename, content, sheet_name, mexc)[0]
         rows, columns, file_format, selected_sheet, sheet_names = self._rows_from_bytes(
             filename,
             content,
@@ -66,8 +70,12 @@ class FileRawImporter:
         filename: str,
         content_base64: str,
         sheet_name: str | None = None,
+        mexc=None,
     ) -> ImportBatch:
         content = self._decode(content_base64)
+        if source.strip().lower() == "mexc":
+            from steuerreport_v2.importers.mexc_native import MexcNativeImporter
+            return MexcNativeImporter(self.csv_importer.store).import_file(filename, content, sheet_name, mexc)
         rows, _, _, selected_sheet, _ = self._rows_from_bytes(filename, content, sheet_name)
         file_hash = self._file_hash(content, selected_sheet)
         return self.csv_importer.import_rows(
