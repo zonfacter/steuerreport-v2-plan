@@ -1,0 +1,2316 @@
+{
+  "all_table_and_archive_fingerprints_stable": {
+    "docker-live": true,
+    "v1-live": true,
+    "v2-candidate": true
+  },
+  "comparisons": {
+    "v1_vs_docker": {
+      "common_tables": {
+        "derivative_lines": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 16211,
+            "left_hmac": "1676ec880557c2ee3d15e54cf706525f0b4322a32afb022505ff39d734eac47b",
+            "left_only_rows": 16211,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 16211,
+            "left_hmac": "1676ec880557c2ee3d15e54cf706525f0b4322a32afb022505ff39d734eac47b",
+            "left_only_rows": 16211,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "tax_lines": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 783772,
+            "left_hmac": "c26ea5e9f8c537b88a97ac3cf3f23d71f2b18e55a02f3215c36d7ee427f83080",
+            "left_only_rows": 783772,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 783772,
+            "left_hmac": "c26ea5e9f8c537b88a97ac3cf3f23d71f2b18e55a02f3215c36d7ee427f83080",
+            "left_only_rows": 783772,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        }
+      },
+      "dimensions": {
+        "archives": {
+          "left": {
+            "available": true,
+            "representation": "sqlite-v1:archives",
+            "tables": {
+              "report_integrity": {
+                "count": 241,
+                "semantic_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a",
+                "strict_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a"
+              },
+              "report_snapshots": {
+                "count": 1,
+                "semantic_hmac": "f39e7f7f97f2caf41b5e8e51915ff28deb75d281af38413cd753544af6d55281",
+                "strict_hmac": "e5c159bff2a6d50532f73c9ca967c04ebc04a92ccfdc56085004351521f237dc"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:archives",
+            "tables": {
+              "export_packages": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_filing_snapshot_events": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_filing_snapshot_files": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_filing_snapshots": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "status": "different_models"
+        },
+        "events": {
+          "left": {
+            "available": true,
+            "representation": "sqlite-v1:events",
+            "tables": {
+              "product_position_events": {
+                "count": 293,
+                "semantic_hmac": "08ceb07b0ac671ea693ca2eb4d77884dace30a5226a42b672500b2da0cd67076",
+                "strict_hmac": "21b1e7fbaa423355ddb80038f921792467ce8cb9efcb04ef016b8ca501c81157"
+              },
+              "raw_events": {
+                "count": 55170,
+                "semantic_hmac": "5af58b7d173041a8d4da155373195342693194cac5a3dbaf411deffa7c12ce19",
+                "strict_hmac": "251893eb189b5ccd346bbe4165f9baeb2601144f51043ea6870c91ee91000c4c"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:events",
+            "tables": {
+              "canonical_events": {
+                "count": 3214,
+                "semantic_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac",
+                "strict_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac"
+              }
+            }
+          },
+          "status": "different_models"
+        },
+        "lots": {
+          "left": {
+            "available": false,
+            "representation": "sqlite-v1:lots",
+            "tables": {}
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:lots",
+            "tables": {
+              "tax_lots": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_unmatched_disposals": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "status": "unavailable_not_equal_to_empty"
+        },
+        "methods": {
+          "left": {
+            "available": true,
+            "representation": "sqlite-v1:methods",
+            "tables": {
+              "processing_queue": {
+                "count": 242,
+                "semantic_hmac": "65e120a073f052b448e2ebf7f351289b3f3190af38b69cdcc2090f8225de30fe",
+                "strict_hmac": "07339220330455bbac1ee087af052027376fbb8876b4a4a4c1344c885084ec7f"
+              },
+              "report_integrity": {
+                "count": 241,
+                "semantic_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a",
+                "strict_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a"
+              },
+              "ruleset_catalog": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "settings": {
+                "count": 49,
+                "semantic_hmac": "f9bbd5cc29f3ec3c5da278db6b78c9966297b094245b0ef19da651d53bcf3457",
+                "strict_hmac": "1f964e719ef060ef23ad8660aa030fb197fdf67096f19b7ab0f4c0d3be654ce5"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:methods",
+            "tables": {
+              "admin_settings": {
+                "count": 8,
+                "semantic_hmac": "796b603642fbc25d881ae203c7e872aa56bbe6e76a38976d6f6399ab81bd7ce0",
+                "strict_hmac": "2109018710aaa49b43407b9df0935071303ed222969ef26ac5ef496813a5ff6d"
+              },
+              "tax_run_summaries": {
+                "count": 1,
+                "semantic_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b",
+                "strict_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b"
+              }
+            }
+          },
+          "status": "different_models"
+        },
+        "prices": {
+          "left": {
+            "available": true,
+            "representation": "sqlite-v1:prices",
+            "tables": {
+              "fx_cache": {
+                "count": 7557,
+                "semantic_hmac": "f1ccf9fc173a0616f1bf22c3df2e7b6875eebc5bd960094b7c6352adf3289e70",
+                "strict_hmac": "f1ccf9fc173a0616f1bf22c3df2e7b6875eebc5bd960094b7c6352adf3289e70"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:prices",
+            "tables": {
+              "price_ledger": {
+                "count": 457,
+                "semantic_hmac": "cac55b5f792024bf2b893012832d93555bb7f31e885e67ef5389bbfb0da66447",
+                "strict_hmac": "d448530d538550a62c303b63c0a07cd377bede47dcdf158de1b95d6be99303cd"
+              }
+            }
+          },
+          "status": "different_models"
+        },
+        "raw": {
+          "left": {
+            "available": true,
+            "representation": "sqlite-v1:raw",
+            "tables": {
+              "raw_events": {
+                "count": 55170,
+                "semantic_hmac": "5af58b7d173041a8d4da155373195342693194cac5a3dbaf411deffa7c12ce19",
+                "strict_hmac": "251893eb189b5ccd346bbe4165f9baeb2601144f51043ea6870c91ee91000c4c"
+              },
+              "source_files": {
+                "count": 308,
+                "semantic_hmac": "efce9906d14d1745d7a1301a4228335c184e197a6c9386293252cdba58074690",
+                "strict_hmac": "efce9906d14d1745d7a1301a4228335c184e197a6c9386293252cdba58074690"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:raw",
+            "tables": {
+              "raw_import_batches": {
+                "count": 1,
+                "semantic_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd",
+                "strict_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd"
+              },
+              "raw_objects": {
+                "count": 4088,
+                "semantic_hmac": "439eace9f425e7825d5ea3c0daf5ba71be9ac3334e40a199b2074cb90362a622",
+                "strict_hmac": "684cd5f6686dca15991a296fcf1847653f7d1be8279f52e16531d89d77227550"
+              }
+            }
+          },
+          "status": "different_models"
+        },
+        "reviews": {
+          "left": {
+            "available": true,
+            "representation": "sqlite-v1:reviews",
+            "tables": {
+              "settings": {
+                "count": 49,
+                "semantic_hmac": "f9bbd5cc29f3ec3c5da278db6b78c9966297b094245b0ef19da651d53bcf3457",
+                "strict_hmac": "1f964e719ef060ef23ad8660aa030fb197fdf67096f19b7ab0f4c0d3be654ce5"
+              },
+              "transfer_matches": {
+                "count": 37,
+                "semantic_hmac": "baa09e532d8ea17ccd024fed3097fabd6ba476a358d47db10965a1f420681449",
+                "strict_hmac": "baa09e532d8ea17ccd024fed3097fabd6ba476a358d47db10965a1f420681449"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:reviews",
+            "tables": {
+              "admin_settings": {
+                "count": 8,
+                "semantic_hmac": "796b603642fbc25d881ae203c7e872aa56bbe6e76a38976d6f6399ab81bd7ce0",
+                "strict_hmac": "2109018710aaa49b43407b9df0935071303ed222969ef26ac5ef496813a5ff6d"
+              },
+              "review_decisions": {
+                "count": 2,
+                "semantic_hmac": "8dcd4cca111d9ed842c92c5d6e0d99e5cd9bfddb1c94a658c4479e6c99fe67df",
+                "strict_hmac": "2dd9bec8bc97998eb24b561646a9bd210cdd0da68644578ceb0b052d62816493"
+              },
+              "review_issues": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "status": "different_models"
+        },
+        "tax_lines": {
+          "left": {
+            "available": true,
+            "representation": "sqlite-v1:tax_lines",
+            "tables": {
+              "derivative_lines": {
+                "count": 16211,
+                "semantic_hmac": "1676ec880557c2ee3d15e54cf706525f0b4322a32afb022505ff39d734eac47b",
+                "strict_hmac": "1676ec880557c2ee3d15e54cf706525f0b4322a32afb022505ff39d734eac47b"
+              },
+              "tax_lines": {
+                "count": 783772,
+                "semantic_hmac": "c26ea5e9f8c537b88a97ac3cf3f23d71f2b18e55a02f3215c36d7ee427f83080",
+                "strict_hmac": "c26ea5e9f8c537b88a97ac3cf3f23d71f2b18e55a02f3215c36d7ee427f83080"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:tax_lines",
+            "tables": {
+              "derivative_lines": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_lines": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "status": "different_models"
+        }
+      },
+      "engine_limit": "No replay with bound identical inputs and methods; stored data is not engine equivalence.",
+      "engine_parity_proven": false,
+      "inputs_equal_proven": false,
+      "projections": {
+        "raw_original_payloads": {
+          "common_rows": 0,
+          "equal": false,
+          "left_count": 55170,
+          "left_hmac": "8c1fc417445d0518ee0cd08d043bdbae8e6c9dd933faf1ed336e08665c7e795c",
+          "left_only_rows": 55170,
+          "right_count": 4088,
+          "right_hmac": "3c15233e43da38c3d386bbfd34936654dcf366fa41187ca0f682f1a506310f36",
+          "right_only_rows": 4088
+        },
+        "raw_stored_json": {
+          "common_rows": 0,
+          "equal": false,
+          "left_count": 55170,
+          "left_hmac": "132d0eb57962e9be09243d73495476e0aaf5b7d0a18b67747c599b092c10de6c",
+          "left_only_rows": 55170,
+          "right_count": 4088,
+          "right_hmac": "3c15233e43da38c3d386bbfd34936654dcf366fa41187ca0f682f1a506310f36",
+          "right_only_rows": 4088
+        },
+        "tax_amount_time_event_refs": {
+          "common_rows": 0,
+          "equal": false,
+          "left_count": 783772,
+          "left_hmac": "55290945b953249756b1c2c2cec4df79489fb663365b94518378d4d43379c5c4",
+          "left_only_rows": 783772,
+          "right_count": 0,
+          "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "right_only_rows": 0
+        }
+      }
+    },
+    "v2_candidate_vs_docker": {
+      "common_tables": {
+        "admin_settings": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 11,
+            "left_hmac": "86e0993150f6e6ff424af8938e99a87518baf11beb7e719568ee96d3b6534567",
+            "left_only_rows": 11,
+            "right_count": 8,
+            "right_hmac": "796b603642fbc25d881ae203c7e872aa56bbe6e76a38976d6f6399ab81bd7ce0",
+            "right_only_rows": 8
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 11,
+            "left_hmac": "7d3bb074db8a7764f1a6104ef8d06f15e74ec7c914ebacfee42761bf47fe3e56",
+            "left_only_rows": 11,
+            "right_count": 8,
+            "right_hmac": "2109018710aaa49b43407b9df0935071303ed222969ef26ac5ef496813a5ff6d",
+            "right_only_rows": 8
+          }
+        },
+        "ai_tasks": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "balance_ledger": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 75714,
+            "left_hmac": "dcbf85eabc6003a90ca96374f4fef736525926e0c378f1caf3afbfdf2477e1a9",
+            "left_only_rows": 75714,
+            "right_count": 3214,
+            "right_hmac": "96580904251402e965a9260bd714a66b074a9e8127fd76908906b696ec13efc4",
+            "right_only_rows": 3214
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 75714,
+            "left_hmac": "dcbf85eabc6003a90ca96374f4fef736525926e0c378f1caf3afbfdf2477e1a9",
+            "left_only_rows": 75714,
+            "right_count": 3214,
+            "right_hmac": "96580904251402e965a9260bd714a66b074a9e8127fd76908906b696ec13efc4",
+            "right_only_rows": 3214
+          }
+        },
+        "canonical_events": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 50074,
+            "left_hmac": "abbeaa926e7aa6e04390ed680076c64858f48c411dcda0c11ba8b5d1444e4ce9",
+            "left_only_rows": 50074,
+            "right_count": 3214,
+            "right_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac",
+            "right_only_rows": 3214
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 50074,
+            "left_hmac": "abbeaa926e7aa6e04390ed680076c64858f48c411dcda0c11ba8b5d1444e4ce9",
+            "left_only_rows": 50074,
+            "right_count": 3214,
+            "right_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac",
+            "right_only_rows": 3214
+          }
+        },
+        "connector_connections": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "derivative_lines": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 2256,
+            "left_hmac": "f6bb79151273035158e5ff9097933b2ccc9b5ee5f5802b1e4ed173f2059cfc76",
+            "left_only_rows": 2256,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 2256,
+            "left_hmac": "f6bb79151273035158e5ff9097933b2ccc9b5ee5f5802b1e4ed173f2059cfc76",
+            "left_only_rows": 2256,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "derivative_run_summaries": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 1,
+            "left_hmac": "6f99b85d07d89a90136ea22bbdbb0feec916c8ab5b38765f4541012bf985ffc3",
+            "left_only_rows": 1,
+            "right_count": 1,
+            "right_hmac": "d7a665731dbd5c29ff9c431e1818a462fc8bf824e233f8763ecc14a608518d0a",
+            "right_only_rows": 1
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 1,
+            "left_hmac": "6f99b85d07d89a90136ea22bbdbb0feec916c8ab5b38765f4541012bf985ffc3",
+            "left_only_rows": 1,
+            "right_count": 1,
+            "right_hmac": "d7a665731dbd5c29ff9c431e1818a462fc8bf824e233f8763ecc14a608518d0a",
+            "right_only_rows": 1
+          }
+        },
+        "event_links": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "export_packages": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 8,
+            "left_hmac": "c3d74a0421df335ec6354dc945b00cfc26aeca6adbc2fb0a8b738908f57777f0",
+            "left_only_rows": 8,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 8,
+            "left_hmac": "c3d74a0421df335ec6354dc945b00cfc26aeca6adbc2fb0a8b738908f57777f0",
+            "left_only_rows": 8,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "flow_ledger": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 32562,
+            "left_hmac": "a0627ea8939f85ec90c6d2dfcebbd8c0a1d27b65fbe282b7ae5881a8cc8dcd66",
+            "left_only_rows": 32562,
+            "right_count": 2298,
+            "right_hmac": "6475a299ba2b3a67a41446bbf22815755c3a4f7be2a6cce050348d7da8bee29d",
+            "right_only_rows": 2298
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 32562,
+            "left_hmac": "a0627ea8939f85ec90c6d2dfcebbd8c0a1d27b65fbe282b7ae5881a8cc8dcd66",
+            "left_only_rows": 32562,
+            "right_count": 2298,
+            "right_hmac": "6475a299ba2b3a67a41446bbf22815755c3a4f7be2a6cce050348d7da8bee29d",
+            "right_only_rows": 2298
+          }
+        },
+        "jupiter_token_metadata_cache": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 22,
+            "left_hmac": "46746ad5b2d3b90dad0d6858b2bec18fee75a6c817c805167fce35b3cf21eb74",
+            "left_only_rows": 22,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 22,
+            "left_hmac": "6d332fb400f5b6abcf3922c2bf28a7d7219fdac690a6842a43d8c16c5adf6a66",
+            "left_only_rows": 22,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "mobile_connector_pairings": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "mobile_connector_sessions": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "mobile_document_inbox": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "portfolio_live_balance_snapshots": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 45,
+            "left_hmac": "42a2c53ab47a487e19198c984dd79bd41cbeba55d23757e8942b32b205ea729a",
+            "left_only_rows": 45,
+            "right_count": 18,
+            "right_hmac": "74c2c2e5cfee455b07ed4a196b27912bdccccfacb35a148527327dc6ef52411f",
+            "right_only_rows": 18
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 45,
+            "left_hmac": "42a2c53ab47a487e19198c984dd79bd41cbeba55d23757e8942b32b205ea729a",
+            "left_only_rows": 45,
+            "right_count": 18,
+            "right_hmac": "74c2c2e5cfee455b07ed4a196b27912bdccccfacb35a148527327dc6ef52411f",
+            "right_only_rows": 18
+          }
+        },
+        "portfolio_live_connector_runs": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 25,
+            "left_hmac": "6ea5e2c495620a26429a44453e306c17898fd06531e97e2b7b3acdbbce0eba9d",
+            "left_only_rows": 25,
+            "right_count": 6,
+            "right_hmac": "3350a55ca46135d4a71be23628c46a7fb3ad3ccdfda7d6c3a8669577a5a11a14",
+            "right_only_rows": 6
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 25,
+            "left_hmac": "6ea5e2c495620a26429a44453e306c17898fd06531e97e2b7b3acdbbce0eba9d",
+            "left_only_rows": 25,
+            "right_count": 6,
+            "right_hmac": "3350a55ca46135d4a71be23628c46a7fb3ad3ccdfda7d6c3a8669577a5a11a14",
+            "right_only_rows": 6
+          }
+        },
+        "price_ledger": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 17011,
+            "left_hmac": "10938255cf7fe4b4b2f757f4605998947719af289b78508710af88462a13822a",
+            "left_only_rows": 17011,
+            "right_count": 457,
+            "right_hmac": "cac55b5f792024bf2b893012832d93555bb7f31e885e67ef5389bbfb0da66447",
+            "right_only_rows": 457
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 17011,
+            "left_hmac": "9d387a80cbaf6a3a2cc7f1450ab5364854f2f4329169e644cf5b63213143e9bc",
+            "left_only_rows": 17011,
+            "right_count": 457,
+            "right_hmac": "d448530d538550a62c303b63c0a07cd377bede47dcdf158de1b95d6be99303cd",
+            "right_only_rows": 457
+          }
+        },
+        "raw_import_batches": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 45,
+            "left_hmac": "77148068ac05a6e675cac08242ec50c449c1e21a58269f3e143b82661d257ddb",
+            "left_only_rows": 45,
+            "right_count": 1,
+            "right_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd",
+            "right_only_rows": 1
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 45,
+            "left_hmac": "77148068ac05a6e675cac08242ec50c449c1e21a58269f3e143b82661d257ddb",
+            "left_only_rows": 45,
+            "right_count": 1,
+            "right_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd",
+            "right_only_rows": 1
+          }
+        },
+        "raw_objects": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 49483,
+            "left_hmac": "7709e76a927cf38633e39e512ed4196b34776f77b91add5e6205476e5a31d307",
+            "left_only_rows": 49483,
+            "right_count": 4088,
+            "right_hmac": "439eace9f425e7825d5ea3c0daf5ba71be9ac3334e40a199b2074cb90362a622",
+            "right_only_rows": 4088
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 49483,
+            "left_hmac": "9363100e44a685d8b1430600a66bc14e452f75d95d1834e6aca613a5d1c0be13",
+            "left_only_rows": 49483,
+            "right_count": 4088,
+            "right_hmac": "684cd5f6686dca15991a296fcf1847653f7d1be8279f52e16531d89d77227550",
+            "right_only_rows": 4088
+          }
+        },
+        "review_decisions": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 254,
+            "left_hmac": "2efd809629c65438e10416c1d6bddb63657c8fda6c8c4508531bcf0f48c182f6",
+            "left_only_rows": 254,
+            "right_count": 2,
+            "right_hmac": "8dcd4cca111d9ed842c92c5d6e0d99e5cd9bfddb1c94a658c4479e6c99fe67df",
+            "right_only_rows": 2
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 254,
+            "left_hmac": "70878f8c792223d98ee4cda9425e0983127dd59ad0ec90b5874bb5777cab6a42",
+            "left_only_rows": 254,
+            "right_count": 2,
+            "right_hmac": "2dd9bec8bc97998eb24b561646a9bd210cdd0da68644578ceb0b052d62816493",
+            "right_only_rows": 2
+          }
+        },
+        "review_issues": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "schema_meta": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 1,
+            "equal": true,
+            "left_count": 1,
+            "left_hmac": "3f8d0640822c50c9eb5f2f29df741903f2fae49c2b41cb68e2b863dbf8d4c106",
+            "left_only_rows": 0,
+            "right_count": 1,
+            "right_hmac": "3f8d0640822c50c9eb5f2f29df741903f2fae49c2b41cb68e2b863dbf8d4c106",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 1,
+            "equal": true,
+            "left_count": 1,
+            "left_hmac": "3f8d0640822c50c9eb5f2f29df741903f2fae49c2b41cb68e2b863dbf8d4c106",
+            "left_only_rows": 0,
+            "right_count": 1,
+            "right_hmac": "3f8d0640822c50c9eb5f2f29df741903f2fae49c2b41cb68e2b863dbf8d4c106",
+            "right_only_rows": 0
+          }
+        },
+        "tax_filing_snapshot_events": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 2,
+            "left_hmac": "10ab5739c8889efd3fca6b563e5b07086bac9bf12e9610aee8dc2bbf221941e4",
+            "left_only_rows": 2,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 2,
+            "left_hmac": "2261846911561c78b1bb2cecb177466ab790fb97074635d534a7dcf6c571abd2",
+            "left_only_rows": 2,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "tax_filing_snapshot_files": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 19,
+            "left_hmac": "fe2c23adc0318dc8cd506296a727f95f15d9895e3d2ad0ce5387590c473cbc97",
+            "left_only_rows": 19,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 19,
+            "left_hmac": "fe2c23adc0318dc8cd506296a727f95f15d9895e3d2ad0ce5387590c473cbc97",
+            "left_only_rows": 19,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "tax_filing_snapshots": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 1,
+            "left_hmac": "24f07b420e2d94692dd36888a8088d977f46ae370328c932185d7c0a78c54a3d",
+            "left_only_rows": 1,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 1,
+            "left_hmac": "a34fa920db324c93244aa47ba827763e124bd1a2ccf7b900e7f736e557d81200",
+            "left_only_rows": 1,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "tax_lines": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 50978,
+            "left_hmac": "179d8dcc511d1907afc2b93f3260437a36c0ae590268700febd422cbdc1b3c1e",
+            "left_only_rows": 50978,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 50978,
+            "left_hmac": "0aa1a4dd4975d96214c351c8897c62143918fbff325b42804d3f01ee3343923c",
+            "left_only_rows": 50978,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "tax_lots": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 40949,
+            "left_hmac": "ba9dd86afb0f0f543ce86f68063513a7cd288397d67f881c9af90e32a938d64e",
+            "left_only_rows": 40949,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 40949,
+            "left_hmac": "74082c579ac69c2ea28c4634b106f58bd8abcebee26923f7b8c9e2092be18128",
+            "left_only_rows": 40949,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "tax_run_summaries": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 1,
+            "left_hmac": "697057a5af3fde3726a41d236c3db3bcd0f99a13381b64747b5633ad655ec58a",
+            "left_only_rows": 1,
+            "right_count": 1,
+            "right_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b",
+            "right_only_rows": 1
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 1,
+            "left_hmac": "697057a5af3fde3726a41d236c3db3bcd0f99a13381b64747b5633ad655ec58a",
+            "left_only_rows": 1,
+            "right_count": 1,
+            "right_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b",
+            "right_only_rows": 1
+          }
+        },
+        "tax_unmatched_disposals": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "transfer_chains": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": true,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "v1_reference_metrics": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 188,
+            "left_hmac": "c9c4f06341de569b2ed01dc479b96822a855ce1e4219ec20957ba88d4eccabf3",
+            "left_only_rows": 188,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 188,
+            "left_hmac": "c9c4f06341de569b2ed01dc479b96822a855ce1e4219ec20957ba88d4eccabf3",
+            "left_only_rows": 188,
+            "right_count": 0,
+            "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "right_only_rows": 0
+          }
+        },
+        "wallet_ownership_challenges": {
+          "same_schema": false,
+          "semantic": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 1,
+            "right_hmac": "9e769b620f124da58cacd23fd349f8a456807290ae60168a38f1d9a9ea8cb7e6",
+            "right_only_rows": 1
+          },
+          "strict": {
+            "common_rows": 0,
+            "equal": false,
+            "left_count": 0,
+            "left_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+            "left_only_rows": 0,
+            "right_count": 1,
+            "right_hmac": "9e769b620f124da58cacd23fd349f8a456807290ae60168a38f1d9a9ea8cb7e6",
+            "right_only_rows": 1
+          }
+        }
+      },
+      "dimensions": {
+        "archives": {
+          "left": {
+            "available": true,
+            "representation": "duckdb-v2:archives",
+            "tables": {
+              "export_packages": {
+                "count": 8,
+                "semantic_hmac": "c3d74a0421df335ec6354dc945b00cfc26aeca6adbc2fb0a8b738908f57777f0",
+                "strict_hmac": "c3d74a0421df335ec6354dc945b00cfc26aeca6adbc2fb0a8b738908f57777f0"
+              },
+              "tax_filing_snapshot_events": {
+                "count": 2,
+                "semantic_hmac": "10ab5739c8889efd3fca6b563e5b07086bac9bf12e9610aee8dc2bbf221941e4",
+                "strict_hmac": "2261846911561c78b1bb2cecb177466ab790fb97074635d534a7dcf6c571abd2"
+              },
+              "tax_filing_snapshot_files": {
+                "count": 19,
+                "semantic_hmac": "fe2c23adc0318dc8cd506296a727f95f15d9895e3d2ad0ce5387590c473cbc97",
+                "strict_hmac": "fe2c23adc0318dc8cd506296a727f95f15d9895e3d2ad0ce5387590c473cbc97"
+              },
+              "tax_filing_snapshots": {
+                "count": 1,
+                "semantic_hmac": "24f07b420e2d94692dd36888a8088d977f46ae370328c932185d7c0a78c54a3d",
+                "strict_hmac": "a34fa920db324c93244aa47ba827763e124bd1a2ccf7b900e7f736e557d81200"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:archives",
+            "tables": {
+              "export_packages": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_filing_snapshot_events": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_filing_snapshot_files": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_filing_snapshots": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "status": "same_representation"
+        },
+        "events": {
+          "left": {
+            "available": true,
+            "representation": "duckdb-v2:events",
+            "tables": {
+              "canonical_events": {
+                "count": 50074,
+                "semantic_hmac": "abbeaa926e7aa6e04390ed680076c64858f48c411dcda0c11ba8b5d1444e4ce9",
+                "strict_hmac": "abbeaa926e7aa6e04390ed680076c64858f48c411dcda0c11ba8b5d1444e4ce9"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:events",
+            "tables": {
+              "canonical_events": {
+                "count": 3214,
+                "semantic_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac",
+                "strict_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac"
+              }
+            }
+          },
+          "status": "same_representation"
+        },
+        "lots": {
+          "left": {
+            "available": true,
+            "representation": "duckdb-v2:lots",
+            "tables": {
+              "tax_lots": {
+                "count": 40949,
+                "semantic_hmac": "ba9dd86afb0f0f543ce86f68063513a7cd288397d67f881c9af90e32a938d64e",
+                "strict_hmac": "74082c579ac69c2ea28c4634b106f58bd8abcebee26923f7b8c9e2092be18128"
+              },
+              "tax_unmatched_disposals": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:lots",
+            "tables": {
+              "tax_lots": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_unmatched_disposals": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "status": "same_representation"
+        },
+        "methods": {
+          "left": {
+            "available": true,
+            "representation": "duckdb-v2:methods",
+            "tables": {
+              "admin_settings": {
+                "count": 11,
+                "semantic_hmac": "86e0993150f6e6ff424af8938e99a87518baf11beb7e719568ee96d3b6534567",
+                "strict_hmac": "7d3bb074db8a7764f1a6104ef8d06f15e74ec7c914ebacfee42761bf47fe3e56"
+              },
+              "tax_run_summaries": {
+                "count": 1,
+                "semantic_hmac": "697057a5af3fde3726a41d236c3db3bcd0f99a13381b64747b5633ad655ec58a",
+                "strict_hmac": "697057a5af3fde3726a41d236c3db3bcd0f99a13381b64747b5633ad655ec58a"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:methods",
+            "tables": {
+              "admin_settings": {
+                "count": 8,
+                "semantic_hmac": "796b603642fbc25d881ae203c7e872aa56bbe6e76a38976d6f6399ab81bd7ce0",
+                "strict_hmac": "2109018710aaa49b43407b9df0935071303ed222969ef26ac5ef496813a5ff6d"
+              },
+              "tax_run_summaries": {
+                "count": 1,
+                "semantic_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b",
+                "strict_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b"
+              }
+            }
+          },
+          "status": "same_representation"
+        },
+        "prices": {
+          "left": {
+            "available": true,
+            "representation": "duckdb-v2:prices",
+            "tables": {
+              "price_ledger": {
+                "count": 17011,
+                "semantic_hmac": "10938255cf7fe4b4b2f757f4605998947719af289b78508710af88462a13822a",
+                "strict_hmac": "9d387a80cbaf6a3a2cc7f1450ab5364854f2f4329169e644cf5b63213143e9bc"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:prices",
+            "tables": {
+              "price_ledger": {
+                "count": 457,
+                "semantic_hmac": "cac55b5f792024bf2b893012832d93555bb7f31e885e67ef5389bbfb0da66447",
+                "strict_hmac": "d448530d538550a62c303b63c0a07cd377bede47dcdf158de1b95d6be99303cd"
+              }
+            }
+          },
+          "status": "same_representation"
+        },
+        "raw": {
+          "left": {
+            "available": true,
+            "representation": "duckdb-v2:raw",
+            "tables": {
+              "raw_import_batches": {
+                "count": 45,
+                "semantic_hmac": "77148068ac05a6e675cac08242ec50c449c1e21a58269f3e143b82661d257ddb",
+                "strict_hmac": "77148068ac05a6e675cac08242ec50c449c1e21a58269f3e143b82661d257ddb"
+              },
+              "raw_objects": {
+                "count": 49483,
+                "semantic_hmac": "7709e76a927cf38633e39e512ed4196b34776f77b91add5e6205476e5a31d307",
+                "strict_hmac": "9363100e44a685d8b1430600a66bc14e452f75d95d1834e6aca613a5d1c0be13"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:raw",
+            "tables": {
+              "raw_import_batches": {
+                "count": 1,
+                "semantic_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd",
+                "strict_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd"
+              },
+              "raw_objects": {
+                "count": 4088,
+                "semantic_hmac": "439eace9f425e7825d5ea3c0daf5ba71be9ac3334e40a199b2074cb90362a622",
+                "strict_hmac": "684cd5f6686dca15991a296fcf1847653f7d1be8279f52e16531d89d77227550"
+              }
+            }
+          },
+          "status": "same_representation"
+        },
+        "reviews": {
+          "left": {
+            "available": true,
+            "representation": "duckdb-v2:reviews",
+            "tables": {
+              "admin_settings": {
+                "count": 11,
+                "semantic_hmac": "86e0993150f6e6ff424af8938e99a87518baf11beb7e719568ee96d3b6534567",
+                "strict_hmac": "7d3bb074db8a7764f1a6104ef8d06f15e74ec7c914ebacfee42761bf47fe3e56"
+              },
+              "review_decisions": {
+                "count": 254,
+                "semantic_hmac": "2efd809629c65438e10416c1d6bddb63657c8fda6c8c4508531bcf0f48c182f6",
+                "strict_hmac": "70878f8c792223d98ee4cda9425e0983127dd59ad0ec90b5874bb5777cab6a42"
+              },
+              "review_issues": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:reviews",
+            "tables": {
+              "admin_settings": {
+                "count": 8,
+                "semantic_hmac": "796b603642fbc25d881ae203c7e872aa56bbe6e76a38976d6f6399ab81bd7ce0",
+                "strict_hmac": "2109018710aaa49b43407b9df0935071303ed222969ef26ac5ef496813a5ff6d"
+              },
+              "review_decisions": {
+                "count": 2,
+                "semantic_hmac": "8dcd4cca111d9ed842c92c5d6e0d99e5cd9bfddb1c94a658c4479e6c99fe67df",
+                "strict_hmac": "2dd9bec8bc97998eb24b561646a9bd210cdd0da68644578ceb0b052d62816493"
+              },
+              "review_issues": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "status": "same_representation"
+        },
+        "tax_lines": {
+          "left": {
+            "available": true,
+            "representation": "duckdb-v2:tax_lines",
+            "tables": {
+              "derivative_lines": {
+                "count": 2256,
+                "semantic_hmac": "f6bb79151273035158e5ff9097933b2ccc9b5ee5f5802b1e4ed173f2059cfc76",
+                "strict_hmac": "f6bb79151273035158e5ff9097933b2ccc9b5ee5f5802b1e4ed173f2059cfc76"
+              },
+              "tax_lines": {
+                "count": 50978,
+                "semantic_hmac": "179d8dcc511d1907afc2b93f3260437a36c0ae590268700febd422cbdc1b3c1e",
+                "strict_hmac": "0aa1a4dd4975d96214c351c8897c62143918fbff325b42804d3f01ee3343923c"
+              }
+            }
+          },
+          "right": {
+            "available": true,
+            "representation": "duckdb-v2:tax_lines",
+            "tables": {
+              "derivative_lines": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              },
+              "tax_lines": {
+                "count": 0,
+                "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+                "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+              }
+            }
+          },
+          "status": "same_representation"
+        }
+      },
+      "engine_limit": "No replay with bound identical inputs and methods; stored data is not engine equivalence.",
+      "engine_parity_proven": false,
+      "inputs_equal_proven": false,
+      "projections": {
+        "raw_original_payloads": {
+          "common_rows": 0,
+          "equal": false,
+          "left_count": 49483,
+          "left_hmac": "e05f70452645d5c8414f300bccd37c70907cdda305eeda14305ec7120cc24cec",
+          "left_only_rows": 49483,
+          "right_count": 4088,
+          "right_hmac": "3c15233e43da38c3d386bbfd34936654dcf366fa41187ca0f682f1a506310f36",
+          "right_only_rows": 4088
+        },
+        "raw_stored_json": {
+          "common_rows": 0,
+          "equal": false,
+          "left_count": 49483,
+          "left_hmac": "e05f70452645d5c8414f300bccd37c70907cdda305eeda14305ec7120cc24cec",
+          "left_only_rows": 49483,
+          "right_count": 4088,
+          "right_hmac": "3c15233e43da38c3d386bbfd34936654dcf366fa41187ca0f682f1a506310f36",
+          "right_only_rows": 4088
+        },
+        "tax_amount_time_event_refs": {
+          "common_rows": 0,
+          "equal": false,
+          "left_count": 50978,
+          "left_hmac": "02ae4624b137043aa51460c4efe595a829a5aa313edf115ed45e878277c9e708",
+          "left_only_rows": 50978,
+          "right_count": 0,
+          "right_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "right_only_rows": 0
+        }
+      }
+    }
+  },
+  "datasets": {
+    "docker-live": {
+      "archive_file_count": 0,
+      "backend": "duckdb-v2",
+      "dimensions": {
+        "archives": {
+          "available": true,
+          "representation": "duckdb-v2:archives",
+          "tables": {
+            "export_packages": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            },
+            "tax_filing_snapshot_events": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            },
+            "tax_filing_snapshot_files": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            },
+            "tax_filing_snapshots": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            }
+          }
+        },
+        "events": {
+          "available": true,
+          "representation": "duckdb-v2:events",
+          "tables": {
+            "canonical_events": {
+              "count": 3214,
+              "semantic_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac",
+              "strict_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac"
+            }
+          }
+        },
+        "lots": {
+          "available": true,
+          "representation": "duckdb-v2:lots",
+          "tables": {
+            "tax_lots": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            },
+            "tax_unmatched_disposals": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            }
+          }
+        },
+        "methods": {
+          "available": true,
+          "representation": "duckdb-v2:methods",
+          "tables": {
+            "admin_settings": {
+              "count": 8,
+              "semantic_hmac": "796b603642fbc25d881ae203c7e872aa56bbe6e76a38976d6f6399ab81bd7ce0",
+              "strict_hmac": "2109018710aaa49b43407b9df0935071303ed222969ef26ac5ef496813a5ff6d"
+            },
+            "tax_run_summaries": {
+              "count": 1,
+              "semantic_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b",
+              "strict_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b"
+            }
+          }
+        },
+        "prices": {
+          "available": true,
+          "representation": "duckdb-v2:prices",
+          "tables": {
+            "price_ledger": {
+              "count": 457,
+              "semantic_hmac": "cac55b5f792024bf2b893012832d93555bb7f31e885e67ef5389bbfb0da66447",
+              "strict_hmac": "d448530d538550a62c303b63c0a07cd377bede47dcdf158de1b95d6be99303cd"
+            }
+          }
+        },
+        "raw": {
+          "available": true,
+          "representation": "duckdb-v2:raw",
+          "tables": {
+            "raw_import_batches": {
+              "count": 1,
+              "semantic_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd",
+              "strict_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd"
+            },
+            "raw_objects": {
+              "count": 4088,
+              "semantic_hmac": "439eace9f425e7825d5ea3c0daf5ba71be9ac3334e40a199b2074cb90362a622",
+              "strict_hmac": "684cd5f6686dca15991a296fcf1847653f7d1be8279f52e16531d89d77227550"
+            }
+          }
+        },
+        "reviews": {
+          "available": true,
+          "representation": "duckdb-v2:reviews",
+          "tables": {
+            "admin_settings": {
+              "count": 8,
+              "semantic_hmac": "796b603642fbc25d881ae203c7e872aa56bbe6e76a38976d6f6399ab81bd7ce0",
+              "strict_hmac": "2109018710aaa49b43407b9df0935071303ed222969ef26ac5ef496813a5ff6d"
+            },
+            "review_decisions": {
+              "count": 2,
+              "semantic_hmac": "8dcd4cca111d9ed842c92c5d6e0d99e5cd9bfddb1c94a658c4479e6c99fe67df",
+              "strict_hmac": "2dd9bec8bc97998eb24b561646a9bd210cdd0da68644578ceb0b052d62816493"
+            },
+            "review_issues": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            }
+          }
+        },
+        "tax_lines": {
+          "available": true,
+          "representation": "duckdb-v2:tax_lines",
+          "tables": {
+            "derivative_lines": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            },
+            "tax_lines": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            }
+          }
+        }
+      },
+      "notes": [],
+      "tables": {
+        "admin_settings": {
+          "count": 8,
+          "semantic_hmac": "796b603642fbc25d881ae203c7e872aa56bbe6e76a38976d6f6399ab81bd7ce0",
+          "strict_hmac": "2109018710aaa49b43407b9df0935071303ed222969ef26ac5ef496813a5ff6d"
+        },
+        "ai_change_generations": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "ai_change_sets": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "ai_correction_overrides": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "ai_tasks": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "balance_ledger": {
+          "count": 3214,
+          "semantic_hmac": "96580904251402e965a9260bd714a66b074a9e8127fd76908906b696ec13efc4",
+          "strict_hmac": "96580904251402e965a9260bd714a66b074a9e8127fd76908906b696ec13efc4"
+        },
+        "canonical_events": {
+          "count": 3214,
+          "semantic_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac",
+          "strict_hmac": "8510fa826b9b51682eba8e57be43774ce2f3148cae68ad9b095e82ff5ce44eac"
+        },
+        "connector_connections": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "derivative_lines": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "derivative_run_summaries": {
+          "count": 1,
+          "semantic_hmac": "d7a665731dbd5c29ff9c431e1818a462fc8bf824e233f8763ecc14a608518d0a",
+          "strict_hmac": "d7a665731dbd5c29ff9c431e1818a462fc8bf824e233f8763ecc14a608518d0a"
+        },
+        "event_links": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "export_packages": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "flow_ledger": {
+          "count": 2298,
+          "semantic_hmac": "6475a299ba2b3a67a41446bbf22815755c3a4f7be2a6cce050348d7da8bee29d",
+          "strict_hmac": "6475a299ba2b3a67a41446bbf22815755c3a4f7be2a6cce050348d7da8bee29d"
+        },
+        "jupiter_token_metadata_cache": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "mobile_connector_pairings": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "mobile_connector_sessions": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "mobile_document_inbox": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "portfolio_live_balance_snapshots": {
+          "count": 18,
+          "semantic_hmac": "74c2c2e5cfee455b07ed4a196b27912bdccccfacb35a148527327dc6ef52411f",
+          "strict_hmac": "74c2c2e5cfee455b07ed4a196b27912bdccccfacb35a148527327dc6ef52411f"
+        },
+        "portfolio_live_connector_runs": {
+          "count": 6,
+          "semantic_hmac": "3350a55ca46135d4a71be23628c46a7fb3ad3ccdfda7d6c3a8669577a5a11a14",
+          "strict_hmac": "3350a55ca46135d4a71be23628c46a7fb3ad3ccdfda7d6c3a8669577a5a11a14"
+        },
+        "price_ledger": {
+          "count": 457,
+          "semantic_hmac": "cac55b5f792024bf2b893012832d93555bb7f31e885e67ef5389bbfb0da66447",
+          "strict_hmac": "d448530d538550a62c303b63c0a07cd377bede47dcdf158de1b95d6be99303cd"
+        },
+        "raw_import_batches": {
+          "count": 1,
+          "semantic_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd",
+          "strict_hmac": "8afd2a884e8173a7990ca557340496c7e778d2b1bc4e2b20f7ce8a5ab8aa95cd"
+        },
+        "raw_objects": {
+          "count": 4088,
+          "semantic_hmac": "439eace9f425e7825d5ea3c0daf5ba71be9ac3334e40a199b2074cb90362a622",
+          "strict_hmac": "684cd5f6686dca15991a296fcf1847653f7d1be8279f52e16531d89d77227550"
+        },
+        "review_decisions": {
+          "count": 2,
+          "semantic_hmac": "8dcd4cca111d9ed842c92c5d6e0d99e5cd9bfddb1c94a658c4479e6c99fe67df",
+          "strict_hmac": "2dd9bec8bc97998eb24b561646a9bd210cdd0da68644578ceb0b052d62816493"
+        },
+        "review_issues": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "schema_meta": {
+          "count": 1,
+          "semantic_hmac": "3f8d0640822c50c9eb5f2f29df741903f2fae49c2b41cb68e2b863dbf8d4c106",
+          "strict_hmac": "3f8d0640822c50c9eb5f2f29df741903f2fae49c2b41cb68e2b863dbf8d4c106"
+        },
+        "tax_filing_snapshot_events": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "tax_filing_snapshot_files": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "tax_filing_snapshots": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "tax_lines": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "tax_lots": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "tax_run_summaries": {
+          "count": 1,
+          "semantic_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b",
+          "strict_hmac": "b3cdf6fb6d5549887c587f565ca854b46f14a08b3d885dc7529a5a97fb92118b"
+        },
+        "tax_unmatched_disposals": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "transfer_chains": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "v1_reference_metrics": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "wallet_ownership_challenges": {
+          "count": 1,
+          "semantic_hmac": "9e769b620f124da58cacd23fd349f8a456807290ae60168a38f1d9a9ea8cb7e6",
+          "strict_hmac": "9e769b620f124da58cacd23fd349f8a456807290ae60168a38f1d9a9ea8cb7e6"
+        }
+      },
+      "v1_payload_shape_counts": null
+    },
+    "v1-live": {
+      "archive_file_count": 0,
+      "backend": "sqlite-v1",
+      "dimensions": {
+        "archives": {
+          "available": true,
+          "representation": "sqlite-v1:archives",
+          "tables": {
+            "report_integrity": {
+              "count": 241,
+              "semantic_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a",
+              "strict_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a"
+            },
+            "report_snapshots": {
+              "count": 1,
+              "semantic_hmac": "f39e7f7f97f2caf41b5e8e51915ff28deb75d281af38413cd753544af6d55281",
+              "strict_hmac": "e5c159bff2a6d50532f73c9ca967c04ebc04a92ccfdc56085004351521f237dc"
+            }
+          }
+        },
+        "events": {
+          "available": true,
+          "representation": "sqlite-v1:events",
+          "tables": {
+            "product_position_events": {
+              "count": 293,
+              "semantic_hmac": "08ceb07b0ac671ea693ca2eb4d77884dace30a5226a42b672500b2da0cd67076",
+              "strict_hmac": "21b1e7fbaa423355ddb80038f921792467ce8cb9efcb04ef016b8ca501c81157"
+            },
+            "raw_events": {
+              "count": 55170,
+              "semantic_hmac": "5af58b7d173041a8d4da155373195342693194cac5a3dbaf411deffa7c12ce19",
+              "strict_hmac": "251893eb189b5ccd346bbe4165f9baeb2601144f51043ea6870c91ee91000c4c"
+            }
+          }
+        },
+        "lots": {
+          "available": false,
+          "representation": "sqlite-v1:lots",
+          "tables": {}
+        },
+        "methods": {
+          "available": true,
+          "representation": "sqlite-v1:methods",
+          "tables": {
+            "processing_queue": {
+              "count": 242,
+              "semantic_hmac": "65e120a073f052b448e2ebf7f351289b3f3190af38b69cdcc2090f8225de30fe",
+              "strict_hmac": "07339220330455bbac1ee087af052027376fbb8876b4a4a4c1344c885084ec7f"
+            },
+            "report_integrity": {
+              "count": 241,
+              "semantic_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a",
+              "strict_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a"
+            },
+            "ruleset_catalog": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            },
+            "settings": {
+              "count": 49,
+              "semantic_hmac": "f9bbd5cc29f3ec3c5da278db6b78c9966297b094245b0ef19da651d53bcf3457",
+              "strict_hmac": "1f964e719ef060ef23ad8660aa030fb197fdf67096f19b7ab0f4c0d3be654ce5"
+            }
+          }
+        },
+        "prices": {
+          "available": true,
+          "representation": "sqlite-v1:prices",
+          "tables": {
+            "fx_cache": {
+              "count": 7557,
+              "semantic_hmac": "f1ccf9fc173a0616f1bf22c3df2e7b6875eebc5bd960094b7c6352adf3289e70",
+              "strict_hmac": "f1ccf9fc173a0616f1bf22c3df2e7b6875eebc5bd960094b7c6352adf3289e70"
+            }
+          }
+        },
+        "raw": {
+          "available": true,
+          "representation": "sqlite-v1:raw",
+          "tables": {
+            "raw_events": {
+              "count": 55170,
+              "semantic_hmac": "5af58b7d173041a8d4da155373195342693194cac5a3dbaf411deffa7c12ce19",
+              "strict_hmac": "251893eb189b5ccd346bbe4165f9baeb2601144f51043ea6870c91ee91000c4c"
+            },
+            "source_files": {
+              "count": 308,
+              "semantic_hmac": "efce9906d14d1745d7a1301a4228335c184e197a6c9386293252cdba58074690",
+              "strict_hmac": "efce9906d14d1745d7a1301a4228335c184e197a6c9386293252cdba58074690"
+            }
+          }
+        },
+        "reviews": {
+          "available": true,
+          "representation": "sqlite-v1:reviews",
+          "tables": {
+            "settings": {
+              "count": 49,
+              "semantic_hmac": "f9bbd5cc29f3ec3c5da278db6b78c9966297b094245b0ef19da651d53bcf3457",
+              "strict_hmac": "1f964e719ef060ef23ad8660aa030fb197fdf67096f19b7ab0f4c0d3be654ce5"
+            },
+            "transfer_matches": {
+              "count": 37,
+              "semantic_hmac": "baa09e532d8ea17ccd024fed3097fabd6ba476a358d47db10965a1f420681449",
+              "strict_hmac": "baa09e532d8ea17ccd024fed3097fabd6ba476a358d47db10965a1f420681449"
+            }
+          }
+        },
+        "tax_lines": {
+          "available": true,
+          "representation": "sqlite-v1:tax_lines",
+          "tables": {
+            "derivative_lines": {
+              "count": 16211,
+              "semantic_hmac": "1676ec880557c2ee3d15e54cf706525f0b4322a32afb022505ff39d734eac47b",
+              "strict_hmac": "1676ec880557c2ee3d15e54cf706525f0b4322a32afb022505ff39d734eac47b"
+            },
+            "tax_lines": {
+              "count": 783772,
+              "semantic_hmac": "c26ea5e9f8c537b88a97ac3cf3f23d71f2b18e55a02f3215c36d7ee427f83080",
+              "strict_hmac": "c26ea5e9f8c537b88a97ac3cf3f23d71f2b18e55a02f3215c36d7ee427f83080"
+            }
+          }
+        }
+      },
+      "notes": [
+        "source_hash is normalized import payload fingerprint, not original file bytes",
+        "raw_events contains normalized payload; raw_row is a partial original-row projection",
+        "no persisted individual lot table; inventory_end aggregates cannot prove original lot bases/dates",
+        "review/settings, rule/job catalog and JSON archives are not isomorphic to V2",
+        "fx_cache currency pairs and reference days are not implicitly EUR PricePoints"
+      ],
+      "tables": {
+        "audit_trail": {
+          "count": 5548,
+          "semantic_hmac": "8ed2c413a6240847dbfd9cefee4a9358403e441d5fc08c84bece4dc263ec3f84",
+          "strict_hmac": "8fc43b5df3feeb2c7708028a03b4730582055b11377547434881da1fca70bdb2"
+        },
+        "derivative_lines": {
+          "count": 16211,
+          "semantic_hmac": "1676ec880557c2ee3d15e54cf706525f0b4322a32afb022505ff39d734eac47b",
+          "strict_hmac": "1676ec880557c2ee3d15e54cf706525f0b4322a32afb022505ff39d734eac47b"
+        },
+        "fx_cache": {
+          "count": 7557,
+          "semantic_hmac": "f1ccf9fc173a0616f1bf22c3df2e7b6875eebc5bd960094b7c6352adf3289e70",
+          "strict_hmac": "f1ccf9fc173a0616f1bf22c3df2e7b6875eebc5bd960094b7c6352adf3289e70"
+        },
+        "processing_queue": {
+          "count": 242,
+          "semantic_hmac": "65e120a073f052b448e2ebf7f351289b3f3190af38b69cdcc2090f8225de30fe",
+          "strict_hmac": "07339220330455bbac1ee087af052027376fbb8876b4a4a4c1344c885084ec7f"
+        },
+        "product_position_events": {
+          "count": 293,
+          "semantic_hmac": "08ceb07b0ac671ea693ca2eb4d77884dace30a5226a42b672500b2da0cd67076",
+          "strict_hmac": "21b1e7fbaa423355ddb80038f921792467ce8cb9efcb04ef016b8ca501c81157"
+        },
+        "raw_events": {
+          "count": 55170,
+          "semantic_hmac": "5af58b7d173041a8d4da155373195342693194cac5a3dbaf411deffa7c12ce19",
+          "strict_hmac": "251893eb189b5ccd346bbe4165f9baeb2601144f51043ea6870c91ee91000c4c"
+        },
+        "report_integrity": {
+          "count": 241,
+          "semantic_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a",
+          "strict_hmac": "7c9c860a78610c66019f01ca41b07b42fad911e531f11f25ef4e79f4029c956a"
+        },
+        "report_snapshots": {
+          "count": 1,
+          "semantic_hmac": "f39e7f7f97f2caf41b5e8e51915ff28deb75d281af38413cd753544af6d55281",
+          "strict_hmac": "e5c159bff2a6d50532f73c9ca967c04ebc04a92ccfdc56085004351521f237dc"
+        },
+        "ruleset_catalog": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "settings": {
+          "count": 49,
+          "semantic_hmac": "f9bbd5cc29f3ec3c5da278db6b78c9966297b094245b0ef19da651d53bcf3457",
+          "strict_hmac": "1f964e719ef060ef23ad8660aa030fb197fdf67096f19b7ab0f4c0d3be654ce5"
+        },
+        "solscan_account_transactions": {
+          "count": 2427,
+          "semantic_hmac": "5e01e414d152715e870d2490e113a38a1a7aeb8fab11340e5780a69fb9504a69",
+          "strict_hmac": "9c8bf86b371c53696565fae17ec8db6a4abbf887d3629f29e151671df99ff2bf"
+        },
+        "solscan_account_transfers": {
+          "count": 2826,
+          "semantic_hmac": "efc412eb2d7b9ea1d2a1ab60e97b482f552c8faa1228ad127e5ecb87e0c98cca",
+          "strict_hmac": "25a9df1b1c3d88170a094c176407987ebaebfaec1e3d191df0990426362a0adc"
+        },
+        "solscan_transactions": {
+          "count": 2431,
+          "semantic_hmac": "95c14d9e11f1ff4adb54c633883bf84bb0e864b5227f33d446fab21feef036b9",
+          "strict_hmac": "1ca716e3c732e5b3904d5605936fae0abad0af79553b9f6ebb2d63250e212756"
+        },
+        "source_files": {
+          "count": 308,
+          "semantic_hmac": "efce9906d14d1745d7a1301a4228335c184e197a6c9386293252cdba58074690",
+          "strict_hmac": "efce9906d14d1745d7a1301a4228335c184e197a6c9386293252cdba58074690"
+        },
+        "tax_lines": {
+          "count": 783772,
+          "semantic_hmac": "c26ea5e9f8c537b88a97ac3cf3f23d71f2b18e55a02f3215c36d7ee427f83080",
+          "strict_hmac": "c26ea5e9f8c537b88a97ac3cf3f23d71f2b18e55a02f3215c36d7ee427f83080"
+        },
+        "transfer_matches": {
+          "count": 37,
+          "semantic_hmac": "baa09e532d8ea17ccd024fed3097fabd6ba476a358d47db10965a1f420681449",
+          "strict_hmac": "baa09e532d8ea17ccd024fed3097fabd6ba476a358d47db10965a1f420681449"
+        }
+      },
+      "v1_payload_shape_counts": {
+        "inventory_end_scalar_map": 242,
+        "top_level_lots_or_lot_rows": 0
+      }
+    },
+    "v2-candidate": {
+      "archive_file_count": 36,
+      "backend": "duckdb-v2",
+      "dimensions": {
+        "archives": {
+          "available": true,
+          "representation": "duckdb-v2:archives",
+          "tables": {
+            "export_packages": {
+              "count": 8,
+              "semantic_hmac": "c3d74a0421df335ec6354dc945b00cfc26aeca6adbc2fb0a8b738908f57777f0",
+              "strict_hmac": "c3d74a0421df335ec6354dc945b00cfc26aeca6adbc2fb0a8b738908f57777f0"
+            },
+            "tax_filing_snapshot_events": {
+              "count": 2,
+              "semantic_hmac": "10ab5739c8889efd3fca6b563e5b07086bac9bf12e9610aee8dc2bbf221941e4",
+              "strict_hmac": "2261846911561c78b1bb2cecb177466ab790fb97074635d534a7dcf6c571abd2"
+            },
+            "tax_filing_snapshot_files": {
+              "count": 19,
+              "semantic_hmac": "fe2c23adc0318dc8cd506296a727f95f15d9895e3d2ad0ce5387590c473cbc97",
+              "strict_hmac": "fe2c23adc0318dc8cd506296a727f95f15d9895e3d2ad0ce5387590c473cbc97"
+            },
+            "tax_filing_snapshots": {
+              "count": 1,
+              "semantic_hmac": "24f07b420e2d94692dd36888a8088d977f46ae370328c932185d7c0a78c54a3d",
+              "strict_hmac": "a34fa920db324c93244aa47ba827763e124bd1a2ccf7b900e7f736e557d81200"
+            }
+          }
+        },
+        "events": {
+          "available": true,
+          "representation": "duckdb-v2:events",
+          "tables": {
+            "canonical_events": {
+              "count": 50074,
+              "semantic_hmac": "abbeaa926e7aa6e04390ed680076c64858f48c411dcda0c11ba8b5d1444e4ce9",
+              "strict_hmac": "abbeaa926e7aa6e04390ed680076c64858f48c411dcda0c11ba8b5d1444e4ce9"
+            }
+          }
+        },
+        "lots": {
+          "available": true,
+          "representation": "duckdb-v2:lots",
+          "tables": {
+            "tax_lots": {
+              "count": 40949,
+              "semantic_hmac": "ba9dd86afb0f0f543ce86f68063513a7cd288397d67f881c9af90e32a938d64e",
+              "strict_hmac": "74082c579ac69c2ea28c4634b106f58bd8abcebee26923f7b8c9e2092be18128"
+            },
+            "tax_unmatched_disposals": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            }
+          }
+        },
+        "methods": {
+          "available": true,
+          "representation": "duckdb-v2:methods",
+          "tables": {
+            "admin_settings": {
+              "count": 11,
+              "semantic_hmac": "86e0993150f6e6ff424af8938e99a87518baf11beb7e719568ee96d3b6534567",
+              "strict_hmac": "7d3bb074db8a7764f1a6104ef8d06f15e74ec7c914ebacfee42761bf47fe3e56"
+            },
+            "tax_run_summaries": {
+              "count": 1,
+              "semantic_hmac": "697057a5af3fde3726a41d236c3db3bcd0f99a13381b64747b5633ad655ec58a",
+              "strict_hmac": "697057a5af3fde3726a41d236c3db3bcd0f99a13381b64747b5633ad655ec58a"
+            }
+          }
+        },
+        "prices": {
+          "available": true,
+          "representation": "duckdb-v2:prices",
+          "tables": {
+            "price_ledger": {
+              "count": 17011,
+              "semantic_hmac": "10938255cf7fe4b4b2f757f4605998947719af289b78508710af88462a13822a",
+              "strict_hmac": "9d387a80cbaf6a3a2cc7f1450ab5364854f2f4329169e644cf5b63213143e9bc"
+            }
+          }
+        },
+        "raw": {
+          "available": true,
+          "representation": "duckdb-v2:raw",
+          "tables": {
+            "raw_import_batches": {
+              "count": 45,
+              "semantic_hmac": "77148068ac05a6e675cac08242ec50c449c1e21a58269f3e143b82661d257ddb",
+              "strict_hmac": "77148068ac05a6e675cac08242ec50c449c1e21a58269f3e143b82661d257ddb"
+            },
+            "raw_objects": {
+              "count": 49483,
+              "semantic_hmac": "7709e76a927cf38633e39e512ed4196b34776f77b91add5e6205476e5a31d307",
+              "strict_hmac": "9363100e44a685d8b1430600a66bc14e452f75d95d1834e6aca613a5d1c0be13"
+            }
+          }
+        },
+        "reviews": {
+          "available": true,
+          "representation": "duckdb-v2:reviews",
+          "tables": {
+            "admin_settings": {
+              "count": 11,
+              "semantic_hmac": "86e0993150f6e6ff424af8938e99a87518baf11beb7e719568ee96d3b6534567",
+              "strict_hmac": "7d3bb074db8a7764f1a6104ef8d06f15e74ec7c914ebacfee42761bf47fe3e56"
+            },
+            "review_decisions": {
+              "count": 254,
+              "semantic_hmac": "2efd809629c65438e10416c1d6bddb63657c8fda6c8c4508531bcf0f48c182f6",
+              "strict_hmac": "70878f8c792223d98ee4cda9425e0983127dd59ad0ec90b5874bb5777cab6a42"
+            },
+            "review_issues": {
+              "count": 0,
+              "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+              "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+            }
+          }
+        },
+        "tax_lines": {
+          "available": true,
+          "representation": "duckdb-v2:tax_lines",
+          "tables": {
+            "derivative_lines": {
+              "count": 2256,
+              "semantic_hmac": "f6bb79151273035158e5ff9097933b2ccc9b5ee5f5802b1e4ed173f2059cfc76",
+              "strict_hmac": "f6bb79151273035158e5ff9097933b2ccc9b5ee5f5802b1e4ed173f2059cfc76"
+            },
+            "tax_lines": {
+              "count": 50978,
+              "semantic_hmac": "179d8dcc511d1907afc2b93f3260437a36c0ae590268700febd422cbdc1b3c1e",
+              "strict_hmac": "0aa1a4dd4975d96214c351c8897c62143918fbff325b42804d3f01ee3343923c"
+            }
+          }
+        }
+      },
+      "notes": [],
+      "tables": {
+        "admin_settings": {
+          "count": 11,
+          "semantic_hmac": "86e0993150f6e6ff424af8938e99a87518baf11beb7e719568ee96d3b6534567",
+          "strict_hmac": "7d3bb074db8a7764f1a6104ef8d06f15e74ec7c914ebacfee42761bf47fe3e56"
+        },
+        "ai_tasks": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "balance_ledger": {
+          "count": 75714,
+          "semantic_hmac": "dcbf85eabc6003a90ca96374f4fef736525926e0c378f1caf3afbfdf2477e1a9",
+          "strict_hmac": "dcbf85eabc6003a90ca96374f4fef736525926e0c378f1caf3afbfdf2477e1a9"
+        },
+        "canonical_events": {
+          "count": 50074,
+          "semantic_hmac": "abbeaa926e7aa6e04390ed680076c64858f48c411dcda0c11ba8b5d1444e4ce9",
+          "strict_hmac": "abbeaa926e7aa6e04390ed680076c64858f48c411dcda0c11ba8b5d1444e4ce9"
+        },
+        "connector_connections": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "derivative_lines": {
+          "count": 2256,
+          "semantic_hmac": "f6bb79151273035158e5ff9097933b2ccc9b5ee5f5802b1e4ed173f2059cfc76",
+          "strict_hmac": "f6bb79151273035158e5ff9097933b2ccc9b5ee5f5802b1e4ed173f2059cfc76"
+        },
+        "derivative_run_summaries": {
+          "count": 1,
+          "semantic_hmac": "6f99b85d07d89a90136ea22bbdbb0feec916c8ab5b38765f4541012bf985ffc3",
+          "strict_hmac": "6f99b85d07d89a90136ea22bbdbb0feec916c8ab5b38765f4541012bf985ffc3"
+        },
+        "event_links": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "export_packages": {
+          "count": 8,
+          "semantic_hmac": "c3d74a0421df335ec6354dc945b00cfc26aeca6adbc2fb0a8b738908f57777f0",
+          "strict_hmac": "c3d74a0421df335ec6354dc945b00cfc26aeca6adbc2fb0a8b738908f57777f0"
+        },
+        "flow_ledger": {
+          "count": 32562,
+          "semantic_hmac": "a0627ea8939f85ec90c6d2dfcebbd8c0a1d27b65fbe282b7ae5881a8cc8dcd66",
+          "strict_hmac": "a0627ea8939f85ec90c6d2dfcebbd8c0a1d27b65fbe282b7ae5881a8cc8dcd66"
+        },
+        "jupiter_token_metadata_cache": {
+          "count": 22,
+          "semantic_hmac": "46746ad5b2d3b90dad0d6858b2bec18fee75a6c817c805167fce35b3cf21eb74",
+          "strict_hmac": "6d332fb400f5b6abcf3922c2bf28a7d7219fdac690a6842a43d8c16c5adf6a66"
+        },
+        "mobile_connector_pairings": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "mobile_connector_sessions": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "mobile_document_inbox": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "portfolio_live_balance_snapshots": {
+          "count": 45,
+          "semantic_hmac": "42a2c53ab47a487e19198c984dd79bd41cbeba55d23757e8942b32b205ea729a",
+          "strict_hmac": "42a2c53ab47a487e19198c984dd79bd41cbeba55d23757e8942b32b205ea729a"
+        },
+        "portfolio_live_connector_runs": {
+          "count": 25,
+          "semantic_hmac": "6ea5e2c495620a26429a44453e306c17898fd06531e97e2b7b3acdbbce0eba9d",
+          "strict_hmac": "6ea5e2c495620a26429a44453e306c17898fd06531e97e2b7b3acdbbce0eba9d"
+        },
+        "price_ledger": {
+          "count": 17011,
+          "semantic_hmac": "10938255cf7fe4b4b2f757f4605998947719af289b78508710af88462a13822a",
+          "strict_hmac": "9d387a80cbaf6a3a2cc7f1450ab5364854f2f4329169e644cf5b63213143e9bc"
+        },
+        "raw_import_batches": {
+          "count": 45,
+          "semantic_hmac": "77148068ac05a6e675cac08242ec50c449c1e21a58269f3e143b82661d257ddb",
+          "strict_hmac": "77148068ac05a6e675cac08242ec50c449c1e21a58269f3e143b82661d257ddb"
+        },
+        "raw_objects": {
+          "count": 49483,
+          "semantic_hmac": "7709e76a927cf38633e39e512ed4196b34776f77b91add5e6205476e5a31d307",
+          "strict_hmac": "9363100e44a685d8b1430600a66bc14e452f75d95d1834e6aca613a5d1c0be13"
+        },
+        "review_decisions": {
+          "count": 254,
+          "semantic_hmac": "2efd809629c65438e10416c1d6bddb63657c8fda6c8c4508531bcf0f48c182f6",
+          "strict_hmac": "70878f8c792223d98ee4cda9425e0983127dd59ad0ec90b5874bb5777cab6a42"
+        },
+        "review_issues": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "schema_meta": {
+          "count": 1,
+          "semantic_hmac": "3f8d0640822c50c9eb5f2f29df741903f2fae49c2b41cb68e2b863dbf8d4c106",
+          "strict_hmac": "3f8d0640822c50c9eb5f2f29df741903f2fae49c2b41cb68e2b863dbf8d4c106"
+        },
+        "tax_filing_snapshot_events": {
+          "count": 2,
+          "semantic_hmac": "10ab5739c8889efd3fca6b563e5b07086bac9bf12e9610aee8dc2bbf221941e4",
+          "strict_hmac": "2261846911561c78b1bb2cecb177466ab790fb97074635d534a7dcf6c571abd2"
+        },
+        "tax_filing_snapshot_files": {
+          "count": 19,
+          "semantic_hmac": "fe2c23adc0318dc8cd506296a727f95f15d9895e3d2ad0ce5387590c473cbc97",
+          "strict_hmac": "fe2c23adc0318dc8cd506296a727f95f15d9895e3d2ad0ce5387590c473cbc97"
+        },
+        "tax_filing_snapshots": {
+          "count": 1,
+          "semantic_hmac": "24f07b420e2d94692dd36888a8088d977f46ae370328c932185d7c0a78c54a3d",
+          "strict_hmac": "a34fa920db324c93244aa47ba827763e124bd1a2ccf7b900e7f736e557d81200"
+        },
+        "tax_lines": {
+          "count": 50978,
+          "semantic_hmac": "179d8dcc511d1907afc2b93f3260437a36c0ae590268700febd422cbdc1b3c1e",
+          "strict_hmac": "0aa1a4dd4975d96214c351c8897c62143918fbff325b42804d3f01ee3343923c"
+        },
+        "tax_lots": {
+          "count": 40949,
+          "semantic_hmac": "ba9dd86afb0f0f543ce86f68063513a7cd288397d67f881c9af90e32a938d64e",
+          "strict_hmac": "74082c579ac69c2ea28c4634b106f58bd8abcebee26923f7b8c9e2092be18128"
+        },
+        "tax_run_summaries": {
+          "count": 1,
+          "semantic_hmac": "697057a5af3fde3726a41d236c3db3bcd0f99a13381b64747b5633ad655ec58a",
+          "strict_hmac": "697057a5af3fde3726a41d236c3db3bcd0f99a13381b64747b5633ad655ec58a"
+        },
+        "tax_unmatched_disposals": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "transfer_chains": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        },
+        "v1_reference_metrics": {
+          "count": 188,
+          "semantic_hmac": "c9c4f06341de569b2ed01dc479b96822a855ce1e4219ec20957ba88d4eccabf3",
+          "strict_hmac": "c9c4f06341de569b2ed01dc479b96822a855ce1e4219ec20957ba88d4eccabf3"
+        },
+        "wallet_ownership_challenges": {
+          "count": 0,
+          "semantic_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07",
+          "strict_hmac": "987e87f9fedf84a04ad8b00d54f1ab90cb5f522d92a289e3816fd687e61f8b07"
+        }
+      },
+      "v1_payload_shape_counts": null
+    }
+  },
+  "docker_configuration_and_start_unchanged": true,
+  "docker_mount_identity_confirmed": true,
+  "engine_parity_proven": false,
+  "file_metadata_unchanged_during_reads": {
+    "docker-live": true,
+    "v1-live": true,
+    "v2-candidate": true
+  },
+  "finished_at": "2026-10-28T17:42:03.680189+00:00",
+  "no_database_file_copy": true,
+  "no_database_or_schema_api_get": true,
+  "private_evidence_root": "/root/.local/share/steuerreport/migration-audit-20261028/blocker-parity/run-01",
+  "private_key_published": false,
+  "process_identities_unchanged": true,
+  "source_document_sha256": {
+    "BMF-Quellenpruefung-2026-10-28.md": "41f23ab93085d3a48c49d8b27b59067a606d9ac54535264d95d8089e5c18a4f1",
+    "Docker-Nachpruefung-18010-2026-10-28.md": "d2c3a08f7b2a8577410b9ff3064cdf64ea0a4b4c40c92927d6861f3d8b4d9fc8",
+    "v1-baseline-evidence-2026-10-28/manifest.json": "47a1e1a14f790589b0613266209c9fd66a268fdd294c32727c591b9d8bcdfe26",
+    "v1-baseline-evidence-2026-10-28/reproduce_v1.py": "c550b126da25f14c714af01c34d7fc16ae6882e4c653d1e625782bbc2a61d898",
+    "v1-baseline-evidence-2026-10-28/results.json": "3d64203d4ee85cdd109f822b0262e25436ff9a1f3485b012415d48b02c411202",
+    "v2-baseline-evidence-2026-10-28/README.md": "3a32e67add9a42f3da5748c161ae27f492d39abe7f293554b7ddad11729b458e",
+    "v2-baseline-evidence-2026-10-28/reproduce.py": "8f7253ea8c8827f917f32cf87e46b0bc95d5e10313142ddd300965841c3b41eb",
+    "v2-baseline-evidence-2026-10-28/results.json": "e40130dc53b64c062e96fe191d4d1900e2476a93248389703d72a0b064a1b969",
+    "v2-baseline-evidence-2026-10-28/source-manifest.json": "c5a35ce005d223e8f93ee411bdb76ce06225d39d0eca2c9f20a7d7a10ef2743d"
+  },
+  "sources_unchanged": true,
+  "started_at": "2026-10-28T17:37:43.730534+00:00",
+  "v1_runtime_identity_confirmed": true,
+  "v2_candidate_runtime_identity_confirmed": false,
+  "v2_runtime_limit": "No observed fd/mmap binding. Default source path is a candidate, not proof of loaded module/global state."
+}

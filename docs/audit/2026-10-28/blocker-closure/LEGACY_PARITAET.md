@@ -4,11 +4,54 @@ Basis `ce51a9d42963e25cb7b96dda19efce0703c55b26`, eigener Branch
 `audit/blocker-parity-20261028`. Vertrag bestaetigt; keine Kinderagenten,
 Produktformeln, Methodenaktivierungen, Produktionseingriffe oder Netzwerk-APIs.
 
-## Vorlaeufiger Vorhervergleich
+## Abschliessender Lauf
 
-Die unten genannten Vorher-Snapshots sind fertig. Der erneute Vollscan fuer
-die Nachher-Stabilitaetspruefung laeuft noch. Deshalb bis zum Abschluss **kein
-Nachweis einer unveraenderten Quelle ueber das gesamte Auditfenster**.
+Der echte RO-Vergleich ist abgeschlossen:28.10.2026,17:37:43 bis17:42:03UTC.
+`parity-summary.json` ist das abschliessende bereinigte Ergebnis;
+`parity-preliminary.json` bleibt als ausdruecklich vorlaeufiger Zwischenstand
+zur Nachvollziehbarkeit erhalten.
+
+- Alle16V1-,32V2-Kandidaten- und35Docker-Tabellen wurden in jeweils konsistenten
+  Lesetransaktionen vor und nach dem Vergleich vollstaendig gehasht. Alle
+  strikten Zeilenmultimengen und die bekannten Archivdateien blieben identisch.
+- DB-Dateiidentitaet, Groesse, mtime und Sidecarbestand blieben bei allen drei
+  Quellen unveraendert. Kein WAL/Dirty-File-Copy und keine Schemamigration.
+- Beide Prozessidentitaeten/selektierte Env und Docker-ID/Image/Config/Mounts/
+  Startzeit blieben gleich. Nutzer-Quellberichte/-Reprodateien blieben gleich.
+- Die Untersuchung aller gespeicherten V1-Job-/Reportpayloads fand242skalare
+  `inventory_end`-Maps und keine top-level `lots`/`lot_rows`/`tax_lots`-Listen.
+  Das stuetzt die benannte Einzel-Lot-Grenze, ohne versteckte oder externe
+  Archivpfade als vollstaendig untersucht auszugeben.
+- Im bekannten V2-Kandidatenarchiv/-Jahrescache wurden36ZIP-Dateien byteinhaltlich
+  gehasht; im entsprechenden Dockerpfad0. Die Datenbank-Archivtabellen sind
+  unabhaengig davon ebenfalls erfasst.0Dateien ist kein Gleichheits- oder
+  Verlustnachweis gegen V1-JSON-Snapshots oder unbekannte Dateipfade.
+- Private Evidence durchgehend Dateien0600/Verzeichnis0700 geprueft. Publicdaten
+  enthalten keine Zeilenbags oder Schluesselbytes, nur Aggregate/HMACs. Der
+  reale32Byte-Schluessel kommt in keiner eigenen Repositorydatei vor.
+
+Die8010-DB bleibt **nur Kandidat**, trotz konkreter Service-/Quellaufloesung:
+die weitere30s-FD-Stichprobe bestaetigte ebenfalls keinen Datenbankhandle.
+Es wurde kein unsicherer Erstconnect ausgelöst und keine Laufzeit-Globalvariable
+aus heutiger Quelldatei als bewiesen ausgegeben.0gemeinsame vollstaendige
+JSON-Objekte schliesst gleichartige wirtschaftliche Vorgaenge in anderer
+Darstellung nicht aus. Eine Enginegleichheit mit gleichen Inputs/Methoden ist
+weiterhin **nicht bewiesen**. Die enge Cross-Schema-Projektion ist kein
+vollstaendiger Jahres-/Steuerparitaetsvergleich.
+
+Reproduktion (neue private Untermappe erforderlich, keine Ueberschreibung):
+
+```sh
+python3 -B docs/audit/2026-10-28/blocker-closure/parity_audit.py \
+  --private-root /root/.local/share/steuerreport/migration-audit-20261028/blocker-parity/NEUER_LAUF \
+  --public-output docs/audit/2026-10-28/blocker-closure/parity-summary.json \
+  --sample-seconds 30
+```
+
+## Befunde Des Vorhervergleichs
+
+Die unten genannten Vorher-Snapshots wurden nach dem Vergleich erneut
+vollstaendig geprueft, siehe abschliessender Lauf. Die zuvor bereitgestellte
 `parity-preliminary.json` enthaelt nur Aggregate und private-keyed HMACs,
 keine Datensatzinhalte, Kontoidentifikatoren oder Geldbetraege.
 
