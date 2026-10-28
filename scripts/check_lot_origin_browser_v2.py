@@ -77,8 +77,9 @@ def main():
         stack.callback(server.shutdown)
         origin = f"http://127.0.0.1:{server.server_port}"
         calls, errors, shots = [], [], []
-        with sync_playwright() as playwright:
-            browser = stack.enter_context(playwright.chromium.launch(headless=True, executable_path=args.browser_executable))
+        with ExitStack() as browser_stack:
+            playwright = browser_stack.enter_context(sync_playwright())
+            browser = browser_stack.enter_context(playwright.chromium.launch(headless=True, executable_path=args.browser_executable))
             page = browser.new_page(viewport={"width": 1440, "height": 1000}, reduced_motion="reduce")
             page.on("pageerror", lambda error: errors.append(str(error)))
             def bridge(route):
@@ -88,7 +89,9 @@ def main():
                     raise AssertionError("No external browser requests permitted")
                 if not parsed.path.startswith("/api/"):
                     return route.continue_()
-                assert request.method == "GET", "No browser write permitted"
+                assert request.method == "GET" or (request.method == "POST" and parsed.path in {
+                    "/api/v1/activity/query", "/api/v1/workspace/review/query",
+                }), "No browser write permitted"
                 calls.append(parsed.path)
                 if parsed.path == endpoint:
                     response = client.get(endpoint)
@@ -98,6 +101,14 @@ def main():
                 if parsed.path == "/api/v1/tax/bmf-combined-fifo-staging/latest":
                     return fixture.send(route, {"status": "ready_for_professional_review", "strict_ready": False,
                         "origin_trace_policy": "legacy_direct_origin_v1", "years": [2024], "year_rows": [], "top_events": [], "top_assets": [], "sphere_rows": []})
+                if parsed.path in {
+                    "/api/v1/tax/lots", "/api/v1/tax/lines", "/api/v1/tax/unmatched-disposals",
+                    "/api/v1/derivatives/lines", "/api/v1/raw/objects", "/api/v1/events/canonical",
+                    "/api/v1/review/decisions", "/api/v1/review/decision-suggestions",
+                    "/api/v1/parity/v1/references", "/api/v1/export/packages", "/api/v1/admin/settings",
+                    "/api/v1/ai/tasks", "/api/v1/prices", "/api/v1/prices/latest",
+                }:
+                    return fixture.send(route, [])
                 try:
                     if fixture.handle(route):
                         return
@@ -107,7 +118,8 @@ def main():
             page.route("**/*", bridge)
             expect.set_options(timeout=30000)
             page.goto(origin + "/#tax?tab=details&year=2024", wait_until="networkidle")
-            panel = page.locator(".panel").filter(has=page.get_by_text("Ursprungssphaere der Verwertungen 2024", exact=True))
+            assert not errors, errors
+            panel = page.locator(".panel").filter(has=page.get_by_text("Ursprungssphaere der Verwertungen 2024", exact=True)).last
             expect(panel).to_have_count(1)
             expect(panel.get_by_text("Ursprungslot fortgeführt", exact=True)).to_be_visible()
             expect(panel.get_by_text("Herkunftskette offen", exact=True)).to_be_visible()

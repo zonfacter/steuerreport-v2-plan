@@ -318,6 +318,9 @@ class BmfFifoEventEvidenceService:
         counts = self._evidence_counts(unique_evidence)
         status = self._report_status(
             blocked_events_count=len(blocked_events),
+            blocked_origin_rows_count=sum(
+                1 for row in all_discrepancy_rows if row.status == "blocked"
+            ),
             review_events_count=len(review_events),
             unresolved_origin_rows_count=unresolved_origin_rows,
             scope_complete=scope_complete,
@@ -1901,8 +1904,9 @@ class BmfFifoEventEvidenceService:
         unresolved_origin_rows_count: int,
         scope_complete: bool,
         staging_matches_current: bool,
+        blocked_origin_rows_count: int = 0,
     ) -> str:
-        if blocked_events_count or not staging_matches_current:
+        if blocked_events_count or blocked_origin_rows_count or not staging_matches_current:
             return "blocked"
         if review_events_count or unresolved_origin_rows_count or not scope_complete:
             return "review"

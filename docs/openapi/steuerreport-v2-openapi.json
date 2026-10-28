@@ -21994,6 +21994,13 @@
             "title": "Combined Delta Eur",
             "type": "string"
           },
+          "direct_acquisition_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Direct Acquisition Event Ids",
+            "type": "array"
+          },
           "disposal_event_id": {
             "title": "Disposal Event Id",
             "type": "string"
@@ -22008,6 +22015,13 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Interaction Delta Eur",
             "type": "string"
+          },
+          "lineage_issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Issue Codes",
+            "type": "array"
           },
           "origin_classifications": {
             "items": {
@@ -22247,6 +22261,11 @@
             },
             "title": "Next Actions",
             "type": "array"
+          },
+          "origin_trace_policy": {
+            "default": "legacy_direct_origin_v1",
+            "title": "Origin Trace Policy",
+            "type": "string"
           },
           "potential_business_inventory_tax_lines_count": {
             "default": 0,
@@ -23320,6 +23339,13 @@
             "title": "Combined Delta Eur",
             "type": "string"
           },
+          "direct_acquisition_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Direct Acquisition Event Ids",
+            "type": "array"
+          },
           "disposal_event_id": {
             "title": "Disposal Event Id",
             "type": "string"
@@ -23349,6 +23375,13 @@
               "type": "string"
             },
             "title": "Issue Codes",
+            "type": "array"
+          },
+          "lineage_issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Issue Codes",
             "type": "array"
           },
           "origin_classifications": {
@@ -24621,6 +24654,11 @@
             "title": "Next Actions",
             "type": "array"
           },
+          "origin_trace_policy": {
+            "default": "legacy_direct_origin_v1",
+            "title": "Origin Trace Policy",
+            "type": "string"
+          },
           "potential_business_acquisition_cost_eur": {
             "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -24740,6 +24778,27 @@
             ],
             "title": "Last Disposal At"
           },
+          "lineage_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Reason"
+          },
+          "lineage_status": {
+            "default": "direct",
+            "enum": [
+              "direct",
+              "carried",
+              "unresolved"
+            ],
+            "title": "Lineage Status",
+            "type": "string"
+          },
           "origin_account": {
             "anyOf": [
               {
@@ -24788,6 +24847,17 @@
             "title": "Reason",
             "type": "string"
           },
+          "sample_direct_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Direct Event Id"
+          },
           "sample_disposal_event_id": {
             "anyOf": [
               {
@@ -24798,6 +24868,14 @@
               }
             ],
             "title": "Sample Disposal Event Id"
+          },
+          "sample_lot_path": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Sample Lot Path",
+            "type": "array"
           },
           "sample_origin_event_id": {
             "anyOf": [
