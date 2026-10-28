@@ -1,9 +1,9 @@
 # Steuerreport V2
 
-Version 0.2.0rc31. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Version 0.2.0rc32. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc31](docs/RELEASE_0.2.0rc31.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc32](docs/RELEASE_0.2.0rc32.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
@@ -20,7 +20,7 @@ nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
 docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc31
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc32
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -31,6 +31,10 @@ Version oder eine feste `ghcr.io/...@sha256:...`-Referenz setzen.
 Die zusaetzliche Kennung `sha-<vollstaendiger Release-Commit>` bezeichnet
 denselben veroeffentlichten Quellstand. Vorabversionen erhalten kein `latest`.
 Aktuell wird `linux/amd64` gebaut und geprueft, nicht ARM64.
+
+rc32 ist ein Releasekandidat. Die obige Image-Referenz ist die Zielversion;
+Build, Veroeffentlichung und produktives Deployment sind erst nach den
+gesonderten Nachweisen im Release bestaetigt.
 
 ### Lokal aus dem Quellstand bauen
 
@@ -200,6 +204,32 @@ sind beliebige Solscan-Exporte oder rohe RPC-JSON-Dateien nicht pauschal abgedec
 Technische Versionsvergleiche und Legacy-Cache-Aktionen sind keine
 Benutzernavigation mehr. Bestehende Referenzdaten und fachliche Exportgates
 werden dadurch nicht geloescht oder umgangen.
+
+### Historische EUR-Preise Ohne KI
+
+Unter **Portfolio & Haltefristen -> EUR-Preise ermitteln** lokal planen,
+externe Suche ausdruecklich bestaetigen und die kumulative Vorschau pruefen.
+Ab rc32 sucht die automatische Strategie zusaetzlich nahe historische
+Zeitpunkte und nur bei nachgewiesen nativem SOL eine native SOL-Referenz.
+Das ist keine globale SOL-/WSOL-Paritaetsannahme. Jeder akzeptierte Quote
+bleibt am selben UTC-Tag, nicht nach dem ersten Ereignis und hoechstens eine
+Stunde vom urspruenglichen Zielzeitpunkt entfernt.
+
+Die UI setzt standardmaessig ein Gesamtbudget von 200 gestarteten
+HTTP-Anfragen, einstellbar von 1 bis 1000, und hoechstens 50 je Abschnitt.
+Mit **Ausstehende Abschnitte automatisch fortsetzen** umfasst die Zustimmung
+weitere ausstehende Abschnitte innerhalb dieses Gesamtbudgets. Alternative
+Suchversuche, Wiederholungen und FX zaehlen mit; fehlgeschlagene Zeilen
+werden nicht endlos wiederholt. Kein automatischer Preisimport, keine
+automatische Uebernahme der Neuberechnung oder steuerliche Entscheidung.
+
+Gefundene Tagespreise schliessen keine offenen Klassifizierungsfragen und
+sind keine vollstaendige steuerliche Freigabe. Eine synthetische 20-Tage-
+Regression prueft den begrenzten Native-SOL-Fallback; lokale Ergebnisse und
+gesonderte Releasebelege stehen in den Releasehinweisen. Reale
+Installationszahlen und private Diagnoseergebnisse werden nicht veroeffentlicht.
+Details und Pruefnachweise: [Preisablauf](docs/HISTORISCHE_EUR_PREISE.md)
+und [rc32](docs/RELEASE_0.2.0rc32.md).
 
 ## KI-Einrichtung
 

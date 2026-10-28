@@ -94,7 +94,7 @@ class HistoricalPriceService:
         with self.store.connect() as con:
             rows = con.execute("select value_json from admin_settings where starts_with(key, ?)", [MAPPING_PREFIX]).fetchall()
         for row in rows:
-            mapping = PriceMapping.model_validate_json(row[0])
+            mapping = PriceMapping.model_validate_json(row[0], context={"stored_mapping": True})
             result[mapping.asset] = {**mapping.model_dump(), "origin": "operator"}
         return result
 
@@ -136,13 +136,30 @@ class HistoricalPriceService:
                 combined[key] = {"asset": key[1], "price_date": key[0], "event_count": 0, "provider_id": identifier,
                                  "status": "blocked" if reason else "planned", "reason": reason,
                                  "years": [], "event_year_counts": {}, "event_types": [],
+                                 "sources": [],
                                  "first_event_at": item.first_event_at.replace(tzinfo=timezone.utc).isoformat()}
             combined[key]["event_count"] += sum(selected_counts.values())
             combined[key]["years"] = sorted(set(combined[key]["years"]) | set(selected_counts))
             combined[key]["event_types"] = sorted(set(combined[key]["event_types"]) | {item.event_type})
+            combined[key]["sources"] = sorted(set(combined[key]["sources"]) | {item.source})
             for year, count in selected_counts.items():
                 combined[key]["event_year_counts"][str(year)] = combined[key]["event_year_counts"].get(str(year), 0) + count
             combined[key]["first_event_at"] = min(combined[key]["first_event_at"], item.first_event_at.replace(tzinfo=timezone.utc).isoformat())
+        if query.strategy == "automatic" and any(row["asset"] == "SOL" for row in combined.values()):
+            from steuerreport_v2.domain.observed_price_requirements import observed_requirements
+            # Native SOL darf auch im Steuerbedarf nicht aus einem Symbol abgeleitet werden,
+            # wenn Originaldaten widersprechende Mints enthalten. Alle Quelljahre pruefen.
+            identities = observed_requirements(self.store, query.model_copy(update={"year": None, "assets": ["SOL"]}), mappings, risks)
+            identity = identities[0] if identities else None
+            for row in combined.values():
+                if row["asset"] != "SOL":
+                    continue
+                if identity is None:
+                    row.update(status="blocked", reason="solana_mint_missing")
+                    continue
+                row.update(mints=identity["mints"], identity_basis=identity["identity_basis"])
+                if identity["reason"] in {"asset_mint_conflict", "solana_mint_invalid", "solana_mint_identity_mismatch", "price_mapping_mint_mismatch", "token_risk_spam_review"}:
+                    row.update(status="blocked", reason=identity["reason"])
         rows = sorted(combined.values(), key=lambda row: (row["status"] != "planned", row["price_date"], row["asset"]))
         return self._finish_plan(query, rows)
 
@@ -294,7 +311,7 @@ class HistoricalPriceService:
             os.close(fd)
 
     def fetch(self, request):
-        if request.scope == "all_observed":
+        if request.scope == "all_observed" or request.strategy == "automatic":
             return self._fetch_observed(request)
         return self._fetch_tax_required(request)
 
@@ -312,7 +329,8 @@ class HistoricalPriceService:
                 fail("historical_price_plan_stale")
             self._write(directory / "request.json", canonical_json(request_doc).encode())
             rows, evidence, prices, fx_cache = [], [], [], {}
-            with outbound_scope(max_requests=query.max_requests) as scope, managed_client(timeout=20) as client:
+            available = min(query.max_requests, query.max_total_requests or query.max_requests)
+            with outbound_scope(max_requests=available) as scope, managed_client(timeout=20) as client:
                 for planned in plan["rows"]:
                     row = dict(planned)
                     if row["status"] != "planned":
@@ -333,7 +351,7 @@ class HistoricalPriceService:
                     row["evidence_sha256"] = [entry["sha256"] for entry in linked]
                     evidence.extend(linked)
                     rows.append(row)
-                    if scope.budget.requests_started >= query.max_requests:
+                    if scope.budget.requests_started >= available:
                         break
             preview = {"id": str(request.request_id), "software_version": __version__, "methodology": METHOD,
                        "plan_sha256": plan["plan_sha256"], "created_at": datetime.now(timezone.utc).isoformat(),
@@ -352,13 +370,17 @@ class HistoricalPriceService:
         parent = self.get(request_id)
         if parent["preview_sha256"] != request.preview_sha256:
             fail("historical_price_preview_mismatch")
-        if parent["applied"] or parent["software_version"] != __version__ or parent["query"].get("scope") != "all_observed":
+        if parent["applied"] or parent["software_version"] != __version__ or not self._uses_collection(parent["query"]):
             fail("historical_price_preview_stale")
         if str(request.request_id) == str(request_id):
             fail("historical_price_request_conflict")
         followup = HistoricalPriceFetch(**parent["query"], request_id=request.request_id,
                                        plan_sha256=parent["plan_sha256"], confirm_external_request=True)
         return self._fetch_observed(followup, parent=parent, retry_open=request.retry_open)
+
+    @staticmethod
+    def _uses_collection(query):
+        return query.get("scope") == "all_observed" or query.get("strategy") == "automatic"
 
     def _fetch_observed(self, request, *, parent=None, retry_open=False):
         from steuerreport_v2.domain.historical_price_collection import collect_section
@@ -380,7 +402,7 @@ class HistoricalPriceService:
                 rows = [{**row} for row in parent["rows"]]
                 for row in rows:
                     if retry_open and row["status"] == "open":
-                        row.update(status="pending", reason=None)
+                        row.update(status="pending", reason=None, lookup_stage="primary")
                 if not any(row["status"] == "pending" for row in rows):
                     fail("historical_price_nothing_to_continue")
             else:
@@ -388,6 +410,10 @@ class HistoricalPriceService:
                 if plan["plan_sha256"] != request.plan_sha256:
                     fail("historical_price_plan_stale")
                 rows = [{**row, "status": "pending" if row["status"] == "planned" else row["status"]} for row in plan["rows"]]
+            previous_starts = (parent or {}).get("requests_started", 0)
+            available = query.max_requests if query.max_total_requests is None else min(query.max_requests, query.max_total_requests - previous_starts)
+            if available <= 0:
+                fail("historical_price_total_budget_exhausted")
             self._write(directory / "request.json", canonical_json(request_doc).encode())
             self._write(directory / "plan.json", canonical_json(plan).encode())
             progress_counter = 0
@@ -401,13 +427,15 @@ class HistoricalPriceService:
             progress({"phase": "Preisabruf vorbereiten", "rows_processed": sum(row["status"] != "pending" for row in rows),
                       "total_rows": len(rows), "requests_started": 0})
             rows, evidence, prices, fx_series, requests_started = collect_section(
-                self, query, rows, parent, progress, positive, fail, client_factory=managed_client, scope_factory=outbound_scope)
+                self, query.model_copy(update={"max_requests": available}), rows, parent, progress, positive, fail,
+                client_factory=managed_client, scope_factory=outbound_scope)
             if self._revision() != plan["database_revision"]:
                 fail("historical_price_plan_stale")
             preview = {"id": str(request.request_id), "software_version": __version__, "methodology": METHOD,
                        "plan_sha256": plan["plan_sha256"], "created_at": datetime.now(timezone.utc).isoformat(),
                        "requests_started": (parent or {}).get("requests_started", 0) + requests_started,
                        "section_requests_started": requests_started, "rows": rows, "evidence": evidence, "fx_series": fx_series,
+                       "max_total_requests": query.max_total_requests,
                        "prices": [item.model_dump(mode="json") for item in prices], "query": query.model_dump(mode="json"),
                        "requirements_count": plan["requirements_count"], "prices_count": len(prices), "total_rows": len(rows),
                        "pending_count": sum(row["status"] == "pending" for row in rows),
@@ -508,7 +536,7 @@ class HistoricalPriceService:
         preview = self._json(directory / "preview.json")
         if digest({k: v for k, v in preview.items() if k != "preview_sha256"}) != preview["preview_sha256"]:
             fail("historical_price_evidence_changed")
-        if preview["query"].get("scope") == "all_observed":
+        if self._uses_collection(preview["query"]):
             plan = self._json(directory / "plan.json")
             if digest({key: value for key, value in plan.items() if key != "plan_sha256"}) != preview["plan_sha256"]:
                 fail("historical_price_evidence_changed")
@@ -554,7 +582,7 @@ class HistoricalPriceService:
                 return result
             if preview["status"] != "ready" or preview["software_version"] != __version__:
                 fail("historical_price_preview_stale")
-            if preview["query"].get("scope") == "all_observed" and preview.get("pending_count", 0):
+            if self._uses_collection(preview["query"]) and preview.get("pending_count", 0):
                 fail("historical_price_collection_incomplete")
             prepared = directory / "calculation.prepared"
             if prepared.is_symlink() or hashlib.sha256(prepared.read_bytes()).hexdigest() != preview["prepared_sha256"]:

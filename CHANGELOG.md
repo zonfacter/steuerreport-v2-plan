@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.0rc32 - 2026-10-28 (Releasekandidat)
+
+- Automatische historische Preissuche mit nahen DefiLlama-Zielzeitpunkten
+  und belegtem Native-SOL-Fallback nur fuer native SOL-Bewegungen beziehungsweise
+  nachgewiesene native SOL-Gebuehren. Keine globale WSOL-Paritaet, kein
+  Symbolraten fuer andere Mints und keine automatische Tokenfreigabe.
+- Zeitregeln unveraendert: derselbe UTC-Tag, Quote nicht nach erstem Ereignis,
+  hoechstens eine Stunde Abstand zum urspruenglichen Ziel. Tatsaechlicher
+  Quote-Zeitpunkt und Originalbelege bleiben erhalten; keine Zukunftsquotes.
+- Automatische Fortsetzung ausstehender Preisabschnitte nach ausdruecklicher
+  Zustimmung. UI-Gesamtbudget standardmaessig 200 HTTP-Starts, einstellbar bis
+  1000; hoechstens 50 je Abschnitt einschliesslich alternativer Suche, Retry
+  und FX. Kein automatischer Preisimport, keine Uebernahme der Neuberechnung
+  oder steuerliche Entscheidung.
+- Legacy-Preiszuordnungen lesen grossgeschriebene Asset-Aliase nicht als
+  rekonstruierte Original-Mints. Erhaltene Schreibweise aus einer exakten
+  `solana:`-Provider-ID bleibt nutzbar; fehlende Identitaetsbelege bleiben offen.
+- Synthetische 20-Tage-Regression fuer den begrenzten Native-SOL-Fallback.
+  Gefundene Tagespreise schliessen keine Klassifizierungsfragen.
+  Reale Installationszahlen und private
+  Diagnoseergebnisse sind keine oeffentlichen Release-Artefakte.
+
 ## 0.2.0rc31 - 2026-10-27 (Releasekandidat)
 
 - Historische EUR-Ermittlung fuer alle erkannten Token und Jahre direkt in

@@ -32930,6 +32930,19 @@
             "title": "Max Requests",
             "type": "integer"
           },
+          "max_total_requests": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Total Requests"
+          },
           "page": {
             "default": 1,
             "maximum": 100000.0,
@@ -32972,6 +32985,15 @@
             "title": "Scope",
             "type": "string"
           },
+          "strategy": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "automatic"
+            ],
+            "title": "Strategy",
+            "type": "string"
+          },
           "year": {
             "anyOf": [
               {
@@ -33012,6 +33034,19 @@
             "title": "Max Requests",
             "type": "integer"
           },
+          "max_total_requests": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Total Requests"
+          },
           "page": {
             "default": 1,
             "maximum": 100000.0,
@@ -33042,6 +33077,15 @@
               "all_observed"
             ],
             "title": "Scope",
+            "type": "string"
+          },
+          "strategy": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "automatic"
+            ],
+            "title": "Strategy",
             "type": "string"
           },
           "year": {
@@ -81528,7 +81572,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc31"
+    "version": "0.2.0rc32"
   },
   "openapi": "3.1.0",
   "paths": {

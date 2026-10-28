@@ -1,6 +1,8 @@
 # Historische EUR-Preise
 
-Stand: 27.10.2026, Bedienablauf ab 0.2.0rc31. Keine steuerliche oder rechtliche Freigabe.
+Stand: 28.10.2026, Bedienablauf fuer 0.2.0rc32 (Releasekandidat).
+Keine steuerliche oder rechtliche Freigabe. Lokale Ergebnisse und gesonderte
+Releasebelege sind in den rc32-Releasehinweisen getrennt ausgewiesen.
 
 ## Ohne KI Bedienen
 
@@ -17,17 +19,23 @@ vollstaendig geprueft.
    Jahresuebersicht trennt erkannte Token/Tage, vorhandene Preise, abrufbare
    Preise und offene Identitaets-/Belegfragen. Die Liste ist paginiert;
    der externe Abruf ist nicht auf die sichtbare Listenseite beschraenkt.
-3. Anbieter und maximales HTTP-Budget je Abschnitt festlegen. Unter
-   Einrichtung -> Abrufsteuerung gelten weiterhin alle gemeinsamen Budgets.
-   Ein Abschnitt enthaelt maximal 50 tatsaechliche HTTP-Starts einschliesslich
-   Wiederholungen und FX. DefiLlama kann bis zu 25 Token/Tagespunkte gemeinsam
-   anfragen; die Anzahl Preise ist daher nicht die Anzahl HTTP-Starts.
+3. Anbieter, HTTP-Budget je Abschnitt und **Gesamtes HTTP-Budget** festlegen.
+   Die UI schlaegt 200 Starts insgesamt vor; einstellbar sind 1 bis 1000.
+   Pro Abschnitt bleiben hoechstens 50 tatsaechliche HTTP-Starts erlaubt.
+   Alternative Suchversuche, Wiederholungen und FX zaehlen mit. Unter
+   Einrichtung -> Abrufsteuerung gelten weiterhin alle gemeinsamen Limits.
+   Sammelabfragen koennen mehrere Tagespreise liefern; Preisanzahl ist nicht
+   HTTP-Anzahl. **Ausstehende Abschnitte automatisch fortsetzen** ist in der
+   UI zunaechst aktiviert und kann vor der Zustimmung ausgeschaltet werden.
 4. Externe Abfrage bestaetigen und **Kurse abrufen und Vorschau berechnen**
    starten. Beobachtungen sind noch keine bestaetigten Rewards oder Trades.
-5. Verbleibende **noch nicht abgefragte** Zeilen ueber den naechsten Abschnitt
-   fortsetzen. Bereits belegte Preise und EZB-Antworten bleiben in der
-   kombinierten Vorschau erhalten. Bereits fehlgeschlagene Zeilen nur ueber
-   einen ausdruecklichen erneuten Versuch abrufen; keine Endlosschleife.
+5. Bei aktivierter automatischer Fortsetzung umfasst die Zustimmung weitere
+   ausstehende Abschnitte bis zum gebundenen Gesamtbudget. Ohne diese Option
+   jeden weiteren Abschnitt bewusst bestaetigen. Bereits belegte Preise und
+   EZB-Antworten bleiben in der kombinierten Vorschau erhalten. Fehlgeschlagene
+   Zeilen nur ueber **Offene Abrufe erneut versuchen** bewusst wiederholen.
+   Budgetende, fehlender Fortschritt oder Fehler stoppen die automatische
+   Folge; keine Endlosschleife und keine automatische Preisuebernahme.
 6. Gespeicherte Vorschau, offene Gruende und Berechnungsunterschiede pruefen.
    JSON, Markdown und **Jahresdateien und Originalbelege als ZIP** herunterladen.
    ZIP enthaelt saemtliche Ergebniszeilen, nicht nur die aktuelle Seite, sowie
@@ -42,7 +50,10 @@ Status pruefen. Ein laufender Serverabruf darf nicht durch einen neuen Klick
 dupliziert werden. Nach einem abgebrochenen Serverprozess ohne fertige Vorschau
 einen neuen Plan ausdruecklich starten; Originalbelege bleiben erhalten, der
 unterbrochene Request wird nicht blind automatisch wiederholt. Fertige
-Abschnitte sind mit neuer, gebundener Vorschau fortsetzbar.
+Abschnitte sind mit neuer, gebundener Vorschau fortsetzbar. Ein Neuladen
+rekonstruiert keine Zustimmung zur automatischen Fortsetzung. Ein Wechsel
+der Ansicht stoppt weitere automatische Abschnitte; den bereits laufenden
+Serverabschnitt gegebenenfalls ueber seine Vorgangs-ID pruefen.
 
 ## Identitaet Und Fachliche Grenzen
 
@@ -57,6 +68,16 @@ Abschnitte sind mit neuer, gebundener Vorschau fortsetzbar.
   sie muss zur Mint im Originalimport passen. Ein als Asset eingegebener
   exakter Mint bleibt ebenfalls separat erhalten. Alte rein grossgeschriebene
   Aliase werden nicht als rekonstruierter Identitaetsnachweis verwendet.
+- Bei Legacy-Zuordnungen wird eine fehlende originale Schreibweise beim
+  Lesen nicht aus dem grossgeschriebenen Asset-Alias abgeleitet. Eine bereits
+  explizite Original-Mint oder die erhaltene case-sensitive Adresse einer
+  exakten `solana:`-Provider-ID bleibt nutzbar. Fehlt dieser Nachweis, bleibt
+  die Identitaet offen; keine Aenderung der Originalimporte.
+- Nur nachgewiesen natives SOL beziehungsweise native SOL-Gebuehren koennen
+  die native Referenz `coingecko:solana` als Alternative zum geplanten
+  WSOL-Pfad verwenden. Keine globale WSOL-Paritaet, keine Uebertragung auf
+  andere SPL-Mints oder Liquid-Staking-Token. Geplante und tatsaechlich
+  erfolgreiche Anbieter-ID sowie Suchversuche bleiben unterscheidbar.
 - Bestehende Preise werden nur als Tagesabdeckung gezeigt, wenn sie am selben
   UTC-Tag und nicht nach dem ersten beobachteten Ereignis liegen. Ein Kurs aus
   einem frueheren Jahr schliesst diese Beobachtungsabdeckung nicht.
@@ -79,7 +100,7 @@ Abschnitte sind mit neuer, gebundener Vorschau fortsetzbar.
 2. Portfolio & Haltefristen -> EUR-Preise ermitteln oeffnen. Direktlink:
    `#portfolio?tab=prices&year=2025`. Jahr und Asset sind wiederherstellbarer
    URL-Ansichtsstatus; keine Secrets oder persoenlichen Notizen eingeben.
-3. Anbieter und HTTP-Budget waehlen, Preisbedarf planen. Planung ist lokal,
+3. Anbieter, Abschnitts- und Gesamtbudget waehlen, Preisbedarf planen. Planung ist lokal,
    ohne externe Requests, Preisimport oder Neuberechnung. Das Jahr entspricht
    dem vorhandenen Steuerjahreskontext Europe/Berlin; Preis-/FX-Tage sind UTC.
 4. Offene Zuordnungen pruefen. Unter Preisquellen zuordnen eine vorhandene
@@ -98,12 +119,15 @@ Abschnitte sind mit neuer, gebundener Vorschau fortsetzbar.
    Neuberechnung getrennt bestaetigen und eine freigebende Person angeben.
    Erst dann erfolgt eine atomare Uebernahme mit dokumentarischer Auditspur.
    Keine Quellen-, Token-, Review- oder Jahresfreigabe wird daraus abgeleitet.
-8. Im engeren steuerlichen Modus naechsten Abschnitt neu planen. API-Standard:
-   zehn, maximal 50 gestartete
-   HTTP-Anfragen je Abruf, einschliesslich Wiederholungen und FX. Angezeigte
-   Preisanzahl ist nicht gleich HTTP-Anzahl. Im Modus Alle erkannten Token
-   stattdessen die kombinierte Vorschau fortsetzen, ohne fruehe offene Zeilen
-   immer wieder vor spaetere Tagesbedarfe zu setzen.
+8. Die UI nutzt die automatische Strategie fuer beide Preisumfaenge.
+   Ausstehende Abschnitte innerhalb der bestaetigten Suche fortsetzen;
+   fruehe fehlgeschlagene Zeilen nicht immer wieder vor spaetere Bedarfe
+   setzen. Der API-Standard bleibt `strategy=standard`, zehn und maximal
+   50 HTTP-Starts je Abschnitt. `max_total_requests` ist im API-Standard
+   nicht gesetzt; die UI bindet dagegen das gewaehlte Gesamtbudget an den
+   Auftrag. Alte Vorschauen ohne Gesamtbudget werden nicht automatisch
+   fortgesetzt. Ein erreichtes Gesamtbudget wird beim Fortsetzen nicht
+   zurueckgesetzt; ein weiterer Suchlauf erfordert eine neue bewusste Planung.
 9. Heutige Portfolio-Marktpreise separat planen/abrufen. Dieser bestehende
    Abruf kann Preise speichern und die Pipeline neu berechnen; vorherige
    Bestaetigung beachten. Er ersetzt keine fehlenden historischen Bewertungen.
@@ -117,12 +141,19 @@ Keine automatischen Anbieterabfragen beim Oeffnen oder Filtern.
 - CoinGecko `/coins/{id}/history`: EUR-Wert direkt aus der historischen
   Antwort, nach Anbieterdefinition Referenz um 00:00 UTC. Kein Intraday-
   Ausfuehrungskurs. Anbieter-ID muss zur Antwort passen.
-- DefiLlama: vorhandene exakte Token-/CoinGecko-Zuordnung, angefragter
-  Zeitpunkt maximal 30 Minuten vor dem ersten betroffenen Tagesereignis.
+- DefiLlama: vorhandene exakte Token-/CoinGecko-Zuordnung, urspruengliches
+  Ziel 30 Minuten vor dem ersten Tagesereignis, fruehestens UTC-Mitternacht.
   Die Antwort muss am selben UTC-Tag liegen, darf nicht nach diesem Ereignis
-  liegen und hoechstens eine Stunde vom angefragten Zeitpunkt abweichen.
-  Der tatsaechlich gelieferte Zeitpunkt bleibt am Preis gespeichert. Kein
-  spaeterer Kurs wird auf einen frueheren Ereigniszeitpunkt zurueckdatiert.
+  liegen und hoechstens eine Stunde vom **urspruenglichen Ziel** abweichen.
+  Die automatische Suche ergaenzt bei fehlendem oder zeitlich unpassendem
+  Quote nahe Abfragen: minus 30, plus 15 und plus 30 Minuten relativ zum
+  urspruenglichen Ziel, auf Tagesbeginn beziehungsweise vor das erste
+  Ereignis begrenzt und dedupliziert. Die Alternativen erweitern das
+  Zulaessigkeitsfenster nicht. Derselbe Selektor prueft auch native SOL-
+  Referenzen. Konfliktbelege werden nicht durch Aliaswechsel uebergangen.
+  Der tatsaechliche Quote-Zeitpunkt bleibt gespeichert; kein spaeterer
+  Kurs wird zurueckdatiert. Eine Chartserie ist kein hier zugesagter
+  implementierter Fallback, und Tagesreferenzen sind keine Ausfuehrungskurse.
 - USD/EUR: Frankfurter v2 mit ausdruecklichem EZB-Provider, nicht der gemischte
   Standardfeed. Letzter vorhandener Geschaeftstag am oder vor dem angefragten
   Tag, hoechstens sieben Kalendertage zurueck. Kursdatum bleibt sichtbar.
@@ -138,6 +169,20 @@ Keine automatischen Anbieterabfragen beim Oeffnen oder Filtern.
   Altpreisverwendung ausserhalb Solana, werden nicht still umgeschrieben.
   Eine abgearbeitete Preisliste beweist weder korrekte Tokenidentitaet noch
   vollstaendige Wallet-Historie oder eine richtige Steuererklaerung.
+
+## Synthetische Pruefung Und Releasegrenzen
+
+Fuer den begrenzten Native-SOL-Fallback besteht eine synthetische 20-Tage-
+Regression. Ein solcher Test ersetzt weder die Pruefung eigener Originalbelege
+noch einen Vollstaendigkeitsnachweis fuer alle Token oder Jahre.
+
+Tagespreisbedarfe und fachliche Hinweise sind unterschiedliche Einheiten.
+Ein gefundener Preis schliesst keine Klassifizierungsfrage oder automatische
+fachliche Freigabe ein. Reale Installationszahlen und private Einzelproben
+bleiben in privaten Diagnose-/Releasebelegen, ausserhalb des Repositorys.
+Gemeldete lokale Regressionen und Browserergebnisse sind getrennt von den
+finalen Test-/Build-, CI-, Image- und Deploymentbelegen dokumentiert; siehe
+[rc32-Nachweise und Grenzen](RELEASE_0.2.0rc32.md).
 
 ## Integritaet Und Wiederholung
 
@@ -165,6 +210,12 @@ eine eigene menschliche Aktion. Archivierte Abgabesnapshots bleiben erhalten.
 - Additive Queryfelder: `scope=tax_required|all_observed`, `page` und
   `page_size` (1 bis 100). API-Default bleibt `tax_required`, UI-Default ist
   `all_observed`. Planhash und Abrufumfang sind unabhaengig von Listenseite.
+- Ab rc32: `strategy=standard|automatic` (API-Default `standard`) und
+  `max_total_requests` (optional, 1 bis 1000). Die UI verwendet `automatic`
+  mit Gesamtbudget 200 als Voreinstellung. `max_requests` bleibt das
+  Abschnittsbudget mit API-Default 10 und Maximum 50. Bei gebundenem
+  Gesamtbudget verwendet jeder Folgeabschnitt nur dessen Rest; fehlende
+  Budgetbindung erlaubt keine automatische UI-Fortsetzung.
 - `GET/PUT /api/v1/prices/historical/mappings`: lesen / privat speichern.
 - `POST /api/v1/prices/historical/previews`: bestaetigter Abruf mit
   Request-UUID und Planhash; speichert private Belege und isolierte Vorschau.
@@ -173,7 +224,8 @@ eine eigene menschliche Aktion. Archivierte Abgabesnapshots bleiben erhalten.
 - `GET /api/v1/prices/historical/previews/{id}/status`: rein lesender
   Abrufstatus und zuletzt gespeicherter Fortschritt; keine neue Anbieterabfrage.
 - `POST /api/v1/prices/historical/previews/{id}/continue`: neue Request-UUID,
-  gebundener Vorschauhash und erneute externe Bestaetigung; optional
+  gebundener Vorschauhash und externe Bestaetigung; die UI kann diese im
+  bestaetigten automatischen Lauf innerhalb des Gesamtbudgets senden. Optional
   `retry_open=true` fuer bewusst erneut gepruefte fehlgeschlagene Zeilen.
   Vorhandene Preise werden in die neue kumulative Vorschau uebernommen,
   nicht in die produktive Finanzdatenbank.

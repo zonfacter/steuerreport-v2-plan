@@ -10,12 +10,40 @@ nicht Teil des fachlichen Planhashs. Abruf und Vollreport umfassen alle Zeilen.
 Jahresuebersichten erhalten die vorhandene Steuerjahres-/Quellperiodenregel;
 Preiszeitpunkte bleiben UTC.
 
+Ab rc32 ergaenzen `strategy=standard|automatic` (API-Default `standard`)
+und das optionale `max_total_requests` (1 bis 1000) den Queryvertrag.
+`max_requests` bleibt das Abschnittsbudget (Default 10, Maximum 50).
+Die UI verwendet `automatic`, Gesamtbudget 200 als Voreinstellung und eine
+abschaltbare automatische Fortsetzung ausstehender Abschnitte. Das gebundene
+Gesamtbudget zaehlt kumulativ gestartete HTTP-Anfragen einschliesslich
+alternativer Suche, Retry und FX; Folgeabschnitte erhalten nur den Rest.
+Ohne hinterlegtes Gesamtbudget keine automatische UI-Fortsetzung.
+
+Die automatische DefiLlama-Suche ergaenzt nahe Zielzeitpunkte und nur fuer
+belegtes natives SOL beziehungsweise native SOL-Gebuehren eine native
+`coingecko:solana`-Referenz. Kein globaler WSOL-Alias fuer originale SPL-Mints.
+Jeder Quote bleibt am selben UTC-Tag, nicht nach dem ersten Ereignis und
+maximal 3600 Sekunden vom urspruenglichen Zielzeitpunkt entfernt; Such-
+alternativen verschieben dieses Fenster nicht. Suchversuche und erfolgreich
+aufgeloeste Provider-ID bleiben in der Vorschau nachvollziehbar.
+
+Gespeicherte Legacy-Zuordnungen rekonstruieren keine Original-Mint aus einem
+grossgeschriebenen Asset-Alias. Explizite Original-Mints beziehungsweise die
+erhaltene Schreibweise einer exakten `solana:`-Provider-ID bleiben nutzbar;
+fehlende Belege oder Konflikte bleiben offen. Keine Originaldatenmigration.
+
 Additive Endpunkte: lesendes `GET /previews/{id}/status`, ausdrueckliches
-`POST /previews/{id}/continue` mit neuer UUID, Vorschauhash und erneutem
-externem Consent sowie lesende `/report.json`, `/report.md`, `/report.zip`.
+`POST /previews/{id}/continue` mit neuer UUID, Vorschauhash und externem
+Consent sowie lesende `/report.json`, `/report.md`, `/report.zip`. Bei
+automatischer UI-Fortsetzung umfasst der bestaetigte Suchlauf mehrere solche
+Abschnitte innerhalb des Gesamtbudgets; ein Neuladen stellt keinen Consent her.
 Fortsetzen sammelt `pending`-Zeilen; `retry_open=true` verlangt einen bewussten
 erneuten Versuch fuer fehlgeschlagene Zeilen. Ergebnis ist eine neue,
 hashgebundene kumulative Vorschau, keine produktive Preisuebernahme.
+Die automatische Strategie nutzt diese Sammlung fuer beide Preisumfaenge.
+Budgetende, Fehler oder fehlender Fortschritt stoppen die automatische Folge.
+Keine automatische Preisuebernahme, Neuberechnungsuebernahme oder
+steuerliche Entscheidung.
 Eine volle HTTP-Anfragegrenze bedeutet nicht fehlenden Kurs: solche Zeilen
 bleiben `pending`, Anbieter-/Zeit-/Wertfehler werden `open`.
 Vorschauen muessen unveraenderte Rohdaten, Canonical Events, Entscheidungen

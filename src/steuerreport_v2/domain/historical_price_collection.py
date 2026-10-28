@@ -11,12 +11,31 @@ from steuerreport_v2.importers.source_history_importer import canonical_json
 
 UTC = timezone.utc
 POINTS_PER_BATCH = 25
+WSOL_ID = "solana:So11111111111111111111111111111111111111112"
+SEARCH_FAILURES = {"historical_price_quote_missing", "historical_price_timestamp_mismatch"}
 
 
 def quote_target(row):
     midnight = datetime.combine(date.fromisoformat(row["price_date"]), time(), UTC)
     first = datetime.fromisoformat(row["first_event_at"])
     return max(midnight, first - timedelta(minutes=30))
+
+
+def nearby_targets(row):
+    midnight = int(datetime.combine(date.fromisoformat(row["price_date"]), time(), UTC).timestamp())
+    first = int(datetime.fromisoformat(row["first_event_at"]).timestamp())
+    target = int(quote_target(row).timestamp())
+    return sorted({max(midnight, min(first - 1, target + offset)) for offset in (-1800, 900, 1800)})
+
+
+def fallback_candidates(row):
+    result = [(row["provider_id"], "nearby")]
+    native = (row.get("identity_basis") == "native_sol_reference" and not row.get("mints"))
+    native_fee = (row.get("sources") == ["solana_rpc"] and row.get("event_types") == ["fee"]
+                  and set(row.get("mints", [])) <= {WSOL_ID.split(":", 1)[1]})
+    if row["asset"] == "SOL" and (native or native_fee) and row["provider_id"] in {WSOL_ID, "coingecko:wrapped-solana"}:
+        result.append(("coingecko:solana", "native_sol"))
+    return result
 
 
 def historical_quote(payload, row, positive, fail):
@@ -78,13 +97,14 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
     fx_errors = {}
     pending = [row for row in rows if row["status"] == "pending"]
 
-    def finish(row, eur, instant, fx_day, linked, fx_sha=None):
-        hashes = list(dict.fromkeys([*(item["sha256"] for item in linked), *([fx_sha] if fx_sha else [])]))
+    def finish(row, eur, instant, fx_day, linked, fx_sha=None, resolved_provider_id=None, search="primary"):
+        hashes = list(dict.fromkeys([*row.get("evidence_sha256", []), *(item["sha256"] for item in linked), *([fx_sha] if fx_sha else [])]))
         identity = hashlib.sha256(canonical_json(hashes).encode()).hexdigest()
-        source = f"historical:v2:{query.provider}:{row['provider_id']}:day:{row['price_date']}:evidence:{identity}"
+        provider_id = resolved_provider_id or row["provider_id"]
+        source = f"historical:v2:{query.provider}:{provider_id}:day:{row['price_date']}:evidence:{identity}"
         prices.append(PricePointCreate(asset=row["asset"], price_eur=eur, priced_at=instant, source=source, confidence=Decimal("0.95")))
         row.update(status="fetched", reason=None, price_eur=str(eur), priced_at=instant.isoformat(), fx_date=fx_day,
-                   source=source, evidence_sha256=hashes)
+                   source=source, evidence_sha256=hashes, resolved_provider_id=provider_id, resolved_search=search, lookup_stage="complete")
 
     with scope_factory(max_requests=query.max_requests) as scope, client_factory(timeout=20) as client:
         def checkpoint(phase):
@@ -108,7 +128,8 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
                 try:
                     payload, linked = request("fx", "https://api.frankfurter.dev/v2/providers/ecb/rates",
                                               {"base": "USD", "quotes": "EUR", "from": (min(days) - timedelta(days=7)).isoformat(), "to": max(days).isoformat()})
-                    historical_fx(payload, day, positive, fail)
+                    if not isinstance(payload, list) or not payload:
+                        fail("historical_price_fx_date_invalid")
                 except RequestLimitError:
                     raise
                 except Exception as error:
@@ -120,6 +141,33 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
             payload = json.loads(content, parse_float=Decimal)
             rate, fx_day = historical_fx(payload, day, positive, fail)
             return rate, fx_day, entry["sha256"]
+
+        def resolve(row, payload, provider_id, search, linked):
+            attempt = {"provider_id": provider_id, "search": search, "evidence_sha256": [entry["sha256"] for entry in linked]}
+            row.setdefault("lookup_attempts", []).append(attempt)
+            row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *attempt["evidence_sha256"]]))
+            try:
+                usd, instant = historical_quote(payload, {**row, "provider_id": provider_id}, positive, fail)
+                rate, fx_day, fx_sha = row["_fx"]
+                with localcontext() as arithmetic:
+                    arithmetic.prec = 60
+                    eur = positive((usd * rate).quantize(Decimal("0.000000000000000001")))
+                attempt.update(status="fetched", reason=None)
+                finish(row, eur, instant, fx_day, linked, fx_sha, provider_id, search)
+                return True
+            except Exception as error:
+                mark_open(row, error)
+                attempt.update(status="open", reason=row["reason"])
+                return False
+
+        def batch_request(candidates):
+            coins = defaultdict(set)
+            for row, provider_id, search in candidates:
+                coins[provider_id].update(nearby_targets(row) if search != "primary" else [int(quote_target(row).timestamp())])
+                if search == "native_sol":
+                    coins[provider_id].add(int(quote_target(row).timestamp()))
+            return request("defillama", "https://coins.llama.fi/batchHistorical",
+                           {"coins": canonical_json({key: sorted(values) for key, values in sorted(coins.items())}), "searchWidth": "1h"})
 
         if query.provider == "coingecko":
             for row in pending:
@@ -151,34 +199,46 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
                     except Exception as error:
                         mark_open(row, error)
                         row["evidence_sha256"] = [item["sha256"] for item in evidence[before:]]
-                if not ready or scope.budget.requests_started >= query.max_requests:
+                if scope.budget.requests_started >= query.max_requests:
                     checkpoint("Abrufabschnitt beendet")
                     break
-                coins = defaultdict(set)
-                for row in ready:
-                    coins[row["provider_id"]].add(int(quote_target(row).timestamp()))
-                linked = []
-                before = len(evidence)
-                try:
-                    payload, linked = request("defillama", "https://coins.llama.fi/batchHistorical",
-                                              {"coins": canonical_json({key: sorted(values) for key, values in sorted(coins.items())}), "searchWidth": "1h"})
-                    for row in ready:
-                        try:
-                            usd, instant = historical_quote(payload, row, positive, fail)
-                            rate, fx_day, fx_sha = row["_fx"]
-                            with localcontext() as arithmetic:
-                                arithmetic.prec = 60
-                                eur = positive((usd * rate).quantize(Decimal("0.000000000000000001")))
-                            finish(row, eur, instant, fx_day, linked, fx_sha)
-                        except Exception as error:
+                if not ready:
+                    continue
+                primary = [row for row in ready if row.get("lookup_stage") != "fallback"]
+                if primary:
+                    before = len(evidence)
+                    try:
+                        payload, linked = batch_request([(row, row["provider_id"], "primary") for row in primary])
+                        for row in primary:
+                            if (not resolve(row, payload, row["provider_id"], "primary", linked)
+                                    and query.strategy == "automatic" and row["reason"] in SEARCH_FAILURES):
+                                row.update(status="pending", lookup_stage="fallback")
+                    except RequestLimitError:
+                        break
+                    except Exception as error:
+                        for row in primary:
                             mark_open(row, error)
-                            row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *(item["sha256"] for item in linked)]))
-                except RequestLimitError:
-                    break
-                except Exception as error:
-                    for row in ready:
-                        mark_open(row, error)
-                        row["evidence_sha256"] = [item["sha256"] for item in evidence[before:]]
+                            row["evidence_sha256"] = [item["sha256"] for item in evidence[before:]]
+                alternatives = [row for row in ready if row["status"] == "pending" and row.get("lookup_stage") == "fallback"]
+                if alternatives and scope.budget.requests_started < query.max_requests:
+                    before = len(evidence)
+                    try:
+                        payload, linked = batch_request([(row, identifier, search) for row in alternatives for identifier, search in fallback_candidates(row)])
+                        for row in alternatives:
+                            for identifier, search in fallback_candidates(row):
+                                if resolve(row, payload, identifier, search, linked):
+                                    break
+                                if row["reason"] not in SEARCH_FAILURES:
+                                    break
+                            if row["status"] != "fetched":
+                                row["lookup_stage"] = "exhausted"
+                    except RequestLimitError:
+                        break
+                    except Exception as error:
+                        for row in alternatives:
+                            mark_open(row, error)
+                            row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *(item["sha256"] for item in evidence[before:])]))
+                            row["lookup_stage"] = "exhausted"
                 checkpoint("Kurse abrufen")
         for row in rows:
             row.pop("_fx", None)

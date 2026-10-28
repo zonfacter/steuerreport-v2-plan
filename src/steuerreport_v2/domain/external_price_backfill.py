@@ -427,7 +427,7 @@ class ExternalPriceBackfillService:
         with self.store.connect() as con:
             configured = con.execute("select value_json from admin_settings where starts_with(key, 'price.mapping.')").fetchall()
         for row in configured:
-            mapping = PriceMapping.model_validate_json(row[0])
+            mapping = PriceMapping.model_validate_json(row[0], context={"stored_mapping": True})
             result.append(_PriceAsset(symbol=mapping.asset, coingecko_id=mapping.coingecko_id,
                 defillama_id=mapping.defillama_id, aliases=(mapping.asset,)))
         return result

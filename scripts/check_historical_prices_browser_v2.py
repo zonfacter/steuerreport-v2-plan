@@ -64,8 +64,10 @@ def main():
         limiter = RequestLimiter(state_root=state)
         limiter.write_config(RequestLimitsConfig(default_profile=RequestLimitProfile(requests_per_second=100, requests_per_minute=6000, burst=100)), expected_revision=0)
         provider_calls = []
+        automatic_fallback = [False]
         def provider(request):
-            provider_calls.append({"host": request.url.host, "path": request.url.path})
+            call = {"host": request.url.host, "path": request.url.path}
+            provider_calls.append(call)
             if request.url.host == "api.frankfurter.dev":
                 first, last = date.fromisoformat(request.url.params["from"]), date.fromisoformat(request.url.params["to"])
                 return httpx.Response(200, json=[{"base": "USD", "quote": "EUR", "date": (first + timedelta(days=offset)).isoformat(), "rate": "0.92"}
@@ -73,6 +75,10 @@ def main():
             assert request.url.host == "coins.llama.fi", "Unerwarteter Mock-Provider"
             assert request.url.path == "/batchHistorical"
             coins = json.loads(request.url.params["coins"])
+            call["coins"] = coins
+            if automatic_fallback[0]:
+                # WSOL bleibt auch bei der nahen Suche leer; nur die belegte native Referenz liefert Preise.
+                coins = {identifier: timestamps for identifier, timestamps in coins.items() if identifier == "coingecko:solana"}
             return httpx.Response(200, json={"coins": {identifier: {"prices": [{"timestamp": timestamp, "price": "150", "confidence": "0.99"} for timestamp in timestamps]} for identifier, timestamps in coins.items()}})
         stack.enter_context(patch.object(module, "managed_client", lambda **kw: managed_client(transport=httpx.MockTransport(provider), limiter=limiter, **kw)))
         app = FastAPI()
@@ -81,6 +87,10 @@ def main():
         fixture = WorkspaceFixture()
         fixture.fresh = True
         service = HistoricalPriceService(store)
+        def source_snapshot():
+            return {"raw": [row.model_dump(mode="json") for row in store.list_raw_objects(limit=None)],
+                    "canonical": [row.model_dump(mode="json") for row in store.list_canonical_events()]}
+        original_sources = source_snapshot()
         before = service._revision()
         class Handler(SimpleHTTPRequestHandler):
             def do_GET(self):
@@ -103,8 +113,9 @@ def main():
         stack.callback(server.server_close)
         stack.callback(server.shutdown)
         origin = "http://127.0.0.1:" + str(server.server_port)
-        calls, errors, external, held = [], [], [], []
+        calls, errors, external, held, collected, held_continue = [], [], [], [], [], []
         hold_plan = [True]
+        hold_continue = [False]
         def respond(route):
             request = route.request
             parsed = urlparse(request.url)
@@ -112,11 +123,18 @@ def main():
                 external.append(parsed.hostname)
                 route.abort()
             elif parsed.path.startswith("/api/v1/prices/historical"):
-                calls.append({"method": request.method, "path": parsed.path})
                 if parsed.path.endswith("/plan") and hold_plan[0]:
                     held.append(route)
                     return
+                if parsed.path.endswith("/continue") and hold_continue[0]:
+                    held_continue.append(route)
+                    return
+                body = json.loads(request.post_data) if request.post_data else None
+                calls.append({"method": request.method, "path": parsed.path, "body": body})
                 response = client.request(request.method, parsed.path, content=request.post_data, headers={"Content-Type": "application/json"})
+                if request.method == "POST" and (parsed.path.endswith("/previews") or parsed.path.endswith("/continue")):
+                    assert response.status_code == 200, response.text
+                    collected.append(response.json()["data"])
                 route.fulfill(status=response.status_code, body=response.content, content_type="application/json")
             elif parsed.path.startswith("/api/"):
                 if not fixture.handle(route):
@@ -134,7 +152,11 @@ def main():
             region = page.get_by_role("region", name="EUR-Preise ermitteln", exact=True)
             expect(region).to_be_visible()
             expect(region.get_by_role("combobox", name="Preisumfang", exact=True)).to_have_value("all_observed")
-            region.get_by_label("Maximale HTTP-Anfragen", exact=True).fill("2")
+            region.get_by_label("HTTP-Anfragen pro Abschnitt", exact=True).fill("2")
+            expect(region.get_by_label("Gesamtes HTTP-Budget", exact=True)).to_have_value("200")
+            auto_continue = region.get_by_role("checkbox", name="Ausstehende Abschnitte automatisch fortsetzen", exact=True)
+            expect(auto_continue).to_be_checked()
+            auto_continue.uncheck()
             expect(region.get_by_role("button", name="Kurse abrufen und Vorschau berechnen", exact=True)).to_have_count(0)
             region.get_by_role("button", name="Preisbedarf planen", exact=True).click()
             expect(region.get_by_role("status")).to_contain_text("Preisbedarf planen läuft")
@@ -166,7 +188,7 @@ def main():
             expect(apply).to_be_disabled()
             expect(region.get_by_text("2 noch nicht abgerufen", exact=False)).to_be_visible()
             expect(region.get_by_role("button", name="Nächsten Preisabschnitt abrufen", exact=True)).to_be_disabled()
-            region.get_by_role("checkbox", name="Für diesen weiteren Abschnitt", exact=False).check()
+            region.get_by_role("checkbox", name="Weitere externe Preis-", exact=False).check()
             region.get_by_role("button", name="Nächsten Preisabschnitt abrufen", exact=True).click()
             expect(region.get_by_text("27 belegte EUR-Preise", exact=False)).to_be_visible()
             expect(region.get_by_text("0 noch nicht abgerufen", exact=False)).to_be_visible()
@@ -218,14 +240,122 @@ def main():
             expect(page).to_have_url(re.compile(r"[?&]year=2024(?:&|$)"))
             page.reload(wait_until="domcontentloaded")
             expect(region.get_by_role("combobox", name="Jahr", exact=True)).to_have_value("2024")
+            assert source_snapshot() == original_sources and len(store.list_canonical_events()) == 29
+
+            # Erst nach dem unveraenderten 29-Ereignisse-Ablauf neue, getrennte Gebuehren anlegen.
+            wsol_mint = "So11111111111111111111111111111111111111112"
+            fee_count = 3
+            fee_batch = store.create_import_batch(ImportBatchCreate(source="solana_rpc", filename="synthetic-native-sol-fees.json"))
+            for index in range(fee_count):
+                fee_raw = store.add_raw_object(fee_batch.batch_id, RawObjectCreate(payload_json=json.dumps({"mint": wsol_mint, "history_mapper_version": "2", "synthetic": True})))
+                store.add_canonical_event(CanonicalEventCreate(source="solana_rpc", source_ref=f"synthetic-native-sol-fee-{index}",
+                    raw_object_id=fee_raw.raw_object_id, event_time=datetime(2024, 6, 2, 12, tzinfo=timezone.utc) + timedelta(days=index),
+                    event_type="fee", asset="SOL", quantity=Decimal("0.000005")))
+            automatic_sources = source_snapshot()
+            automatic_revision = service._revision()
+            existing_prices = store.list_price_points()
+            automatic_calls_start, automatic_provider_start, automatic_previews_start = len(calls), len(provider_calls), len(collected)
+            automatic_fallback[0] = True
+            hold_continue[0] = True
+            page.reload(wait_until="domcontentloaded")
+            expect(auto_continue).to_be_checked()
+            region.get_by_role("combobox", name="Preisumfang", exact=True).select_option("tax_required")
+            region.get_by_label("Asset", exact=True).fill("SOL")
+            region.get_by_label("HTTP-Anfragen pro Abschnitt", exact=True).fill("2")
+            region.get_by_label("Gesamtes HTTP-Budget", exact=True).fill("10")
+            region.get_by_role("button", name="Preisbedarf planen", exact=True).click()
+            expect(region.get_by_text(f"{fee_count} fehlende Asset-Tagespreise", exact=False)).to_be_visible()
+            assert len(provider_calls) == automatic_provider_start
+            initial_collect = region.get_by_role("button", name="Kurse abrufen und Vorschau berechnen", exact=True)
+            expect(initial_collect).to_be_disabled()
+            consent = region.get_by_role("checkbox", name="Externe Preis- und", exact=False)
+            expect(consent).not_to_be_checked()
+            expect(consent).to_have_accessible_name(re.compile(r"gesamten Budget von 10 HTTP-Anfragen.*automatisch fortgesetzt.*Kein automatischer Import"))
+            consent.check()
+            initial_collect.click()
+            expect(region.get_by_text(f"{fee_count} noch nicht abgerufen", exact=False)).to_be_visible()
+            expect(region.get_by_text("Alternative Zeitpunkte oder eine nachgewiesene native SOL-Referenz", exact=False).first).to_be_visible()
+            expect(region.get_by_text("Aktueller Abschnitt: 2", exact=False)).to_be_visible()
+            expect(region.get_by_role("status").filter(has_text="Gesamt-HTTP: 2 / 10")).to_be_visible()
+            page.wait_for_function("document.querySelector('[aria-label=\"EUR-Preise ermitteln\"]').getAttribute('aria-busy') === 'true'")
+            assert len(held_continue) == 1, "Die Fortsetzung muss ohne weiteren Klick starten"
+            first = collected[-1]
+            assert first["query"]["scope"] == "tax_required" and first["query"]["strategy"] == "automatic"
+            assert first["query"]["max_requests"] == 2 and first["max_total_requests"] == 10
+            assert first["prices_count"] == 0 and first["pending_count"] == fee_count
+            assert first["requests_started"] == first["section_requests_started"] == 2
+            assert first["collection_complete"] is False
+            assert all(row["status"] == "pending" and row["lookup_stage"] == "fallback" for row in first["rows"])
+            assert not any(call["path"].endswith("/apply") for call in calls[automatic_calls_start:])
+            assert store.list_price_points() == existing_prices and source_snapshot() == automatic_sources
+            hold_continue[0] = False
+            for route in held_continue:
+                respond(route)
+            expect(region.get_by_text(f"{fee_count} belegte EUR-Preise", exact=False)).to_be_visible()
+            expect(region).to_have_attribute("aria-busy", "false")
+            expect(region.get_by_text("0 noch nicht abgerufen", exact=False)).to_be_visible()
+            expect(region.get_by_text("Gesamt-HTTP: 3 / 10", exact=False)).to_be_visible()
+            expect(region.get_by_text("Letzter Abschnitt: 1 HTTP-Anfragen", exact=False)).to_be_visible()
+            expect(region.get_by_text("Belegte native SOL-Preisreferenz", exact=False)).to_have_count(fee_count)
+            expect(apply).to_be_disabled()
+            expect(region.get_by_label("Freigebende Person", exact=True)).to_have_value("")
+            expect(region.get_by_role("checkbox", name="Die ausgewiesenen EUR-Preise", exact=False)).not_to_be_checked()
+            expect(region.get_by_role("checkbox", name="Die gezeigte Neuberechnung", exact=False)).not_to_be_checked()
+            final = collected[-1]
+            assert len(collected) - automatic_previews_start == 2
+            assert final["parent_preview_id"] == first["id"] and final["id"] != first["id"]
+            assert final["requests_started"] == 3 and final["section_requests_started"] == 1
+            assert final["prices_count"] == fee_count and final["pending_count"] == final["open_count"] == 0
+            assert final["collection_complete"] is True and final["applied"] is False
+            assert final["fx_series"] == first["fx_series"]
+            for row in final["rows"]:
+                assert row["provider_id"] == "solana:" + wsol_mint
+                assert row["resolved_provider_id"] == "coingecko:solana" and row["status"] == "fetched"
+                assert ":coingecko:solana:day:" in row["source"]
+                assert [attempt["search"] for attempt in row["lookup_attempts"]] == ["primary", "nearby", "native_sol"]
+                assert row["lookup_attempts"][-1]["status"] == "fetched"
+            automatic_calls = calls[automatic_calls_start:]
+            collection_calls = [call for call in automatic_calls if call["body"] and "request_id" in call["body"]]
+            assert len(collection_calls) == 2
+            assert collection_calls[1]["path"].endswith(f"/{first['id']}/continue")
+            assert collection_calls[1]["body"] == {"request_id": final["id"], "preview_sha256": first["preview_sha256"],
+                "confirm_external_request": True, "retry_open": False}
+            assert not any(call["path"].endswith("/apply") for call in automatic_calls)
+            automatic_provider_calls = provider_calls[automatic_provider_start:]
+            assert len(automatic_provider_calls) == 3
+            assert sum(call["host"] == "api.frankfurter.dev" for call in automatic_provider_calls) == 1
+            primary, fallback = [call["coins"] for call in automatic_provider_calls if call["host"] == "coins.llama.fi"]
+            assert set(primary) == {"solana:" + wsol_mint}
+            assert set(fallback) == {"solana:" + wsol_mint, "coingecko:solana"}
+            assert store.list_price_points() == existing_prices and service._revision() == automatic_revision
+            assert source_snapshot() == automatic_sources
+            saved_id = page.evaluate("sessionStorage.getItem('steuerreport:historical-price-request')")
+            assert saved_id == final["id"] and re.fullmatch(r"[a-f0-9-]{36}", saved_id)
+            table = region.get_by_role("table", name="Historische EUR-Preisbedarfe und Belege", exact=True)
+            first_identity = table.locator("tbody tr").first.locator("td").first
+            expect(first_identity).to_contain_text("coingecko:solana")
+            expect(first_identity).not_to_contain_text("solana:" + wsol_mint)
+            table.locator("summary").filter(has_text="Technische Abrufversuche").first.click()
+            expect(table.get_by_text("Versuch 3:", exact=False).first).to_contain_text("native_sol")
+            for width in (390, 768, 1280, 1440):
+                page.set_viewport_size({"width": width, "height": 1000})
+                if width <= 820:
+                    expect(page.locator("#main-navigation")).to_be_hidden()
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), ("auto-fallback", width)
+                page.evaluate("window.scrollTo(0, 0)")
+                page.screenshot(path=str(args.output / f"auto-fallback-{width}.png"), full_page=True)
             page.wait_for_load_state("networkidle")
             assert not external and not errors, (external, errors)
             context.close()
             browser.close()
         report = {"passed": True, "actual_price_router": True, "provider_boundary": "httpx.MockTransport", "real_external_requests": 0,
-                  "mock_provider_calls": len(provider_calls), "canonical_events_unchanged": len(store.list_canonical_events()) == 29,
-                  "viewports": [390, 768, 1280, 1440], "screenshots": 8,
-                  "checks": ["loading_not_empty", "all_observed_transfers_and_fee_independent", "planning_and_pagination_read_only", "collection_not_limited_to_visible_page", "three_years", "fixed_eur_coverage", "original_mint_binding", "explicit_external_consent", "preview_isolated", "limited_section_and_cumulative_continue", "two_approvals_required", "complete_year_zip", "reload_status_no_refetch", "atomic_apply", "reload_year_and_saved_preview", "mapping_ui_roundtrip_preserves_original_mint", "year_url_roundtrip"], "browser_errors": errors}
+                  "mock_provider_calls": len(provider_calls), "canonical_events_unchanged": source_snapshot() == automatic_sources,
+                  "raw_objects_unchanged": source_snapshot()["raw"] == automatic_sources["raw"],
+                  "initial_events": 29, "additional_native_sol_fee_events": fee_count,
+                  "automatic_fallback": {"scope": "tax_required", "strategy": "automatic", "section_budget": 2, "total_budget": 10,
+                      "sections": 2, "http_requests": 3, "fx_requests": 1, "resolved_provider_id": "coingecko:solana", "auto_applied": False},
+                  "viewports": [390, 768, 1280, 1440], "screenshots": 12,
+                  "checks": ["loading_not_empty", "all_observed_transfers_and_fee_independent", "planning_and_pagination_read_only", "collection_not_limited_to_visible_page", "three_years", "fixed_eur_coverage", "original_mint_binding", "explicit_external_consent", "preview_isolated", "manual_sections_opt_out", "limited_section_and_cumulative_continue", "two_approvals_required", "complete_year_zip", "reload_status_no_refetch", "atomic_apply", "reload_year_and_saved_preview", "mapping_ui_roundtrip_preserves_original_mint", "year_url_roundtrip", "automatic_tax_required_pending_continue", "primary_missing_nearby_native_sol_fallback", "actual_resolved_provider_visible", "continue_reuses_fx", "no_automatic_apply", "raw_and_canonical_preserved", "auto_fallback_four_widths_no_overflow"], "browser_errors": errors}
         (args.output / "result.json").write_text(json.dumps(report, indent=2) + "\n")
         print(json.dumps(report))
 

@@ -230,6 +230,21 @@ Preisbedarfe bleiben ein eigener Modus. Preisuebernahme setzt weiterhin
 Vorschau, menschliche Bestaetigung und unveraenderte Ereignisklassifikationen
 voraus. Ein Preisabruf schliesst keine ungeklaerten Reward-/Trade-Zuordnungen.
 
+Ab rc32 ergaenzt die automatische Preissuche nahe historische Zielzeitpunkte
+und nur fuer belegtes natives SOL beziehungsweise native SOL-Gebuehren eine
+native Referenz; keine globale SOL-/WSOL-Paritaet. Quotes bleiben am selben
+UTC-Tag, nicht nach dem ersten Ereignis und hoechstens eine Stunde vom
+urspruenglichen Ziel entfernt. Legacy-Mint-Zuordnungen duerfen ihre originale
+Schreibweise nicht aus grossgeschriebenen Asset-Aliasen rekonstruieren.
+
+Vor dem Start Abschnitts- und Gesamtbudget pruefen: UI-Vorgabe 200 HTTP-Starts
+insgesamt, einstellbar von 1 bis 1000, maximal 50 je Abschnitt einschliesslich
+alternativer Suche, Retry und FX. Bei aktivierter automatischer Fortsetzung
+deckt die ausdrueckliche Zustimmung weitere ausstehende Abschnitte innerhalb
+des Gesamtbudgets ab. Budgetende, Fehler oder fehlender Fortschritt stoppen
+die Folge. Kein automatischer Preisimport, keine Uebernahme der Neuberechnung
+oder steuerliche Entscheidung; persoenliche Freigabe bleibt separat.
+
 Ein Update importiert keine bereits abgerufenen Transaktionen. Fertige alte
 Historienvorschauen vor Importfreigabe ausdruecklich lokal erneut berechnen;
 Originalbelege bleiben erhalten.

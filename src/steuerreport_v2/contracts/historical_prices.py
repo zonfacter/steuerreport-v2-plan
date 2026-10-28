@@ -5,7 +5,7 @@ import re
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
 class PriceMapping(BaseModel):
@@ -17,9 +17,17 @@ class PriceMapping(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def preserve_address_identity(cls, value):
-        if isinstance(value, dict) and not value.get("solana_mint"):
-            original = value.get("asset")
+    def preserve_address_identity(cls, value, info: ValidationInfo):
+        if isinstance(value, dict) and value.get("solana_mint") is None:
+            if info.context and info.context.get("stored_mapping"):
+                # Gespeicherte Asset-Aliase haben ihre originale Schreibweise verloren.
+                identifier = value.get("defillama_id")
+                original = (
+                    identifier.removeprefix("solana:")
+                    if isinstance(identifier, str) and identifier.startswith("solana:") else None
+                )
+            else:
+                original = value.get("asset")
             if isinstance(original, str) and re.fullmatch(r"[1-9A-HJ-NP-Za-km-z]{32,44}", original):
                 return {**value, "solana_mint": original}
         return value
@@ -39,6 +47,8 @@ class HistoricalPriceQuery(BaseModel):
     scope: Literal["tax_required", "all_observed"] = "tax_required"
     page: int = Field(default=1, ge=1, le=100_000)
     page_size: int = Field(default=25, ge=1, le=100)
+    strategy: Literal["standard", "automatic"] = "standard"
+    max_total_requests: int | None = Field(default=None, ge=1, le=1000)
 
     @field_validator("assets")
     @classmethod
