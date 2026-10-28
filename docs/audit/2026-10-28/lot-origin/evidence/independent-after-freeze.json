@@ -1,0 +1,30 @@
+{
+  "after": {
+    "contracts/bmf_event_evidence.py": "66235eb71a7f56898d8f4336a8b999ed9730ca00504942324ea60924cefbd152",
+    "contracts/bmf_fifo_staging.py": "6277d8584e801ee54bc6a6c84c5f1cbe353d1798d12bd0e708296de3d3162801",
+    "contracts/business_inventory.py": "ebda6ab90a5017296982b25143f7ba0568c6eeb9b3154b2aa1eeb8d03cd2b5f6",
+    "domain/bmf_event_evidence.py": "867a7ef25af127123fed5e1424c47701d0bdee6cffe2ccbc6e2d25e880bf8472",
+    "domain/bmf_fifo_staging.py": "1519a5e830c9e514b4ac4b1228fa30ed88cb803243be5d31b71364d812e762f2",
+    "domain/business_inventory.py": "b86036918040b7bba48e3326e632816595ddae22edbff65e62b343243a0d6334",
+    "domain/lot_origin.py": "2533e8c980ef66c67fa2f7342ee89b8559dadf99b6728ffcf96048d161aafbb0",
+    "domain/review.py": "b84248622cdd934618cf5bd95ee57b2df23807fee856fb512877f173e95df9a7",
+    "domain/tax.py": "05116b47d735c7838dbd3203340f8eee0aecc813531ee1158edcc50a0d2c3072",
+    "domain/tax_wallet_fifo.py": "d1517acbd0f742a2a25fb8c18839b4b35ffe5bca2a7ef4e4d169e5df25b16981",
+    "domain/token_conversion.py": "b347a56bb0d0a44d5cac15dbd384af453cadb6bbc56ef8903289b61c5fd2fde0"
+  },
+  "before": {
+    "contracts/bmf_event_evidence.py": "66235eb71a7f56898d8f4336a8b999ed9730ca00504942324ea60924cefbd152",
+    "contracts/bmf_fifo_staging.py": "6277d8584e801ee54bc6a6c84c5f1cbe353d1798d12bd0e708296de3d3162801",
+    "contracts/business_inventory.py": "ebda6ab90a5017296982b25143f7ba0568c6eeb9b3154b2aa1eeb8d03cd2b5f6",
+    "domain/bmf_event_evidence.py": "867a7ef25af127123fed5e1424c47701d0bdee6cffe2ccbc6e2d25e880bf8472",
+    "domain/bmf_fifo_staging.py": "1519a5e830c9e514b4ac4b1228fa30ed88cb803243be5d31b71364d812e762f2",
+    "domain/business_inventory.py": "b86036918040b7bba48e3326e632816595ddae22edbff65e62b343243a0d6334",
+    "domain/lot_origin.py": "2533e8c980ef66c67fa2f7342ee89b8559dadf99b6728ffcf96048d161aafbb0",
+    "domain/review.py": "b84248622cdd934618cf5bd95ee57b2df23807fee856fb512877f173e95df9a7",
+    "domain/tax.py": "05116b47d735c7838dbd3203340f8eee0aecc813531ee1158edcc50a0d2c3072",
+    "domain/tax_wallet_fifo.py": "d1517acbd0f742a2a25fb8c18839b4b35ffe5bca2a7ef4e4d169e5df25b16981",
+    "domain/token_conversion.py": "b347a56bb0d0a44d5cac15dbd384af453cadb6bbc56ef8903289b61c5fd2fde0"
+  },
+  "retained_bytes": 40368031,
+  "unchanged": true
+}

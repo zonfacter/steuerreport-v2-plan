@@ -1,0 +1,865 @@
+[
+  {
+    "fiscal_approval": false,
+    "id": "G01",
+    "implementation_scope": "EUR-Kauf, Teilverkauf, Restbasis, Jahreswerte",
+    "lot_origin_tests": [],
+    "open": "Separater PDF-Fachzahlenabgleich aller Faelle",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G01_csv_fifo_restbasis_und_jahreswerte",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalprobe"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G02",
+    "implementation_scope": "EUR-Erwerbs- und Verkaufskosten einmalig",
+    "lot_origin_tests": [],
+    "open": "Individuelle steuerliche Kostenrolle",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G02_eur_erwerbskosten_und_verkaufskosten",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalprobe und neue Fee-Proben beider Engines"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G03",
+    "implementation_scope": "Erwerbsassetgebuehr reduziert Nettomenge, keine zweite Verwertung",
+    "lot_origin_tests": [],
+    "open": "Nicht jeder Connector-/Nettoexportvertrag",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G03_erwerbsassetgebuehr_netto_menge",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalprobe plus neue Fee-Proben"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G04",
+    "implementation_scope": "Drittasset-FIFO-Verbrauch, historischer EUR-Wert, Kostenrolle und eigene Verwertung",
+    "lot_origin_tests": [],
+    "open": "Swapkostenrolle bleibt gesperrt; keine individuelle Kostenbasisherkunft freigegeben",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G04_drittassetgebuehr_lotverbrauch_teilprobe",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G04_known_price_without_stored_fee_consumption_remains_blocked",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G04_fee_proof_becomes_stale_after_price_input_change",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalprobe plus neue feste Zahlen-/Pool-/Mehrlot-/Alt-DB-/Stale-Proben"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G05",
+    "implementation_scope": "Verknuepfter Token-Swap ohne fiktive EUR-Einzahlung",
+    "lot_origin_tests": [],
+    "open": "Slippage-/Sonderprotokoll-/Gebuehrenmethoden nicht allgemein abgenommen",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G05_swap_beide_beine_gewinne_ohne_fiatdeposit",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalprobe"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G06",
+    "implementation_scope": "Historischer Stablecoin-EUR-PricePoint konsumiert",
+    "lot_origin_tests": [],
+    "open": "Nicht jeder Stablecoin-/Originalbelegbeschaffungsweg",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G06_G07_stablecoin_tatsaechlicher_eur_kurs[G06-FX]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G06_G07_stablecoin_tatsaechlicher_eur_kurs[G07-Depeg]",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalprobe; FX-Consumer separat erweitert"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G07",
+    "implementation_scope": "Depegwert statt pauschaler USD-Paritaet",
+    "lot_origin_tests": [],
+    "open": "Echtheit/Abdeckung aller produktiven Depegkurse",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G06_G07_stablecoin_tatsaechlicher_eur_kurs[G06-FX]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G06_G07_stablecoin_tatsaechlicher_eur_kurs[G07-Depeg]",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalprobe"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G08",
+    "implementation_scope": "USD/EUR direkt und EUR/USD invers, 100USD ergeben90EUR",
+    "lot_origin_tests": [],
+    "open": "Keine Ausfuehrungskursbehauptung fuer Tagesreferenzen",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G08_real_fx_consumer_100usd_90eur[USD-EUR-0.9]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G08_real_fx_consumer_100usd_90eur[EUR-USD-1.111111111111111111111111111111111111]",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Neue unabhaengige echte FX-Consumer"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G09",
+    "implementation_scope": "Juengster belegter Vortag bis sieben Kalendertage; Wochenende/Feiertag, missing/stale/future",
+    "lot_origin_tests": [],
+    "open": "Technische Policy, keine universelle steuerliche Freigabe",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_documented_seven_day_reference_boundary",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows0]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows1]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows2]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows3]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows4]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows5]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows6]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows7]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows8]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows9]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G09_missing_invalid_future_old_fx_never_factor_one[rows10]",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Neue unabhaengige echte FX-Consumer"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G10",
+    "implementation_scope": "Lookup/Coverage/Tax/Review/Derived/Export ohne stillen Altpreis; keine Zukunftsrueckdatierung",
+    "lot_origin_tests": [],
+    "open": "Nicht jede Altprovenienz und Preisquelle geheilt",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_lookup_alte_und_zukuenftige_preise_abgelehnt[alt]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_lookup_alte_und_zukuenftige_preise_abgelehnt[zukunft]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_coverage_sql_meldet_altkurs_als_luecke",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_tax_kein_unmarkierter_altkurs",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_review_altkurs_darf_final_nicht_freigeben",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_derived_preis_darf_altkurs_nicht_zeitlich_waschen",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G10_altkurs_jahresarchiv_nicht_final",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalproben und zusaetzliche FX-/Pipeline-Regression"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G11",
+    "implementation_scope": "Globale Methode und Wallet-Vorschau getrennt",
+    "lot_origin_tests": [],
+    "open": "Keine produktive Depotmethodenaktivierung",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G11_wallet_global_vorschau_ohne_aktivierung",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalprobe"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G12",
+    "implementation_scope": "Eigenuebertrag fuehrt Anschaffungsdatum und Basis fort",
+    "lot_origin_tests": [
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets0]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets1]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[None]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_real_bmf_preview_keeps_helium_root_and_literal_partial_sale",
+        "status": "passed"
+      }
+    ],
+    "open": "Alle Netzwerkgebuehren und Fremdbelege",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G12_eigenuebertrag_originaldatum_basis_teilprobe",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Teilprobe"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G13",
+    "implementation_scope": "Rewardzugang und Verwertung getrennt; Konvertierung verdoppelt Income nicht",
+    "lot_origin_tests": [
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets0]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets1]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[None]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_real_bmf_preview_keeps_helium_root_and_literal_partial_sale",
+        "status": "passed"
+      }
+    ],
+    "open": "Privat-/Betriebsherkunft bleibt Sachverhaltsentscheidung",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G13_reward_einnahme_basis_und_veraeusserung_getrennt",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalprobe plus neue unabhaengige Income-Regression"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G14",
+    "implementation_scope": "Unklares Income bleibt Review",
+    "lot_origin_tests": [
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_current]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[orphan]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[cycle]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_event_conflict]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_lot_conflict]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[acquired_at_conflict]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[parent_acquired_at_conflict]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_root_event]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_unknown_root_type_is_review_not_non_reward_clearance[True]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_unknown_root_type_is_review_not_non_reward_clearance[False]",
+        "status": "passed"
+      }
+    ],
+    "open": "Vollstaendige Reward-/Sphaerenklassifikation",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G14_unklares_income_als_review_teilprobe",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Teilprobe"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G15",
+    "implementation_scope": "Kalenderjahrestag/Folgetag/Schaltjahr im Jahres-/CSV-/Planungsconsumer",
+    "lot_origin_tests": [],
+    "open": "Reale Quellzeit und Einzelfallscope",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-366-Jahrestag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-Folgetag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-29Feb-Jahrestag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-29Feb-Folgetag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Berlin-Winter]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Berlin-Sommer]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Winter-365]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Sommer-365]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_jahrestag_csv_klassifikation",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_berlin_planungszeitpunkt",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalproben"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G16",
+    "implementation_scope": "Berlin-Jahr, UTC-/DST-Grenzen konsistent",
+    "lot_origin_tests": [],
+    "open": "Kein exhaustiver Zeitzonenbeweis",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-366-Jahrestag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-Folgetag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-29Feb-Jahrestag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G15-29Feb-Folgetag]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Berlin-Winter]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Berlin-Sommer]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Winter-365]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G15_G16_jahresconsumer_kalenderfrist[G16-Sommer-365]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G16_berlin_jahr_dst_und_sql",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalproben"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G17",
+    "implementation_scope": "Fehlender Preis/Kauf/Anfangsbestand und Nullbasis nicht final",
+    "lot_origin_tests": [
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_current]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[orphan]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[cycle]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_event_conflict]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_lot_conflict]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[acquired_at_conflict]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[parent_acquired_at_conflict]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_root_event]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[missing_current]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[orphan]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[cycle]",
+        "status": "passed"
+      }
+    ],
+    "open": "Positive unbelegte Basis und vollstaendige Gaptaxonomie",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[basis]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[historie]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G17_fehlende_basis_oder_preis_kein_finaler_stand[preis]",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalproben"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G18",
+    "implementation_scope": "Original-Chain/Contract/Mint/Dezimalstellen, Symbolkollision blockiert; explizit gebundene Preiszuordnung",
+    "lot_origin_tests": [],
+    "open": "Kein allgemein positiver getrennter FIFO fuer gleichnamige Multichain-Assets",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G18_same_symbol_does_not_resolve_chain_contract_or_decimals[second0]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G18_same_symbol_does_not_resolve_chain_contract_or_decimals[second1]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G18_same_symbol_does_not_resolve_chain_contract_or_decimals[second2]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G18_original_decimals_raw_quantity_mismatch_blocks",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G18_coingecko_symbol_only_is_not_identity_evidence",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G18_coingecko_explicit_chain_contract_bound_control",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G18_bound_wsol_existing_coingecko_provider_is_preserved",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Neue unabhaengige positive und negative Identitaetsproben plus Solana-Regression"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G19",
+    "implementation_scope": "Belegte 100:1-Umstellung im selben Pool/UTC-Zeitpunkt, Basis/Datum, Teilverkauf; keine unbelegte Paritaet1",
+    "lot_origin_tests": [
+      {
+        "id": "tests.acceptance.test_lot_origin_evidence_reference::test_blocked_intermediate_evidence_blocks_discrepancy_and_group",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_evidence_reference::test_full_ledger_roles_include_prior_year_root_outside_disposal_asset_scope",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets0]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets1]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_stored_reward_root_survives_transfer_conversion_and_asset_filter[None]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_resolver_follows_explicit_root_without_mutating_financial_inputs[global]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_resolver_follows_explicit_root_without_mutating_financial_inputs[wallet]",
+        "status": "passed"
+      }
+    ],
+    "open": "Keine generische steuerneutrale Bridge/LP, zeitversetzte Umstellung oder Gebuehrenumstellung",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_100_to_1_carries_basis_date_global_and_wallet[global]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_100_to_1_carries_basis_date_global_and_wallet[wallet]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_partial_sale_fixed_basis_36_gain_24[global]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_partial_sale_fixed_basis_36_gain_24[wallet]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_no_conversion_without_bound_primary_evidence[missing]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_no_conversion_without_bound_primary_evidence[changed]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_no_conversion_without_bound_primary_evidence[absolute]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_no_conversion_without_bound_primary_evidence[parent]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_no_conversion_without_bound_primary_evidence[symlink]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_no_conversion_without_bound_primary_evidence[wrong-ratio]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_no_conversion_without_bound_primary_evidence[false-ack]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_no_conversion_without_bound_primary_evidence[string-ack]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_evidence_bytes_invalidate_config_and_wallet_run_fingerprint",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_evidence_bytes_invalidate_preview_input_fingerprint",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_fx_identity_conversion_reference::test_G19_reward_conversion_never_doubles_income",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Neue unabhaengige Global-/Wallet-/Beleg-/Income-/Stale-Proben"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G20",
+    "implementation_scope": "Identischer CSV-Import idempotent; begrenzte Konto-/API-Proben vorhanden",
+    "lot_origin_tests": [],
+    "open": "Nicht jeder Anbieter-/Formatwechsel",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G20_doppelimport_keine_ereignis_oder_lotverschiebung",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalprobe"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G21",
+    "implementation_scope": "Vorschau bei geaenderten Daten/Preisen/Methodenmarkern gesperrt; jetzt auch TXT-Konvertierungsbeleg",
+    "lot_origin_tests": [
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_legacy_staging_without_origin_policy_is_not_silently_current",
+        "status": "passed"
+      }
+    ],
+    "open": "Nicht alle sonstigen privaten Quelldateien universell bewertet",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[daten]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[preise]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G21_pdf_binding_veraltet_bei_inputaenderung[regeln]",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalproben plus neue unabhaengige Belegbyte-Regression"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G22",
+    "implementation_scope": "Offline-FIFO und CSV semantisch reproduzierbar",
+    "lot_origin_tests": [
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_resolver_follows_explicit_root_without_mutating_financial_inputs[global]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_resolver_follows_explicit_root_without_mutating_financial_inputs[wallet]",
+        "status": "passed"
+      }
+    ],
+    "open": "Separater Prozess-/PDF-Bytevergleich und jede neue Herkunftskette",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G22_offline_neulauf_semantisch_inkl_export",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte Originalprobe"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G23",
+    "implementation_scope": "Technische Exportmoeglichkeit ist keine finale Jahresfreigabe; Vorschauinhalt gebunden",
+    "lot_origin_tests": [
+      {
+        "id": "tests.acceptance.test_lot_origin_evidence_reference::test_blocked_intermediate_evidence_blocks_discrepancy_and_group",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_zero_eur_delta_origin_review_is_not_dropped_from_event_evidence",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_event_evidence_lineage_only_zero_delta_blocks_even_with_ready_raw_events",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[missing_current]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[orphan]",
+        "status": "passed"
+      },
+      {
+        "id": "tests.acceptance.test_lot_origin_reference::test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[cycle]",
+        "status": "passed"
+      }
+    ],
+    "open": "Fachzahlengleichheit PDF/CSV/JSON fuer alle Spezialfaelle",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_technisch_exportierbar_ist_keine_jahresfreigabe",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_echtes_jahresarchiv_inhalt_als_vorschau",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G23_pdf_ist_inhaltlich_vorschau",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalproben und Browserregression"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G24",
+    "implementation_scope": "Jahresabhaengige Freigrenze, strikter Vergleich, Zusatzkontext keine implizite0",
+    "lot_origin_tests": [],
+    "open": "Keine persoenliche Einkommensteuerrechnung oder alle moeglichen Jahre",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2023-599.99-below_threshold]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2023-600-threshold_reached]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2024-999.99-below_threshold]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_echte_route_freigrenze_strikt_kleiner[2024-1000-threshold_reached]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body0]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body1]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body2]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unbekannte_andere_private_einkuenfte_kein_nullfallback[body3]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unterstuetzte_jahre_nicht_still_ausdehnen[2008]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_unterstuetzte_jahre_nicht_still_ausdehnen[2027]",
+        "status": "passed"
+      },
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G24_bestaetigung_strikter_bool_keine_stringfreigabe",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Unveraenderte echte Route-Proben"
+  },
+  {
+    "fiscal_approval": false,
+    "id": "G25",
+    "implementation_scope": "Archiv unveraendert, Revision und synthetischer Restore; voriger isolierter Docker-Restore bleibt historischer Nachweis",
+    "lot_origin_tests": [],
+    "open": "Kein neuer Image-/Restore-/Rollback-/Engineparitaetsnachweis fuer diese Revision",
+    "technical_status": "passed_scoped",
+    "tests": [
+      {
+        "id": "docs.audit.2026-10-28.acceptance_tests::test_G25_originalarchiv_revision_raw_review_synthetischer_restore",
+        "status": "passed"
+      }
+    ],
+    "validation_scope": "Originalprobe plus aktuelle RO-Stabilitaetspruefung"
+  }
+]

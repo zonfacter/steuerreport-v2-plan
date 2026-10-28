@@ -1,0 +1,28 @@
+{
+  "after": {
+    "contracts/bmf_event_evidence.py": "9a11dc0dc4da10f9491bd3f2f8069b34bcfc57e823f44b003501b8d2a864b2b1",
+    "contracts/bmf_fifo_staging.py": "dcb59ac9868702f2ee666ba1d477e447c7f278604f4614d0d28293bc84706b91",
+    "contracts/business_inventory.py": "ae588ccb1055d26b0f64e1f2ecba48752af71ddcd6e5f47a004410d000a9c933",
+    "domain/bmf_event_evidence.py": "e9d0ad75f9d8a4c687ecf7afbd5f6af45e91ca447da9ff9f2491f6fd74623652",
+    "domain/bmf_fifo_staging.py": "547f869fd20224b46431e4c67c7c47f70a19d81041d914d3a6e2c3b539703d38",
+    "domain/business_inventory.py": "f4e5867be5c7b07d19fcf7e4039160126f4c8017ac07863d80a067c60de9b4ff",
+    "domain/lot_origin.py": null,
+    "domain/tax.py": "05116b47d735c7838dbd3203340f8eee0aecc813531ee1158edcc50a0d2c3072",
+    "domain/tax_wallet_fifo.py": "d1517acbd0f742a2a25fb8c18839b4b35ffe5bca2a7ef4e4d169e5df25b16981",
+    "domain/token_conversion.py": "b347a56bb0d0a44d5cac15dbd384af453cadb6bbc56ef8903289b61c5fd2fde0"
+  },
+  "before": {
+    "contracts/bmf_event_evidence.py": "9a11dc0dc4da10f9491bd3f2f8069b34bcfc57e823f44b003501b8d2a864b2b1",
+    "contracts/bmf_fifo_staging.py": "dcb59ac9868702f2ee666ba1d477e447c7f278604f4614d0d28293bc84706b91",
+    "contracts/business_inventory.py": "ae588ccb1055d26b0f64e1f2ecba48752af71ddcd6e5f47a004410d000a9c933",
+    "domain/bmf_event_evidence.py": "e9d0ad75f9d8a4c687ecf7afbd5f6af45e91ca447da9ff9f2491f6fd74623652",
+    "domain/bmf_fifo_staging.py": "547f869fd20224b46431e4c67c7c47f70a19d81041d914d3a6e2c3b539703d38",
+    "domain/business_inventory.py": "f4e5867be5c7b07d19fcf7e4039160126f4c8017ac07863d80a067c60de9b4ff",
+    "domain/lot_origin.py": null,
+    "domain/tax.py": "05116b47d735c7838dbd3203340f8eee0aecc813531ee1158edcc50a0d2c3072",
+    "domain/tax_wallet_fifo.py": "d1517acbd0f742a2a25fb8c18839b4b35ffe5bca2a7ef4e4d169e5df25b16981",
+    "domain/token_conversion.py": "b347a56bb0d0a44d5cac15dbd384af453cadb6bbc56ef8903289b61c5fd2fde0"
+  },
+  "retained_bytes": 309460668,
+  "unchanged": true
+}

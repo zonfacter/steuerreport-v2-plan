@@ -1,0 +1,1808 @@
+{
+  "created_at_utc": "2026-10-28T19:28:41.295852+00:00",
+  "apply": true,
+  "files": [
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-review/test_csv_overlap_requires_revi7/source_history_previews/f3cfe1fa-94f5-4c12-998f-ee2d5fe5c5d8/9adcc34c-a0e8-4384-a856-032a7f4bf546.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1186113,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-review/test_csv_overlap_requires_revi6/source_history_previews/639e6e65-7079-413f-901b-ae45cd7494d9/7b273e91-ce0a-4fac-ad03-0667c1141f31.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1186080,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-review/test_csv_overlap_requires_revi5/source_history_previews/449dcd5d-b3ea-4cdc-8b7b-a1a5bfc9337a/290081f1-a498-4365-9501-315ca6bf6703.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1186060,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw0/test_review_gate_allows_bitget0/steuerreport_v2.duckdb",
+      "bytes": 4206592,
+      "allocated_bytes": 4206592,
+      "inode": 1767361,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_fallback_accepts_original1/historical_prices/06f87959-3cdf-4273-a0f4-ab7e34a01056/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765024,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_continuation_section_uses1/historical_prices/cbed8851-e06a-429a-98b4-c8216f302c6b/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1765913,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_nearby_targets_are_dedupl0/historical_prices/07ed28d1-ea59-4841-9a70-01551a4737ef/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765134,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_automatic_primary_is_one_0/historical_prices/bd26bd71-1800-42b6-b43c-e2ab3b6cbb73/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1595861,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_missing_wrapped_sol_prima1/historical_prices/5944bac0-242f-4c1d-a83f-bf4e2bf767c2/calculation.prepared",
+      "bytes": 6041600,
+      "allocated_bytes": 6041600,
+      "inode": 1704156,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_nearby_targets_are_dedupl2/historical_prices/90a30c92-150a-4613-8bf0-637d0278890a/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765244,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_verified_native_fee_with_0/historical_prices/7e17148c-3745-4767-9642-5d8f45ab5c85/calculation.prepared",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1765680,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_continuation_section_uses0/historical_prices/537960ef-26b3-429c-a760-8e3114b510ba/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1765877,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_nearby_targets_are_dedupl3/historical_prices/75d412ec-82c0-42a6-931d-38d7c6726a73/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765288,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_budget_after_primary_keep0/historical_prices/d6664dc2-a202-449c-9c7d-a7050e2d24d7/calculation.prepared",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1765722,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_nearby_earlier_quote_is_u1/historical_prices/33de47bb-5b21-4e45-b8ec-e86e4f3db526/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1764867,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_missing_wrapped_sol_prima0/historical_prices/3035172b-bbaa-421b-985f-fa245b6758ac/calculation.prepared",
+      "bytes": 6041600,
+      "allocated_bytes": 6041600,
+      "inode": 1622980,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_fallback_accepts_original3/historical_prices/3e4fc5e5-38fe-40ce-a849-c15eb1902a6c/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765123,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_bmf_finalization_matrix_e0/steuerreport_v2.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1767354,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_automatic_primary_is_one_1/historical_prices/6dc2fb45-d7a9-4928-84cd-c2ebb51503d4/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1633353,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_default_automatic_section0/historical_prices/684f2856-0552-4183-b149-f723909214bc/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765943,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_fx_day_failure_does_not_p0/historical_prices/3a864f3e-1847-40b9-a71f-d6c51d92be24/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765972,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_fallback_accepts_original0/historical_prices/93f4b25f-2799-4f06-afcb-4e61dde4f960/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1764977,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_fallback_accepts_original2/historical_prices/72342c41-9783-4bbd-a663-19a2c0474778/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765072,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_nearby_targets_are_dedupl1/historical_prices/ad018b73-f302-42ef-9183-2a1d64e2d774/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765214,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_mixed_batch_retries_only_0/historical_prices/38043eeb-19c4-4b01-8b6d-d29669500daf/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1765156,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_verified_native_fee_with_1/historical_prices/66d624ed-cf4e-4a6f-9cf4-ffd1557fd6cf/calculation.prepared",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1765716,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw2/test_nearby_earlier_quote_is_u0/historical_prices/98258c2c-f851-489d-a810-de87b90e1ea3/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1762828,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw3/test_source_reconciliation_bre2/steuerreport_v2.duckdb",
+      "bytes": 6041600,
+      "allocated_bytes": 6041600,
+      "inode": 1767356,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_mixed_series_selects_1/historical_prices/632c8883-f7d4-472b-8bf6-3fb6732e3362/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1462388,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_downloaded_evidence_match0/historical_prices/19093151-b7be-4b7f-a6ca-772927f0bd2c/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1767260,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_bounded_reference_day5/historical_prices/a4055c93-0c51-4d0c-aa2e-4513014d16f2/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1186310,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_bounded_reference_day1/historical_prices/cc14273b-a4ce-4b50-9fb9-d841bf2a8d15/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1186062,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_apply_rejects_pending_col0/historical_prices/a98542ef-8d43-4ea9-b99e-385b3c400dab/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766584,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_status_reports_not_found_0/historical_prices/68daabe6-a79f-4dc7-abcd-efa361e9408c/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766713,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G08_real_consumer_both_qu1/historical_prices/a01a32e3-896c-4e63-b144-ef1a9709d4c1/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1185798,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G08_real_consumer_both_qu2/historical_prices/950635bb-3528-490b-8d26-936360370f2e/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1185842,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_bounded_reference_day6/historical_prices/eb35e92c-9edb-4352-8c36-466eb4e00964/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1186368,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G08_real_consumer_both_qu0/historical_prices/9dccfbe8-538f-48c8-8a1a-be0fd8b0c39e/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1185734,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_tampered_artifacts_block_0/historical_prices/c94423d8-20cf-43d3-bb08-db080e808c05/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766822,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_complete_collection_with_0/historical_prices/dc61928c-fd3d-42e4-88cc-f2e735569acc/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766628,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_inverse_cache_reuse_a1/historical_prices/94457c13-0b46-4e68-9320-b1de7641c094/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1592872,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_bounded_reference_day3/historical_prices/44b63d58-b761-48cf-af45-cebd2312ea5a/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1186154,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_tax_required_reporting_ye0/historical_prices/1f3081b9-43b1-4ac0-879e-288e9f6bbc6a/calculation.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1767320,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_inverse_cache_reuse_a0/historical_prices/a80195ca-774e-41aa-8d05-5782f7923cbd/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1581893,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_bounded_reference_day7/historical_prices/a2f36029-15b0-4347-883b-23a268904031/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1186440,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_tax_required_reporting_ye1/historical_prices/09fbc325-0474-4c17-b979-2366f163c8b5/calculation.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1767352,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_bounded_reference_day0/historical_prices/2b0b4371-7c04-4ca7-813b-8deea70e21a6/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1185972,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_old_software_preview_is_r0/historical_prices/57d97d16-df9c-42fe-8707-5a5ab56f237c/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1767147,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_fetch_uses_entire_plan_no0/historical_prices/d0e703ec-61ca-4532-a380-74cdc8dbcddc/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766284,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_price_preview_never_norma1/historical_prices/409546de-66a3-4689-8c8a-2abfefe108cf/calculation.prepared",
+      "bytes": 8400896,
+      "allocated_bytes": 8400896,
+      "inode": 1767204,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_tampered_artifacts_block_2/historical_prices/7f1e9a39-b7d2-4cf5-b113-467d504a7ee9/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766923,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_price_preview_never_norma0/historical_prices/2baaab8e-4759-4f40-870e-101ddbe481ad/calculation.prepared",
+      "bytes": 8400896,
+      "allocated_bytes": 8400896,
+      "inode": 1767177,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_multiple_sections_apply_a0/historical_prices/6b5ded5a-3e58-439a-a5ec-3e72424bcb71/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6307840,
+      "inode": 1766537,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_multiple_sections_apply_a0/historical_prices/6067e3a8-4d68-47ee-9453-66378e7deaa7/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766558,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_multiple_sections_apply_a0/historical_prices/af34685d-ab35-4c4a-82a1-0fcaefeb762c/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766571,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_mixed_series_selects_0/historical_prices/f1c0b821-8776-4854-9e60-f3740b4d7cca/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1373583,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_minimum_budget_keeps_ever0/historical_prices/98c96db4-a0b2-4bbb-aecc-4a84f81254b6/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766371,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_minimum_budget_keeps_ever0/historical_prices/49ffea7a-933f-4e4d-92bc-3efa7a342d5b/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766399,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_preview_isolated_apply_up0/changes.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6565888,
+      "inode": 1767359,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_raw_payload_tamper_reject0/historical_prices/114ed2cb-0ed0-49b4-9fb4-1d0e8a294208/calculation.prepared",
+      "bytes": 7876608,
+      "allocated_bytes": 7876608,
+      "inode": 1767042,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_bounded_reference_day4/historical_prices/4c2ff5ad-dfeb-42e7-a10d-aa25d86e225c/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1186224,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_frozen_source_guard_rejec0/historical_prices/bceeb02d-9154-4ee1-b545-a16eca76393d/calculation.prepared",
+      "bytes": 6565888,
+      "allocated_bytes": 6569984,
+      "inode": 1767234,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_batch_historical_covers_a0/historical_prices/b48960d5-522a-4d9b-a0f9-e3e17c1cc88c/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766315,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_tampered_artifacts_block_3/historical_prices/19f26409-0bb9-4b0e-9de9-1d0cfc89c087/calculation.prepared",
+      "bytes": 6303760,
+      "allocated_bytes": 6307840,
+      "inode": 1766968,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_same_uuid_changed_request0/historical_prices/bd8cf3db-49b2-4887-a098-1792c7d013af/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1767100,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_same_uuid_changed_request0/historical_prices/8651b32e-47fc-4966-b44b-27698aae3db6/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1767089,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_database_change_rejects_c0/historical_prices/4d4b263b-d7a4-4c44-a042-69de02224f35/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766787,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G08_real_consumer_both_qu3/historical_prices/0e82a304-6f28-40f1-9418-c54f3272e65f/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1185869,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_G09_bounded_reference_day2/historical_prices/057559ec-49d0-4134-be42-465589f37598/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1186110,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_tampered_artifacts_block_1/historical_prices/2ea30f01-0c00-4ba7-b6b7-67e21f49e630/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766888,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_early_known_failure_does_0/historical_prices/a6060b4b-338a-45db-bc18-ea6fd3e686c0/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766695,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_early_known_failure_does_0/historical_prices/735f1671-76c2-480c-89e9-e1eb6a2b0d0b/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766711,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-full/popen-gw1/test_early_known_failure_does_0/historical_prices/91cdefce-4d09-4338-b5f1-5c1eb4ca0ee9/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1766642,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_fallback_accepts_original1/historical_prices/f9794a3a-b450-42ab-b7c6-2a2d8409894b/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888398,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_continuation_section_uses1/historical_prices/7d47d7ce-5e4a-48b5-a0f4-1ca7baaf91ad/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1889574,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_nearby_targets_are_dedupl0/historical_prices/19a96be3-ccd8-4b2e-aff1-5935a6fd8ce6/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888606,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_csv_overlap_requires_revi7/source_history_previews/7bbd9b62-a7ca-4f04-9b76-e19ae07503b0/72df4d79-f2c3-4879-abf0-c76c7a98e2e3.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1892851,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_automatic_primary_is_one_0/historical_prices/01b8f982-498e-41af-aaa1-314d6ff306b1/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1887711,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_direct_coingecko_eur_pres0/historical_prices/a6a91227-0a70-4883-b130-8258a3d47133/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1892042,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_missing_wrapped_sol_prima1/historical_prices/dad9395c-9845-42b2-aba5-82111e1e2b0a/calculation.prepared",
+      "bytes": 5779456,
+      "allocated_bytes": 5779456,
+      "inode": 1888050,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_nearby_targets_are_dedupl2/historical_prices/945a8057-f507-4b3f-a181-4c9bf69ee459/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888685,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_verified_native_fee_with_0/historical_prices/151c5c78-c6c7-4059-9c77-eaeca248b0bf/calculation.prepared",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1889284,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_continuation_section_uses0/historical_prices/c0767b07-48f4-4f8a-8bff-65f6c3be3541/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1889534,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_nearby_targets_are_dedupl3/historical_prices/fd30cdf4-50b0-4f75-a6b2-b4a4f73f9fc1/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888727,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_budget_after_primary_keep0/historical_prices/004654c2-aa86-411d-bb11-7c43d67ea646/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1889394,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_nearby_earlier_quote_is_u1/historical_prices/35d5357c-181f-4ca1-bd90-b39b2d3af8ae/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888206,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_missing_wrapped_sol_prima0/historical_prices/0c457f1a-2393-4414-b954-bf4790958ce6/calculation.prepared",
+      "bytes": 5779456,
+      "allocated_bytes": 5779456,
+      "inode": 1887962,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_fallback_accepts_original3/historical_prices/95df7332-eb6a-4447-928a-195ca20a5335/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888514,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_automatic_primary_is_one_1/historical_prices/0108dfbf-590e-4684-a61a-9f73f42f7192/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1887772,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_default_automatic_section0/historical_prices/ebc8a671-2508-42be-9807-dcaac2fca5e1/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1889605,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_fx_day_failure_does_not_p0/historical_prices/560b3689-3d57-4144-9893-f236b8749f3f/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1889632,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_csv_overlap_requires_revi6/source_history_previews/af81ac39-f2db-412f-8608-5c1592d643c7/20ec4991-eff4-4bee-8a35-c5e9021c07ac.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1892842,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_same_request_is_idempoten0/historical_prices/d1a68d7f-adf1-492d-9f35-189a349a7ed7/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1892257,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_fallback_accepts_original0/historical_prices/a96524e4-b5f2-4460-ab38-434cb03a9045/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888343,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_fallback_accepts_original2/historical_prices/23d7f347-86ad-4872-833f-74e342c3cbdb/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888460,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_preview_rejects_changed_d0/historical_prices/37b412de-9b31-4a27-a6f9-cdd6f00f7f63/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1892236,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_nearby_targets_are_dedupl1/historical_prices/7e03565a-db14-4885-8bc6-ebeaf206866b/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888638,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_mixed_batch_retries_only_0/historical_prices/b31434f4-0c35-4de4-aa90-e7ba5a881ca6/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888560,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_explicit_free_provider_in0/source_history_previews/f2ca478b-4bf9-4b70-b599-5ad6e41bc7a7/d58c8fef-c4fe-4009-8375-1a42db32818f.prepared",
+      "bytes": 8925184,
+      "allocated_bytes": 8925184,
+      "inode": 1894461,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_verified_native_fee_with_1/historical_prices/a55f009b-136b-46a3-8566-a7f2173017ed/calculation.prepared",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1889352,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_csv_overlap_requires_revi5/source_history_previews/707a25cd-369c-411f-ac1a-8694f2d4447d/b36a2472-c29d-416e-b9bd-a87cc8b47958.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1892821,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_nearby_earlier_quote_is_u0/historical_prices/80049f8f-4181-474a-87db-72fa68962f0a/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1888114,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw2/test_historical_eur_without_v10/historical_prices/370584ba-fef8-4d33-adbb-97813ab9f454/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1892012,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_mixed_series_selects_1/historical_prices/bb212334-e74e-43e8-8d9b-979307782be2/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1887223,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_downloaded_evidence_match0/historical_prices/9013f6f2-d753-4b9a-80cc-98322925097f/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1891034,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_bounded_reference_day5/historical_prices/ca794644-b3cb-4d06-a811-de1b250d92a2/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886243,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_bounded_reference_day1/historical_prices/af25d595-078f-4492-899c-acd6a3dc4595/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886115,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_apply_rejects_pending_col0/historical_prices/07ab8374-b431-40ca-a897-66ebc825bd06/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890325,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_status_reports_not_found_0/historical_prices/e163a766-8a48-4ea0-a476-dde4c0bef753/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890476,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G08_real_consumer_both_qu1/historical_prices/f29b7293-6c85-45e6-96b6-908601f98699/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1885957,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G08_real_consumer_both_qu2/historical_prices/f66b506c-5c16-4c74-b32f-2a50f6812e2f/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1885984,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_bounded_reference_day6/historical_prices/90e4411e-d926-4ee8-b0eb-a3aac70a82f1/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886272,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G08_real_consumer_both_qu0/historical_prices/f0eae369-d0e4-411b-9eee-7a825cb56591/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1885922,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_tampered_artifacts_block_0/historical_prices/b643869f-afc8-488b-b587-84d082685ed7/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890589,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_complete_collection_with_0/historical_prices/d0b65b93-8456-4ce5-96ae-c76d496322af/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890356,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_inverse_cache_reuse_a1/historical_prices/09242557-aa61-4df5-9e59-a5c2b33e6787/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1887681,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_bounded_reference_day3/historical_prices/027c241a-315e-470b-b3de-d31c5670090e/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886182,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_tax_required_reporting_ye0/historical_prices/0e58a4cd-4022-4612-ac68-e406f0eedfb1/calculation.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1891102,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_inverse_cache_reuse_a0/historical_prices/3f514353-bfbc-4b4b-9777-494c2a1f7a22/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1887479,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_bounded_reference_day7/historical_prices/3abf5003-2f64-4939-9e82-4272dcd12f13/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886311,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_tax_required_reporting_ye1/historical_prices/e992a51a-0b78-44d1-911e-222c69bea2f6/calculation.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1891131,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_request_time_slice_contin0/source_history_previews/92529860-25e3-41fd-9b89-295607fa95be/c785f0f3-db79-44a7-9959-1e1bec6aafd6.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1893176,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_bounded_reference_day0/historical_prices/0dfe3e30-a202-4ace-9d50-dc9aacb913f9/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886057,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_page_error_preserves_chec0/source_history_previews/e8a34d72-ad24-4c3b-9451-38d0d3974ea6/d55982d7-8c64-4238-bb40-5d3259716341.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1892245,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_old_software_preview_is_r0/historical_prices/dbeab53b-51bf-468e-860a-8064f3959d51/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890907,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_fetch_uses_entire_plan_no0/historical_prices/17203b50-23f4-428f-8c85-33145215a635/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1889991,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_price_preview_never_norma1/historical_prices/b9ed8642-4897-4a59-accc-8b00b91cdc8f/calculation.prepared",
+      "bytes": 8400896,
+      "allocated_bytes": 8400896,
+      "inode": 1890968,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_tampered_artifacts_block_2/historical_prices/064aeae6-5e47-4eb0-911f-4a32fbcdb883/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890670,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_price_preview_never_norma0/historical_prices/9481e7b9-a4d5-479f-812b-de19f808f6ac/calculation.prepared",
+      "bytes": 8400896,
+      "allocated_bytes": 8400896,
+      "inode": 1890937,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_multiple_sections_apply_a0/historical_prices/348b5538-0b08-4334-93cc-6f4c36184b76/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890256,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_multiple_sections_apply_a0/historical_prices/43582837-0987-4b0a-acd1-57417d223c3d/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890279,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_multiple_sections_apply_a0/historical_prices/00cc3d18-d980-4b23-912e-6c0a47ed4e75/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890293,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_mixed_series_selects_0/historical_prices/8fedca09-ea37-4d0e-96c8-ab053c6ba836/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1887159,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_repreview_after_software_0/source_history_previews/8efe3328-6edf-41e6-983e-481d4df00218/99a10251-592d-4490-b7cc-7d506b3405de.prepared",
+      "bytes": 8663040,
+      "allocated_bytes": 8663040,
+      "inode": 1891872,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_repreview_after_software_0/source_history_previews/8efe3328-6edf-41e6-983e-481d4df00218/3d7aa36b-fe79-445a-86e6-f8bc4807f55e.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1891855,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_minimum_budget_keeps_ever0/historical_prices/4122a25b-3078-47db-b6f0-64621554ef6b/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890112,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_minimum_budget_keeps_ever0/historical_prices/a38ba5d6-5b06-48a2-bbd9-972d912c5288/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890100,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_stale_preview_or_modified0/source_history_previews/e59c1de3-fed3-4094-87fb-3191387e203c/6d1c7cf5-f300-440c-a648-6bf5dd8cfe7c.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1892310,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_raw_payload_tamper_reject0/historical_prices/8f386821-42a1-45ac-ba8a-0c3a6374c3c1/calculation.prepared",
+      "bytes": 7876608,
+      "allocated_bytes": 7876608,
+      "inode": 1890790,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_bounded_reference_day4/historical_prices/259f0bd7-571e-44c1-bd3c-0872a34fea0e/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886212,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_frozen_source_guard_rejec0/historical_prices/ad11daa4-af89-4793-9508-e4932f65131f/calculation.prepared",
+      "bytes": 6565888,
+      "allocated_bytes": 6565888,
+      "inode": 1891004,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_batch_historical_covers_a0/historical_prices/390dea75-11ef-4ee0-b497-247b79177c8e/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890026,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_tampered_artifacts_block_3/historical_prices/9bab794c-d58b-4d01-8f4f-f167fb93693a/calculation.prepared",
+      "bytes": 6303760,
+      "allocated_bytes": 6307840,
+      "inode": 1890725,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_same_uuid_changed_request0/historical_prices/91e0fda3-1828-4b09-9f5a-cd3abcbd0ee8/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890869,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_same_uuid_changed_request0/historical_prices/37f8c0af-ce8a-4364-884e-84f8c696d1ad/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890843,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_database_change_rejects_c0/historical_prices/5937fbbf-f720-45d5-8e7d-17c517caede8/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890529,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G08_real_consumer_both_qu3/historical_prices/543590e6-2e22-4d89-9db0-97f2ce2cfbb2/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886011,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_G09_bounded_reference_day2/historical_prices/fa699364-30ee-4aa6-bef0-21a6b6bc4192/calculation.prepared",
+      "bytes": 6828032,
+      "allocated_bytes": 6828032,
+      "inode": 1886148,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_tampered_artifacts_block_1/historical_prices/f97e6911-3aef-4967-a8cf-c39201f9afd5/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890633,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_raw_evidence_tampering_is0/source_history_previews/b707b2ef-51c8-4733-98e1-69296639be4e/8b8d2cbc-f52e-439f-aec4-f7728da383b9.prepared",
+      "bytes": 8138752,
+      "allocated_bytes": 8138752,
+      "inode": 1892357,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_early_known_failure_does_0/historical_prices/4c21ea44-84ef-4789-8241-72b3bf6f5a4a/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890383,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_early_known_failure_does_0/historical_prices/0a3a0011-e0e8-438c-8a7f-f89e2ad07b22/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890426,
+      "removed": true
+    },
+    {
+      "path": "/tmp/sr-origin-20261028-coordinator-final-full/popen-gw1/test_early_known_failure_does_0/historical_prices/32b5f1b0-ca15-48f4-b434-70842049b7ce/calculation.prepared",
+      "bytes": 6303744,
+      "allocated_bytes": 6303744,
+      "inode": 1890441,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-xf6h2r8a/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1579933,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-ngrumfag/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1888469,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-zsspnpch/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1581627,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-nbh6eskb/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1597679,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-fcccf4_5/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1616871,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-bnhispul/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1635268,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-25fqsj1t/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1579768,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-ivsgjrsn/data.duckdb",
+      "bytes": 3158016,
+      "allocated_bytes": 3158016,
+      "inode": 1576768,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-uiwvbwyh/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6565888,
+      "inode": 1888226,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-earhvlte/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6565888,
+      "inode": 1581542,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-3bnzgr5c/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1576712,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-ftd01sok/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1888778,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-qlzs8uhq/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1592866,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-u8imtdpi/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1581357,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-4o1n6oyi/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887985,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-j45xuyae/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7614464,
+      "inode": 1889265,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-gx0el8pe/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1581404,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-691htnvq/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1596022,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-gtckrk_m/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1886844,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-qokmkp58/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1634604,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-yycmuhhk/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1577147,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-o655rueh/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1887745,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-pqwo9qzf/data.duckdb",
+      "bytes": 9187328,
+      "allocated_bytes": 9187328,
+      "inode": 1888308,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-1uhojwwh/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7618560,
+      "inode": 1886952,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-xje01av8/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1888082,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-hhgtndjy/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6565888,
+      "inode": 1581608,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-s455nwkk/data.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1581390,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-qvez7ado/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7618560,
+      "inode": 1581880,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-271td7zy/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6565888,
+      "inode": 1888423,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-c7osj300/data.duckdb",
+      "bytes": 12595200,
+      "allocated_bytes": 12599296,
+      "inode": 1889322,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-x6s9vbuj/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1889070,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-3jhto9ln/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1888702,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-si6g8rew/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7614464,
+      "inode": 1576697,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-o9aweehl/data.duckdb",
+      "bytes": 12595200,
+      "allocated_bytes": 12599296,
+      "inode": 1764962,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-yf35p7sh/data.duckdb",
+      "bytes": 4993024,
+      "allocated_bytes": 4997120,
+      "inode": 1577231,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-bhwvhjtf/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1889123,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-ibw8bflf/data.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1704332,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-66t2l9yk/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1888755,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-r6ttxoq6/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887810,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-cv_mi1gp/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1575091,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-hvvi8px9/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1888036,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-ws5vm78r/data.duckdb",
+      "bytes": 3158016,
+      "allocated_bytes": 3158016,
+      "inode": 1887079,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-dtpu_9nm/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7614464,
+      "inode": 1575392,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-da6w1gol/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1576733,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-s2w0lq72/data.duckdb",
+      "bytes": 3158016,
+      "allocated_bytes": 3158016,
+      "inode": 1887053,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-_dg08602/data.duckdb",
+      "bytes": 4468736,
+      "allocated_bytes": 4468736,
+      "inode": 1577521,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-54plikct/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1577316,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-vta1l2sr/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887771,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-gjysk7v8/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887885,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-s_nv8dq6/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887927,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-11eocuaa/data.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1889176,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-zc7zh8_z/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7614464,
+      "inode": 1887672,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-du0gnm5j/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887220,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-i02_q48j/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1887016,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-en7yh57r/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887120,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-sgj_pv2_/data.duckdb",
+      "bytes": 9187328,
+      "allocated_bytes": 9191424,
+      "inode": 1888317,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-wdtj89ji/data.duckdb",
+      "bytes": 4468736,
+      "allocated_bytes": 4468736,
+      "inode": 1887623,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-sijee5tm/data.duckdb",
+      "bytes": 7876608,
+      "allocated_bytes": 7880704,
+      "inode": 1581786,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-c94kzvfa/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6569984,
+      "inode": 1581524,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-07p0y4a6/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887143,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-9ggn6kza/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6569984,
+      "inode": 1581558,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-bympc_42/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1578143,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-uqg5ybm8/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1886902,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-ea567lej/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1577911,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-9dpytovk/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1889025,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-nxghpjxv/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1579920,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-xs1oczps/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1886713,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-2vedo2ck/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7618560,
+      "inode": 1764825,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-p_fzk343/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1574460,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-y8fu18u8/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1888842,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-u25rkdfw/data.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1887993,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-bbyagtsz/data.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1754076,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-s4bv_k8c/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1888921,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-15vx7gid/data.duckdb",
+      "bytes": 3158016,
+      "allocated_bytes": 3158016,
+      "inode": 1576750,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-8vxn2yvf/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1625747,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-cn0f7kmt/data.duckdb",
+      "bytes": 4468736,
+      "allocated_bytes": 4468736,
+      "inode": 1577684,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-kkpnozs_/data.duckdb",
+      "bytes": 4993024,
+      "allocated_bytes": 4997120,
+      "inode": 1576954,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-x6diad3f/data.duckdb",
+      "bytes": 9187328,
+      "allocated_bytes": 9187328,
+      "inode": 1581576,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-oaylera0/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7614464,
+      "inode": 1888624,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-znzwm0k1/data.duckdb",
+      "bytes": 4993024,
+      "allocated_bytes": 4993024,
+      "inode": 1887097,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-9t2u2zas/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7614464,
+      "inode": 1886926,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-gki9vpre/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6565888,
+      "inode": 1888126,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-p_8q0hrk/data.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1889164,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-8udzsa9c/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1887936,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-kmybklkr/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6569984,
+      "inode": 1888156,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-jb6k9s3_/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1581378,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-i2f883h2/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6565888,
+      "inode": 1575162,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-0sfhkmfn/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1625645,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-la12kci8/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7094272,
+      "inode": 1887705,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-_n0zk_3l/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1577091,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-74202tk9/data.duckdb",
+      "bytes": 7876608,
+      "allocated_bytes": 7876608,
+      "inode": 1888607,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-p_fnjegz/data.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1764812,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-egufqnl7/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1622970,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-ej40hca_/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1581455,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-60r2rhd2/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1887847,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-fmgejspx/data.duckdb",
+      "bytes": 9187328,
+      "allocated_bytes": 9191424,
+      "inode": 1581594,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-tjmbsgon/data.duckdb",
+      "bytes": 1585152,
+      "allocated_bytes": 1585152,
+      "inode": 1889224,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-lgvyz6fh/data.duckdb",
+      "bytes": 4993024,
+      "allocated_bytes": 4993024,
+      "inode": 1887179,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-_njbet_i/data.duckdb",
+      "bytes": 4468736,
+      "allocated_bytes": 4468736,
+      "inode": 1887543,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-b2j2lh6c/data.duckdb",
+      "bytes": 7614464,
+      "allocated_bytes": 7618560,
+      "inode": 1577838,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-_gaqa591/data.duckdb",
+      "bytes": 6565888,
+      "allocated_bytes": 6569984,
+      "inode": 1886880,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-yyzdy2i6/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1579946,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-3i2rz_5s/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1579910,
+      "removed": true
+    },
+    {
+      "path": "/tmp/steuerreport-migration-20261028-acceptance-tests/case-y2c6yef0/data.duckdb",
+      "bytes": 7090176,
+      "allocated_bytes": 7090176,
+      "inode": 1888959,
+      "removed": true
+    }
+  ],
+  "count": 257,
+  "allocated_bytes": 1708011520,
+  "preserved": "All XML/JSON/CSV/PDF/ZIP/source files, backups, worktrees, production paths and Docker volumes"
+}

@@ -1,0 +1,2772 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 09713e3..61ca0c3 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -27,7 +27,7 @@ jobs:
+         run: |
+           python scripts/check_reference_baseline_v2.py
+           python -m pytest docs/audit/2026-10-28/acceptance_tests.py -q --junitxml=reference-original.xml
+-      - name: Additional independent FX and identity probes
++      - name: Independent FX, identity and lot-origin probes
+         env:
+           PYTHONPATH: src
+         run: python -m pytest tests/acceptance -q --basetemp="${RUNNER_TEMP}/reference-additional" --junitxml=reference-additional.xml
+@@ -111,6 +111,9 @@ jobs:
+       - name: Review context browser checks against actual isolated backend
+         working-directory: .
+         run: python scripts/check_review_backend_browser_v2.py
++      - name: Lot-origin details with isolated backend and synthetic companion data
++        working-directory: .
++        run: python scripts/check_lot_origin_browser_v2.py --output "${RUNNER_TEMP}/lot-origin-browser"
+       - name: Protected wallet setup against actual isolated backend
+         working-directory: .
+         run: python scripts/check_wallet_setup_browser_v2.py
+@@ -137,6 +140,7 @@ jobs:
+           path: |
+             artifacts/ux-browser/
+             artifacts/ux-review-fixes/
++            ${{ runner.temp }}/lot-origin-browser/
+             artifacts/source-history-browser/
+             artifacts/source-history-backend-browser/
+             ${{ runner.temp }}/history-provider-eta-browser/
+diff --git a/docs/audit/2026-10-28/LOT_HERKUNFT_REFERENCE_HANDOFF.md b/docs/audit/2026-10-28/LOT_HERKUNFT_REFERENCE_HANDOFF.md
+new file mode 100644
+index 0000000..4e72f20
+--- /dev/null
++++ b/docs/audit/2026-10-28/LOT_HERKUNFT_REFERENCE_HANDOFF.md
+@@ -0,0 +1,166 @@
++# Unabhaengige Lot-Herkunftsreferenz
++
++## Grenzen
++
++Basis `87b231b5a40716f41468e56a68048f3abd79f4cc`, eigener Checkout
++`/tmp/steuerreport-blockers-20261028-fx`, Branch
++`audit/lot-origin-independent-20261028`. AGENTS und LOT_HERKUNFT_VERTRAG
++wurden vor dem ersten Edit gelesen und bestaetigt. Eigene Aenderungen nur
++`tests/acceptance/test_lot_origin_reference.py` und dieses Handoff.
++Zentrale Contracts und Resolver ausschliesslich als bereitgestellte Commits
++uebernommen: `a3e3ae5`, `0a088c4`, `84aca336`.
++Die zentrale Integration `4c51d8eb8fd80acdeb1d1ffc7089459d9940721f` wurde
++ebenfalls unveraendert als Abhaengigkeit uebernommen (lokal `d0ff4c4`).
++Der zentrale Statusfix `eecec786c6894d350e082ca1bd508fcf93dd9300` liegt
++lokal als `24ffe08` vor. Eigene Referenztests: `5569f9a` (im Coordinator
++`5e209fe`); anschliessende reine Testpfadkorrektur: `8db6c703ea34780e9fccfc29017252923a6b4a21`.
++
++Alle Inputs sind neu erzeugte synthetische Daten, keine exakte Wiederholung
++privater Nutzerfaelle. Keine Produktionsdaten/-datenbanken, externen Aufrufe,
++Profilkopien, Produktcode-/Konfigurationsaenderungen, Methodenaktivierung oder
++steuerliche Freigabe. Keine neuen EventEvidence-Scopes: NEW nur Stored/Staging,
++HNT 2024 fuer EventEvidence. Rohdaten, Tax-Lots/-Lines und Preise werden fuer
++Read-only-Assertions direkt aus der eigenen kleinen DuckDB gelesen.
++
++## Unabhaengige Sollwerte
++
++100 HNT / Basis 90 EUR, expliziter Eigenuebertrag A nach B, beleggebundene
++100:1-Umstellung zu 1 NEW, Teilverkauf 0.4 NEW fuer 60 EUR. Feste Erwartungen:
++Basis 36 EUR, Gewinn 24 EUR, Restmenge 0.6, Restbasis 54 EUR. Einmaliger
++Mining-Zugang 90 EUR; Transfer und Umstellung erzeugen kein zweites Einkommen.
++Global-/Wallet-Preview, beide Preisvarianten, werden gegen dieselben literalen
++Zahlen geprueft. Finanzielle Sollwerte stammen nicht aus Produkt-Hilfsfunktionen.
++Die Event-Signaturfunktion im Test dient nur dem vorhandenen Bindungsprotokoll,
++nicht als Rechenoracle.
++
++Eigene globale und Wallet-Datenobjekte pruefen direkte Erwerbe, explizite
++Rootpfade, fehlendes Lot/Ereignis, verwaiste Links, Zyklus, widersprechende
++Line-/Lot-IDs und Erwerbsdaten, doppelte Lot-/Event-Identitaeten, Tiefenlimit,
++grosse Mengen und Unveraenderlichkeit. Stored Review prueft HNT-Root trotz
++NEW-Symbol, unbekannte Roottypen und mehrere Zeilen ohne verdoppelte Summen
++oder Rootzaehlung. ReviewGate muss auch eine Line ohne aktuelles Lot lesen
++und `lot_origin_unresolved` mit `blocks_export=True` ausgeben.
++
++Die zusaetzliche Lineage-only-EventEvidence-Probe manipuliert ausdruecklich
++nur ein synthetisches Staging-Artefakt: reale Raw-/Canonical-Daten ohne
++Eventblocker, 0 EUR Delta, ansonsten non_reward_origin. Das ist eine isolierte
++Konsumerpruefung, kein angeblicher vom FIFO erzeugter Resolverfehler.
++
++## Vorherbelege
++
++Auf altem Runtime-Pfad mit additiven Contracts, ohne Resolverimport:
++
++- `baseline-r2.xml`: vier echte Consumerfehler (HNT-Filter, NEW-Rootklasse,
++  Staging-Status, verlorene 0-EUR-Reviewzeile).
++- `baseline-consumers.xml`: 13 failed, 1 passed, 25 deselected, 11.47 s.
++- `baseline-v3.xml`: 15 failed, 2 passed, 25 deselected, 15.11 s. Enthalten
++  sind die unveraenderten Consumerfaelle sowie direkter unknown-Roottyp
++  (alter Pfad meldete faelschlich strict_ready=True). Direkter EUR-Erwerb
++  und die schon zuvor konservative carried-unknown-Kontrolle bestanden.
++- `baseline-review.xml`: 3 failed, 43 deselected, 4.33 s. Fehlendes aktuelles
++  Lot, verwaister Parent, Zyklus: vorher kein lot_origin_unresolved-Issue.
++
++Alles unter `/tmp/sr-origin-20261028-independent/`. Kein `xfail`, keine
++Importfehler als fachliche Baseline: Resolverfaelle wurden erst nach
++Uebernahme des Moduls ausgefuehrt. Fruehere Adapterlaeufe mit falschen
++synthetischen Tabellen-/Spaltennamen sowie fehlendem Tmp-Elternverzeichnis
++sind keine Produktbefunde und bleiben nur als technische Originallogs erhalten.
++Vorher-XML/JSON wurden nach Runtimeintegration nicht veraendert.
++
++SHA256 baseline-v3.xml:
++`086f75e9f1deeba31c2346c63240a7e69ff0508cab0a67e8daab99ed7780f6de`.
++SHA256 baseline-v3-source-freeze.json:
++`b54828eab4cc73d10e6da61802ab8c6300e8a051691dc5d8c3276763f507ebac`.
++
++## Zwischenstand Und Nachher
++
++Nach Resolver `84aca336`: 40 passed, 3 erwartete ReviewGate-Fails mit noch
++altem Coordinator-Hook, 3 deselected, 12.82 s (`resolver-r1.xml`).
++Consumerquellen im Lauf unveraendert.
++
++Nach zentraler Integration: `after-r1.xml`, 46 passed / 1 failed, 20.01 s.
++Der neue Lineage-only-Test hatte noch keinen synthetischen HNT-Tageskurs und
++konnte deshalb die beabsichtigte Bedingung blocked_events_count=0 nicht
++herstellen. Ausschliesslich dieses Fixture erhielt HNT/EUR 0.9 am Erwerbstag
++und 1.5 am Verkaufstag, keine numerische Erwartung wurde gelockert.
++
++Der bereinigte Lauf `final.xml` ergab 46 passed / 1 failed, 20.44 s. Dieser
++Fehler ist fachlich: blocked_events_count=0, Lineage-Zeile und Gruppe blocked,
++aber Gesamtbericht status=review. Die Assertion status=blocked bleibt erhalten;
++der Coordinator wurde zur zentralen Statuszusammenfuehrung informiert.
++SHA256 final.xml:
++`040dc8608e0fbfac375cc8c9c83c70c872e6771e2a39408cadf95c233c2ae5ec`.
++SHA256 final-source-freeze.json:
++`2d886a146c9125a25af95292d94444c68cbd5e34858a94f1dc4518ef8115c894`.
++Der zentrale Fix zaehlt nun blockierte Herkunftszeilen aus allen ausgewerteten
++Zeilen, nicht nur dem sichtbaren Limit. Keine eigene Produktcodekorrektur.
++
++## Erfolgreiche Nachpruefung
++
++Nach `eecec786`, unveraenderte 47 Referenztests: **47 passed, 24.09 s**,
++`verified.xml`. Kein `skip`/`xfail`, keine Lockerung der blocked-Assertion oder
++der Zahlen 90/36/60/24/54. Zeile, Gruppe und Gesamtbericht sind beim reinen
++Lineage-Fehler jetzt blocked, obwohl beide Canonical Events keinen Blocker
++haben. Die Stored-/Staging-/Review-/Altartefakt-Referenzen bestehen ebenfalls.
++
++SHA256 verified.xml:
++`ef4705f7c2c0b154ff21a73fc73547de0d042dcb965c36f1fdd91fffc785c925`.
++SHA256 verified-source-freeze.json:
++`9436f027bcb7926543dcd4379612dab718d3217d6d6d9182612b98c285c472c6`.
++
++Anschliessend vom Coordinator gefundener Testadapterfehler: Der feste Tmp-Root
++war mit einem fremden CI-basetemp inkompatibel. Nur die eigene Testdatei wurde
++korrigiert: autouse Session-Fixture bindet ROOT an
++`tmp_path_factory.getbasetemp().resolve()` vor den Case-Fixtures. Budget,
++DB-Schutz und Quellhashbeleg verwenden diesen tatsaechlichen Pfad. Kein
++statischer /tmp-Pfad im Test und keine veraenderte fachliche Erwartung.
++
++Portabilitaetsnachweise mit demselben Runtime-Stand:
++
++- **47 passed, 20.50 s**, frei gewaehlter Basispfad
++  `/tmp/sr-origin-20261028-independent/arbitrary-ci-base`;
++  `portable-explicit.xml`, SHA256
++  `f97e13f9441b03b383e8ab125ead9a8b98a0054b5147119bd77ba2a44387c28a`.
++- **47 passed, 21.58 s**, ohne `--basetemp`, mit eigenem `TMPDIR` und
++  `RUNNER_TEMP`; `portable-factory.xml`, SHA256
++  `e069588af9c01f45246acf0c0ad950cf6160e582460a55ab64772409c1bc2eb6`.
++- Beide Quellhashbelege melden `unchanged=true`. Erster Beleg liegt unter
++  `arbitrary-ci-base/portable-explicit-source-freeze.json`, SHA256
++  `6be70ba7b427b1da85341ff7bdc478e8d31b238f21f5acaaebd468106c9d55b5`.
++  Zweiter unter
++  `runner-temp/pytest-of-root/pytest-0/portable-factory-source-freeze.json`,
++  SHA256 `d39cb8c477446f803412b03f7d10acb7e2a04cae827bcbdc9f1c6c104fb3c044`.
++
++`ruff check --no-cache --select F tests/acceptance/test_lot_origin_reference.py`
++und `git diff --check` bestanden. Kein Vollsuitelauf durch diesen Agenten;
++keine darueber hinausgehende steuerliche Abnahme behauptet.
++
++## Reproduktion Und Speicher
++
++```sh
++mkdir -p /tmp/sr-origin-20261028-independent
++env PYTHONPATH=src:/tmp/steuerreport-connector-tools-20261026:/tmp/steuerreport-release-tools-20261025 \
++  STEUERREPORT_TEST_PRUNE_PASSED_DBS=1 python3 -m pytest -q \
++  tests/acceptance/test_lot_origin_reference.py \
++  --basetemp=/tmp/sr-origin-20261028-independent/verified \
++  --junitxml=/tmp/sr-origin-20261028-independent/verified.xml
++```
++
++Baseline-Selektor: `-k 'stored or real_bmf or zero_eur'`; Review-Baseline:
++`-k review_gate_reads`. Resolver-Zwischenlauf: `-k 'stored or resolver'`
++(dieser selektiert wegen des Namens auch die drei Stored-ReviewGate-Tests).
++
++Tmp-Budget wird im eigenen Fixture fuer den tatsaechlichen pytest-Basisordner
++auf unter 500 MiB geprueft; der gesamte eigene Audit-Tmp-Bestand wurde
++zusaetzlich gemessen. Keine
++Repository-/Datenbankkopien, kein Vollsuitelauf. Hoechster bisher gemessener
++Zwischenstand 297 MiB; nach Entfernen der synthetischen Baseline-DuckDBs
++und .prepared-Reste 2 MiB. XML, JSON und erzeugte Belegarchive bleiben erhalten.
++Bei erfolgreichen Proben entfernt das Fixture eigene DB-/WAL-/prepared-Dateien.
++Der Sessionbeleg haelt die verwendeten Consumer-Quellhashes vor/nach fest.
++Nach den erfolgreichen Nachpruefungen wurden auch die verbliebenen
++synthetischen Fehlerfall-DBs/.prepared-Reste entfernt. Verbleibender gesamter
++Audit-Tmp-Bestand: 5.3 MiB; Original-XML/JSON und Belegarchive erhalten.
++
++Keine automatische Privat-/Betriebszuordnung aus Herkunft. Eine konsistente
++ID-Kette prueft weder Belegechtheit noch Angemessenheit der positiven Basis.
+diff --git a/docs/audit/2026-10-28/LOT_HERKUNFT_VERTRAG.md b/docs/audit/2026-10-28/LOT_HERKUNFT_VERTRAG.md
+new file mode 100644
+index 0000000..e157cc2
+--- /dev/null
++++ b/docs/audit/2026-10-28/LOT_HERKUNFT_VERTRAG.md
+@@ -0,0 +1,66 @@
++# Vertrag: Lesende Lot-Herkunft
++
++Basis87b231b5a40716f41468e56a68048f3abd79f4cc. Keine Produktion,
++Methodenaktivierung, Neuberechnung produktiver Daten, Freigabe oder Deployment.
++Keine neue steuerliche Regel. Bestehende Klassifikationen bleiben konservative
++Pruefhinweise, keine automatische Betriebs-/Privatentscheidung.
++
++## Schnittstelle
++
++Neue reine Hilfsklasse `domain/lot_origin.py`:
++
++`LotOriginIndex(lots, events)` nimmt vorhandene Global-/Wallet-Lotobjekte
++und CanonicalEvents (Iterable) entgegen. `resolve(line)` liefert ein
++unveraenderliches `LotOriginTrace` mit:
++
++- `status`: direct, carried oder unresolved;
++- `lot_ids`: Tupel von aktuellem Lot bis zum Ursprung, hoechstens64Eintraege;
++- `direct_event_id`: unmittelbar am aktuellen Lot gespeicherte Herkunft;
++- `origin_event_id`: bestaetigtes Ursprungsereignis, sonstNone;
++- `origin_asset`: Asset des bestaetigten Ursprungslots, sonstNone;
++- `reason`: stabiler Fehlercode, sonstNone.
++
++Keine Namen-/Symbol-/Zeitnaehe-Heuristik, kein Netzwerk, keine Writes und
++keine Neuberechnung. Lot- und Event-IDs sind die Verbindung. Fehlender Lot,
++verwaister Link, doppelte Identitaet, Zyklus, Tiefenlimit, widersprechende
++Line-/Lot-Herkunft oder Erwerbsdaten ergeben unresolved. Originaldatum und
++Kostenbasis werden weder umgeschrieben noch aus einer Kette erfunden.
++Ein Herkunftslink beweist allein keine steuerliche Sphaere oder angemessene
++Kostenbasis. Herkunft bei Swap-/Bridge-Sonderfaellen nicht ohne Link ableiten.
++
++## Integration
++
++BusinessRewardInventoryReviewService verwendet den gleichen Trace fuer
++gespeicherte Zeilen. Sowohl veraeussertes Asset als auch bestaetigtes
++Ursprungsasset koennen den expliziten Assetfilter treffen. Ein umgestellter
++HNT-Zugang verschwindet also nicht nur wegen eines neuen Symbols aus dem
++Pruefumfang. Keine allgemeine positive Multichain-/Swapklassifikation.
++
++Additive Rowfelder (Koordinator integriert zentral):
++`lineage_status` (direct/carried/unresolved, Defaultdirect),
++`lineage_reason` (str/None), `sample_lot_path` (list[str], max64),
++`sample_direct_event_id` (str/None). Bestehende Ursprungsfelder beziehen
++sich auf den bestaetigten Root, nicht auf ein beliebiges Zwischenereignis.
++Fehler bleiben export-/pruefpflichtig. Gruppierung darf Mengen und Summen
++weder verlieren noch vervielfachen. Preview und gespeicherte Sicht muessen
++dieselbe Herkunftsauflösung konsumieren; Berechnungsergebnisse bleiben gleich.
++
++## Eigentum Und Speicherbudget
++
++- Implementierungsagent: neuer Resolver, business_inventory.py und eigene
++  fokussierte Unit-Tests. Keine Contracts/API/Frontend/Version/FIFO-Formeln.
++- Unabhaengiger Agent: eigene neue Referenzdatei unter tests/acceptance,
++  feste Zahlen und isolierte eigene Inputs, keine Produktfunktion als Oracle.
++- Koordinator: Contracts, BMF-Preview-/Belegconsumer, UI, OpenAPI, Integration.
++- Existierende saubere Worktrees wiederverwenden, keine DB-/Repositorykopien.
++- Synthetische Testbasen nur /tmp/sr-origin-20261028-ROLE, jeweils unter
++  500MiB; nach Erfolg DBs inklusive .prepared entfernen, Original-XML/JSON
++  und Belegarchive behalten. Kein paralleler Vollsuitelauf pro Agent.
++
++## Abnahme
++
++Direkter EUR-Kauf; Reward -> Eigenuebertrag -> Verkauf; belegte100:1-
++Umstellung -> Teilverkauf mit erhaltener Basis; Herkunft ausserhalb des
++urspruenglichen Symbols; missing/cycle/conflicting links; grosse Mengen;
++Gleichheit gespeicherter Mengen/Erloese/Kosten/Gewinne vor/nach lesender
++Auswertung. Keine neue Einkommensverdopplung und keine automatische Freigabe.
+diff --git a/docs/openapi/steuerreport-v2-openapi.json b/docs/openapi/steuerreport-v2-openapi.json
+index 0cbc3a6..98dd8ef 100644
+--- a/docs/openapi/steuerreport-v2-openapi.json
++++ b/docs/openapi/steuerreport-v2-openapi.json
+@@ -21994,6 +21994,13 @@
+             "title": "Combined Delta Eur",
+             "type": "string"
+           },
++          "direct_acquisition_event_ids": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Direct Acquisition Event Ids",
++            "type": "array"
++          },
+           "disposal_event_id": {
+             "title": "Disposal Event Id",
+             "type": "string"
+@@ -22009,6 +22016,20 @@
+             "title": "Interaction Delta Eur",
+             "type": "string"
+           },
++          "lineage_event_ids": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Lineage Event Ids",
++            "type": "array"
++          },
++          "lineage_issue_codes": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Lineage Issue Codes",
++            "type": "array"
++          },
+           "origin_classifications": {
+             "items": {
+               "type": "string"
+@@ -22248,6 +22269,11 @@
+             "title": "Next Actions",
+             "type": "array"
+           },
++          "origin_trace_policy": {
++            "default": "legacy_direct_origin_v1",
++            "title": "Origin Trace Policy",
++            "type": "string"
++          },
+           "potential_business_inventory_tax_lines_count": {
+             "default": 0,
+             "title": "Potential Business Inventory Tax Lines Count",
+@@ -23320,6 +23346,13 @@
+             "title": "Combined Delta Eur",
+             "type": "string"
+           },
++          "direct_acquisition_event_ids": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Direct Acquisition Event Ids",
++            "type": "array"
++          },
+           "disposal_event_id": {
+             "title": "Disposal Event Id",
+             "type": "string"
+@@ -23351,6 +23384,20 @@
+             "title": "Issue Codes",
+             "type": "array"
+           },
++          "lineage_event_ids": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Lineage Event Ids",
++            "type": "array"
++          },
++          "lineage_issue_codes": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Lineage Issue Codes",
++            "type": "array"
++          },
+           "origin_classifications": {
+             "items": {
+               "type": "string"
+@@ -24621,6 +24668,11 @@
+             "title": "Next Actions",
+             "type": "array"
+           },
++          "origin_trace_policy": {
++            "default": "legacy_direct_origin_v1",
++            "title": "Origin Trace Policy",
++            "type": "string"
++          },
+           "potential_business_acquisition_cost_eur": {
+             "default": "0",
+             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+@@ -24740,6 +24792,27 @@
+             ],
+             "title": "Last Disposal At"
+           },
++          "lineage_reason": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Lineage Reason"
++          },
++          "lineage_status": {
++            "default": "direct",
++            "enum": [
++              "direct",
++              "carried",
++              "unresolved"
++            ],
++            "title": "Lineage Status",
++            "type": "string"
++          },
+           "origin_account": {
+             "anyOf": [
+               {
+@@ -24788,6 +24861,17 @@
+             "title": "Reason",
+             "type": "string"
+           },
++          "sample_direct_event_id": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Sample Direct Event Id"
++          },
+           "sample_disposal_event_id": {
+             "anyOf": [
+               {
+@@ -24799,6 +24883,14 @@
+             ],
+             "title": "Sample Disposal Event Id"
+           },
++          "sample_lot_path": {
++            "items": {
++              "type": "string"
++            },
++            "maxItems": 64,
++            "title": "Sample Lot Path",
++            "type": "array"
++          },
+           "sample_origin_event_id": {
+             "anyOf": [
+               {
+diff --git a/frontend/src/main.tsx b/frontend/src/main.tsx
+index c19da6b..a765f69 100644
+--- a/frontend/src/main.tsx
++++ b/frontend/src/main.tsx
+@@ -13,6 +13,7 @@ import { ActivityWorkspace } from "./workspace/Transactions";
+ import { ReviewWorkspace } from "./workspace/ReviewWorkspace";
+ import { YearWorkspace } from "./workspace/YearWorkspace";
+ import { PriceWorkspace } from "./workspace/PriceWorkspace";
++import { LotOriginDetails, LOT_CLASS_LABELS, LOT_LINEAGE_LABELS } from "./workspace/LotOriginDetails";
+ import { navigateView, useViewState } from "./workspace/view-state";
+ import {
+   AlertTriangle,
+@@ -2611,6 +2612,7 @@ type Snapshot = {
+     status: "blocked" | "review" | "ready_for_professional_review";
+     strict_ready: boolean;
+     read_only: boolean;
++    origin_trace_policy?: string;
+     productive_tax_tables_unchanged: boolean;
+     active_global: Record<string, unknown>;
+     received_first_global: Record<string, unknown>;
+@@ -14852,6 +14854,8 @@ function TaxPanel({
+   const activeBusinessInventoryRows = (taxBusinessRewardInventoryReview?.rows ?? []).filter(
+     (row) => String(row.disposal_year) === activeYearValue
+   );
++  const [selectedLotOrigin, setSelectedLotOrigin] = useState<Record<string, unknown>>();
++  const currentOriginPreview = taxBmfCombinedFifoStaging?.origin_trace_policy === "linked_lot_origin_v1";
+   const activeBusinessInventoryTotals = activeBusinessInventoryRows.reduce(
+     (
+       totals: { potentialLines: number; unresolvedLines: number; potentialGainLoss: number },
+@@ -18074,18 +18078,20 @@ function TaxPanel({
+             title={`Ursprungssphaere der Verwertungen ${activeYearValue}`}
+             rows={activeBusinessInventoryRows.map((row) => ({
+               asset: row.asset,
+-              origin_source: row.origin_source,
+-              origin_event_type: row.origin_event_type,
+-              origin_account: row.origin_account,
++              ursprung: [row.origin_source, row.origin_event_type].filter(Boolean).join(" · ") || "Nicht verfügbar",
++              herkunftskette: LOT_LINEAGE_LABELS[String(row.lineage_status)] ?? "Noch nicht verfolgt",
+               tax_lines: row.tax_lines_count,
+               anschaffung_eur: formatCurrency(row.acquisition_cost_eur),
+               veraeusserung_eur: formatCurrency(row.disposal_proceeds_eur),
+               gewinn_verlust_eur: formatCurrency(row.gain_loss_eur),
+-              classification: row.classification
++              einordnung: LOT_CLASS_LABELS[String(row.classification)] ?? "Noch nicht eingeordnet",
++              lineage_details_full: row
+             }))}
++            rowActions={[{ label: "Ursprungslot anzeigen", icon: <GitBranch size={16} />, onClick: (row) => setSelectedLotOrigin(row.lineage_details_full as Record<string, unknown>) }]}
+             footer={taxBusinessRewardInventoryReview?.methodology ?? "Reward-Ursprungslot-Audit wird geladen."}
+             compact
+           />
++          {selectedLotOrigin && <LotOriginDetails row={selectedLotOrigin} onClose={() => setSelectedLotOrigin(undefined)} />}
+         </div>
+         <TablePanel
+           title="Review-only Income Event Preview"
+@@ -18403,8 +18409,8 @@ function TaxPanel({
+             <span>{formatDateTime(taxBmfCombinedFifoStaging?.generated_at)}</span>
+           </div>
+           <div className="buttonRow">
+-            <span className={`statusPill ${taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "ok" : "blocked"}`}>
+-              {taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "pruefbereit" : "fachlich blockiert"}
++            <span className={`statusPill ${currentOriginPreview && taxBmfCombinedFifoStaging?.status === "ready_for_professional_review" ? "ok" : "blocked"}`}>
++              {!taxBmfCombinedFifoStaging ? "Noch kein Prüflauf" : !currentOriginPreview ? "Herkunftsvorschau veraltet" : taxBmfCombinedFifoStaging.status === "ready_for_professional_review" ? "prüfbereit" : "fachlich blockiert"}
+             </span>
+             <button
+               type="button"
+@@ -18469,7 +18475,7 @@ function TaxPanel({
+               preisdelta_eur: formatCurrency(row.price_policy_delta_eur),
+               wallet_delta_eur: formatCurrency(row.wallet_scope_delta_eur),
+               kombiniert_eur: formatCurrency(row.combined_delta_eur),
+-              ursprung: Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : "",
++              ursprung: [Array.isArray(row.lineage_issue_codes) && row.lineage_issue_codes.length ? "Herkunftskette offen" : "", Array.isArray(row.origin_classifications) ? row.origin_classifications.join(", ") : ""].filter(Boolean).join(" · "),
+               disposal_event_id: row.disposal_event_id
+             }))}
+             footer="Vollstaendige IDs bleiben im API-Artefakt und im Zellen-Tooltip erhalten."
+diff --git a/frontend/src/workspace/LotOriginDetails.tsx b/frontend/src/workspace/LotOriginDetails.tsx
+new file mode 100644
+index 0000000..99e1439
+--- /dev/null
++++ b/frontend/src/workspace/LotOriginDetails.tsx
+@@ -0,0 +1,36 @@
++import { DetailPanel } from "./Ui";
++import { money } from "./resource";
++
++export const LOT_LINEAGE_LABELS: Record<string, string> = {
++  direct: "Direkter Zugang", carried: "Ursprungslot fortgeführt", unresolved: "Herkunftskette offen"
++};
++export const LOT_CLASS_LABELS: Record<string, string> = {
++  potential_business_inventory: "Potenziell betrieblich", origin_classification_review: "Ursprung einordnen",
++  separate_income_review: "Einkunftsart prüfen", non_reward_origin: "Kein direkter Reward-Ursprung",
++  missing_origin: "Ursprung nicht belegt"
++};
++
++export function LotOriginDetails({ row, onClose }: { row: Record<string, unknown>; onClose: () => void }) {
++  const text = (value: unknown) => value == null || value === "" ? "Nicht verfügbar" : String(value);
++  const path = Array.isArray(row.sample_lot_path) ? row.sample_lot_path.filter((value): value is string => typeof value === "string") : [];
++  return <DetailPanel title="Ursprung der Verwertung" onClose={onClose}>
++    {Number(row.tax_lines_count) > 1 && <p>{text(row.tax_lines_count)} zusammengefasste Verwertungszeilen. Die Ereignis-IDs und die Lot-Kette zeigen ein Beispiel; Beträge sind Gruppensummen.</p>}
++    <dl className="lotOriginDetails">
++      <dt>Asset</dt><dd>{text(row.asset)}</dd>
++      <dt>Einordnung</dt><dd>{LOT_CLASS_LABELS[String(row.classification)] ?? "Noch nicht eingeordnet"}</dd>
++      <dt>Herkunftskette</dt><dd>{LOT_LINEAGE_LABELS[String(row.lineage_status)] ?? "Noch nicht verfolgt"}</dd>
++      <dt>Ursprüngliche Quelle</dt><dd>{text(row.origin_source)}</dd>
++      <dt>Ursprünglicher Zugangstyp</dt><dd>{text(row.origin_event_type)}</dd>
++      <dt>Konto / Wallet</dt><dd>{text(row.origin_account)}</dd>
++      <dt>Ursprungsereignis</dt><dd><code>{text(row.sample_origin_event_id)}</code></dd>
++      <dt>Direkt gespeichertes Zwischenereignis</dt><dd><code>{text(row.sample_direct_event_id)}</code></dd>
++      <dt>Veräußerungsereignis</dt><dd><code>{text(row.sample_disposal_event_id)}</code></dd>
++      <dt>Anschaffungskosten</dt><dd>{money(row.acquisition_cost_eur)}</dd>
++      <dt>Veräußerungserlös</dt><dd>{money(row.disposal_proceeds_eur)}</dd>
++      <dt>Gewinn / Verlust</dt><dd>{money(row.gain_loss_eur)}</dd>
++    </dl>
++    <p>{text(row.reason)}</p>
++    {path.length > 0 && <section aria-label="Verknüpfte Lot-IDs"><h3>Lot-Verknüpfung</h3><ol>{path.map((id, index) => <li key={`${index}:${id}`}><code>{id}</code></li>)}</ol></section>}
++    {row.lineage_reason != null && <details><summary>Technischer Prüfgrund</summary><code>{text(row.lineage_reason)}</code></details>}
++  </DetailPanel>;
++}
+diff --git a/frontend/src/workspace/workspace.css b/frontend/src/workspace/workspace.css
+index dbc28aa..f1f2719 100644
+--- a/frontend/src/workspace/workspace.css
++++ b/frontend/src/workspace/workspace.css
+@@ -186,3 +186,11 @@
+ .wsPriceWorkspace .wsPager button { width: 38px; height: 38px; padding: 0; flex: 0 0 38px; }
+ .wsPriceWorkspace .wsPriceRecovery { border-left: 3px solid #448a9b; padding: 12px; background: #eaf3f6; }
+ .wsPriceWorkspace code { overflow-wrap: anywhere; }
++.lotOriginDetails { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px 16px; }
++.lotOriginDetails dt { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
++.lotOriginDetails dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
++.lotOriginDetails code { overflow-wrap: anywhere; }
++@media (max-width: 480px) {
++  .lotOriginDetails { grid-template-columns: minmax(0, 1fr); gap: 4px; }
++  .lotOriginDetails dd { margin-bottom: 12px; }
++}
+diff --git a/scripts/check_lot_origin_browser_v2.py b/scripts/check_lot_origin_browser_v2.py
+new file mode 100644
+index 0000000..2f1059a
+--- /dev/null
++++ b/scripts/check_lot_origin_browser_v2.py
+@@ -0,0 +1,156 @@
++"""Lesender Herkunftsablauf mit echten API-Antworten und synthetischer Datenbank."""
++from contextlib import ExitStack
++from datetime import datetime, timezone
++from decimal import Decimal
++from functools import partial
++from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
++import argparse
++import json
++import os
++from pathlib import Path
++import tempfile
++from threading import Thread
++from urllib.parse import urlparse
++
++from playwright.sync_api import expect, sync_playwright
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--output", type=Path, required=True)
++    parser.add_argument("--browser-executable")
++    args = parser.parse_args()
++    args.output.mkdir(parents=True, exist_ok=True)
++    root = Path(__file__).resolve().parents[1]
++    with ExitStack() as stack:
++        state = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="sr-origin-browser-")))
++        for key in list(os.environ):
++            if key.startswith("STEUERREPORT_"):
++                del os.environ[key]
++        os.environ.update(STEUERREPORT_STATE_DIR=str(state), STEUERREPORT_PRIVATE_PROFILE="",
++            STEUERREPORT_PRIVATE_CONFIG_DIR=str(state / "configs"), STEUERREPORT_V2_DB=str(state / "test.duckdb"),
++            STEUERREPORT_USERTRANSFER_ROOT=str(state / "imports"))
++        from fastapi.testclient import TestClient
++        from steuerreport_v2.api.app import create_app
++        from steuerreport_v2.contracts.events import CanonicalEventCreate
++        from steuerreport_v2.contracts.tax import TaxLot, TaxLine
++        from steuerreport_v2.db.duckdb_store import DuckDbStore
++        from steuerreport_v2.domain.tax import TaxService
++        from check_review_backend_browser_v2 import fingerprint
++        from ux_workspace_fixtures import WorkspaceFixture
++        store = DuckDbStore(state / "test.duckdb")
++        acquired = datetime(2024, 1, 1, tzinfo=timezone.utc)
++        carried = datetime(2024, 2, 1, tzinfo=timezone.utc)
++        disposed = datetime(2024, 3, 1, tzinfo=timezone.utc)
++        reward, transfer, sale = store.add_canonical_events([
++            CanonicalEventCreate(source="helium", event_time=acquired, event_type="reward", asset="HNT", quantity=Decimal("100")),
++            CanonicalEventCreate(source="helium", event_time=carried, event_type="transfer", asset="JUP", quantity=Decimal("1")),
++            CanonicalEventCreate(source="synthetic", event_time=disposed, event_type="trade", asset="JUP", quantity=Decimal("-0.4"), quote_asset="EUR", quote_quantity=Decimal("60")),
++        ])
++        # Gespeicherte synthetische Rechenergebnisse, keine fachliche Freigabe/Umstellung.
++        lots = [
++            TaxLot(lot_id="synthetic-root", asset="HNT", acquired_at=acquired, quantity_total=Decimal("100"), quantity_remaining=Decimal("0"), cost_basis_eur_total=Decimal("90"), source_event_id=reward.event_id),
++            TaxLot(lot_id="synthetic-carry", asset="JUP", acquired_at=acquired, quantity_total=Decimal("1"), quantity_remaining=Decimal("0.6"), cost_basis_eur_total=Decimal("90"), source_event_id=transfer.event_id, origin_lot_id="synthetic-root"),
++            TaxLot(lot_id="synthetic-orphan", asset="HNT", acquired_at=acquired, quantity_total=Decimal("1"), quantity_remaining=Decimal("0.5"), cost_basis_eur_total=Decimal("2"), source_event_id=reward.event_id, origin_lot_id="missing-synthetic-root"),
++        ]
++        lines = [
++            TaxLine(tax_line_id="synthetic-line", asset="JUP", acquired_at=acquired, disposed_at=disposed, quantity=Decimal("0.4"), acquisition_cost_eur=Decimal("36"), disposal_proceeds_eur=Decimal("60"), gain_loss_eur=Decimal("24"), holding_days=60, source_event_id=sale.event_id, lot_id="synthetic-carry", acquisition_source_event_id=transfer.event_id, origin_lot_id="synthetic-root"),
++            TaxLine(tax_line_id="synthetic-broken", asset="HNT", acquired_at=acquired, disposed_at=disposed, quantity=Decimal("0.5"), acquisition_cost_eur=Decimal("1"), disposal_proceeds_eur=Decimal("2"), gain_loss_eur=Decimal("1"), holding_days=60, source_event_id=sale.event_id, lot_id="synthetic-orphan", origin_lot_id="missing-synthetic-root"),
++        ]
++        TaxService(store)._replace_tax_tables(lots, lines, [])
++        client = stack.enter_context(TestClient(create_app(store)))
++        before = fingerprint(store)
++        endpoint = "/api/v1/tax-years/business-reward-inventory-review"
++        report = client.get(endpoint).json()["data"]
++        assert report["potential_business_tax_lines_count"] == 1 and report["unresolved_tax_lines_count"] == 1
++        assert report["strict_ready"] is False
++        fixture = WorkspaceFixture()
++        fixture.fresh = False
++        class Handler(SimpleHTTPRequestHandler):
++            def log_message(self, *args):
++                pass
++        server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Handler, directory=str(root / "frontend/dist")))
++        thread = Thread(target=server.serve_forever, daemon=True)
++        thread.start()
++        stack.callback(server.server_close)
++        stack.callback(thread.join)
++        stack.callback(server.shutdown)
++        origin = f"http://127.0.0.1:{server.server_port}"
++        calls, errors, shots = [], [], []
++        with ExitStack() as browser_stack:
++            playwright = browser_stack.enter_context(sync_playwright())
++            browser = browser_stack.enter_context(playwright.chromium.launch(headless=True, executable_path=args.browser_executable))
++            page = browser.new_page(viewport={"width": 1440, "height": 1000}, reduced_motion="reduce")
++            page.on("pageerror", lambda error: errors.append(str(error)))
++            def bridge(route):
++                request = route.request
++                parsed = urlparse(request.url)
++                if parsed.netloc != urlparse(origin).netloc:
++                    raise AssertionError("No external browser requests permitted")
++                if not parsed.path.startswith("/api/"):
++                    return route.continue_()
++                assert request.method == "GET" or (request.method == "POST" and parsed.path in {
++                    "/api/v1/activity/query", "/api/v1/workspace/review/query",
++                }), "No browser write permitted"
++                calls.append(parsed.path)
++                if parsed.path == endpoint:
++                    response = client.get(endpoint)
++                    return route.fulfill(status=response.status_code, content_type="application/json", body=response.content)
++                if parsed.path == "/api/v1/tax-years":
++                    return fixture.send(route, [{"year": 2024, "state": "review_required", "issues": []}])
++                if parsed.path == "/api/v1/tax/bmf-combined-fifo-staging/latest":
++                    return fixture.send(route, {"status": "ready_for_professional_review", "strict_ready": False,
++                        "origin_trace_policy": "legacy_direct_origin_v1", "years": [2024], "year_rows": [], "top_events": [], "top_assets": [], "sphere_rows": []})
++                if parsed.path in {
++                    "/api/v1/tax/lots", "/api/v1/tax/lines", "/api/v1/tax/unmatched-disposals",
++                    "/api/v1/derivatives/lines", "/api/v1/raw/objects", "/api/v1/events/canonical",
++                    "/api/v1/review/decisions", "/api/v1/review/decision-suggestions",
++                    "/api/v1/parity/v1/references", "/api/v1/export/packages", "/api/v1/admin/settings",
++                    "/api/v1/ai/tasks", "/api/v1/prices", "/api/v1/prices/latest",
++                }:
++                    return fixture.send(route, [])
++                try:
++                    if fixture.handle(route):
++                        return
++                except ValueError:
++                    pass
++                fixture.send(route, None)
++            page.route("**/*", bridge)
++            expect.set_options(timeout=30000)
++            page.goto(origin + "/#tax?tab=details&year=2024", wait_until="networkidle")
++            assert not errors, errors
++            panel = page.locator(".panel").filter(has=page.get_by_text("Ursprungssphaere der Verwertungen 2024", exact=True)).last
++            expect(panel).to_have_count(1)
++            expect(panel.get_by_text("Ursprungslot fortgeführt", exact=True)).to_be_visible()
++            expect(panel.get_by_text("Herkunftskette offen", exact=True)).to_be_visible()
++            expect(panel.get_by_role("columnheader", name="gewinn_verlust_eur", exact=True)).to_be_visible()
++            for width in (390, 768, 1280, 1440):
++                page.set_viewport_size({"width": width, "height": 1000})
++                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
++                panel.scroll_into_view_if_needed()
++                panel.screenshot(path=str(args.output / f"lineage-{width}.png"))
++                opener = panel.get_by_role("button", name="Ursprungslot anzeigen", exact=True).last
++                opener.click()
++                dialog = page.get_by_role("dialog", name="Ursprung der Verwertung", exact=True)
++                expect(dialog).to_be_visible()
++                expect(dialog.get_by_text("synthetic-root", exact=True)).to_be_visible()
++                expect(dialog.get_by_text("36,00 EUR", exact=True)).to_be_visible()
++                expect(dialog.get_by_text("24,00 EUR", exact=True)).to_be_visible()
++                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
++                dialog.screenshot(path=str(args.output / f"lineage-detail-{width}.png"))
++                dialog.get_by_role("button", name="Details schließen", exact=True).click()
++                expect(opener).to_be_focused()
++                shots.append(width)
++            page.goto(origin + "/#tax?tab=expert&year=2024", wait_until="networkidle")
++            expect(page.get_by_text("Herkunftsvorschau veraltet", exact=True)).to_be_visible()
++            assert fingerprint(store) == before
++            assert not errors, errors
++        result = {"passed": True, "viewports": shots, "actual_business_api": True, "unrelated_api": "synthetic fixtures",
++            "database_unchanged": True, "browser_writes": 0, "external_requests": 0, "errors": errors,
++            "checks": ["carried_root_visible", "unresolved_visible", "gain_column_not_hidden", "detail_basis_36_gain_24", "focus_return", "old_policy_stale"], "api_reads": len(calls)}
++        (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
++        print(json.dumps(result))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/src/steuerreport_v2/contracts/bmf_event_evidence.py b/src/steuerreport_v2/contracts/bmf_event_evidence.py
+index f40c4de..a823a0e 100644
+--- a/src/steuerreport_v2/contracts/bmf_event_evidence.py
++++ b/src/steuerreport_v2/contracts/bmf_event_evidence.py
+@@ -220,6 +220,9 @@ class BmfFifoDiscrepancyEvidenceRow(BaseModel):
+     acquisition_issue_event_ids_truncated: bool = False
+     acquisition_evidence_digest: str
+     origin_classifications: list[str] = Field(default_factory=list)
++    lineage_issue_codes: list[str] = Field(default_factory=list)
++    direct_acquisition_event_ids: list[str] = Field(default_factory=list)
++    lineage_event_ids: list[str] = Field(default_factory=list)
+     status: BmfEventEvidenceLineStatus
+     issue_codes: list[str] = Field(default_factory=list)
+     asset_fifo_drilldown_endpoint: str
+diff --git a/src/steuerreport_v2/contracts/bmf_fifo_staging.py b/src/steuerreport_v2/contracts/bmf_fifo_staging.py
+index 14eea7a..8768a60 100644
+--- a/src/steuerreport_v2/contracts/bmf_fifo_staging.py
++++ b/src/steuerreport_v2/contracts/bmf_fifo_staging.py
+@@ -89,6 +89,9 @@ class BmfCombinedFifoEventRow(BaseModel):
+     wallet_pool_ids: list[str] = Field(default_factory=list)
+     acquisition_source_event_ids: list[str] = Field(default_factory=list)
+     origin_classifications: list[str] = Field(default_factory=list)
++    lineage_issue_codes: list[str] = Field(default_factory=list)
++    direct_acquisition_event_ids: list[str] = Field(default_factory=list)
++    lineage_event_ids: list[str] = Field(default_factory=list)
+     active_global_quantity: Decimal = Decimal("0")
+     received_first_global_quantity: Decimal = Decimal("0")
+     active_wallet_quantity: Decimal = Decimal("0")
+@@ -111,6 +114,7 @@ class BmfCombinedFifoStagingReport(BaseModel):
+     status: BmfFifoStagingStatus
+     strict_ready: bool = False
+     read_only: Literal[True] = True
++    origin_trace_policy: str = "legacy_direct_origin_v1"
+     active_global_policy: str
+     received_first_global_policy: str
+     active_wallet_policy: str
+diff --git a/src/steuerreport_v2/contracts/business_inventory.py b/src/steuerreport_v2/contracts/business_inventory.py
+index b8bed45..c294a62 100644
+--- a/src/steuerreport_v2/contracts/business_inventory.py
++++ b/src/steuerreport_v2/contracts/business_inventory.py
+@@ -31,6 +31,10 @@ class BusinessRewardInventoryReviewRow(BaseModel):
+     last_disposal_at: str | None = None
+     sample_origin_event_id: str | None = None
+     sample_disposal_event_id: str | None = None
++    lineage_status: Literal["direct", "carried", "unresolved"] = "direct"
++    lineage_reason: str | None = None
++    sample_lot_path: list[str] = Field(default_factory=list, max_length=64)
++    sample_direct_event_id: str | None = None
+     classification: BusinessRewardOriginStatus
+     blocks_private_fifo_classification: bool = False
+     reason: str
+@@ -41,6 +45,7 @@ class BusinessRewardInventoryReviewReport(BaseModel):
+     assets: list[str] = Field(default_factory=list)
+     affected_years: list[int] = Field(default_factory=list)
+     strict_ready: bool = False
++    origin_trace_policy: str = "legacy_direct_origin_v1"
+     total_tax_lines_count: int = 0
+     potential_business_tax_lines_count: int = 0
+     unresolved_tax_lines_count: int = 0
+diff --git a/src/steuerreport_v2/domain/bmf_event_evidence.py b/src/steuerreport_v2/domain/bmf_event_evidence.py
+index 8dcad6f..5f23e91 100644
+--- a/src/steuerreport_v2/domain/bmf_event_evidence.py
++++ b/src/steuerreport_v2/domain/bmf_event_evidence.py
+@@ -10,6 +10,7 @@ import gzip
+ import hashlib
+ import json
+ from pathlib import Path
++from types import SimpleNamespace
+ 
+ from steuerreport_v2.contracts.bmf_event_evidence import (
+     BmfCanonicalEventEvidence,
+@@ -28,6 +29,8 @@ from steuerreport_v2.contracts.bmf_fifo_staging import BmfCombinedFifoEventRow
+ from steuerreport_v2.db.duckdb_store import DuckDbStore
+ from steuerreport_v2.domain.bmf_fifo_staging import BmfCombinedFifoStagingService
+ from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
++from steuerreport_v2.domain.lot_origin import LotOriginIndex
++from steuerreport_v2.domain.tax import TaxService
+ from steuerreport_v2.domain.tax_time import (
+     event_reporting_year_sql,
+     reporting_tax_year,
+@@ -95,6 +98,7 @@ class BmfFifoEventEvidenceService:
+         "missing_raw_evidence",
+         "missing_onchain_identifier",
+         "received_price_missing",
++        "lot_origin_unresolved",
+     }
+     SCOPES = (
+         _Scope(
+@@ -168,6 +172,7 @@ class BmfFifoEventEvidenceService:
+         ).input_fingerprint(staging.as_of)
+         staging_matches_current_input = (
+             staging.input_fingerprint_digest == current_input_fingerprint.digest
++            and staging.origin_trace_policy == BmfCombinedFifoStagingService.ORIGIN_TRACE_POLICY
+         )
+         staging_matches_current = (
+             staging.productive_tax_component_sha256 == productive_before
+@@ -177,7 +182,9 @@ class BmfFifoEventEvidenceService:
+             row
+             for row in staging.top_events
+             if self._scope_for(row) is not None
+-            and self._material_delta(row) >= request.min_abs_delta_eur
++            and (self._material_delta(row) >= request.min_abs_delta_eur
++                 or row.lineage_issue_codes
++                 or set(row.origin_classifications) & self.REVIEW_ORIGIN_CLASSIFICATIONS)
+         ]
+         eligible.sort(key=self._row_sort_key)
+         selected = eligible[: request.limit]
+@@ -190,6 +197,8 @@ class BmfFifoEventEvidenceService:
+             for event_id in (
+                 row.disposal_event_id,
+                 *row.acquisition_source_event_ids,
++                *row.direct_acquisition_event_ids,
++                *row.lineage_event_ids,
+             )
+         }
+         ledger_event_ids: set[str] = set()
+@@ -203,6 +212,11 @@ class BmfFifoEventEvidenceService:
+                 years=staging.years,
+                 as_of=staging.as_of,
+             )
++            # Full-Ledger umfasst auch Vorjahresherkunft ausserhalb der Prioritaetsgruppen.
++            for row in staging.top_events:
++                tax_graph_roles.setdefault(row.disposal_event_id, set()).add("disposal")
++                for event_id in set(row.acquisition_source_event_ids) | set(row.direct_acquisition_event_ids) | set(row.lineage_event_ids):
++                    tax_graph_roles.setdefault(event_id, set()).add("acquisition")
+             event_ids.update(ledger_event_ids)
+             event_ids.update(tax_graph_roles)
+         synthetic_fee_rows = {
+@@ -314,6 +328,9 @@ class BmfFifoEventEvidenceService:
+         counts = self._evidence_counts(unique_evidence)
+         status = self._report_status(
+             blocked_events_count=len(blocked_events),
++            blocked_origin_rows_count=sum(
++                1 for row in all_discrepancy_rows if row.status == "blocked"
++            ),
+             review_events_count=len(review_events),
+             unresolved_origin_rows_count=unresolved_origin_rows,
+             scope_complete=scope_complete,
+@@ -356,6 +373,8 @@ class BmfFifoEventEvidenceService:
+             ),
+             full_ledger_scope=full_ledger_scope,
+         )
++        if staging.origin_trace_policy != BmfCombinedFifoStagingService.ORIGIN_TRACE_POLICY:
++            findings.append("Der gespeicherte Prueflauf verwendet noch die fruehere direkte Herkunftszuordnung. Eine neue isolierte Herkunftsvorschau ist erforderlich; alte Artefakte bleiben unveraendert.")
+         if full_ledger_scope:
+             unknown_tax_graph_events = sum(
+                 1
+@@ -591,6 +610,16 @@ class BmfFifoEventEvidenceService:
+         result: dict[str, set[str]] = defaultdict(set)
+         for event_id, event_role in rows:
+             result[str(event_id)].add(str(event_role))
++        with self.store.connect() as con:
++            cursor = con.execute(f"""select line.* from tax_lines line
++                where {disposal_year} in ({placeholders}) and line.disposed_at <= ?""",
++                [*years, self._as_utc(as_of).replace(tzinfo=None)])
++            columns = [item[0] for item in cursor.description]
++            lines = [SimpleNamespace(**dict(zip(columns, row))) for row in cursor.fetchall()]
++        index = LotOriginIndex(TaxService(self.store).list_tax_lots(), self.store.list_canonical_events())
++        for line in lines:
++            for event_id in index.source_event_ids(index.resolve(line)):
++                result[event_id].add("acquisition")
+         return dict(result)
+ 
+     def _origin_evidence_groups(
+@@ -1609,18 +1638,25 @@ class BmfFifoEventEvidenceService:
+         if scope is None:
+             raise ValueError("Event liegt ausserhalb des Eventbeleg-Pruefumfangs.")
+         disposal = evidence_by_id[row.disposal_event_id]
+-        acquisition_ids = sorted(set(row.acquisition_source_event_ids))
++        acquisition_ids = sorted(set(row.acquisition_source_event_ids) | set(row.direct_acquisition_event_ids) | set(row.lineage_event_ids))
+         acquisition_evidence = [evidence_by_id[item] for item in acquisition_ids]
+         resolved_origin_classifications = sorted(
+             {
+                 self._origin_classification(item)
+-                for item in acquisition_evidence
++                for item in acquisition_evidence if item.event_id in row.acquisition_source_event_ids
+             }
+         )
++        if row.lineage_issue_codes:
++            resolved_origin_classifications = sorted(set(resolved_origin_classifications) | {"missing_origin"})
++        elif not row.acquisition_source_event_ids:
++            resolved_origin_classifications = sorted(set(row.origin_classifications) & self.REVIEW_ORIGIN_CLASSIFICATIONS)
+         issue_event_ids = [
+             item.event_id for item in acquisition_evidence if item.status != "ready"
+         ]
+         issue_codes = list(disposal.issue_codes)
++        if row.lineage_issue_codes:
++            issue_codes.append("lot_origin_unresolved")
++            issue_codes.extend("lot_origin:" + code for code in row.lineage_issue_codes)
+         issue_codes.extend(
+             code
+             for item in acquisition_evidence
+@@ -1688,6 +1724,9 @@ class BmfFifoEventEvidenceService:
+             acquisition_issue_event_ids_truncated=len(issue_event_ids) > 50,
+             acquisition_evidence_digest=acquisition_digest,
+             origin_classifications=resolved_origin_classifications,
++            lineage_issue_codes=row.lineage_issue_codes,
++            direct_acquisition_event_ids=row.direct_acquisition_event_ids,
++            lineage_event_ids=row.lineage_event_ids,
+             status=status,
+             issue_codes=issue_codes,
+             asset_fifo_drilldown_endpoint=(
+@@ -1708,6 +1747,8 @@ class BmfFifoEventEvidenceService:
+             for event_id in (
+                 row.disposal_event_id,
+                 *row.acquisition_source_event_ids,
++                *row.direct_acquisition_event_ids,
++                *row.lineage_event_ids,
+             )
+         }
+         evidence = [evidence_by_id[item] for item in sorted(event_ids)]
+@@ -1727,10 +1768,14 @@ class BmfFifoEventEvidenceService:
+                 ]
+                 if classification in self.REVIEW_ORIGIN_CLASSIFICATIONS
+             }
++            | {"lot_origin_unresolved" for row in selected if row.lineage_issue_codes}
++            | {"lot_origin:" + code for row in selected for code in row.lineage_issue_codes}
++            | {"origin:" + classification for row in selected if not row.acquisition_source_event_ids
++               for classification in row.origin_classifications if classification in self.REVIEW_ORIGIN_CLASSIFICATIONS}
+         )
+         if not selected:
+             status = "not_applicable"
+-        elif any(item.status == "blocked" for item in evidence):
++        elif any(item.status == "blocked" for item in evidence) or set(issue_codes) & self.BLOCKING_EVENT_CODES:
+             status = "blocked"
+         elif issue_codes:
+             status = "review"
+@@ -1882,8 +1927,9 @@ class BmfFifoEventEvidenceService:
+         unresolved_origin_rows_count: int,
+         scope_complete: bool,
+         staging_matches_current: bool,
++        blocked_origin_rows_count: int = 0,
+     ) -> str:
+-        if blocked_events_count or not staging_matches_current:
++        if blocked_events_count or blocked_origin_rows_count or not staging_matches_current:
+             return "blocked"
+         if review_events_count or unresolved_origin_rows_count or not scope_complete:
+             return "review"
+diff --git a/src/steuerreport_v2/domain/bmf_fifo_staging.py b/src/steuerreport_v2/domain/bmf_fifo_staging.py
+index 7148f95..226b737 100644
+--- a/src/steuerreport_v2/domain/bmf_fifo_staging.py
++++ b/src/steuerreport_v2/domain/bmf_fifo_staging.py
+@@ -64,6 +64,7 @@ class _SphereTotals(_Totals):
+ 
+ 
+ class BmfCombinedFifoStagingService:
++    ORIGIN_TRACE_POLICY = "linked_lot_origin_v1"
+     MATERIAL_DELTA_EUR = Decimal("0.01")
+     PROJECT_ROOT = SOFTWARE_ROOT
+     DEFAULT_DB = PROJECT_ROOT / "data/steuerreport_v2.duckdb"
+@@ -150,9 +151,12 @@ class BmfCombinedFifoStagingService:
+         events_by_id = {
+             event.event_id: event for event in received_wallet_state.canonical_events
+         }
++        from steuerreport_v2.domain.lot_origin import LotOriginIndex
++        origin_index = LotOriginIndex(received_wallet_state.all_lots, received_wallet_state.canonical_events)
+         sphere_rows, sphere_by_year_asset = self._sphere_rows(
+             received_wallet_lines,
+             events_by_id,
++            origin_index,
+         )
+         scenario_lines = {
+             "active_global": active_global_lines,
+@@ -180,6 +184,7 @@ class BmfCombinedFifoStagingService:
+             scenario_lines,
+             received_wallet_lines,
+             events_by_id,
++            origin_index,
+         )
+ 
+         active_global = self._scenario_totals(
+@@ -250,6 +255,7 @@ class BmfCombinedFifoStagingService:
+             years=years,
+             status=status,
+             strict_ready=False,
++            origin_trace_policy=self.ORIGIN_TRACE_POLICY,
+             active_global_policy=self.ACTIVE_GLOBAL_POLICY,
+             received_first_global_policy=self.RECEIVED_GLOBAL_POLICY,
+             active_wallet_policy=self.ACTIVE_WALLET_POLICY,
+@@ -472,6 +478,7 @@ class BmfCombinedFifoStagingService:
+         self,
+         lines: list[WalletFifoPreviewLine],
+         events_by_id: dict[str, CanonicalEvent],
++        origin_index,
+     ) -> tuple[
+         list[BmfCombinedFifoSphereRow],
+         dict[tuple[int, str, str], _SphereTotals],
+@@ -481,11 +488,13 @@ class BmfCombinedFifoStagingService:
+         )
+         for line in lines:
+             asset = line.asset.upper()
+-            origin = events_by_id.get(line.acquisition_source_event_id or "")
+-            classification = self._origin_classification(asset, origin)
+-            totals[(reporting_tax_year(line.disposed_at), asset, classification)].add_line(
+-                line
+-            )
++            trace = origin_index.resolve(line)
++            origin = events_by_id.get(trace.origin_event_id or "")
++            classification = "missing_origin" if trace.status == "unresolved" else self._origin_classification(trace.origin_asset or asset, origin)
++            total = totals[(reporting_tax_year(line.disposed_at), asset, classification)]
++            total.add(line)
++            if trace.origin_event_id:
++                total.origin_event_ids.add(trace.origin_event_id)
+         rows = [
+             BmfCombinedFifoSphereRow(
+                 year=year,
+@@ -508,6 +517,7 @@ class BmfCombinedFifoStagingService:
+         scenarios: dict[str, list[TaxLineLike]],
+         received_wallet_lines: list[WalletFifoPreviewLine],
+         events_by_id: dict[str, CanonicalEvent],
++        origin_index,
+     ) -> list[BmfCombinedFifoEventRow]:
+         totals = {
+             name: self._aggregate(lines, key="event")
+@@ -516,7 +526,7 @@ class BmfCombinedFifoStagingService:
+         keys = set().union(*(values.keys() for values in totals.values()))
+         wallet_context: dict[
+             tuple[int, str, str], dict[str, set[str]]
+-        ] = defaultdict(lambda: {"pools": set(), "origins": set(), "classes": set()})
++        ] = defaultdict(lambda: {"pools": set(), "origins": set(), "classes": set(), "direct": set(), "issues": set(), "lineage": set()})
+         disposed_at_by_key: dict[tuple[int, str, str], datetime] = {}
+         for line in received_wallet_lines:
+             key = (
+@@ -525,11 +535,17 @@ class BmfCombinedFifoStagingService:
+                 line.source_event_id,
+             )
+             wallet_context[key]["pools"].add(line.pool_id)
+-            if line.acquisition_source_event_id:
+-                wallet_context[key]["origins"].add(line.acquisition_source_event_id)
+-            origin = events_by_id.get(line.acquisition_source_event_id or "")
++            trace = origin_index.resolve(line)
++            wallet_context[key]["lineage"].update(origin_index.source_event_ids(trace))
++            if trace.direct_event_id:
++                wallet_context[key]["direct"].add(trace.direct_event_id)
++            if trace.origin_event_id:
++                wallet_context[key]["origins"].add(trace.origin_event_id)
++            if trace.reason:
++                wallet_context[key]["issues"].add(trace.reason)
++            origin = events_by_id.get(trace.origin_event_id or "")
+             wallet_context[key]["classes"].add(
+-                self._origin_classification(line.asset.upper(), origin)
++                "missing_origin" if trace.status == "unresolved" else self._origin_classification(trace.origin_asset or line.asset.upper(), origin)
+             )
+             disposed_at_by_key[key] = line.disposed_at
+ 
+@@ -579,6 +595,9 @@ class BmfCombinedFifoStagingService:
+                     wallet_pool_ids=sorted(context["pools"]),
+                     acquisition_source_event_ids=sorted(context["origins"]),
+                     origin_classifications=classifications,
++                    lineage_issue_codes=sorted(context["issues"]),
++                    direct_acquisition_event_ids=sorted(context["direct"]),
++                    lineage_event_ids=sorted(context["lineage"]),
+                     active_global_quantity=values["active_global"].quantity,
+                     received_first_global_quantity=values["received_global"].quantity,
+                     active_wallet_quantity=values["active_wallet"].quantity,
+diff --git a/src/steuerreport_v2/domain/business_inventory.py b/src/steuerreport_v2/domain/business_inventory.py
+index 4cc4b9f..814681a 100644
+--- a/src/steuerreport_v2/domain/business_inventory.py
++++ b/src/steuerreport_v2/domain/business_inventory.py
+@@ -1,7 +1,11 @@
+ from __future__ import annotations
+ 
+ from datetime import datetime, timezone
+-from decimal import Decimal
++from decimal import Decimal, localcontext
++from collections import defaultdict
++from types import SimpleNamespace
++
++from steuerreport_v2.contracts.events import CanonicalEvent
+ 
+ from steuerreport_v2.contracts.business_inventory import (
+     BusinessRewardInventoryReviewReport,
+@@ -9,7 +13,8 @@ from steuerreport_v2.contracts.business_inventory import (
+     BusinessRewardOriginStatus,
+ )
+ from steuerreport_v2.db.duckdb_store import DuckDbStore
+-from steuerreport_v2.domain.tax_time import reporting_year_sql
++from steuerreport_v2.domain.tax_time import reporting_tax_year
++from steuerreport_v2.domain.lot_origin import POLICY_ID, LotOriginIndex, LotOriginTrace
+ 
+ 
+ class BusinessRewardInventoryReviewService:
+@@ -38,47 +43,34 @@ class BusinessRewardInventoryReviewService:
+         if not asset_keys:
+             return self._empty_report(asset_keys)
+ 
+-        placeholders = ", ".join("?" for _ in asset_keys)
+-        disposal_year = reporting_year_sql("line.disposed_at")
+         with self.store.connect() as con:
+-            records = con.execute(
+-                f"""
+-                select
+-                    {disposal_year} as disposal_year,
+-                    upper(line.asset) as asset,
+-                    nullif(lower(trim(origin.source)), '') as origin_source,
+-                    nullif(lower(trim(origin.event_type)), '') as origin_event_type,
+-                    nullif(trim(coalesce(origin.account, origin.wallet)), '') as origin_account,
+-                    count(distinct origin.event_id)::integer as origin_events_count,
+-                    count(*)::integer as tax_lines_count,
+-                    coalesce(sum(line.quantity), 0) as quantity_disposed,
+-                    coalesce(sum(line.acquisition_cost_eur), 0) as acquisition_cost_eur,
+-                    coalesce(sum(line.disposal_proceeds_eur), 0) as disposal_proceeds_eur,
+-                    coalesce(sum(line.gain_loss_eur), 0) as gain_loss_eur,
+-                    min(line.disposed_at) as first_disposal_at,
+-                    max(line.disposed_at) as last_disposal_at,
+-                    min(origin.event_id) as sample_origin_event_id,
+-                    min(line.source_event_id) as sample_disposal_event_id
+-                from tax_lines line
+-                left join tax_lots lot on lot.lot_id = line.lot_id
+-                left join canonical_events origin
+-                  on origin.event_id = coalesce(
+-                    nullif(line.acquisition_source_event_id, ''),
+-                    lot.source_event_id
+-                  )
+-                where upper(line.asset) in ({placeholders})
+-                group by
+-                    disposal_year,
+-                    upper(line.asset),
+-                    origin_source,
+-                    origin_event_type,
+-                    origin_account
+-                order by disposal_year, asset, origin_source, origin_event_type, origin_account
+-                """,
+-                list(asset_keys),
+-            ).fetchall()
+-
+-        rows = [self._row(record) for record in records]
++            def records(table: str, order: str) -> list[SimpleNamespace]:
++                cursor = con.execute(f"select * from {table} order by {order}")
++                columns = [column[0] for column in cursor.description]
++                return [SimpleNamespace(**dict(zip(columns, row))) for row in cursor.fetchall()]
++
++            lots = records("tax_lots", "lot_id")
++            lines = records("tax_lines", "tax_line_id")
++        events = self.store.list_canonical_events()
++        origin_index = LotOriginIndex(lots, events)
++        events_by_id = {event.event_id: event for event in events}
++        groups = defaultdict(list)
++        for line in lines:
++            trace = origin_index.resolve(line)
++            if line.asset.upper() not in asset_keys and trace.origin_asset not in asset_keys:
++                continue
++            origin = events_by_id.get(trace.origin_event_id)
++            source = self._optional_text(origin.source.lower()) if origin else None
++            event_type = self._optional_text(origin.event_type.lower()) if origin else None
++            account = self._optional_text(origin.account or origin.wallet) if origin else None
++            key = (reporting_tax_year(line.disposed_at), line.asset.upper(), source,
++                   event_type, account, trace.status, trace.reason)
++            groups[key].append((line, trace, origin))
++
++        with localcontext() as context:
++            context.prec = 80
++            rows = [self._row(records) for _, records in sorted(
++                groups.items(), key=lambda item: tuple("" if value is None else value for value in item[0]))]
+         potential_rows = [
+             row for row in rows if row.classification == "potential_business_inventory"
+         ]
+@@ -108,6 +100,7 @@ class BusinessRewardInventoryReviewService:
+             )
+ 
+         return BusinessRewardInventoryReviewReport(
++            origin_trace_policy=POLICY_ID,
+             generated_at=datetime.now(timezone.utc).isoformat(),
+             assets=list(asset_keys),
+             affected_years=affected_years,
+@@ -117,15 +110,9 @@ class BusinessRewardInventoryReviewService:
+                 row.tax_lines_count for row in potential_rows
+             ),
+             unresolved_tax_lines_count=sum(row.tax_lines_count for row in unresolved_rows),
+-            potential_business_acquisition_cost_eur=sum(
+-                (row.acquisition_cost_eur for row in potential_rows), Decimal("0")
+-            ),
+-            potential_business_proceeds_eur=sum(
+-                (row.disposal_proceeds_eur for row in potential_rows), Decimal("0")
+-            ),
+-            potential_business_gain_loss_eur=sum(
+-                (row.gain_loss_eur for row in potential_rows), Decimal("0")
+-            ),
++            potential_business_acquisition_cost_eur=self._sum_amount(potential_rows, "acquisition_cost_eur"),
++            potential_business_proceeds_eur=self._sum_amount(potential_rows, "disposal_proceeds_eur"),
++            potential_business_gain_loss_eur=self._sum_amount(potential_rows, "gain_loss_eur"),
+             rows=rows,
+             findings=findings,
+             next_actions=(
+@@ -138,37 +125,44 @@ class BusinessRewardInventoryReviewService:
+                 else []
+             ),
+             methodology=(
+-                "Read-only Ursprungslot-Audit fuer HNT, IOT und MOBILE. Jede bestehende "
+-                "Tax-Line wird ueber tax_lots.source_event_id beziehungsweise den expliziten "
+-                "acquisition_source_event_id mit dem Anschaffungsereignis verbunden. Mining- "
+-                "und belegte On-Chain-Reward-Urspruenge werden konservativ als potenzielles "
++                "Read-only Ursprungslot-Audit mit explizitem Assetfilter auf Verkauf oder bestaetigten Ursprung. "
++                "Jede Tax-Line wird ueber eindeutige Lot-/Event-IDs und origin_lot_id bis zum "
++                "Ursprung verfolgt. Fehlende oder widerspruechliche Ketten bleiben im Review. Mining- "
++                "und als On-Chain-Rewards erfasste Urspruenge werden konservativ als potenzielles "
+                 "Betriebsvermoegen markiert. Income-, Transfer-, CEX-Staking- und fehlende "
+                 "Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, "
+-                "Tax-Lines, Preise oder Erklaerungswerte."
++                "Tax-Lines, Preise oder Erklaerungswerte. Eine ID-Kette belegt weder die Echtheit "
++                "der Quelle noch die Angemessenheit einer positiven Kostenbasis."
+             ),
+         )
+ 
+-    def _row(self, record: tuple[object, ...]) -> BusinessRewardInventoryReviewRow:
+-        source = self._optional_text(record[2])
+-        event_type = self._optional_text(record[3])
++    def _row(self, records: list[tuple[SimpleNamespace, LotOriginTrace, CanonicalEvent | None]]) -> BusinessRewardInventoryReviewRow:
++        line, trace, origin = min(records, key=lambda item: (
++            item[2].event_id if item[2] else "", item[0].tax_line_id))
++        source = self._optional_text(origin.source.lower()) if origin else None
++        event_type = self._optional_text(origin.event_type.lower()) if origin else None
+         classification, reason = self.classify_origin(source, event_type)
+         blocks = classification != "non_reward_origin"
+         return BusinessRewardInventoryReviewRow(
+-            disposal_year=int(record[0]),
+-            asset=str(record[1]),
++            disposal_year=reporting_tax_year(line.disposed_at),
++            asset=line.asset.upper(),
+             origin_source=source,
+             origin_event_type=event_type,
+-            origin_account=self._optional_text(record[4]),
+-            origin_events_count=int(record[5] or 0),
+-            tax_lines_count=int(record[6] or 0),
+-            quantity_disposed=Decimal(str(record[7] or "0")),
+-            acquisition_cost_eur=Decimal(str(record[8] or "0")),
+-            disposal_proceeds_eur=Decimal(str(record[9] or "0")),
+-            gain_loss_eur=Decimal(str(record[10] or "0")),
+-            first_disposal_at=self._iso(record[11]),
+-            last_disposal_at=self._iso(record[12]),
+-            sample_origin_event_id=self._optional_text(record[13]),
+-            sample_disposal_event_id=self._optional_text(record[14]),
++            origin_account=self._optional_text(origin.account or origin.wallet) if origin else None,
++            origin_events_count=len({item[2].event_id for item in records if item[2] is not None}),
++            tax_lines_count=len(records),
++            quantity_disposed=sum((item[0].quantity for item in records), Decimal("0")),
++            acquisition_cost_eur=sum((item[0].acquisition_cost_eur for item in records), Decimal("0")),
++            disposal_proceeds_eur=sum((item[0].disposal_proceeds_eur for item in records), Decimal("0")),
++            gain_loss_eur=sum((item[0].gain_loss_eur for item in records), Decimal("0")),
++            first_disposal_at=self._iso(min(item[0].disposed_at for item in records)),
++            last_disposal_at=self._iso(max(item[0].disposed_at for item in records)),
++            sample_origin_event_id=origin.event_id if origin else None,
++            sample_disposal_event_id=line.source_event_id,
++            lineage_status=trace.status,
++            lineage_reason=trace.reason,
++            sample_lot_path=list(trace.lot_ids),
++            sample_direct_event_id=trace.direct_event_id,
+             classification=classification,
+             blocks_private_fifo_classification=blocks,
+             reason=reason,
+@@ -202,9 +196,14 @@ class BusinessRewardInventoryReviewService:
+                 "origin_classification_review",
+                 "Income oder Transfer kann Reward, Migration, Airdrop oder FIFO-Fortfuehrung sein; Primaerbeleg fehlt in dieser Ableitung.",
+             )
++        if event_type == "trade":
++            return (
++                "non_reward_origin",
++                "Der direkte Ursprung ist ein Handel; keine automatische steuerliche Sphaerenfreigabe.",
++            )
+         return (
+-            "non_reward_origin",
+-            "Der direkte Ursprung ist kein Reward-/Mining-/Staking-Ereignis.",
++            "origin_classification_review",
++            "Der Ursprungstyp ist nicht als Anschaffung klassifiziert; keine automatische Privatzuordnung.",
+         )
+ 
+     def _empty_report(
+@@ -212,6 +211,7 @@ class BusinessRewardInventoryReviewService:
+         assets: tuple[str, ...],
+     ) -> BusinessRewardInventoryReviewReport:
+         return BusinessRewardInventoryReviewReport(
++            origin_trace_policy=POLICY_ID,
+             generated_at=datetime.now(timezone.utc).isoformat(),
+             assets=list(assets),
+             strict_ready=True,
+@@ -219,6 +219,12 @@ class BusinessRewardInventoryReviewService:
+             methodology="Read-only Ursprungslot-Audit; keine Auswahl, keine Datenveraenderung.",
+         )
+ 
++    @staticmethod
++    def _sum_amount(rows: list[BusinessRewardInventoryReviewRow], field: str) -> Decimal:
++        with localcontext() as context:
++            context.prec = 80
++            return sum((getattr(row, field) for row in rows), Decimal("0"))
++
+     @staticmethod
+     def _optional_text(value: object) -> str | None:
+         text = str(value or "").strip()
+diff --git a/src/steuerreport_v2/domain/lot_origin.py b/src/steuerreport_v2/domain/lot_origin.py
+new file mode 100644
+index 0000000..75a0f01
+--- /dev/null
++++ b/src/steuerreport_v2/domain/lot_origin.py
+@@ -0,0 +1,132 @@
++"""Reine ID-Herkunftsaufloesung; kein Beleg fuer Sphaere oder Kostenbasis."""
++from __future__ import annotations
++
++from dataclasses import dataclass
++from typing import Iterable, Literal, Protocol
++from datetime import datetime
++
++from steuerreport_v2.contracts.events import CanonicalEvent
++from steuerreport_v2.domain.tax_time import as_utc
++
++
++POLICY_ID = "linked_lot_origin_v1"
++
++
++class _Lot(Protocol):
++    lot_id: str
++    asset: str
++    acquired_at: datetime
++    source_event_id: str
++    origin_lot_id: str | None
++    pool_id: str | None
++
++
++class _Line(Protocol):
++    lot_id: str
++    asset: str
++    acquired_at: datetime | None
++    disposed_at: datetime
++    acquisition_source_event_id: str | None
++    origin_lot_id: str | None
++    pool_id: str | None
++
++
++@dataclass(frozen=True)
++class LotOriginTrace:
++    status: Literal["direct", "carried", "unresolved"]
++    lot_ids: tuple[str, ...]
++    direct_event_id: str | None
++    origin_event_id: str | None
++    origin_asset: str | None
++    reason: str | None
++
++
++class LotOriginIndex:
++    MAX_DEPTH = 64
++
++    def __init__(self, lots: Iterable[_Lot], events: Iterable[CanonicalEvent]) -> None:
++        self._lots: dict[str, _Lot] = {}
++        self._events: dict[str, CanonicalEvent] = {}
++        self._duplicate_lots: set[str] = set()
++        self._duplicate_events: set[str] = set()
++        for lot in lots:
++            if lot.lot_id in self._lots:
++                self._duplicate_lots.add(lot.lot_id)
++            self._lots[lot.lot_id] = lot
++        for event in events:
++            if event.event_id in self._events:
++                self._duplicate_events.add(event.event_id)
++            self._events[event.event_id] = event
++
++    def resolve(self, line: _Line) -> LotOriginTrace:
++        path: list[str] = []
++        seen: set[str] = set()
++        direct = None
++
++        def unresolved(reason: str) -> LotOriginTrace:
++            return LotOriginTrace("unresolved", tuple(path), direct, None, None, reason)
++
++        lot_id = line.lot_id
++        acquired_at = None
++        while True:
++            if lot_id in seen:
++                return unresolved("lot_cycle")
++            if len(path) >= self.MAX_DEPTH:
++                return unresolved("lot_depth_exceeded")
++            path.append(lot_id)
++            seen.add(lot_id)
++            if lot_id in self._duplicate_lots:
++                return unresolved("duplicate_lot_id")
++            lot = self._lots.get(lot_id)
++            if lot is None:
++                return unresolved("missing_lot" if len(path) == 1 else "missing_origin_lot")
++            if len(path) == 1:
++                direct = lot.source_event_id or None
++                acquired_at = as_utc(lot.acquired_at)
++                if line.asset.upper() != lot.asset.upper():
++                    return unresolved("line_lot_asset_conflict")
++                if line.pool_id and line.pool_id != lot.pool_id:
++                    return unresolved("line_lot_pool_conflict")
++                if (line.acquisition_source_event_id
++                        and line.acquisition_source_event_id != direct):
++                    return unresolved("line_lot_source_conflict")
++                if line.origin_lot_id and line.origin_lot_id != lot.origin_lot_id:
++                    return unresolved("line_lot_origin_conflict")
++                # A nullable legacy line date may use its actual lot, never a guessed date.
++                if line.acquired_at is not None and as_utc(line.acquired_at) != acquired_at:
++                    return unresolved("line_lot_acquisition_conflict")
++                if as_utc(line.disposed_at) < acquired_at:
++                    return unresolved("disposal_before_acquisition")
++            if as_utc(lot.acquired_at) != acquired_at:
++                return unresolved("carried_acquisition_conflict")
++            if lot.source_event_id in self._duplicate_events:
++                return unresolved("duplicate_event_id")
++            event = self._events.get(lot.source_event_id)
++            if event is None:
++                return unresolved("missing_source_event")
++            event_at = as_utc(event.event_time)
++            if event_at < acquired_at or event_at > as_utc(line.disposed_at):
++                return unresolved("source_event_time_conflict")
++            if not self._acquires(event, lot.asset):
++                return unresolved("source_event_asset_conflict")
++            if not lot.origin_lot_id:
++                if event_at != acquired_at:
++                    return unresolved("root_acquisition_time_conflict")
++                return LotOriginTrace("direct" if len(path) == 1 else "carried",
++                                      tuple(path), direct, event.event_id, lot.asset.upper(), None)
++            lot_id = lot.origin_lot_id
++
++    def source_event_ids(self, trace: LotOriginTrace) -> tuple[str, ...]:
++        return tuple(dict.fromkeys(
++            self._lots[lot_id].source_event_id for lot_id in trace.lot_ids
++            if lot_id in self._lots and self._lots[lot_id].source_event_id
++        ))
++
++    @staticmethod
++    def _acquires(event: CanonicalEvent, asset: str) -> bool:
++        asset = asset.upper()
++        if event.asset.upper() == asset and event.quantity > 0:
++            return True
++        return (event.event_type == "trade" and event.quantity < 0
++                and (event.quote_asset or "").upper() == asset
++                and event.quote_quantity is not None and event.quote_quantity != 0)
+diff --git a/src/steuerreport_v2/domain/review.py b/src/steuerreport_v2/domain/review.py
+index 11577f4..cdc8ca5 100644
+--- a/src/steuerreport_v2/domain/review.py
++++ b/src/steuerreport_v2/domain/review.py
+@@ -6,6 +6,7 @@ from datetime import datetime, timezone
+ from decimal import Decimal
+ from hashlib import sha1
+ import json
++from types import SimpleNamespace
+ 
+ from steuerreport_v2.contracts.review import (
+     ReviewDecisionSuggestion,
+@@ -68,6 +69,23 @@ class ReviewService:
+                                           message="Freigegebene Datenkorrektur stimmt nicht mit dem aktuellen Datenstand ueberein.", blocks_export=True))
+         positions = BalanceLedgerBuilder(self.store).positions()
+ 
++        from steuerreport_v2.domain.lot_origin import LotOriginIndex
++        origin_events = self.store.list_canonical_events()
++        origin_index = LotOriginIndex(TaxService(self.store).list_tax_lots(), origin_events)
++        with self.store.connect() as con:
++            origin_lines = con.execute("""select tax_line_id,source_event_id,lot_id,asset,acquired_at,
++                disposed_at,pool_id,origin_lot_id,acquisition_source_event_id from tax_lines
++                order by disposed_at,tax_line_id""").fetchall()
++        for values in origin_lines:
++            line = SimpleNamespace(**dict(zip(("tax_line_id", "source_event_id", "lot_id", "asset",
++                "acquired_at", "disposed_at", "pool_id", "origin_lot_id", "acquisition_source_event_id"), values)))
++            trace = origin_index.resolve(line)
++            if trace.status == "unresolved":
++                issues.append(ReviewIssue(code="lot_origin_unresolved", severity="high",
++                    scope=f"event:{line.source_event_id}:lot:{line.lot_id}", blocks_export=True,
++                    tax_year=reporting_tax_year(line.disposed_at),
++                    message=f"Die gespeicherte Anschaffungsherkunft fuer {line.asset} ist nicht vollstaendig oder widerspruchsfrei verknuepft ({trace.reason}). Originale Ereignis- und Lotverweise pruefen; keine automatische private Einordnung."))
++
+         with self.store.connect() as con:
+             zero_basis = con.execute("""
+                 select lot.lot_id, lot.asset, lot.source_event_id, min(line.disposed_at)
+diff --git a/tests/acceptance/test_lot_origin_evidence_reference.py b/tests/acceptance/test_lot_origin_evidence_reference.py
+new file mode 100644
+index 0000000..5e3b78c
+--- /dev/null
++++ b/tests/acceptance/test_lot_origin_evidence_reference.py
+@@ -0,0 +1,81 @@
++"""Zwei feste Herkunftsbeleg-Regressionen; nur synthetische Inputs."""
++from datetime import datetime, timezone
++from decimal import Decimal
++
++from steuerreport_v2.contracts.bmf_event_evidence import (
++    BmfCanonicalEventEvidence, BmfEventSourceEvidence,
++)
++from steuerreport_v2.contracts.bmf_fifo_staging import BmfCombinedFifoEventRow
++from steuerreport_v2.contracts.events import CanonicalEventCreate
++from steuerreport_v2.contracts.tax import TaxLine, TaxLot
++from steuerreport_v2.db.duckdb_store import DuckDbStore
++from steuerreport_v2.domain.bmf_event_evidence import BmfFifoEventEvidenceService
++from steuerreport_v2.domain.lot_origin import LotOriginIndex
++from steuerreport_v2.domain.tax import TaxService
++
++
++D = Decimal
++WHEN = datetime(2024, 3, 1, tzinfo=timezone.utc)
++
++
++def _evidence(key, kind, asset, *, blocked=False):
++    return BmfCanonicalEventEvidence(
++        event_id=key, event_time=WHEN, source="synthetic", event_type=kind, asset=asset,
++        source_evidence=BmfEventSourceEvidence(
++            identifier_kind="missing" if blocked else "raw_batch_row",
++            status="blocked" if blocked else "ready"),
++        status="blocked" if blocked else "ready",
++        issue_codes=["missing_raw_evidence"] if blocked else [], evidence_digest="fixture-" + key,
++    )
++
++
++def test_blocked_intermediate_evidence_blocks_discrepancy_and_group():
++    row = BmfCombinedFifoEventRow(
++        year=2024, asset="JUP", disposal_event_id="sale", disposed_at=WHEN,
++        acquisition_source_event_ids=["root"], direct_acquisition_event_ids=["target"],
++        origin_classifications=["non_reward_origin"], combined_delta_eur=D("1"),
++    )
++    evidence = {"sale": _evidence("sale", "trade", "JUP"),
++                "root": _evidence("root", "trade", "HNT"),
++                "target": _evidence("target", "transfer", "JUP", blocked=True)}
++    # These two pure consumers need no store; all evidence states are explicit controls.
++    service = object.__new__(BmfFifoEventEvidenceService)
++    discrepancy = service._discrepancy_row(row, evidence)
++    group = service._group(service._scope_for(row), [row], evidence)
++    assert evidence["target"].status == "blocked"
++    assert (discrepancy.status, group.status) == ("blocked", "blocked"), (
++        "Missing intermediate raw evidence must not become ready merely because root and sale are ready",
++        discrepancy.status, discrepancy.issue_codes, group.status, group.issue_codes,
++    )
++
++
++def test_full_ledger_roles_include_prior_year_root_outside_disposal_asset_scope(tmp_path):
++    store = DuckDbStore(tmp_path / "prior-year-root.duckdb")
++    acquired = datetime(2023, 1, 1, tzinfo=timezone.utc)
++    root, target, sale = store.add_canonical_events([
++        CanonicalEventCreate(source="synthetic", event_time=acquired, event_type="mining",
++                             asset="HNT", quantity=D("100")),
++        CanonicalEventCreate(source="synthetic", event_time=datetime(2024, 2, 1, tzinfo=timezone.utc),
++                             event_type="transfer", asset="XYZ", quantity=D("1")),
++        CanonicalEventCreate(source="synthetic", event_time=WHEN, event_type="trade", asset="XYZ",
++                             quantity=D("-0.4"), quote_asset="EUR", quote_quantity=D("120")),
++    ])
++    lots = [TaxLot(lot_id="root-lot", asset="HNT", acquired_at=acquired, quantity_total=D("100"),
++                   quantity_remaining=D("0"), cost_basis_eur_total=D("200"), source_event_id=root.event_id),
++            TaxLot(lot_id="carried-lot", asset="XYZ", acquired_at=acquired, quantity_total=D("1"),
++                   quantity_remaining=D("0.6"), cost_basis_eur_total=D("200"),
++                   source_event_id=target.event_id, origin_lot_id="root-lot")]
++    line = TaxLine(tax_line_id="sale-line", asset="XYZ", acquired_at=acquired, disposed_at=WHEN,
++                   quantity=D("0.4"), acquisition_cost_eur=D("80"), disposal_proceeds_eur=D("120"),
++                   gain_loss_eur=D("40"), holding_days=425, source_event_id=sale.event_id,
++                   lot_id="carried-lot", acquisition_source_event_id=target.event_id, origin_lot_id="root-lot")
++    TaxService(store)._replace_tax_tables(lots, [line], [])
++    trace = LotOriginIndex(lots, [root, target, sale]).resolve(line)
++    assert trace.status == "carried" and trace.origin_event_id == root.event_id
++    roles = BmfFifoEventEvidenceService(store)._tax_graph_roles(
++        years=[2024], as_of=datetime(2024, 12, 31, tzinfo=timezone.utc))
++    assert {root.event_id, target.event_id, sale.event_id} <= set(roles), (
++        "Full-ledger evidence must retain prior-year root and direct carry event even for XYZ disposals",
++        roles, root.event_id,
++    )
++    assert "acquisition" in roles[root.event_id]
+diff --git a/tests/acceptance/test_lot_origin_reference.py b/tests/acceptance/test_lot_origin_reference.py
+new file mode 100644
+index 0000000..c46f63e
+--- /dev/null
++++ b/tests/acceptance/test_lot_origin_reference.py
+@@ -0,0 +1,901 @@
++"""Unabhaengige, rein synthetische Herkunftsreferenz ohne Rechenoracle.
++
++100 HNT, Basis 90 -> Eigenuebertrag -> 1 NEW -> Verkauf 0.4 fuer 60:
++Basis 36, Gewinn 24, Rest 0.6 / Basis 54. Herkunft ist keine Freigabe.
++"""
++
++from datetime import datetime, timezone
++from decimal import Decimal, localcontext
++import hashlib
++import json
++from pathlib import Path
++import shutil
++import socket
++
++import duckdb
++import pytest
++
++from steuerreport_v2.contracts.bmf_event_evidence import BmfFifoEventEvidenceRunRequest
++from steuerreport_v2.contracts.bmf_fifo_staging import (
++    BmfCombinedFifoEventRow,
++    BmfFifoStagingRunRequest,
++)
++from steuerreport_v2.contracts.events import CanonicalEvent, CanonicalEventCreate
++from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
++from steuerreport_v2.contracts.prices import PricePointCreate
++from steuerreport_v2.contracts.tax import TaxLine, TaxLot
++from steuerreport_v2.contracts.tax_wallet_fifo import (
++    WalletFifoPreviewLine,
++    WalletFifoPreviewLot,
++)
++from steuerreport_v2.db.duckdb_store import DuckDbStore
++from steuerreport_v2.domain.bmf_event_evidence import BmfFifoEventEvidenceService
++from steuerreport_v2.domain.bmf_fifo_staging import BmfCombinedFifoStagingService
++from steuerreport_v2.domain.business_inventory import (
++    BusinessRewardInventoryReviewService,
++)
++from steuerreport_v2.domain.review import ReviewService
++from steuerreport_v2.domain.tax import TaxService
++from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
++from steuerreport_v2.domain.tax_years import TaxYearService
++
++
++ROOT: Path | None = None
++ACQUIRED = datetime(2024, 1, 10, 12, tzinfo=timezone.utc)
++DISPOSED = datetime(2024, 7, 1, 12, tzinfo=timezone.utc)
++AS_OF = datetime(2024, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
++
++
++@pytest.fixture(scope="session", autouse=True)
++def frozen_consumer_sources(request, tmp_path_factory):
++    global ROOT
++    ROOT = tmp_path_factory.getbasetemp().resolve()
++    repo = Path(__file__).resolve().parents[2]
++    names = (
++        "domain/lot_origin.py",
++        "domain/business_inventory.py",
++        "domain/bmf_fifo_staging.py",
++        "domain/bmf_event_evidence.py",
++        "domain/review.py",
++        "domain/tax.py",
++        "domain/tax_wallet_fifo.py",
++        "domain/token_conversion.py",
++        "contracts/business_inventory.py",
++        "contracts/bmf_fifo_staging.py",
++        "contracts/bmf_event_evidence.py",
++    )
++
++    def hashes():
++        return {
++            name: hashlib.sha256(path.read_bytes()).hexdigest()
++            if path.is_file()
++            else None
++            for name in names
++            for path in [repo / "src/steuerreport_v2" / name]
++        }
++
++    before = hashes()
++    yield
++    after = hashes()
++    xml = request.config.getoption("xmlpath")
++    name = Path(xml).stem if xml else "reference"
++    ROOT.mkdir(parents=True, exist_ok=True)
++    (ROOT / f"{name}-source-freeze.json").write_text(
++        json.dumps(
++            {
++                "before": before,
++                "after": after,
++                "unchanged": before == after,
++                "retained_bytes": _budget(),
++            },
++            sort_keys=True,
++            indent=2,
++        )
++        + "\n"
++    )
++    assert before == after, "Consumerquellen waehrend Referenzlauf veraendert"
++
++
++def _budget():
++    assert ROOT is not None
++    size = sum(p.stat().st_size for p in ROOT.rglob("*") if p.is_file())
++    assert size < 500 * 1024 * 1024, f"Eigenes Tmpbudget ueberschritten: {size}"
++    return size
++
++
++@pytest.fixture
++def case(tmp_path, monkeypatch, request):
++    assert ROOT is not None
++    assert tmp_path.resolve().is_relative_to(ROOT)
++    config = tmp_path / "private-configs"
++    config.mkdir()
++    profile = tmp_path / "profile.json"
++    profile.write_text("{}\n")
++    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", str(profile))
++    monkeypatch.setenv("STEUERREPORT_PRIVATE_CONFIG_DIR", str(config))
++    monkeypatch.setenv("STEUERREPORT_V2_DB", str(tmp_path / "synthetic.duckdb"))
++    original_connect = duckdb.connect
++
++    def guarded_connect(database=":memory:", *args, **kwargs):
++        if str(database) != ":memory:":
++            assert Path(database).resolve().is_relative_to(tmp_path.resolve())
++        return original_connect(database, *args, **kwargs)
++
++    def blocked(*args, **kwargs):
++        raise OSError("Lot-Referenz: Netzwerk gesperrt")
++
++    monkeypatch.setattr(duckdb, "connect", guarded_connect)
++    monkeypatch.setattr(socket.socket, "connect", blocked)
++    monkeypatch.setattr(socket.socket, "connect_ex", blocked)
++    _budget()
++    store = DuckDbStore(tmp_path / "synthetic.duckdb")
++    store.health()
++    yield tmp_path, config, store
++    if getattr(request.node, "_steuerreport_call_passed", False):
++        for path in sorted(
++            tmp_path.rglob("*"), key=lambda p: len(p.parts), reverse=True
++        ):
++            if path.is_file() and (
++                path.suffix in {".duckdb", ".wal"} or path.name.endswith(".prepared")
++            ):
++                path.unlink()
++            elif path.is_dir() and path.name.endswith(".prepared"):
++                shutil.rmtree(path)
++    _budget()
++
++
++def _event(event_id, *, asset="HNT", kind="mining", account="A", at=ACQUIRED):
++    return CanonicalEvent(
++        event_id=event_id,
++        source="helium",
++        event_time=at,
++        event_type=kind,
++        asset=asset,
++        quantity=Decimal("100"),
++        account=account,
++    )
++
++
++def _objects():
++    root = TaxLot(
++        lot_id="reward-lot",
++        asset="HNT",
++        acquired_at=ACQUIRED,
++        quantity_total=Decimal("100"),
++        quantity_remaining=Decimal("0"),
++        cost_basis_eur_total=Decimal("90"),
++        source_event_id="reward",
++    )
++    moved = TaxLot(
++        lot_id="transfer-lot",
++        asset="HNT",
++        acquired_at=ACQUIRED,
++        quantity_total=Decimal("100"),
++        quantity_remaining=Decimal("0"),
++        cost_basis_eur_total=Decimal("90"),
++        source_event_id="transfer",
++        origin_lot_id=root.lot_id,
++    )
++    current = TaxLot(
++        lot_id="conversion-lot",
++        asset="NEW",
++        acquired_at=ACQUIRED,
++        quantity_total=Decimal("1"),
++        quantity_remaining=Decimal("0.6"),
++        cost_basis_eur_total=Decimal("90"),
++        source_event_id="conversion",
++        origin_lot_id=moved.lot_id,
++    )
++    line = TaxLine(
++        tax_line_id="sale-line",
++        asset="NEW",
++        acquired_at=ACQUIRED,
++        disposed_at=DISPOSED,
++        quantity=Decimal("0.4"),
++        acquisition_cost_eur=Decimal("36"),
++        disposal_proceeds_eur=Decimal("60"),
++        gain_loss_eur=Decimal("24"),
++        holding_days=173,
++        source_event_id="sale",
++        lot_id=current.lot_id,
++        acquisition_source_event_id="conversion",
++        origin_lot_id=moved.lot_id,
++    )
++    events = [
++        _event("reward"),
++        _event("transfer", kind="transfer", account="B"),
++        _event("conversion", kind="transfer", asset="NEW", account="B"),
++        _event("sale", kind="trade", asset="NEW", account="B", at=DISPOSED),
++    ]
++    return [root, moved, current], events, line
++
++
++def _persist(store, lots, events, lines):
++    with store.connect() as con:
++        for event in events:
++            con.execute(
++                "insert into canonical_events "
++                "(event_id,source,event_time,event_type,asset,quantity,account,confidence) "
++                "values (?,?,?,?,?,?,?,?)",
++                [
++                    event.event_id,
++                    event.source,
++                    event.event_time,
++                    event.event_type,
++                    event.asset,
++                    event.quantity,
++                    event.account,
++                    Decimal("1"),
++                ],
++            )
++        for lot in lots:
++            con.execute(
++                "insert into tax_lots (lot_id,asset,acquired_at,quantity_total,"
++                "quantity_remaining,cost_basis_eur_total,source_event_id,origin_lot_id,created_at) "
++                "values (?,?,?,?,?,?,?,?,?)",
++                [
++                    lot.lot_id,
++                    lot.asset,
++                    lot.acquired_at,
++                    lot.quantity_total,
++                    lot.quantity_remaining,
++                    lot.cost_basis_eur_total,
++                    lot.source_event_id,
++                    lot.origin_lot_id,
++                    AS_OF,
++                ],
++            )
++        for line in lines:
++            con.execute(
++                "insert into tax_lines (tax_line_id,asset,acquired_at,disposed_at,quantity,"
++                "acquisition_cost_eur,disposal_proceeds_eur,gain_loss_eur,holding_days,"
++                "source_event_id,lot_id,acquisition_source_event_id,origin_lot_id,created_at) "
++                "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
++                [
++                    line.tax_line_id,
++                    line.asset,
++                    line.acquired_at,
++                    line.disposed_at,
++                    line.quantity,
++                    line.acquisition_cost_eur,
++                    line.disposal_proceeds_eur,
++                    line.gain_loss_eur,
++                    line.holding_days,
++                    line.source_event_id,
++                    line.lot_id,
++                    line.acquisition_source_event_id,
++                    line.origin_lot_id,
++                    AS_OF,
++                ],
++            )
++
++
++def _snapshot(store):
++    with store.connect() as con:
++        return {
++            table: con.execute(f"select * from {table} order by 1").fetchall()
++            for table in (
++                "tax_lots",
++                "tax_lines",
++                "canonical_events",
++                "tax_run_summaries",
++                "raw_objects",
++                "raw_import_batches",
++                "price_ledger",
++            )
++        }
++
++
++@pytest.mark.parametrize("assets", [("HNT",), ("NEW",), None])
++def test_stored_reward_root_survives_transfer_conversion_and_asset_filter(case, assets):
++    _, _, store = case
++    lots, events, line = _objects()
++    _persist(store, lots, events, [line])
++    before = _snapshot(store)
++    report = BusinessRewardInventoryReviewService(store).review(
++        **({"assets": assets} if assets else {})
++    )
++    assert _snapshot(store) == before
++    assert report.total_tax_lines_count == 1
++    assert report.potential_business_tax_lines_count == 1
++    assert report.strict_ready is False
++    assert report.potential_business_acquisition_cost_eur == Decimal("36")
++    assert report.potential_business_proceeds_eur == Decimal("60")
++    assert report.potential_business_gain_loss_eur == Decimal("24")
++    assert len(report.rows) == 1
++    row = report.rows[0]
++    assert row.asset == "NEW"
++    assert row.quantity_disposed == Decimal("0.4")
++    assert row.sample_origin_event_id == "reward"
++    assert row.sample_direct_event_id == "conversion"
++    assert row.lineage_status == "carried"
++    assert row.sample_lot_path == ["conversion-lot", "transfer-lot", "reward-lot"]
++    assert row.blocks_private_fifo_classification is True
++
++
++def _event_digest(event):
++    # Nur Bindungsprotokoll, kein fachliches Erwartungsoracle.
++    body = event.model_dump(mode="python")
++    body["event_time"] = event.event_time.replace(tzinfo=timezone.utc).isoformat()
++    with localcontext() as context:
++        context.prec = 80
++        for key, value in body.items():
++            if isinstance(value, Decimal):
++                body[key] = str(value.normalize())
++    return hashlib.sha256(
++        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
++    ).hexdigest()
++
++
++def _replay_inputs(case, *, convert=True, root_kind="mining"):
++    path, config, store = case
++    batch = store.create_import_batch(
++        ImportBatchCreate(source="helium", filename="synthetic-origin.json")
++    )
++    specs = [
++        ("reward", ACQUIRED, root_kind, "HNT", "100", "A", None, "90"),
++        (
++            "out",
++            datetime(2024, 3, 1, 12, tzinfo=timezone.utc),
++            "transfer",
++            "HNT",
++            "-100",
++            "A",
++            "own-transfer",
++            None,
++        ),
++        (
++            "in",
++            datetime(2024, 3, 1, 12, tzinfo=timezone.utc),
++            "transfer",
++            "HNT",
++            "100",
++            "B",
++            "own-transfer",
++            None,
++        ),
++    ]
++    if convert:
++        specs += [
++            (
++                "convert-out",
++                datetime(2024, 6, 1, 12, tzinfo=timezone.utc),
++                "transfer",
++                "HNT",
++                "-100",
++                "B",
++                "conversion",
++                None,
++            ),
++            (
++                "convert-in",
++                datetime(2024, 6, 1, 12, tzinfo=timezone.utc),
++                "transfer",
++                "NEW",
++                "1",
++                "B",
++                "conversion",
++                None,
++            ),
++        ]
++    specs.append(
++        (
++            "sale",
++            DISPOSED,
++            "trade",
++            "NEW" if convert else "HNT",
++            "-0.4" if convert else "-40",
++            "B",
++            "sale-tx",
++            "60",
++        )
++    )
++    by_role = {}
++    raw_by_role = {}
++    for n, (role, at, kind, asset, quantity, account, tx_id, eur) in enumerate(
++        specs, 1
++    ):
++        raw_body = {"role": role, "synthetic": True}
++        if role.startswith("convert-"):
++            raw_body["conversion_kind"] = "redenomination"
++        payload = json.dumps(raw_body, sort_keys=True)
++        raw = store.add_raw_object(
++            batch.batch_id, RawObjectCreate(row_number=n, payload_json=payload)
++        )
++        event = store.add_canonical_events(
++            [
++                CanonicalEventCreate(
++                    source="helium",
++                    source_ref=f"independent:{role}",
++                    event_time=at,
++                    event_type=kind,
++                    asset=asset,
++                    quantity=Decimal(quantity),
++                    account=account,
++                    tx_id=tx_id,
++                    raw_object_id=raw.raw_object_id,
++                    quote_asset="EUR" if eur else None,
++                    quote_quantity=Decimal(eur) if eur else None,
++                )
++            ]
++        )[0]
++        by_role[role] = event
++        raw_by_role[role] = payload
++    if convert:
++        evidence = config / "synthetic-conversion.txt"
++        evidence.write_text(
++            "Synthetischer Beleg: 100 HNT entsprechen 1 NEW. Keine steuerliche Freigabe.\n"
++        )
++        mapping = {
++            "mapping_id": "independent-100-to-1",
++            "enabled": True,
++            "kind": "redenomination",
++            "source_event_id": by_role["convert-out"].event_id,
++            "target_event_id": by_role["convert-in"].event_id,
++            "source_event_sha256": _event_digest(by_role["convert-out"]),
++            "target_event_sha256": _event_digest(by_role["convert-in"]),
++            "source_raw_sha256": hashlib.sha256(
++                raw_by_role["convert-out"].encode()
++            ).hexdigest(),
++            "target_raw_sha256": hashlib.sha256(
++                raw_by_role["convert-in"].encode()
++            ).hexdigest(),
++            "ratio_numerator": "1",
++            "ratio_denominator": "100",
++            "tax_treatment": "carry_original_basis_and_date",
++            "actor": "independent-synthetic",
++            "rationale": "Reine Referenzpruefung ohne produktive Methodenfreigabe.",
++            "evidence_ref": evidence.name,
++            "evidence_sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
++            "acknowledge_same_economic_asset": True,
++            "acknowledge_no_automatic_tax_approval": True,
++        }
++        (config / "token_conversion_mappings.json").write_text(
++            json.dumps({"schema_version": 1, "mappings": [mapping]})
++        )
++    TaxService(store).rebuild_fifo()
++    staging = BmfCombinedFifoStagingService(store, artifact_root=path / "staging")
++    return store, staging, by_role
++
++
++def test_real_bmf_preview_keeps_helium_root_and_literal_partial_sale(case):
++    store, staging, events = _replay_inputs(case)
++    before = _snapshot(store)
++    income_before = TaxYearService(store).income_report(2024).model_dump(mode="json")
++    assert Decimal(income_before["total_income_eur"]) == Decimal("90")
++    assert income_before["events_count"] == 1
++    state = WalletFifoPreviewService(store).replay(as_of=AS_OF)
++    lines = [line for line in state.tax_lines if line.asset == "NEW"]
++    assert len(lines) == 1
++    assert (
++        lines[0].quantity,
++        lines[0].acquisition_cost_eur,
++        lines[0].disposal_proceeds_eur,
++        lines[0].gain_loss_eur,
++    ) == (
++        Decimal("0.4"),
++        Decimal("36"),
++        Decimal("60"),
++        Decimal("24"),
++    )
++    remaining = [lot for lot in state.all_lots if lot.asset == "NEW"]
++    assert len(remaining) == 1
++    assert remaining[0].quantity_remaining == Decimal("0.6")
++    assert remaining[0].cost_basis_eur_total == Decimal("90")
++    assert (
++        remaining[0].cost_basis_eur_total
++        * remaining[0].quantity_remaining
++        / remaining[0].quantity_total
++    ) == Decimal("54")
++    report = staging.run(BmfFifoStagingRunRequest(years=[2024], as_of=AS_OF))
++    assert _snapshot(store) == before
++    income_after = TaxYearService(store).income_report(2024).model_dump(mode="json")
++    income_before.pop("generated_at", None)
++    income_after.pop("generated_at", None)
++    assert income_before == income_after
++    for totals in (
++        report.active_global,
++        report.received_first_global,
++        report.active_wallet,
++        report.received_first_wallet,
++    ):
++        assert totals.tax_lines_count == 1
++        assert totals.acquisition_cost_eur == Decimal("36")
++        assert totals.disposal_proceeds_eur == Decimal("60")
++        assert totals.gain_loss_eur == Decimal("24")
++    assert report.strict_ready is False
++    assert report.status == "blocked"
++    assert report.potential_business_inventory_tax_lines_count == 1
++    assert report.origin_trace_policy == "linked_lot_origin_v1"
++    sale = next(
++        row
++        for row in report.top_events
++        if row.disposal_event_id == events["sale"].event_id
++    )
++    assert sale.acquisition_source_event_ids == [events["reward"].event_id]
++    assert sale.origin_classifications == ["potential_business_inventory"]
++    assert sale.direct_acquisition_event_ids == [events["convert-in"].event_id]
++    assert sale.lineage_issue_codes == []
++
++
++def test_zero_eur_delta_origin_review_is_not_dropped_from_event_evidence(case):
++    path, _, _ = case
++    store, staging, events = _replay_inputs(case, convert=False)
++    preview = staging.run(BmfFifoStagingRunRequest(years=[2024], as_of=AS_OF))
++    assert preview.combined_delta_eur == Decimal("0")
++    assert len(preview.top_events) == 1
++    before = _snapshot(store)
++    evidence = BmfFifoEventEvidenceService(
++        store,
++        artifact_root=path / "evidence",
++        staging_service=staging,
++    ).run(BmfFifoEventEvidenceRunRequest())
++    assert _snapshot(store) == before
++    assert evidence.strict_ready is False
++    assert evidence.selected_discrepancy_rows_count == 1
++    assert len(evidence.discrepancy_rows) == 1
++    row = evidence.discrepancy_rows[0]
++    assert row.disposal_event_id == events["sale"].event_id
++    assert row.combined_delta_eur == Decimal("0")
++    assert row.status in {"review", "blocked"}
++
++
++def test_legacy_staging_without_origin_policy_is_not_silently_current(case):
++    path, _, _ = case
++    store, staging, _ = _replay_inputs(case, convert=False)
++    staging.run(BmfFifoStagingRunRequest(years=[2024], as_of=AS_OF))
++    latest = path / "staging/latest.json"
++    legacy = json.loads(latest.read_text())
++    legacy.pop("origin_trace_policy", None)
++    legacy_text = json.dumps(legacy, sort_keys=True, indent=2) + "\n"
++    latest.write_text(legacy_text)
++    (path / "legacy-staging-original.json").write_text(legacy_text)
++    before = _snapshot(store)
++    assert staging.latest().origin_trace_policy == "legacy_direct_origin_v1"
++    report = BmfFifoEventEvidenceService(
++        store,
++        artifact_root=path / "legacy-evidence",
++        staging_service=staging,
++    ).run(BmfFifoEventEvidenceRunRequest())
++    assert report.staging_matches_current_input is False
++    assert report.staging_matches_current_tax_component is True
++    assert report.strict_ready is False
++    assert report.status in {"review", "blocked"}
++    assert any("Herkunftszuordnung" in finding for finding in report.findings)
++    assert latest.read_text() == legacy_text
++    assert _snapshot(store) == before
++
++
++def test_event_evidence_lineage_only_zero_delta_blocks_even_with_ready_raw_events(case):
++    path, _, _ = case
++    store, staging, events = _replay_inputs(case, convert=False, root_kind="trade")
++    for at, value in ((ACQUIRED, "0.9"), (DISPOSED, "1.5")):
++        store.add_price_point(
++            PricePointCreate(
++                asset="HNT",
++                priced_at=at,
++                price_eur=Decimal(value),
++                source="independent-synthetic-reference",
++            )
++        )
++    staging.run(BmfFifoStagingRunRequest(years=[2024], as_of=AS_OF))
++    latest = path / "staging/latest.json"
++    artifact = json.loads(latest.read_text())
++    # Isolierte Artefakt-Konsumergrenze, kein vorgetaeuschter Resolverfehler.
++    row = BmfCombinedFifoEventRow(
++        year=2024,
++        asset="HNT",
++        disposal_event_id=events["sale"].event_id,
++        disposed_at=DISPOSED,
++        acquisition_source_event_ids=[events["reward"].event_id],
++        direct_acquisition_event_ids=[events["reward"].event_id],
++        origin_classifications=["non_reward_origin"],
++        lineage_issue_codes=["missing_origin_lot"],
++    )
++    artifact["top_events"] = [row.model_dump(mode="json")]
++    text = json.dumps(artifact, sort_keys=True, indent=2) + "\n"
++    latest.write_text(text)
++    (path / "lineage-only-staging-original.json").write_text(text)
++    before = _snapshot(store)
++    report = BmfFifoEventEvidenceService(
++        store,
++        artifact_root=path / "lineage-evidence",
++        staging_service=staging,
++    ).run(BmfFifoEventEvidenceRunRequest())
++    assert _snapshot(store) == before
++    assert latest.read_text() == text
++    assert report.selected_discrepancy_rows_count == 1
++    assert report.blocked_events_count == 0
++    assert report.strict_ready is False
++    assert report.status == "blocked"
++    assert report.discrepancy_rows[0].lineage_issue_codes == ["missing_origin_lot"]
++    assert "lot_origin_unresolved" in report.discrepancy_rows[0].issue_codes
++    assert report.discrepancy_rows[0].status == "blocked"
++    group = next(
++        group for group in report.groups if group.scope_key == "hnt_solana_2024"
++    )
++    assert group.status == "blocked"
++    assert "lot_origin_unresolved" in group.issue_codes
++
++
++def _broken_objects(mode):
++    lots, events, line = _objects()
++    if mode == "missing_current":
++        lots.pop()
++    elif mode == "orphan":
++        lots[1].origin_lot_id = "absent-parent"
++    elif mode == "cycle":
++        lots[0].origin_lot_id = lots[2].lot_id
++    elif mode == "line_event_conflict":
++        line.acquisition_source_event_id = "reward"
++    elif mode == "line_lot_conflict":
++        line.origin_lot_id = "reward-lot"
++    elif mode == "acquired_at_conflict":
++        line.acquired_at = datetime(2024, 1, 11, 12, tzinfo=timezone.utc)
++    elif mode == "parent_acquired_at_conflict":
++        lots[0].acquired_at = datetime(2024, 1, 9, 12, tzinfo=timezone.utc)
++    elif mode == "missing_root_event":
++        events.pop(0)
++    elif mode == "duplicate_lot":
++        lots.append(lots[0].model_copy())
++    elif mode == "duplicate_event":
++        events.append(events[0].model_copy())
++    else:
++        raise AssertionError(mode)
++    return lots, events, line
++
++
++BROKEN_STORED = (
++    "missing_current",
++    "orphan",
++    "cycle",
++    "line_event_conflict",
++    "line_lot_conflict",
++    "acquired_at_conflict",
++    "parent_acquired_at_conflict",
++    "missing_root_event",
++)
++
++
++@pytest.mark.parametrize("mode", BROKEN_STORED)
++def test_stored_broken_lineage_never_becomes_private_or_loses_amounts(case, mode):
++    _, _, store = case
++    lots, events, line = _broken_objects(mode)
++    _persist(store, lots, events, [line])
++    before = _snapshot(store)
++    report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
++    assert _snapshot(store) == before
++    assert report.total_tax_lines_count == 1
++    assert report.strict_ready is False
++    assert report.unresolved_tax_lines_count == 1
++    assert len(report.rows) == 1
++    row = report.rows[0]
++    assert row.lineage_status == "unresolved"
++    assert row.lineage_reason
++    assert row.sample_origin_event_id is None
++    assert row.blocks_private_fifo_classification is True
++    assert (
++        row.quantity_disposed,
++        row.acquisition_cost_eur,
++        row.disposal_proceeds_eur,
++        row.gain_loss_eur,
++    ) == (
++        Decimal("0.4"),
++        Decimal("36"),
++        Decimal("60"),
++        Decimal("24"),
++    )
++
++
++@pytest.mark.parametrize("carried", [True, False])
++def test_stored_unknown_root_type_is_review_not_non_reward_clearance(case, carried):
++    _, _, store = case
++    lots, events, line = _objects()
++    events[0].event_type = "unknown"
++    if not carried:
++        lots = [lots[0]]
++        line = line.model_copy(
++            update={
++                "asset": "HNT",
++                "lot_id": "reward-lot",
++                "origin_lot_id": None,
++                "acquisition_source_event_id": "reward",
++            }
++        )
++    _persist(store, lots, events, [line])
++    report = BusinessRewardInventoryReviewService(store).review(assets=("NEW", "HNT"))
++    assert report.total_tax_lines_count == 1
++    assert report.strict_ready is False
++    assert report.unresolved_tax_lines_count == 1
++    assert report.rows[0].classification != "non_reward_origin"
++    assert report.rows[0].blocks_private_fifo_classification is True
++
++
++@pytest.mark.parametrize("mode", ["missing_current", "orphan", "cycle"])
++def test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin(case, mode):
++    _, _, store = case
++    lots, events, line = _broken_objects(mode)
++    _persist(store, lots, events, [line])
++    before = _snapshot(store)
++    gate = ReviewService(store).gate()
++    assert _snapshot(store) == before
++    issues = [issue for issue in gate.issues if issue.code == "lot_origin_unresolved"]
++    assert len(issues) == 1
++    assert issues[0].blocks_export is True
++    assert gate.allow_export is False
++
++
++def test_stored_direct_eur_buy_is_not_fabricated_as_business_reward(case):
++    _, _, store = case
++    lots, _, line = _objects()
++    lot = lots[2].model_copy(
++        update={"source_event_id": "eur-buy", "origin_lot_id": None}
++    )
++    line = line.model_copy(
++        update={"acquisition_source_event_id": "eur-buy", "origin_lot_id": None}
++    )
++    event = _event("eur-buy", kind="trade", asset="NEW").model_copy(
++        update={
++            "source": "synthetic-exchange",
++            "quote_asset": "EUR",
++            "quote_quantity": Decimal("90"),
++            "quantity": Decimal("1"),
++        }
++    )
++    _persist(store, [lot], [event], [line])
++    before = _snapshot(store)
++    report = BusinessRewardInventoryReviewService(store).review(assets=("NEW",))
++    assert _snapshot(store) == before
++    assert report.total_tax_lines_count == 1
++    assert report.potential_business_tax_lines_count == 0
++    assert report.unresolved_tax_lines_count == 0
++    assert report.rows[0].classification == "non_reward_origin"
++    assert report.rows[0].lineage_status == "direct"
++    assert report.rows[0].sample_origin_event_id == "eur-buy"
++
++
++def test_stored_two_lines_one_root_do_not_duplicate_origin_or_totals(case):
++    _, _, store = case
++    lots, events, line = _objects()
++    first = line.model_copy(
++        update={
++            "quantity": Decimal("0.1"),
++            "acquisition_cost_eur": Decimal("9"),
++            "disposal_proceeds_eur": Decimal("15"),
++            "gain_loss_eur": Decimal("6"),
++        }
++    )
++    second = line.model_copy(
++        update={
++            "tax_line_id": "sale-line-2",
++            "quantity": Decimal("0.3"),
++            "acquisition_cost_eur": Decimal("27"),
++            "disposal_proceeds_eur": Decimal("45"),
++            "gain_loss_eur": Decimal("18"),
++        }
++    )
++    _persist(store, lots, events, [first, second])
++    before = _snapshot(store)
++    for _ in range(2):
++        report = BusinessRewardInventoryReviewService(store).review(
++            assets=("NEW", "HNT")
++        )
++        assert report.total_tax_lines_count == 2
++        assert report.potential_business_tax_lines_count == 2
++        assert report.potential_business_acquisition_cost_eur == Decimal("36")
++        assert report.potential_business_proceeds_eur == Decimal("60")
++        assert report.potential_business_gain_loss_eur == Decimal("24")
++        assert len(report.rows) == 1
++        assert report.rows[0].origin_events_count == 1
++        assert report.rows[0].quantity_disposed == Decimal("0.4")
++    assert _snapshot(store) == before
++
++
++def _typed_objects(lots, line, engine):
++    if engine == "global":
++        return lots, line
++    return (
++        [
++            WalletFifoPreviewLot.model_validate(
++                {**lot.model_dump(), "pool_id": "helium:B"}
++            )
++            for lot in lots
++        ],
++        WalletFifoPreviewLine.model_validate(
++            {**line.model_dump(), "pool_id": "helium:B"}
++        ),
++    )
++
++
++@pytest.mark.parametrize("engine", ["global", "wallet"])
++def test_resolver_follows_explicit_root_without_mutating_financial_inputs(engine):
++    from steuerreport_v2.domain.lot_origin import LotOriginIndex
++
++    lots, events, line = _objects()
++    lots, line = _typed_objects(lots, line, engine)
++    before = [item.model_dump(mode="json") for item in [*lots, *events, line]]
++    index = LotOriginIndex(iter(lots), iter(events))
++    trace = index.resolve(line)
++    assert trace.status == "carried"
++    assert trace.lot_ids == ("conversion-lot", "transfer-lot", "reward-lot")
++    assert trace.direct_event_id == "conversion"
++    assert trace.origin_event_id == "reward"
++    assert trace.origin_asset == "HNT"
++    assert trace.reason is None
++    assert index.resolve(line) == trace
++    with pytest.raises((AttributeError, TypeError)):
++        trace.status = "direct"
++    assert [item.model_dump(mode="json") for item in [*lots, *events, line]] == before
++
++
++@pytest.mark.parametrize("engine", ["global", "wallet"])
++@pytest.mark.parametrize("mode", [*BROKEN_STORED, "duplicate_lot", "duplicate_event"])
++def test_resolver_rejects_ambiguous_or_broken_links(engine, mode):
++    from steuerreport_v2.domain.lot_origin import LotOriginIndex
++
++    lots, events, line = _broken_objects(mode)
++    lots, line = _typed_objects(lots, line, engine)
++    trace = LotOriginIndex(lots, events).resolve(line)
++    assert trace.status == "unresolved"
++    assert trace.origin_event_id is None
++    assert trace.origin_asset is None
++    assert trace.reason
++    assert len(trace.lot_ids) <= 64
++
++
++@pytest.mark.parametrize("engine", ["global", "wallet"])
++def test_resolver_direct_eur_purchase_is_direct_not_invented_reward(engine):
++    from steuerreport_v2.domain.lot_origin import LotOriginIndex
++
++    lots, _, line = _objects()
++    current = lots[2].model_copy(
++        update={"origin_lot_id": None, "source_event_id": "eur-buy"}
++    )
++    line = line.model_copy(
++        update={"origin_lot_id": None, "acquisition_source_event_id": "eur-buy"}
++    )
++    events = [_event("eur-buy", asset="NEW", kind="trade")]
++    lots, line = _typed_objects([current], line, engine)
++    trace = LotOriginIndex(lots, events).resolve(line)
++    assert trace.status == "direct"
++    assert trace.lot_ids == ("conversion-lot",)
++    assert trace.origin_event_id == "eur-buy"
++    assert trace.origin_asset == "NEW"
++    assert trace.reason is None
++
++
++def test_resolver_depth_is_bounded_and_large_quantity_is_not_a_heuristic():
++    from steuerreport_v2.domain.lot_origin import LotOriginIndex
++
++    lots, events, line = _objects()
++    template = lots[0]
++    chain = [
++        template.model_copy(
++            update={
++                "lot_id": f"chain-{n}",
++                "source_event_id": "reward",
++                "origin_lot_id": f"chain-{n + 1}" if n < 64 else None,
++                "quantity_total": Decimal("1000000000000000000"),
++            }
++        )
++        for n in range(65)
++    ]
++    line = line.model_copy(
++        update={
++            "lot_id": "chain-0",
++            "origin_lot_id": "chain-1",
++            "acquisition_source_event_id": "reward",
++            "asset": "HNT",
++            "quantity": Decimal("400000000000000000"),
++        }
++    )
++    trace = LotOriginIndex(chain, events).resolve(line)
++    assert trace.status == "unresolved"
++    assert trace.origin_event_id is None
++    assert trace.reason
++    assert len(trace.lot_ids) <= 64
++    direct = line.model_copy(update={"lot_id": "chain-64", "origin_lot_id": None})
++    trace = LotOriginIndex(chain, events).resolve(direct)
++    assert trace.status == "direct"
++    assert trace.origin_event_id == "reward"
++    assert trace.origin_asset == "HNT"
+diff --git a/tests/unit/test_lot_origin_implementation.py b/tests/unit/test_lot_origin_implementation.py
+new file mode 100644
+index 0000000..f0bce7e
+--- /dev/null
++++ b/tests/unit/test_lot_origin_implementation.py
+@@ -0,0 +1,282 @@
++"""Unabhaengige ID-/Summenproben, keine Provider und keine Sphaerenfreigabe."""
++from dataclasses import FrozenInstanceError
++from datetime import datetime, timedelta, timezone
++from decimal import Decimal
++
++import pytest
++
++from steuerreport_v2.contracts.events import CanonicalEvent
++from steuerreport_v2.contracts.tax import TaxLine, TaxLot
++from steuerreport_v2.contracts.tax_wallet_fifo import WalletFifoPreviewLine, WalletFifoPreviewLot
++from steuerreport_v2.domain.lot_origin import POLICY_ID, LotOriginIndex
++from steuerreport_v2.domain.business_inventory import BusinessRewardInventoryReviewService
++from steuerreport_v2.domain.tax import TaxService
++from steuerreport_v2.db.duckdb_store import DuckDbStore
++
++
++D = Decimal
++DAY = datetime(2024, 1, 1, tzinfo=timezone.utc)
++
++
++def event(key="reward", asset="HNT", kind="mining", day=0, **changes):
++    values = dict(event_id=key, source="helium", event_type=kind, asset=asset,
++                  quantity=D("100"), event_time=DAY + timedelta(days=day), account="original")
++    values.update(changes)
++    return CanonicalEvent(**values)
++
++
++def lot(key="root", asset="HNT", source="reward", parent=None, **changes):
++    values = dict(lot_id=key, asset=asset, source_event_id=source, origin_lot_id=parent,
++                  acquired_at=DAY, quantity_total=D("100"), quantity_remaining=D("0"),
++                  cost_basis_eur_total=D("200"))
++    values.update(changes)
++    return TaxLot(**values)
++
++
++def line(key="sale", current="root", asset="HNT", **changes):
++    values = dict(tax_line_id=key, lot_id=current, asset=asset, acquired_at=DAY,
++                  disposed_at=DAY + timedelta(days=2), quantity=D("0.4"),
++                  acquisition_cost_eur=D("80"), disposal_proceeds_eur=D("120"),
++                  gain_loss_eur=D("40"), holding_days=2, source_event_id="sell")
++    values.update(changes)
++    return TaxLine(**values)
++
++
++def carried(asset="XYZ"):
++    events = [event(), event("target", asset, "transfer", 1, quantity=D("1"))]
++    lots = [lot(), lot("converted", asset, "target", "root", quantity_total=D("1"), quantity_remaining=D("0.5"))]
++    sale = line(current="converted", asset=asset, acquisition_source_event_id="target", origin_lot_id="root")
++    return lots, events, sale
++
++
++@pytest.mark.parametrize("wallet", [False, True])
++def test_pure_trace_preserves_root_with_no_mutation(wallet):
++    lots, events, sale = carried()
++    if wallet:
++        lots = [WalletFifoPreviewLot(**{**item.model_dump(), "pool_id": "generated"}) for item in lots]
++        sale = WalletFifoPreviewLine(**{**sale.model_dump(), "pool_id": "generated"})
++    before = ([item.model_dump() for item in lots], sale.model_dump())
++    trace = LotOriginIndex(iter(lots), iter(events)).resolve(sale)
++    assert (trace.status, trace.lot_ids, trace.direct_event_id) == ("carried", ("converted", "root"), "target")
++    assert (trace.origin_event_id, trace.origin_asset, trace.reason) == ("reward", "HNT", None)
++    assert before == ([item.model_dump() for item in lots], sale.model_dump())
++    with pytest.raises(FrozenInstanceError):
++        trace.status = "direct"
++
++
++def test_direct_eur_purchase_and_quote_side_purchase():
++    buy = event("buy", "HNT", "trade", quantity=D("100"), quote_asset="EUR", quote_quantity=D("200"))
++    direct = LotOriginIndex([lot(source="buy")], [buy]).resolve(line())
++    assert direct.status == "direct" and direct.origin_event_id == "buy"
++    quote_buy = event("buy", "BTC", "trade", quantity=D("-1"), quote_asset="HNT", quote_quantity=D("100"))
++    assert LotOriginIndex([lot(source="buy")], [quote_buy]).resolve(line()).status == "direct"
++
++
++@pytest.mark.parametrize("source", ["reward", "transfer"])
++def test_own_transfer_may_retain_acquisition_event_or_link_target(source):
++    transfer = event("transfer", "HNT", "transfer", 1)
++    lots = [lot(), lot("moved", source=source, parent="root")]
++    trace = LotOriginIndex(lots, [event(), transfer]).resolve(line(current="moved"))
++    assert trace.status == "carried" and trace.origin_event_id == "reward"
++
++
++def test_multihop_carry_and_equal_utc_acquisition_times():
++    lots, events, sale = carried()
++    lots.insert(1, lot("moved", parent="root"))
++    lots[-1] = lots[-1].model_copy(update={"origin_lot_id": "moved"})
++    local_time = datetime(2024, 1, 1, 1, tzinfo=timezone(timedelta(hours=1)))
++    sale = sale.model_copy(update={"origin_lot_id": "moved", "acquired_at": local_time})
++    trace = LotOriginIndex(lots, events).resolve(sale)
++    assert trace.status == "carried" and trace.lot_ids == ("converted", "moved", "root")
++    assert trace.origin_event_id == "reward"
++
++
++@pytest.mark.parametrize("defect,expected", [
++    ("missing_current", "missing_lot"),
++    ("missing_parent", "missing_origin_lot"),
++    ("duplicate_lot", "duplicate_lot_id"),
++    ("duplicate_event", "duplicate_event_id"),
++    ("missing_event", "missing_source_event"),
++    ("self_link", "lot_cycle"),
++    ("cycle", "lot_cycle"),
++    ("line_source", "line_lot_source_conflict"),
++    ("line_origin", "line_lot_origin_conflict"),
++    ("line_asset", "line_lot_asset_conflict"),
++    ("line_pool", "line_lot_pool_conflict"),
++    ("line_date", "line_lot_acquisition_conflict"),
++    ("parent_date", "carried_acquisition_conflict"),
++    ("root_event_date", "root_acquisition_time_conflict"),
++    ("source_asset", "source_event_asset_conflict"),
++    ("source_future", "source_event_time_conflict"),
++    ("disposal_before", "disposal_before_acquisition"),
++])
++def test_fail_closed(defect, expected):
++    lots, events, sale = carried()
++    if defect == "missing_current":
++        lots.pop()
++    elif defect == "missing_parent":
++        lots.pop(0)
++    elif defect == "duplicate_lot":
++        lots.append(lots[-1])
++    elif defect == "duplicate_event":
++        events.append(events[-1])
++    elif defect == "missing_event":
++        events.pop()
++    elif defect == "self_link":
++        lots[-1] = lots[-1].model_copy(update={"origin_lot_id": "converted"})
++        sale = sale.model_copy(update={"origin_lot_id": "converted"})
++    elif defect == "cycle":
++        lots[0] = lots[0].model_copy(update={"origin_lot_id": "converted"})
++    elif defect.startswith("line_"):
++        field, value = {"line_source": ("acquisition_source_event_id", "wrong"),
++                        "line_origin": ("origin_lot_id", "wrong"),
++                        "line_asset": ("asset", "OTHER"),
++                        "line_pool": ("pool_id", "wrong"),
++                        "line_date": ("acquired_at", DAY + timedelta(seconds=1))}[defect]
++        sale = sale.model_copy(update={field: value})
++    elif defect == "parent_date":
++        lots[0] = lots[0].model_copy(update={"acquired_at": DAY + timedelta(seconds=1)})
++    elif defect == "root_event_date":
++        events[0] = events[0].model_copy(update={"event_time": DAY + timedelta(seconds=1)})
++    elif defect == "source_asset":
++        events[-1] = events[-1].model_copy(update={"asset": "OTHER"})
++    elif defect == "source_future":
++        events[-1] = events[-1].model_copy(update={"event_time": DAY + timedelta(days=3)})
++    elif defect == "disposal_before":
++        sale = sale.model_copy(update={"disposed_at": DAY - timedelta(seconds=1)})
++    trace = LotOriginIndex(lots, events).resolve(sale)
++    assert (trace.status, trace.reason) == ("unresolved", expected)
++    assert trace.origin_event_id is None and trace.origin_asset is None
++    assert len(trace.lot_ids) <= 64
++
++
++@pytest.mark.parametrize("length,status", [(64, "carried"), (65, "unresolved")])
++def test_depth_limit(length, status):
++    lots = [lot(str(i), parent=str(i - 1) if i else None) for i in range(length)]
++    trace = LotOriginIndex(lots, [event()]).resolve(line(current=str(length - 1)))
++    assert trace.status == status and len(trace.lot_ids) == 64
++    assert trace.reason == ("lot_depth_exceeded" if length == 65 else None)
++
++
++def test_large_id_index_does_not_merge_lots_by_symbol_or_amount():
++    lots = [lot(str(i), parent="root") for i in range(10000)] + [lot()]
++    index = LotOriginIndex(lots, [event()])
++    for i in range(10000):
++        trace = index.resolve(line(current=str(i)))
++        assert trace.lot_ids == (str(i), "root") and trace.origin_event_id == "reward"
++
++
++def persist(tmp_path, lots, events, lines):
++    store = DuckDbStore(tmp_path / "origin.duckdb")
++    for item in events:
++        created = store.add_canonical_event(item)
++        # Stored fixtures retain explicit IDs for independent lineage assertions.
++        with store.connect() as con:
++            con.execute("update canonical_events set event_id=? where event_id=?", [item.event_id, created.event_id])
++    TaxService(store)._replace_tax_tables(lots, lines, [])
++    return store
++
++
++def snapshot(store):
++    with store.connect() as con:
++        return tuple(con.execute(f"select * from {table} order by 1").fetchall()
++                     for table in ("canonical_events", "tax_lots", "tax_lines", "tax_run_summaries", "admin_settings"))
++
++
++def test_stored_partial_conversion_root_filter_exact_totals_and_read_only(tmp_path):
++    lots, events, sale = carried()
++    second = sale.model_copy(update={"tax_line_id": "sale2", "quantity": D("0.1"),
++        "acquisition_cost_eur": D("20"), "disposal_proceeds_eur": D("30"), "gain_loss_eur": D("10")})
++    store = persist(tmp_path, lots, events, [sale, second])
++    before = snapshot(store)
++    service = BusinessRewardInventoryReviewService(store)
++    for assets in [("HNT",), ("XYZ",), ("HNT", "XYZ")]:
++        report = service.review(assets=assets)
++        assert report.total_tax_lines_count == 2 and len(report.rows) == 1
++        row = report.rows[0]
++        assert row.classification == "potential_business_inventory" and row.blocks_private_fifo_classification
++        assert (row.quantity_disposed, row.acquisition_cost_eur, row.disposal_proceeds_eur, row.gain_loss_eur) == (D("0.5"), D("100"), D("150"), D("50"))
++        assert row.sample_origin_event_id == "reward" and row.origin_event_type == "mining"
++        assert row.lineage_status == "carried" and row.sample_lot_path == ["converted", "root"]
++        assert row.sample_direct_event_id == "target" and row.lineage_reason is None
++        assert not report.strict_ready
++    assert service.review(assets=("BTC",)).total_tax_lines_count == 0
++    assert service.review(assets=()).total_tax_lines_count == 0
++    assert snapshot(store) == before
++
++
++@pytest.mark.parametrize("defect", ["missing_parent", "self_link", "line_conflict", "missing_current"])
++def test_stored_unresolved_never_uses_intermediate_as_root(tmp_path, defect):
++    lots, events, sale = carried("IOT")
++    store = persist(tmp_path, lots, events, [sale])
++    with store.connect() as con:
++        if defect == "missing_parent":
++            con.execute("delete from tax_lots where lot_id='root'")
++        elif defect == "self_link":
++            con.execute("update tax_lots set origin_lot_id='converted' where lot_id='converted'")
++            con.execute("update tax_lines set origin_lot_id='converted'")
++        elif defect == "line_conflict":
++            con.execute("update tax_lines set acquisition_source_event_id='reward'")
++        else:
++            con.execute("delete from tax_lots where lot_id='converted'")
++    before = snapshot(store)
++    report = BusinessRewardInventoryReviewService(store).review()
++    assert report.total_tax_lines_count == 1 and report.unresolved_tax_lines_count == 1
++    row = report.rows[0]
++    assert row.lineage_status == "unresolved" and row.lineage_reason
++    assert row.origin_source is None and row.sample_origin_event_id is None
++    assert row.classification == "missing_origin" and row.blocks_private_fifo_classification
++    assert not report.strict_ready and snapshot(store) == before
++
++
++@pytest.mark.parametrize("kind", ["unknown", "fee", "derivative"])
++def test_unknown_root_type_never_default_non_reward(kind):
++    assert BusinessRewardInventoryReviewService.classify_origin("helium", kind)[0] == "origin_classification_review"
++
++
++def test_stored_unknown_root_type_and_zero_basis_remain_review(tmp_path):
++    store = persist(tmp_path, [lot(cost_basis_eur_total=D("0"))], [event(kind="unknown")],
++                    [line(acquisition_cost_eur=D("0"))])
++    before = snapshot(store)
++    report = BusinessRewardInventoryReviewService(store).review()
++    row = report.rows[0]
++    assert row.lineage_status == "direct" and row.classification == "origin_classification_review"
++    assert row.blocks_private_fifo_classification and not report.strict_ready
++    assert row.acquisition_cost_eur == 0 and snapshot(store) == before
++
++
++def test_stored_direct_purchase_and_berlin_year(tmp_path):
++    buy = event("buy", kind="trade", quote_asset="EUR", quote_quantity=D("200"))
++    sale = line(disposed_at=datetime(2024, 12, 31, 23, 30, tzinfo=timezone.utc))
++    store = persist(tmp_path, [lot(source="buy")], [buy], [sale])
++    report = BusinessRewardInventoryReviewService(store).review()
++    row = report.rows[0]
++    assert row.lineage_status == "direct" and row.disposal_year == 2025
++    assert row.classification == "non_reward_origin" and row.sample_origin_event_id == "buy"
++
++
++def test_large_stored_decimals_are_not_rounded_by_aggregation(tmp_path):
++    huge = D("9999999999999999999.123456789012345678")
++    twice = D("19999999999999999998.246913578024691356")
++    sale = line(quantity=huge, acquisition_cost_eur=huge, disposal_proceeds_eur=huge, gain_loss_eur=D("0"))
++    store = persist(tmp_path, [lot(quantity_total=twice, cost_basis_eur_total=twice)],
++                    [event(quantity=twice)], [sale, sale.model_copy(update={"tax_line_id": "sale2"})])
++    report = BusinessRewardInventoryReviewService(store).review()
++    row = report.rows[0]
++    assert row.quantity_disposed == twice and row.acquisition_cost_eur == twice
++    assert report.potential_business_acquisition_cost_eur == twice
++
++
++def test_policy_constant_is_stable():
++    assert POLICY_ID == "linked_lot_origin_v1"
++
++
++def test_service_supplies_policy_explicitly_for_both_report_paths(tmp_path):
++    from steuerreport_v2.contracts.business_inventory import BusinessRewardInventoryReviewReport
++    store = persist(tmp_path, [lot()], [event()], [line()])
++    service = BusinessRewardInventoryReviewService(store)
++    report = service.review()
++    assert report.origin_trace_policy == "linked_lot_origin_v1"
++    assert service.review(assets=()).origin_trace_policy == "linked_lot_origin_v1"
++    legacy = report.model_dump(exclude={"origin_trace_policy"})
++    assert BusinessRewardInventoryReviewReport.model_validate(legacy).origin_trace_policy == "legacy_direct_origin_v1"

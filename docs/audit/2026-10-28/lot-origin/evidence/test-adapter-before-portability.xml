@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="22" failures="0" skipped="0" tests="85" time="35.419" timestamp="2026-10-28T19:06:39.841825+00:00" hostname="ai-control"><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G08_real_fx_consumer_100usd_90eur[USD-EUR-0.9]" time="0.866" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G08_real_fx_consumer_100usd_90eur[EUR-USD-1.111111111111111111111111111111111111]" time="0.802" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_documented_seven_day_reference_boundary" time="0.654" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows0]" time="0.670" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows1]" time="0.658" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows2]" time="0.706" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows3]" time="0.677" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows4]" time="0.915" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows5]" time="0.836" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows6]" time="0.855" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows7]" time="0.799" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows8]" time="0.692" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows9]" time="0.670" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G09_missing_invalid_future_old_fx_never_factor_one[rows10]" time="0.895" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G18_same_symbol_does_not_resolve_chain_contract_or_decimals[second0]" time="1.300" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G18_same_symbol_does_not_resolve_chain_contract_or_decimals[second1]" time="1.455" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G18_same_symbol_does_not_resolve_chain_contract_or_decimals[second2]" time="1.210" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G18_original_decimals_raw_quantity_mismatch_blocks" time="0.599" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G18_coingecko_symbol_only_is_not_identity_evidence" time="0.497" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G18_coingecko_explicit_chain_contract_bound_control" time="0.527" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G18_bound_wsol_existing_coingecko_provider_is_preserved" time="0.745" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_100_to_1_carries_basis_date_global_and_wallet[global]" time="0.960" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_100_to_1_carries_basis_date_global_and_wallet[wallet]" time="0.989" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_partial_sale_fixed_basis_36_gain_24[global]" time="1.298" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_partial_sale_fixed_basis_36_gain_24[wallet]" time="1.376" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_no_conversion_without_bound_primary_evidence[missing]" time="0.888" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_no_conversion_without_bound_primary_evidence[changed]" time="0.860" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_no_conversion_without_bound_primary_evidence[absolute]" time="0.854" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_no_conversion_without_bound_primary_evidence[parent]" time="0.886" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_no_conversion_without_bound_primary_evidence[symlink]" time="0.727" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_no_conversion_without_bound_primary_evidence[wrong-ratio]" time="0.638" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_no_conversion_without_bound_primary_evidence[false-ack]" time="0.898" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_no_conversion_without_bound_primary_evidence[string-ack]" time="0.776" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_evidence_bytes_invalidate_config_and_wallet_run_fingerprint" time="0.742" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_evidence_bytes_invalidate_preview_input_fingerprint" time="0.705" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G19_reward_conversion_never_doubles_income" time="0.992" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G04_known_price_without_stored_fee_consumption_remains_blocked" time="1.219" /><testcase classname="tests.acceptance.test_fx_identity_conversion_reference" name="test_G04_fee_proof_becomes_stale_after_price_input_change" time="1.951" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets0]" time="0.003"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c87207a50&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets0]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets1]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv1').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv1') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv1').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c872f4210&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_reward_root_survives_transfer_conversion_and_asset_filter[assets1]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv1').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv1') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv1').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_reward_root_survives_transfer_conversion_and_asset_filter[None]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv2').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv2') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv2').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv2')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776caebba110&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_reward_root_survives_transfer_conversion_and_asset_filter[None]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv2').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv2') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_reward_root_surviv2').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_real_bmf_preview_keeps_helium_root_and_literal_partial_sale" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_real_bmf_preview_keeps_he0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_real_bmf_preview_keeps_he0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_real_bmf_preview_keeps_he0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_real_bmf_preview_keeps_he0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c8734df10&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_real_bmf_preview_keeps_helium_root_and_literal_partial_sale&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_real_bmf_preview_keeps_he0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_real_bmf_preview_keeps_he0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_real_bmf_preview_keeps_he0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_zero_eur_delta_origin_review_is_not_dropped_from_event_evidence" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_zero_eur_delta_origin_rev0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_zero_eur_delta_origin_rev0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_zero_eur_delta_origin_rev0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_zero_eur_delta_origin_rev0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c875ea790&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_zero_eur_delta_origin_review_is_not_dropped_from_event_evidence&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_zero_eur_delta_origin_rev0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_zero_eur_delta_origin_rev0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_zero_eur_delta_origin_rev0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_legacy_staging_without_origin_policy_is_not_silently_current" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_legacy_staging_without_or0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_legacy_staging_without_or0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_legacy_staging_without_or0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_legacy_staging_without_or0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c87158190&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_legacy_staging_without_origin_policy_is_not_silently_current&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_legacy_staging_without_or0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_legacy_staging_without_or0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_legacy_staging_without_or0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_event_evidence_lineage_only_zero_delta_blocks_even_with_ready_raw_events" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_event_evidence_lineage_on0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_event_evidence_lineage_on0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_event_evidence_lineage_on0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_event_evidence_lineage_on0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c873e0910&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_event_evidence_lineage_only_zero_delta_blocks_even_with_ready_raw_events&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_event_evidence_lineage_on0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_event_evidence_lineage_on0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_event_evidence_lineage_on0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_current]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c873d2050&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_current]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[orphan]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev1').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev1') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev1').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c873e0490&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_broken_lineage_never_becomes_private_or_loses_amounts[orphan]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev1').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev1') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev1').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[cycle]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev2').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev2') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev2').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev2')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c875587d0&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_broken_lineage_never_becomes_private_or_loses_amounts[cycle]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev2').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev2') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev2').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_event_conflict]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev3').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev3') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev3').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev3')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c8738ba90&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_event_conflict]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev3').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev3') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev3').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_lot_conflict]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev4').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev4') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev4').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev4')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c873a3850&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_broken_lineage_never_becomes_private_or_loses_amounts[line_lot_conflict]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev4').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev4') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev4').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[acquired_at_conflict]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev5').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev5') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev5').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev5')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c8714bdd0&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_broken_lineage_never_becomes_private_or_loses_amounts[acquired_at_conflict]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev5').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev5') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev5').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[parent_acquired_at_conflict]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev6').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev6') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev6').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev6')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c8738b190&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_broken_lineage_never_becomes_private_or_loses_amounts[parent_acquired_at_conflict]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev6').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev6') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev6').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_root_event]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev7').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev7') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev7').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev7')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c874e6d50&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_broken_lineage_never_becomes_private_or_loses_amounts[missing_root_event]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev7').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev7') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_broken_lineage_nev7').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_unknown_root_type_is_review_not_non_reward_clearance[True]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c873e3950&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_unknown_root_type_is_review_not_non_reward_clearance[True]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_unknown_root_type_is_review_not_non_reward_clearance[False]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_1').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_1') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_1').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776caebbb150&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_unknown_root_type_is_review_not_non_reward_clearance[False]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_1').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_1') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_unknown_root_type_1').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[missing_current]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c872aeed0&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[missing_current]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[orphan]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto1').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto1') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto1').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c8722de50&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[orphan]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto1').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto1') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto1').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[cycle]" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto2').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto2') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto2').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto2')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c875b4910&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_review_gate_reads_all_stored_lines_and_blocks_unresolved_origin[cycle]&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto2').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto2') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_review_gate_reads_all_sto2').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_direct_eur_buy_is_not_fabricated_as_business_reward" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_direct_eur_buy_is_0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_direct_eur_buy_is_0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_direct_eur_buy_is_0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_direct_eur_buy_is_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c87487150&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_direct_eur_buy_is_not_fabricated_as_business_reward&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_direct_eur_buy_is_0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_direct_eur_buy_is_0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_direct_eur_buy_is_0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_stored_two_lines_one_root_do_not_duplicate_origin_or_totals" time="0.001"><error message="failed on setup with &quot;AssertionError: assert False&#10; +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))&#10; +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_two_lines_one_root0').is_relative_to&#10; +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_two_lines_one_root0') = resolve()&#10; +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_two_lines_one_root0').resolve&quot;">tmp_path = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_two_lines_one_root0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x776c8734c0d0&gt;
+request = &lt;SubRequest 'case' for &lt;Function test_stored_two_lines_one_root_do_not_duplicate_origin_or_totals&gt;&gt;
+
+    @pytest.fixture
+    def case(tmp_path, monkeypatch, request):
+&gt;       assert tmp_path.resolve().is_relative_to(ROOT)
+E       AssertionError: assert False
+E        +  where False = is_relative_to(PosixPath('/tmp/sr-origin-20261028-independent'))
+E        +    where is_relative_to = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_two_lines_one_root0').is_relative_to
+E        +      where PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_two_lines_one_root0') = resolve()
+E        +        where resolve = PosixPath('/tmp/sr-origin-20261028-coordinator-acceptance/test_stored_two_lines_one_root0').resolve
+
+tests/acceptance/test_lot_origin_reference.py:105: AssertionError</error></testcase><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_follows_explicit_root_without_mutating_financial_inputs[global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_follows_explicit_root_without_mutating_financial_inputs[wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[missing_current-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[missing_current-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[orphan-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[orphan-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[cycle-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[cycle-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[line_event_conflict-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[line_event_conflict-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[line_lot_conflict-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[line_lot_conflict-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[acquired_at_conflict-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[acquired_at_conflict-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[parent_acquired_at_conflict-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[parent_acquired_at_conflict-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[missing_root_event-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[missing_root_event-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[duplicate_lot-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[duplicate_lot-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[duplicate_event-global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_rejects_ambiguous_or_broken_links[duplicate_event-wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_direct_eur_purchase_is_direct_not_invented_reward[global]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_direct_eur_purchase_is_direct_not_invented_reward[wallet]" time="0.001" /><testcase classname="tests.acceptance.test_lot_origin_reference" name="test_resolver_depth_is_bounded_and_large_quantity_is_not_a_heuristic" time="0.070" /></testsuite></testsuites>
