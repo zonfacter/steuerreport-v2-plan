@@ -59,6 +59,9 @@ bewahrt und sind keine erwarteten Fehler des CI-Gates.
 - Zwei Cache-/Sperrreproduktionen: zuvor falsches aktuell bzw. alter Fehler
   nach fertigem Lauf; im integrierten fokussierten Backendlauf bestanden.
 - Fokussierte Backend-/Fingerprint-Pruefung: 102 bestanden.
+- Gemeinsamer HTTP-Transport, Update-API und Cache: 103 bestanden. Zusaetzlich
+  drei Defaultpfad-Proben mit echtem Limiter fuer Folgeseiten, 429 ohne Retry
+  und fail-closed Koordinatorausfall bestanden.
 - Fokussierte Bitget-/Bestandspruefung: 57 bestanden, drei bekannte private
   Belegskips; keine echten Belege durch synthetische Daten ersetzt.
 - Urspruengliche unabhaengige Referenzen: 52 bestanden. Erweiterte Referenzen:
@@ -82,11 +85,18 @@ verwendeten httpx-Clients und ein Reproducer-Aufruf ohne den fuer dev0
 erforderlichen `--expected-version`-Parameter. Diese Fehlversuche sind weder
 fachliche Vorherfehler noch erfolgreiche Nachweise. Beim ersten Browseradapter
 fehlte die Health-Fixture; der korrigierte isolierte Lauf ist separat bestanden.
+Die erste Vollsuite ergab 2711 bestanden, vier bekannte Skips und einen echten
+Integrationsfehler: Ein direkter httpx-Client verletzte das gemeinsame
+HTTP-Limitierungsgebot. Der Guard wurde nicht gelockert. GitHub verwendet nun
+den zentralen Transport mit zusaetzlich verschaerftem 512-KiB-Antwortlimit,
+keinen Transport-Retries, maximal fuenf Starts und begrenzter Gesamtdeadline.
+Der vollstaendige erneute Lauf wird separat als `unit.xml` eingefroren.
 
 ## Reproduktion
 
 Aus dem Repository, Python-Abhaengigkeiten gegen `requirements-runtime.lock`
-installieren, im Frontend die vorhandene Lockdatei verwenden:
+installieren, fuer `-n 4` zusaetzlich `pytest-xdist==3.8.0` installieren,
+im Frontend die vorhandene Lockdatei verwenden:
 
 ```sh
 PYTHONPATH=src python -m pytest tests/unit -n 4 --dist loadfile -q

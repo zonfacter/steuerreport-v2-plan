@@ -10,6 +10,7 @@ import hashlib
 from html.parser import HTMLParser
 import json
 from pathlib import Path
+import time
 from typing import Callable
 from urllib.parse import quote
 
@@ -28,6 +29,8 @@ from steuerreport_v2.contracts.updates import (
     UpdateStatus,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.external_http import managed_client, outbound_scope
+from steuerreport_v2.domain.request_limits import RequestLimiter, RequestLimitError
 from steuerreport_v2.private_settings import private_state_root
 
 
@@ -444,6 +447,7 @@ class UpdateService:
                 _FetchError,
                 UnicodeError,
                 ValidationError,
+                RequestLimitError,
             ) as exc:
                 retry = exc.retry_at if isinstance(exc, _FetchError) else None
                 cache = running.model_copy(
@@ -462,9 +466,10 @@ class UpdateService:
         context = (
             nullcontext(self.client)
             if self.client is not None
-            else httpx.Client(trust_env=False)
+            else managed_client(provider="github_updates", limiter=RequestLimiter(state_root=self.lock_path.parent.parent),
+                                max_response_bytes=MAX_PAGE_BYTES, max_retries=0)
         )
-        with context as client:
+        with outbound_scope(provider="github_updates", max_requests=MAX_PAGES, deadline=time.time() + 45), context as client:
             for number in range(1, MAX_PAGES + 1):
                 old = cache.pages.get(str(number))
                 headers = {

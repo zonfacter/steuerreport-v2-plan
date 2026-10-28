@@ -3462,6 +3462,12 @@ werden zusaetzlich ausgewiesen. RC-Erkennung folgt der geparsten Version,
 nicht dem GitHub-Prerelease-Flag. Entwuerfe, Dev-/Alpha-/Beta-Staende und
 Downgrades sind keine Updateziele.
 
+Der produktive GitHub-Pfad verwendet den gemeinsamen `managed_client` und
+das gemeinsame IP-/Anbieterbudget `github_updates`. Zusaetzliche lokale
+Schranken verschaerfen nur: 512 KiB je Antwort, maximal fuenf Starts,
+keine Transport-Retries und begrenzte Auftragsdeadline. Ein Koordinatorfehler
+blockiert den Abruf; er aktiviert keinen unlimitierten Ersatzclient.
+
 `POST /api/v1/updates/handoff` verlangt `release_id` und `snapshot_digest` aus
 dem gespeicherten Status und liefert Schema 1, installierte Version, den
 exakten Ziel-Snapshot, Erstellungszeit und einen deutschen Textauftrag.

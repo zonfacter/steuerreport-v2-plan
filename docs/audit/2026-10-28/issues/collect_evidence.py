@@ -32,10 +32,13 @@ def main():
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
     originals = {
-        "unit.xml": "/tmp/sr-issues-20261028/full-unit.xml",
+        "unit.xml": "/tmp/sr-issues-20261028/full-unit-final.xml",
+        "unit-before-shared-limiter.xml": "/tmp/sr-issues-20261028/full-unit.xml",
         "original-reference.xml": "/tmp/sr-issues-20261028/original-reference.xml",
-        "additional-reference.xml": "/tmp/sr-issues-20261028/acceptance.xml",
+        "additional-reference.xml": "/tmp/sr-issues-20261028/acceptance-final.xml",
         "updates-focused.xml": "/tmp/sr-issues-20261028/updates-final.xml",
+        "managed-transport.xml": "/tmp/sr-issues-20261028/managed-focused.xml",
+        "managed-default-path.xml": "/tmp/sr-issues-20261028/managed-path.xml",
         "bitget-focused.xml": "/tmp/sr-issues-20261028/bitget-final.xml",
         "issue2-before.json": "/tmp/sr-issues-20261028/issue2-before.json",
         "issue2-after.json": "/tmp/sr-issues-20261028/issue2-after-final-verified.json",
@@ -46,14 +49,15 @@ def main():
         "adapter-cache-before.xml": "/tmp/sr-issues-20261028/coherence-before.xml",
         "adapter-version-before.json": "/tmp/sr-issues-20261028/issue2-after-final.json",
         "browser-fixtures.json": "/tmp/sr-issues-20261028/component-final/result.json",
-        "browser-backend.json": "/tmp/sr-issues-20261028/browser-final-build/result.json",
-        "reference-source-freeze.json": "/tmp/sr-issues-20261028/acceptance/bitget-stale-source-freeze.json",
-        "updates-source-freeze.json": "/tmp/sr-issues-20261028/updates-final/updates-source-freeze.json",
+        "browser-backend.json": "/tmp/sr-issues-20261028/browser-managed-final/result.json",
+        "review-browser.json": "/tmp/sr-issues-20261028/review-regression/review-verification.json",
+        "reference-source-freeze.json": "/tmp/sr-issues-20261028/acceptance-final/bitget-stale-source-freeze.json",
+        "updates-source-freeze.json": "/tmp/sr-issues-20261028/managed-focused/updates-source-freeze.json",
     }
     for name, source in originals.items():
         shutil.copyfile(source, out / name)
         assert sha(Path(source)) == sha(out / name)
-    for source in sorted(Path("/tmp/sr-issues-20261028/browser-final-build").glob("*.png")):
+    for source in sorted(Path("/tmp/sr-issues-20261028/browser-managed-final").glob("*.png")):
         shutil.copyfile(source, out / source.name)
     (out / "changes.patch").write_bytes(git("diff", "--binary", BASE, commit))
     tests = {}
@@ -62,7 +66,7 @@ def main():
             tree = ET.parse(out / name).getroot()
             tests[name] = {"tests": len(list(tree.iter("testcase"))), "failures": len(list(tree.iter("failure"))),
                            "errors": len(list(tree.iter("error"))), "skipped": len(list(tree.iter("skipped")))}
-    for name in ("unit.xml", "original-reference.xml", "additional-reference.xml", "updates-focused.xml", "bitget-focused.xml", "stale-review-after.xml"):
+    for name in ("unit.xml", "original-reference.xml", "additional-reference.xml", "updates-focused.xml", "managed-transport.xml", "managed-default-path.xml", "bitget-focused.xml", "stale-review-after.xml"):
         assert tests[name]["failures"] == tests[name]["errors"] == 0, name
     assert json.loads((out / "issue2-after.json").read_text())["summary"] == {"cases": 15, "passed": 15, "failed": 0, "execution_errors": 0}
     for name in ("browser-fixtures.json", "browser-backend.json"):
