@@ -133,6 +133,10 @@ class TaxService:
         )
 
         events = self.store.list_canonical_events()
+        from steuerreport_v2.domain.token_conversion import TokenConversionService, carry_conversion_lots
+        conversions = {event_id: item for item in TokenConversionService(self.store).report(events)["ready"]
+                       for event_id in (item.source.event_id, item.target.event_id)}
+        converted_events: set[str] = set()
         clawback_reward_event_ids = locked_redemption_clawback_reward_event_ids(
             self.store, events
         )
@@ -149,6 +153,35 @@ class TaxService:
                 unmatched.extend(missing)
                 continue
             event = operation
+            if event.event_id in converted_events:
+                continue
+            conversion = conversions.get(event.event_id)
+            if conversion is not None:
+                def create_converted_lot(original, quantity, basis):
+                    lot = self._lot_from_values(asset=conversion.target.asset,
+                        acquired_at=original.acquired_at, quantity=quantity,
+                        cost_basis_eur_total=basis, source_event_id=original.source_event_id)
+                    return lot.model_copy(update={"origin_lot_id": original.origin_lot_id or original.lot_id})
+                old_lots = lots_by_asset[conversion.source.asset]
+                available = sum((lot.quantity_remaining for lot in old_lots), Decimal("0"))
+                created, missing_quantity = carry_conversion_lots(old_lots, conversion, create_converted_lot)
+                target_lots = lots_by_asset[conversion.target.asset]
+                target_lots.extend(created)
+                lots_by_asset[conversion.target.asset] = deque(sorted(target_lots,
+                    key=lambda lot: (self._normalize_datetime(lot.acquired_at), lot.source_event_id, lot.lot_id)))
+                all_lots.extend(created)
+                if missing_quantity:
+                    unmatched.append(TaxUnmatchedDisposal(unmatched_id=str(uuid4()),
+                        source_event_id=conversion.source.event_id, source=conversion.source.source,
+                        raw_object_id=conversion.source.raw_object_id, source_ref=conversion.source.source_ref,
+                        event_time=conversion.source.event_time, event_type="transfer",
+                        account=conversion.source.account, asset=conversion.source.asset,
+                        quantity=abs(conversion.source.quantity),
+                        matched_quantity=abs(conversion.source.quantity) - missing_quantity,
+                        missing_quantity=missing_quantity, available_before=available,
+                        proceeds_total_eur=Decimal("0")))
+                converted_events.update((conversion.source.event_id, conversion.target.event_id))
+                continue
             if event.asset in FIAT_TAX_EXCLUDED_ASSETS:
                 continue
             moonpay_evidence = moonpay_cost_basis_by_event.get(event.event_id)

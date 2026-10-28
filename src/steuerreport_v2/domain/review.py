@@ -49,7 +49,10 @@ class ReviewService:
     def gate(self, price_coverage: PriceCoverageReport | None = None) -> ReviewGate:
         issues: list[ReviewIssue] = []
         from steuerreport_v2.domain.asset_identity import AssetIdentityIndex
-        for asset, reason in sorted(AssetIdentityIndex(self.store).problems.items()):
+        from steuerreport_v2.domain.historical_prices import HistoricalPriceService
+        identity_problems = AssetIdentityIndex(self.store).problems_for_mappings(
+            HistoricalPriceService(self.store).mappings())
+        for asset, reason in sorted(identity_problems.items()):
             issues.append(ReviewIssue(code=reason, severity="high", scope=f"asset_identity:{asset}",
                 blocks_export=True, message=f"Tokenidentitaet fuer {asset} nicht eindeutig oder Mengeneinheit widerspruechlich ({reason}). Originale Chain-/Contract-/Dezimalstellen pruefen; keine Freigabe aufgrund des Symbols."))
         from steuerreport_v2.domain.token_conversion import TokenConversionService
@@ -78,21 +81,23 @@ class ReviewService:
                 tax_year=reporting_tax_year(disposed_at) if disposed_at else None,
                 message=f"Fuer {asset} ist eine Nullkostenbasis gespeichert. Anschaffung, Herkunft und ein gegebenenfalls begruendeter Nullansatz sind gesondert zu belegen; keine automatische Anerkennung."))
 
-        from steuerreport_v2.domain.fifo_methods import GLOBAL_ASSET_FIFO_SCOPE, active_fifo_scope
-        if active_fifo_scope(self.store) == GLOBAL_ASSET_FIFO_SCOPE:
-            with self.store.connect() as con:
-                fee_components = con.execute("""
-                    select event_id, event_time from canonical_events
-                    where event_type='trade' and fee_asset is not null and fee_quantity<>0
-                      and upper(fee_asset)<>'EUR'
-                      and not ((quantity>0 and upper(fee_asset)=upper(asset))
-                           or (quantity<0 and upper(fee_asset)=upper(coalesce(quote_asset,''))))
-                    order by event_id
-                """).fetchall()
-            for event_id, event_time in fee_components:
-                issues.append(ReviewIssue(code="fee_token_lot_accounting_review_required", severity="high",
-                    scope=f"event:{event_id}", blocks_export=True, tax_year=reporting_tax_year(event_time),
-                    message="Separates Gebuehren-Token im globalen FIFO noch nicht vollstaendig als Lotverbrauch und Kostenallokation nachgewiesen. Ledger und Gebuehrenbeleg pruefen; keine finale Freigabe aus dieser Vorschau."))
+        fee_service = TaxService(self.store)
+        for event in self.store.list_canonical_events():
+            fee = fee_service.trade_fee_accounting(event)
+            if fee is None:
+                continue
+            if fee.allocation == "review_required":
+                issues.append(ReviewIssue(code="swap_fee_allocation_review_required", severity="high",
+                    scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),
+                    message="Gebuehrenmenge ist beruecksichtigt; die Kostenrolle beim Token-Tausch ist noch nicht belegt. Erwerbs- und Verwertungskosten getrennt pruefen."))
+            if fee.separate_disposal and fee.value_eur is None:
+                issues.append(ReviewIssue(code="fee_token_valuation_missing", severity="high",
+                    scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),
+                    message="Gebuehren-Token wurde mengenmaessig verbraucht, sein historischer EUR-Wert fehlt. Ein vorlaeufiger Nullerloes ist kein belegter Nullwert."))
+            if fee.allocation == "disposal_cost" and fee_service._disposal_value_eur(event) < 0:
+                issues.append(ReviewIssue(code="negative_net_disposal_proceeds", severity="high",
+                    scope=f"event:{event.event_id}", blocks_export=True, tax_year=reporting_tax_year(event.event_time),
+                    message="Verkaufskosten uebersteigen den Erloes. Nettoerloes und Gebuehrenbeleg fachlich pruefen."))
 
         with self.store.connect() as con:
             pending_history = con.execute(

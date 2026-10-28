@@ -168,11 +168,32 @@ def test_unvalued_fee_still_consumes_quantity_but_is_not_known_zero(engine, pric
     assert remaining_basis(lots, "BNB") == D("18")
     assert TaxService(store).trade_fee_accounting(event).value_eur is None
     assert lines[0].disposal_proceeds_eur == D("0")  # Decimal-only provisional row, NOT a valuation.
-    # Existing global gate is retained; coordinator owns the wallet gate integration.
+    # Quantity is corrected; missing valuation remains a specific export blocker.
     TaxService(store).rebuild_fifo()
     gate = ReviewService(store).gate()
     assert not gate.allow_export
-    assert any(issue.code == "fee_token_lot_accounting_review_required" and issue.blocks_export for issue in gate.issues)
+    assert any(issue.code == "fee_token_valuation_missing" and issue.blocks_export for issue in gate.issues)
+
+
+def test_complete_fee_accounting_no_longer_reports_unimplemented_fifo(tmp_path):
+    store = DuckDbStore(tmp_path / "fee-gate.duckdb")
+    trade(store, "BNB", "1", "20", day=5)
+    trade(store, "BTC", "10", "100", fee_asset="BNB", fee="0.1")
+    point(store)
+    TaxService(store).rebuild_fifo()
+    codes = {issue.code for issue in ReviewService(store).gate().issues}
+    assert "fee_token_lot_accounting_review_required" not in codes
+    assert "fee_token_valuation_missing" not in codes
+    assert "swap_fee_allocation_review_required" not in codes
+
+
+def test_swap_fee_cost_role_stays_blocked_after_quantity_fix(tmp_path):
+    store = DuckDbStore(tmp_path / "swap-gate.duckdb")
+    trade(store, "ETH", "1", "40", day=5)
+    trade(store, "BTC", "10", "1", quote="ETH", fee_asset="BTC", fee="0.1")
+    TaxService(store).rebuild_fifo()
+    assert any(issue.code == "swap_fee_allocation_review_required" and issue.blocks_export
+               for issue in ReviewService(store).gate().issues)
 
 
 @pytest.mark.parametrize("direction", ["buy", "sell"])

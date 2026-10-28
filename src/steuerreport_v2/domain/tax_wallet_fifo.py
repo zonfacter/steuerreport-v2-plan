@@ -237,7 +237,7 @@ class WalletFifoReplayState:
 
 
 class WalletFifoPreviewService:
-    METHOD_VERSION = "wallet_asset_preview_v47_binance_earn_reward_lot_clawback"
+    METHOD_VERSION = "wallet_asset_preview_v48_fee_consumption_evidenced_conversion"
     EXCHANGE_INTERNAL_PRINCIPAL_CARRY_STATUSES = frozenset(
         {
             "binance_internal_earn_transfer",

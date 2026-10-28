@@ -120,26 +120,32 @@ class AssetIdentityIndex:
             else:
                 self.identities[symbol] = max(identities, key=lambda row: row.decimals is not None)
 
+    def problems_for_mappings(self, mappings: dict) -> dict[str, str]:
+        problems = dict(self.problems)
+        for symbol, identity in self.identities.items():
+            mapping = mappings.get(symbol, {})
+            configured = mapping.get("defillama_id")
+            network = mapping.get("network")
+            contract = mapping.get("contract_address") or mapping.get("solana_mint")
+            if contract and identity.network != "solana" and contract.startswith("0x"):
+                contract = contract.lower()
+            if ((configured and configured != identity.provider_id and not configured.startswith("coingecko:"))
+                    or (network and network_name(network) != identity.network)
+                    or (contract and contract != identity.contract)
+                    or (mapping.get("decimals") is not None and identity.decimals is not None
+                        and mapping["decimals"] != identity.decimals)):
+                problems[symbol] = "price_mapping_identity_mismatch"
+        return problems
+
     def apply_to_plan(self, rows: list[dict], mappings: dict, *, provider: str) -> None:
+        problems = self.problems_for_mappings(mappings)
         for row in rows:
             symbol = row["asset"].upper()
-            reason = self.problems.get(symbol)
+            reason = problems.get(symbol)
             identity = self.identities.get(symbol)
             if identity:
                 row["asset_identity"] = {"network": identity.network, "contract_address": identity.contract,
                                          "decimals": identity.decimals, "basis": "original_raw_object"}
-                mapping = mappings.get(symbol, {})
-                configured = mapping.get("defillama_id")
-                mapped_network = mapping.get("network")
-                mapped_contract = mapping.get("contract_address") or mapping.get("solana_mint")
-                if mapped_contract and identity.network != "solana" and mapped_contract.startswith("0x"):
-                    mapped_contract = mapped_contract.lower()
-                if ((configured and configured != identity.provider_id and not configured.startswith("coingecko:"))
-                        or (mapped_network and network_name(mapped_network) != identity.network)
-                        or (mapped_contract and mapped_contract != identity.contract)
-                        or (mapping.get("decimals") is not None and identity.decimals is not None
-                            and mapping["decimals"] != identity.decimals)):
-                    reason = "price_mapping_identity_mismatch"
                 if not reason and provider == "defillama":
                     row["provider_id"] = identity.provider_id
                     if row.get("reason") == "asset_not_configured":

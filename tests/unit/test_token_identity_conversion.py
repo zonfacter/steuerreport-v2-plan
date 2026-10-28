@@ -15,6 +15,7 @@ from steuerreport_v2.domain.asset_identity import AssetIdentityIndex, identity_f
 from steuerreport_v2.domain.historical_prices import HistoricalPriceService
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.domain.tax_wallet_fifo import WalletFifoPreviewService
+from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.domain.token_conversion import TokenConversionService, event_binding
 
 
@@ -109,6 +110,22 @@ def test_g19_ratio_preserves_basis_date_and_quantity(tmp_path, monkeypatch):
     assert lots[0].quantity_remaining == Decimal("1")
     assert lots[0].cost_basis_eur_total == Decimal("200")
     assert lots[0].acquired_at.day == 1
+    global_result = TaxService(store).preview_global_fifo()
+    converted = [lot for lot in global_result.lots if lot.asset == "NEW"]
+    assert len(converted) == 1 and not global_result.unmatched
+    assert converted[0].quantity_remaining == Decimal("1")
+    assert converted[0].cost_basis_eur_total == Decimal("200")
+    assert converted[0].acquired_at.day == 1
+
+
+def test_g19_changed_primary_evidence_invalidates_run_binding(tmp_path, monkeypatch):
+    from steuerreport_v2.domain.token_conversion import config_binding
+    store, path, mapping = conversion_fixture(tmp_path, monkeypatch)
+    path.write_text(json.dumps({"schema_version": 1, "mappings": [mapping]}))
+    before = config_binding()
+    path.with_name("conversion-evidence.txt").write_text("Changed primary evidence")
+    assert config_binding() != before
+    assert not TokenConversionService(store).report()["ready"]
 
 
 @pytest.mark.parametrize("change,reason", [
