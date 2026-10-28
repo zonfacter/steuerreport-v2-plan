@@ -1,0 +1,21 @@
+
+> steuerreport-v2-frontend@0.2.0-rc.33.dev0 build
+> node node_modules/typescript/bin/tsc && node node_modules/vite/bin/vite.js build
+
+vite v6.4.5 building for production...
+transforming...
+✓ 1616 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.92 kB │ gzip:   0.48 kB
+dist/assets/index-BkC_ATaL.css  128.93 kB │ gzip:  22.28 kB
+dist/assets/vendor-CoSDG3-6.js    4.17 kB │ gzip:   1.82 kB
+dist/assets/icons-BTmIwR_n.js    22.77 kB │ gzip:   4.77 kB
+dist/assets/react-C10uwxdT.js   138.51 kB │ gzip:  44.26 kB
+dist/assets/index-MfGt1FSq.js   894.91 kB │ gzip: 225.56 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.46s
