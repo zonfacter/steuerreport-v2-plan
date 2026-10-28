@@ -53,10 +53,16 @@ def run(args):
     if not backup.is_file():
         raise RuntimeError("backup_not_regular_file")
     live = inspect("container", args.live)
-    image = live["Image"]
+    source_image = live["Image"]
+    image = args.candidate_image or source_image
     image_meta = inspect("image", image)
-    if image_meta.get("Config", {}).get("Labels", {}).get("org.opencontainers.image.revision") != args.revision:
+    image = image_meta["Id"]
+    source_meta = inspect("image", source_image)
+    if source_meta.get("Config", {}).get("Labels", {}).get("org.opencontainers.image.revision") != args.revision:
         raise RuntimeError("live_revision_mismatch")
+    expected_revision = args.candidate_revision if args.candidate_image else args.revision
+    if not expected_revision or image_meta.get("Config", {}).get("Labels", {}).get("org.opencontainers.image.revision") != expected_revision:
+        raise RuntimeError("restore_image_revision_mismatch")
     if live["State"]["Status"] != "running":
         raise RuntimeError("live_not_running")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{3,65}", args.run_id):
@@ -74,7 +80,7 @@ def run(args):
     snapshot = (HERE / "ops_snapshot.py").read_text()
     with backup.open("rb") as handle:
         backup_digest = hashlib.file_digest(handle, "sha256").hexdigest()
-    summary = {"image_id": image, "revision": args.revision, "volume": volume,
+    summary = {"image_id": image, "revision": expected_revision, "source_image_id": source_image, "volume": volume,
                "container": container, "backup_sha256": backup_digest,
                "network": "none", "published_ports": {}, "cleanup": False}
     volume_created = False
@@ -196,4 +202,6 @@ if __name__ == "__main__":
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--live", default="steuerreport-v2-lan")
     parser.add_argument("--revision", default="1aecfb131d189267a01a6303f5a9b67a5a99efe2")
+    parser.add_argument("--candidate-image", help="Nur lokal vorhandenes Pruefimage fuer die isolierte Kopie")
+    parser.add_argument("--candidate-revision", help="Erwartetes Commitlabel des Pruefimages")
     run(parser.parse_args())

@@ -86,3 +86,44 @@ Grenzen: logische Tabellenidentitaet ist keine Byteidentitaet der DuckDB-Datei,
 keine fachliche Neubewertung, keine Aussage ueber steuerliche Richtigkeit,
 keine externe Entschluesselungs-/Providerprobe und keine Registryverifikation.
 Der Restore hat keine V1-Anbindung und kann externe Dienste nicht erreichen.
+
+## Zusaetzlicher Entwicklungsimage-Test
+
+Der Koordinator baute lokal den eingefrorenen Codecommit
+`ae8c30eb3e4f36849a6b31ae26a7aaf35c60636e` als `0.2.0rc33.dev0`.
+Lokale Image-ID:
+`sha256:aebbcdc02ce47bfda6031ac7e2409e3959a14024fac3d843e21d978d967ce6b6`.
+Kein Push, kein Registry-Digest und keine produktive Umschaltung.
+
+Mit demselben Backup wurde ausschliesslich eine weitere neue Volume ohne
+Netzwerk/Ports gestartet. Wiederholbarer Zusatz zum obigen Aufruf:
+`--candidate-image steuerreport-v2:migration-audit-20261028-ae8c30e
+--candidate-revision ae8c30e`, eigene Run-ID und neuer Evidence-Ordner.
+Der Helfer prueft weiterhin die produktive Quellrevision gesondert und pinnt
+das gewaehlte Restoreimage nach Inspect auf seine lokale Image-ID.
+
+Nachweis unter dem privaten Koordinator-Evidencepfad `candidate-restore/`:
+Erststart und Neustart melden `0.2.0rc33.dev0`, DuckDB; statisches HTML HTTP200.
+Alle Restoretabellen und Nicht-DB-Dateien vor/nach beiden Starts identisch.
+Vaultkey, Token und Profil erhalten. Alle produktiven Tabellen/Dateien sowie
+Containeridentitaet, Konfiguration und Startzeit unveraendert. Testressourcen
+entfernt. Kein Import, Fachlauf oder Providerrequest auf den kopierten Daten.
+
+Dieser Beleg gilt genau fuer das genannte lokale Image. Spaetere Codeaenderungen
+benoetigen ihren eigenen Imagebezug; das Commitlabel allein ist kein Digest.
+
+## Finaler Codefreeze
+
+Nach den Integrationskorrekturen wurde der vollstaendig eingefrorene Commit
+`b036b8ad4212d08d719fedec7dbc7115cf5704a9` erneut lokal gebaut und mit
+demselben Ablauf offline gestartet und neugestartet. Image-ID und Laufzeit
+stehen in `candidate-manifest.json`, private Belege in `final-restore-b036b8a/`.
+Auch dieser Lauf bestand alle vollstaendigen Tabellen-/Datei-/Key-/Profil-
+Erhaltspruefungen; Produktivcontainer, Quellen und Konfiguration blieben
+unveraendert. Eigene Testcontainer/Volumes sind entfernt.
+
+Zusaetzlich: leerer Start mit ausschliesslich neuen tmpfs-Pfaden, ohne
+Netzwerk/V1 und mit schreibgeschuetzter Software. Health200, Version33.dev0,
+DuckDB-Schema1 und0CanonicalEvents. Keine vorgegebenen privaten Konten.
+Das ist weiterhin kein produktiver Rollback oder Nachweis fehlender
+steuerlicher Sachverhaltsluecken.
