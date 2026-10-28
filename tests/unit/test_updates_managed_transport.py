@@ -1,11 +1,12 @@
 """Produktiver Defaultpfad nutzt denselben Limiter wie alle Connectoren."""
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.external_http import managed_client
+from steuerreport_v2.domain.external_http import managed_client, outbound_scope
 from steuerreport_v2.domain.request_limits import RequestLimiter, RequestLimitError
 from steuerreport_v2.domain import updates
 
@@ -14,8 +15,8 @@ NOW = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
 
 
 class Clock:
-    def __init__(self):
-        self.now = 1000.0
+    def __init__(self, now=1000.0):
+        self.now = now
 
     def __call__(self):
         return self.now
@@ -25,8 +26,9 @@ class Clock:
 
 
 @pytest.mark.parametrize("rate_limited", [False, True])
-def test_default_path_pagination_and_429_reserve_shared_budget(tmp_path, monkeypatch, rate_limited):
-    clock = Clock()
+@pytest.mark.parametrize("uptime", [10.0, 1000.0])
+def test_default_path_pagination_and_429_reserve_shared_budget(tmp_path, monkeypatch, rate_limited, uptime):
+    clock = Clock(uptime)
     limiter = RequestLimiter(state_root=tmp_path, clock=clock, monotonic=clock, sleep=clock.sleep, random=lambda: 0)
     calls = []
 
@@ -45,7 +47,14 @@ def test_default_path_pagination_and_429_reserve_shared_budget(tmp_path, monkeyp
         kwargs["limiter"] = limiter
         return managed_client(transport=httpx.MockTransport(handler), clock=clock, monotonic=clock, **kwargs)
 
+    def scope(**kwargs):
+        # Scope und Transport muessen dieselbe Testuhr verwenden, auch auf jungen VMs.
+        assert kwargs["deadline"] == clock.now + 45
+        return outbound_scope(clock=clock, monotonic=clock, **kwargs)
+
     monkeypatch.setattr(updates, "managed_client", factory)
+    monkeypatch.setattr(updates, "outbound_scope", scope)
+    monkeypatch.setattr(updates, "time", SimpleNamespace(time=clock))
     service = updates.UpdateService(DuckDbStore(tmp_path / "synthetic.duckdb"), state_dir=tmp_path,
                                     installed_version="0.2.0rc32", clock=lambda: NOW)
     result = service.check()

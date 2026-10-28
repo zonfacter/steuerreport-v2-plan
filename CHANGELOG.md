@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.2.0rc33 - 2026-10-28 (Releasekandidat)
+## 0.2.0rc34 - 2026-10-28 (Releasekandidat)
+
+- Uebernimmt die unten dokumentierten rc33-Aenderungen. rc33 wurde nicht
+  veroeffentlicht; sein vorhandener Tag bleibt unveraendert erhalten.
+- Die isolierte HTTP-Transportprobe verwendet fuer Scope und Limiter dieselbe
+  kuenstliche Uhr. Neue Faelle fuer kurze und lange Maschinenlaufzeiten
+  verhindern die auf frischen CI-Runnern erkannte Zeitdomaenen-Verwechslung.
+  Keine Aenderung der Produktivberechnung oder der Abruflimiter-Regeln.
+
+## 0.2.0rc33 - 2026-10-28 (Nicht veroeffentlichter Kandidat)
 
 - GitHub #2: Bitget-Financial-CSV mit Date, signierten Futures-Gebuehren,
   Funding und neutralen Margin-Aktionen; explizite Nettoexporte ohne doppelten
