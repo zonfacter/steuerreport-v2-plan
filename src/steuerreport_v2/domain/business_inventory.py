@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
+from collections import defaultdict
+from types import SimpleNamespace
+
+from steuerreport_v2.contracts.events import CanonicalEvent
 
 from steuerreport_v2.contracts.business_inventory import (
     BusinessRewardInventoryReviewReport,
@@ -9,7 +13,8 @@ from steuerreport_v2.contracts.business_inventory import (
     BusinessRewardOriginStatus,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.tax_time import reporting_year_sql
+from steuerreport_v2.domain.tax_time import reporting_tax_year
+from steuerreport_v2.domain.lot_origin import POLICY_ID, LotOriginIndex, LotOriginTrace
 
 
 class BusinessRewardInventoryReviewService:
@@ -38,47 +43,34 @@ class BusinessRewardInventoryReviewService:
         if not asset_keys:
             return self._empty_report(asset_keys)
 
-        placeholders = ", ".join("?" for _ in asset_keys)
-        disposal_year = reporting_year_sql("line.disposed_at")
         with self.store.connect() as con:
-            records = con.execute(
-                f"""
-                select
-                    {disposal_year} as disposal_year,
-                    upper(line.asset) as asset,
-                    nullif(lower(trim(origin.source)), '') as origin_source,
-                    nullif(lower(trim(origin.event_type)), '') as origin_event_type,
-                    nullif(trim(coalesce(origin.account, origin.wallet)), '') as origin_account,
-                    count(distinct origin.event_id)::integer as origin_events_count,
-                    count(*)::integer as tax_lines_count,
-                    coalesce(sum(line.quantity), 0) as quantity_disposed,
-                    coalesce(sum(line.acquisition_cost_eur), 0) as acquisition_cost_eur,
-                    coalesce(sum(line.disposal_proceeds_eur), 0) as disposal_proceeds_eur,
-                    coalesce(sum(line.gain_loss_eur), 0) as gain_loss_eur,
-                    min(line.disposed_at) as first_disposal_at,
-                    max(line.disposed_at) as last_disposal_at,
-                    min(origin.event_id) as sample_origin_event_id,
-                    min(line.source_event_id) as sample_disposal_event_id
-                from tax_lines line
-                left join tax_lots lot on lot.lot_id = line.lot_id
-                left join canonical_events origin
-                  on origin.event_id = coalesce(
-                    nullif(line.acquisition_source_event_id, ''),
-                    lot.source_event_id
-                  )
-                where upper(line.asset) in ({placeholders})
-                group by
-                    disposal_year,
-                    upper(line.asset),
-                    origin_source,
-                    origin_event_type,
-                    origin_account
-                order by disposal_year, asset, origin_source, origin_event_type, origin_account
-                """,
-                list(asset_keys),
-            ).fetchall()
+            def records(table: str, order: str) -> list[SimpleNamespace]:
+                cursor = con.execute(f"select * from {table} order by {order}")
+                columns = [column[0] for column in cursor.description]
+                return [SimpleNamespace(**dict(zip(columns, row))) for row in cursor.fetchall()]
 
-        rows = [self._row(record) for record in records]
+            lots = records("tax_lots", "lot_id")
+            lines = records("tax_lines", "tax_line_id")
+        events = self.store.list_canonical_events()
+        origin_index = LotOriginIndex(lots, events)
+        events_by_id = {event.event_id: event for event in events}
+        groups = defaultdict(list)
+        for line in lines:
+            trace = origin_index.resolve(line)
+            if line.asset.upper() not in asset_keys and trace.origin_asset not in asset_keys:
+                continue
+            origin = events_by_id.get(trace.origin_event_id)
+            source = self._optional_text(origin.source.lower()) if origin else None
+            event_type = self._optional_text(origin.event_type.lower()) if origin else None
+            account = self._optional_text(origin.account or origin.wallet) if origin else None
+            key = (reporting_tax_year(line.disposed_at), line.asset.upper(), source,
+                   event_type, account, trace.status, trace.reason)
+            groups[key].append((line, trace, origin))
+
+        with localcontext() as context:
+            context.prec = 80
+            rows = [self._row(records) for _, records in sorted(
+                groups.items(), key=lambda item: tuple("" if value is None else value for value in item[0]))]
         potential_rows = [
             row for row in rows if row.classification == "potential_business_inventory"
         ]
@@ -108,6 +100,7 @@ class BusinessRewardInventoryReviewService:
             )
 
         return BusinessRewardInventoryReviewReport(
+            origin_trace_policy=POLICY_ID,
             generated_at=datetime.now(timezone.utc).isoformat(),
             assets=list(asset_keys),
             affected_years=affected_years,
@@ -117,15 +110,9 @@ class BusinessRewardInventoryReviewService:
                 row.tax_lines_count for row in potential_rows
             ),
             unresolved_tax_lines_count=sum(row.tax_lines_count for row in unresolved_rows),
-            potential_business_acquisition_cost_eur=sum(
-                (row.acquisition_cost_eur for row in potential_rows), Decimal("0")
-            ),
-            potential_business_proceeds_eur=sum(
-                (row.disposal_proceeds_eur for row in potential_rows), Decimal("0")
-            ),
-            potential_business_gain_loss_eur=sum(
-                (row.gain_loss_eur for row in potential_rows), Decimal("0")
-            ),
+            potential_business_acquisition_cost_eur=self._sum_amount(potential_rows, "acquisition_cost_eur"),
+            potential_business_proceeds_eur=self._sum_amount(potential_rows, "disposal_proceeds_eur"),
+            potential_business_gain_loss_eur=self._sum_amount(potential_rows, "gain_loss_eur"),
             rows=rows,
             findings=findings,
             next_actions=(
@@ -138,37 +125,44 @@ class BusinessRewardInventoryReviewService:
                 else []
             ),
             methodology=(
-                "Read-only Ursprungslot-Audit fuer HNT, IOT und MOBILE. Jede bestehende "
-                "Tax-Line wird ueber tax_lots.source_event_id beziehungsweise den expliziten "
-                "acquisition_source_event_id mit dem Anschaffungsereignis verbunden. Mining- "
-                "und belegte On-Chain-Reward-Urspruenge werden konservativ als potenzielles "
+                "Read-only Ursprungslot-Audit mit explizitem Assetfilter auf Verkauf oder bestaetigten Ursprung. "
+                "Jede Tax-Line wird ueber eindeutige Lot-/Event-IDs und origin_lot_id bis zum "
+                "Ursprung verfolgt. Fehlende oder widerspruechliche Ketten bleiben im Review. Mining- "
+                "und als On-Chain-Rewards erfasste Urspruenge werden konservativ als potenzielles "
                 "Betriebsvermoegen markiert. Income-, Transfer-, CEX-Staking- und fehlende "
                 "Urspruenge bleiben im Review. Der Audit aendert weder Events noch Lots, "
-                "Tax-Lines, Preise oder Erklaerungswerte."
+                "Tax-Lines, Preise oder Erklaerungswerte. Eine ID-Kette belegt weder die Echtheit "
+                "der Quelle noch die Angemessenheit einer positiven Kostenbasis."
             ),
         )
 
-    def _row(self, record: tuple[object, ...]) -> BusinessRewardInventoryReviewRow:
-        source = self._optional_text(record[2])
-        event_type = self._optional_text(record[3])
+    def _row(self, records: list[tuple[SimpleNamespace, LotOriginTrace, CanonicalEvent | None]]) -> BusinessRewardInventoryReviewRow:
+        line, trace, origin = min(records, key=lambda item: (
+            item[2].event_id if item[2] else "", item[0].tax_line_id))
+        source = self._optional_text(origin.source.lower()) if origin else None
+        event_type = self._optional_text(origin.event_type.lower()) if origin else None
         classification, reason = self.classify_origin(source, event_type)
         blocks = classification != "non_reward_origin"
         return BusinessRewardInventoryReviewRow(
-            disposal_year=int(record[0]),
-            asset=str(record[1]),
+            disposal_year=reporting_tax_year(line.disposed_at),
+            asset=line.asset.upper(),
             origin_source=source,
             origin_event_type=event_type,
-            origin_account=self._optional_text(record[4]),
-            origin_events_count=int(record[5] or 0),
-            tax_lines_count=int(record[6] or 0),
-            quantity_disposed=Decimal(str(record[7] or "0")),
-            acquisition_cost_eur=Decimal(str(record[8] or "0")),
-            disposal_proceeds_eur=Decimal(str(record[9] or "0")),
-            gain_loss_eur=Decimal(str(record[10] or "0")),
-            first_disposal_at=self._iso(record[11]),
-            last_disposal_at=self._iso(record[12]),
-            sample_origin_event_id=self._optional_text(record[13]),
-            sample_disposal_event_id=self._optional_text(record[14]),
+            origin_account=self._optional_text(origin.account or origin.wallet) if origin else None,
+            origin_events_count=len({item[2].event_id for item in records if item[2] is not None}),
+            tax_lines_count=len(records),
+            quantity_disposed=sum((item[0].quantity for item in records), Decimal("0")),
+            acquisition_cost_eur=sum((item[0].acquisition_cost_eur for item in records), Decimal("0")),
+            disposal_proceeds_eur=sum((item[0].disposal_proceeds_eur for item in records), Decimal("0")),
+            gain_loss_eur=sum((item[0].gain_loss_eur for item in records), Decimal("0")),
+            first_disposal_at=self._iso(min(item[0].disposed_at for item in records)),
+            last_disposal_at=self._iso(max(item[0].disposed_at for item in records)),
+            sample_origin_event_id=origin.event_id if origin else None,
+            sample_disposal_event_id=line.source_event_id,
+            lineage_status=trace.status,
+            lineage_reason=trace.reason,
+            sample_lot_path=list(trace.lot_ids),
+            sample_direct_event_id=trace.direct_event_id,
             classification=classification,
             blocks_private_fifo_classification=blocks,
             reason=reason,
@@ -202,9 +196,14 @@ class BusinessRewardInventoryReviewService:
                 "origin_classification_review",
                 "Income oder Transfer kann Reward, Migration, Airdrop oder FIFO-Fortfuehrung sein; Primaerbeleg fehlt in dieser Ableitung.",
             )
+        if event_type == "trade":
+            return (
+                "non_reward_origin",
+                "Der direkte Ursprung ist ein Handel; keine automatische steuerliche Sphaerenfreigabe.",
+            )
         return (
-            "non_reward_origin",
-            "Der direkte Ursprung ist kein Reward-/Mining-/Staking-Ereignis.",
+            "origin_classification_review",
+            "Der Ursprungstyp ist nicht als Anschaffung klassifiziert; keine automatische Privatzuordnung.",
         )
 
     def _empty_report(
@@ -212,12 +211,19 @@ class BusinessRewardInventoryReviewService:
         assets: tuple[str, ...],
     ) -> BusinessRewardInventoryReviewReport:
         return BusinessRewardInventoryReviewReport(
+            origin_trace_policy=POLICY_ID,
             generated_at=datetime.now(timezone.utc).isoformat(),
             assets=list(assets),
             strict_ready=True,
             findings=["Keine Assets fuer den Ursprungslot-Audit ausgewaehlt."],
             methodology="Read-only Ursprungslot-Audit; keine Auswahl, keine Datenveraenderung.",
         )
+
+    @staticmethod
+    def _sum_amount(rows: list[BusinessRewardInventoryReviewRow], field: str) -> Decimal:
+        with localcontext() as context:
+            context.prec = 80
+            return sum((getattr(row, field) for row in rows), Decimal("0"))
 
     @staticmethod
     def _optional_text(value: object) -> str | None:
