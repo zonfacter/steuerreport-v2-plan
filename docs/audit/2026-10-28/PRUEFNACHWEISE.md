@@ -24,6 +24,8 @@ Nach diesem Freeze nur Dokumentations-/Nachweisdateien geaendert.
 | Alle7zusaetzlichenCI-Browserprogramme |7von7mitExit0, genaue Bereiche unten |
 | Leerer finaler Container | offline/read-only, Schema1,0Events,Health200,keinV1 |
 | Finales Restore/Neustart | alle Tabellen/Dateien/Keys/Token/Profil erhalten; Produktion unveraendert |
+| Finaler Quellenexport / Gitleaks8.30.1 |10bekannte einzeln hashgebunden gepruefte Nicht-Secrets,0ungepruefte Funde; ReviewguardExit0 |
+| Private Kontovorgaben | `check_private_data_v2.py`:0Verstoesse; Beispielprofil und Registry leer |
 
 Die8Worker sind ausschliesslich Testprozesse mit eigenen synthetischen DBs.
 Die produktive Einprozess-/DuckDB-Architektur wurde nicht erweitert.
@@ -130,6 +132,13 @@ Keine Ausfuehrung des produktionsveraendernden Legacy-Startskripts.
 | Privater finaler Restore `restore-result.json` | `c44bfef54db1898e6ae4921458a02675049cc7568566400155f8d20321adcef1` |
 
 Private Volltabellen-/Dateihashes verbleiben im geschuetzten Evidenceordner.
+Der finale Secretcheck bezog sich auf den vollstaendigen Quellbaumexport von
+Commit490d2b7, nicht auf saemtliche Git-Historien. Bereinigter Reviewnachweis:
+`/tmp/steuerreport-migration-final-gitleaks-reviewed.json`, SHA256
+`45e9f1f72862ac3c1320aecf1f521e4ce98072a00e24e479a3a738b7f8b8df02`.
+Keine Ausgabe von Secretwerten; bekannte Treffer sind nur mit der vorhandenen
+exakten Quellenzeilen-Hashfreigabe akzeptiert. Der ungefilterte Scanner meldet
+deshalb absichtlich Exit1; der ueberpruefende Fail-closed-Guard meldet Exit0.
 Keine privaten Datenbanken, Konto-/Walletwerte, Keys oder Anbieterantworten
 in diesem oeffentlich geeigneten Quellcodebericht. Der lokale Codegraph wurde
 ohne Embeddings aufgebaut und nach Integration inkrementell aktualisiert;
