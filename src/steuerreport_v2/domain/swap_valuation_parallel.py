@@ -17,7 +17,7 @@ from steuerreport_v2.contracts.swap_valuation import (
 from steuerreport_v2.contracts.tax import TaxLine
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax import TaxService
-from steuerreport_v2.domain.tax_time import reporting_tax_year
+from steuerreport_v2.domain.tax_time import private_disposal_within_year, reporting_tax_year
 
 
 @dataclass
@@ -34,7 +34,7 @@ class _Totals:
         self.proceeds_eur += line.disposal_proceeds_eur
         self.acquisition_cost_eur += line.acquisition_cost_eur
         self.tax_lines_count += 1
-        if line.holding_days <= 365:
+        if private_disposal_within_year(line.acquired_at, line.disposed_at):
             self.short_holding_gain_loss_eur += line.gain_loss_eur
         else:
             self.long_holding_gain_loss_eur += line.gain_loss_eur

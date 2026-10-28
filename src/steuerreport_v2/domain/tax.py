@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -34,6 +34,7 @@ from steuerreport_v2.domain.fifo_methods import (
     active_fifo_scope,
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
+from steuerreport_v2.domain.tax_time import private_disposal_tax_free_at, reporting_time
 from steuerreport_v2.domain.service_swap_tax_mapping import (
     ServiceSwapTaxMappingService,
 )
@@ -595,14 +596,17 @@ class TaxService:
                 continue
             cost_basis_remaining = self._remaining_cost_basis(lot, sellable_quantity)
             tax_free_at = self._tax_free_at(lot.acquired_at)
-            days_until = max((tax_free_at.date() - as_of.date()).days, 0)
+            days_until = max(
+                (reporting_time(tax_free_at).date() - reporting_time(as_of).date()).days,
+                0,
+            )
             context = event_context.get(lot.source_event_id, {})
             lots.append(
                 TaxHoldingPeriodLot(
                     lot_id=lot.lot_id,
                     asset=lot.asset,
                     acquired_at=lot.acquired_at,
-                    tax_free_at=datetime.combine(tax_free_at.date(), time.min, tzinfo=timezone.utc),
+                    tax_free_at=tax_free_at,
                     days_until_tax_free=days_until,
                     bucket=self._holding_bucket(days_until),
                     quantity_remaining=sellable_quantity,
@@ -637,8 +641,9 @@ class TaxService:
             lots=lots,
             methodology=(
                 "Read-only Haltefristansicht aus offenen FIFO-Lots und aktuellen "
-                "sichtbaren Portfolio-Mengen. Steuerfrei-Datum konservativ: Tag "
-                "nach dem einjaehrigen Anschaffungsjubilauem. Lots unter "
+                "sichtbaren Portfolio-Mengen. Modellierte private Jahresfrist in "
+                "Europe/Berlin: Jahrestag noch innerhalb, Folgetag ausserhalb; "
+                "keine Entscheidung ueber Privat-/Betriebsvermoegen. Lots unter "
                 "min_value_eur werden als Dust ausgeblendet."
             ),
         )
@@ -720,14 +725,7 @@ class TaxService:
 
     @staticmethod
     def _tax_free_at(acquired_at: datetime) -> datetime:
-        normalized = acquired_at if acquired_at.tzinfo is not None else acquired_at.replace(tzinfo=timezone.utc)
-        normalized = normalized.astimezone(timezone.utc)
-        acquired_date = normalized.date()
-        try:
-            anniversary = acquired_date.replace(year=acquired_date.year + 1)
-        except ValueError:
-            anniversary = acquired_date.replace(year=acquired_date.year + 1, day=28)
-        return datetime.combine(anniversary + timedelta(days=1), time.min, tzinfo=timezone.utc)
+        return private_disposal_tax_free_at(acquired_at)
 
     @staticmethod
     def _holding_bucket(days_until: int) -> str:

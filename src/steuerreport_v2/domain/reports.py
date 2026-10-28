@@ -21,7 +21,11 @@ from steuerreport_v2.contracts.reports import (
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.exports import ExportService
 from steuerreport_v2.domain.review import ReviewService
-from steuerreport_v2.domain.tax_time import event_reporting_year_sql, reporting_year_sql
+from steuerreport_v2.domain.tax_time import (
+    event_reporting_year_sql,
+    reporting_year_sql,
+    tax_line_within_year_sql,
+)
 from steuerreport_v2.domain.valuation import PriceCoverageService
 
 
@@ -287,7 +291,7 @@ class ReportCenterService:
                         count(*)::integer as tax_lines_count,
                         coalesce(sum(gain_loss_eur), 0) as realized_gain_loss_eur
                     from tax_lines
-                    where holding_days <= 365
+                    where {tax_line_within_year_sql()}
                     group by year
                 ),
                 tax_free as (
@@ -296,7 +300,7 @@ class ReportCenterService:
                         count(*)::integer as tax_free_lines_count,
                         coalesce(sum(gain_loss_eur), 0) as tax_free_gain_loss_eur
                     from tax_lines
-                    where holding_days > 365
+                    where not {tax_line_within_year_sql()}
                     group by year
                 ),
                 income as (

@@ -1653,7 +1653,7 @@ def test_tax_year_filing_summary_explains_entry_targets(tmp_path):
     checklist_by_label = {item.label: item for item in report.checklist}
     assert checklist_by_label["Privates Veraeusserungsergebnis"].category == "eintragen"
     assert checklist_by_label["Einzutragende Rewards / Mining / Staking"].category == "eintragen"
-    assert checklist_by_label["Steuerfreie Veraeusserungen > 365 Tage"].category == "archivieren"
+    assert checklist_by_label["Veraeusserungen ausserhalb der privaten Jahresfrist"].category == "archivieren"
     assert checklist_by_label["Belegpaket"].category == "archivieren"
     assert "Jahr" in report.checklist_ascii
     assert "eintragen" in report.checklist_ascii
