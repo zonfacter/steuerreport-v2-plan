@@ -12,8 +12,17 @@
   Nullbasis und nicht vollstaendig modellierte Gebuehren-Token bleiben Review.
 - Lesende, jahresabhaengige Freigrenzen-Arithmetik erfordert ausdrueckliche
   Angaben zu anderen privaten Veraeusserungen und erteilt keine Jahresfreigabe.
+- Drittassetgebuehren mit eigenem Lotverbrauch, richtungsgebundene historische
+  FX-Referenzen sowie beleggebundene Tokenidentitaet und Umstellungen.
+- Lesende Lot-Herkunft durch Transfers und Umstellungen einschliesslich
+  Zwischenbelegen, Vorjahresurspruengen und konsistenten Review-Sperren.
+  Herkunftsdetails bleiben im Steuerjahr einsehbar; keine Sphaerenfreigabe.
+- Abschliessender lokaler Stand: 2629 Unit-Tests bestanden, vier bekannte
+  private Belegskips; 52 urspruengliche und 87 zusaetzliche Referenztests
+  bestanden. Originalausgaben, Matrix, Diff und Grenzen im Auditordner.
 - Isolierte Restore-/Browser-/Referenzpruefungen und verbleibende Grenzen im
-  Auditordner. Kein Push, Release, produktiver Lauf oder Containerwechsel.
+  Auditordner. Dieser Entwicklungsstand wird getrennt vom veroeffentlichten
+  rc32 gefuehrt; keine produktive Methodenaktivierung oder Containerumschaltung.
 
 ## 0.2.0rc32 - 2026-10-28 (Releasekandidat)
 
