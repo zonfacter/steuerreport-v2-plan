@@ -327,6 +327,13 @@ mit Gitleaks geprueft. Die Belegpruefung importiert keine Anwendung, oeffnet
 keine DB und fragt keine Anbieter ab; private Erhaltsbelege lassen sich nur
 mit berechtigtem lokalem Zugriff vollstaendig nachpruefen.
 
+Der pauschale `git diff --check` ueber das neue Anlagenpaket meldet
+Whitespace in originalen Patch-Kontextleerzeilen und einer originalen
+Traceback-Leerzeile in `F52_vorher.xml` (Exit2). Diese beiden Belege werden
+absichtlich nicht umformatiert, damit ihre Hashes und die Patchanwendbarkeit
+erhalten bleiben. Der Check der Quell-/Berichtsdateien mit Ausschluss genau
+dieser beiden Originalanhaenge besteht; keine globale Whitespace-Ausnahme.
+
 ## 9. Verbleibende Blocker Und Freigabeentscheidung
 
 1. **G04:** physischer Drittasset-Lotverbrauch und konsistente Kosten-/Erloes-
