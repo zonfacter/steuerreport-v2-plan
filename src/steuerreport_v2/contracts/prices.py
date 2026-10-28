@@ -25,6 +25,27 @@ class PricePoint(PricePointCreate):
     price_id: str
 
 
+class PriceLookupCandidate(BaseModel):
+    price: PricePoint
+    rejection_reason: str | None = None
+    selected: bool = False
+    provenance_status: Literal["not_linked", "synthetic_fiat_identity"] = "not_linked"
+
+
+class PriceLookupDecision(BaseModel):
+    policy_id: str = "historical_same_utc_day_not_after_event"
+    policy_version: int = 1
+    asset: str
+    event_time: datetime
+    allow_derived: bool
+    status: Literal["selected", "missing", "fiat"]
+    rejection_reason: str | None = None
+    selected_price: PricePoint | None = None
+    candidates: list[PriceLookupCandidate] = Field(default_factory=list)
+    candidate_count: int = 0
+    candidates_truncated: bool = False
+
+
 class PriceDeleteResult(BaseModel):
     price_id: str
     deleted: bool
