@@ -495,6 +495,10 @@ class WorkspaceService:
             next_section=next_section, next_action=next_action,
             dimensions={"data": "Historie vorhanden — Abdeckung prüfen" if events else "Noch keine Transaktionshistorie",
                         "calculation": "Veraltet" if stale else "Berechnungsstand vorhanden" if calculation else "Noch nicht berechnet",
+                        "methodology": {"current": "Gebundener Methoden-Prüfstand aktuell",
+                                        "stale": "Methoden-Prüfstand veraltet",
+                                        "unbound": "Methoden-Prüfstand ohne Datenbindung",
+                                        "missing": "Noch kein Methoden-Prüfstand"}[readiness.snapshot_binding_status],
                         "review": ("1 offener Hinweis" if review.issues_open == 1 else f"{review.issues_open} offene Hinweise") if review.issues_open else "Keine Gate-Hinweise im geprüften Datenstand" if events else "Noch nicht prüfbar",
                         "year": "Freigegeben" if final else "Jahresbestätigung / Belege prüfen",
                         "export": "Final verfügbar" if final else "Nur Vorschau" if preview else "Noch nicht verfügbar"})

@@ -248,6 +248,9 @@ class TaxBmfFilingReadinessYear(BaseModel):
 
 class TaxBmfFilingReadinessReport(BaseModel):
     generated_at: str
+    input_binding_sha256: str | None = None
+    binding_version: str | None = None
+    latest_tax_run_id: str | None = None
     years: list[TaxBmfFilingReadinessYear] = Field(default_factory=list)
     available_years: list[int] = Field(default_factory=list)
     ready_years: list[int] = Field(default_factory=list)

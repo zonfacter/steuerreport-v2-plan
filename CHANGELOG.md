@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0rc33.dev0 - 2026-10-28 (Unveroeffentlichter Auditstand)
+
+- Historische Ersatzkurse, SQL-Coverage und Ableitungen verwenden denselben
+  konservativen Tages-/Zeitvertrag; keine verdeckte Altpreis-Wiederverwendung.
+- Private Kalenderjahresfrist in Europe/Berlin fuer Python, SQL, Planung und
+  CSV; Archivvergleiche erhalten die urspruenglich gespeicherte Klassifikation.
+- Technische Vorschau und finale Jahresfreigabe getrennt; gebundene PDF- und
+  Jahrespakete sowie Daten-/Methodenbindung der BMF-Pruefstaende.
+- Separat ausgewiesene EUR-Erwerbsgebuehren in der Kostenbasis; ungepruefte
+  Nullbasis und nicht vollstaendig modellierte Gebuehren-Token bleiben Review.
+- Lesende, jahresabhaengige Freigrenzen-Arithmetik erfordert ausdrueckliche
+  Angaben zu anderen privaten Veraeusserungen und erteilt keine Jahresfreigabe.
+- Isolierte Restore-/Browser-/Referenzpruefungen und verbleibende Grenzen im
+  Auditordner. Kein Push, Release, produktiver Lauf oder Containerwechsel.
+
 ## 0.2.0rc32 - 2026-10-28 (Releasekandidat)
 
 - Automatische historische Preissuche mit nahen DefiLlama-Zielzeitpunkten

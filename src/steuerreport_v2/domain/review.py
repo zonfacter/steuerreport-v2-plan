@@ -56,6 +56,36 @@ class ReviewService:
         positions = BalanceLedgerBuilder(self.store).positions()
 
         with self.store.connect() as con:
+            zero_basis = con.execute("""
+                select lot.lot_id, lot.asset, lot.source_event_id, min(line.disposed_at)
+                from tax_lots lot left join tax_lines line on line.lot_id=lot.lot_id
+                where lot.quantity_total > 0 and lot.cost_basis_eur_total=0
+                group by lot.lot_id, lot.asset, lot.source_event_id
+                order by lot.lot_id
+            """).fetchall()
+        for lot_id, asset, event_id, disposed_at in zero_basis:
+            issues.append(ReviewIssue(code="unproven_zero_cost_basis", severity="high",
+                scope=f"lot:{lot_id}:event:{event_id}", blocks_export=True,
+                tax_year=reporting_tax_year(disposed_at) if disposed_at else None,
+                message=f"Fuer {asset} ist eine Nullkostenbasis gespeichert. Anschaffung, Herkunft und ein gegebenenfalls begruendeter Nullansatz sind gesondert zu belegen; keine automatische Anerkennung."))
+
+        from steuerreport_v2.domain.fifo_methods import GLOBAL_ASSET_FIFO_SCOPE, active_fifo_scope
+        if active_fifo_scope(self.store) == GLOBAL_ASSET_FIFO_SCOPE:
+            with self.store.connect() as con:
+                fee_components = con.execute("""
+                    select event_id, event_time from canonical_events
+                    where event_type='trade' and fee_asset is not null and fee_quantity<>0
+                      and upper(fee_asset)<>'EUR'
+                      and not ((quantity>0 and upper(fee_asset)=upper(asset))
+                           or (quantity<0 and upper(fee_asset)=upper(coalesce(quote_asset,''))))
+                    order by event_id
+                """).fetchall()
+            for event_id, event_time in fee_components:
+                issues.append(ReviewIssue(code="fee_token_lot_accounting_review_required", severity="high",
+                    scope=f"event:{event_id}", blocks_export=True, tax_year=reporting_tax_year(event_time),
+                    message="Separates Gebuehren-Token im globalen FIFO noch nicht vollstaendig als Lotverbrauch und Kostenallokation nachgewiesen. Ledger und Gebuehrenbeleg pruefen; keine finale Freigabe aus dieser Vorschau."))
+
+        with self.store.connect() as con:
             pending_history = con.execute(
                 """
                 select e.event_id, e.account, e.asset, e.event_time

@@ -35,7 +35,7 @@ from steuerreport_v2.domain.tax_filing_snapshots import (
     TaxFilingSnapshotService,
 )
 from steuerreport_v2.domain.tax_methodology import TaxMethodologyService
-from steuerreport_v2.domain.tax_time import reporting_tax_year
+from steuerreport_v2.domain.tax_time import PRIVATE_HOLDING_POLICY_VERSION, reporting_tax_year
 from steuerreport_v2.domain.tax_years import TaxYearService
 
 
@@ -430,6 +430,15 @@ class TaxFilingAuditService:
             "manifest": json.loads(members[manifest_name].decode("utf-8")),
         }
 
+    @staticmethod
+    def _archived_taxable(value: Any) -> bool | None:
+        label = str(value or "").strip().casefold()
+        if label in {"ja", "yes", "true"}:
+            return True
+        if label in {"nein", "no", "false"}:
+            return False
+        return None
+
     def _reference_tax_lines(self, package: dict[str, Any], year: int) -> list[dict[str, Any]]:
         members = package["members"]
         name = self._member(members, "tax-lines.csv")
@@ -452,7 +461,8 @@ class TaxFilingAuditService:
                     "proceeds": self._decimal(row.get("Veraeusserungserloes_EUR")),
                     "gain": self._decimal(row.get("Gewinn_Verlust_EUR")),
                     "holding_days": self._int(row.get("Haltedauer_Tage")),
-                    "taxable": str(row.get("Steuerpflichtig") or "").lower() in {"ja", "yes", "true"},
+                    "taxable": self._archived_taxable(row.get("Steuerpflichtig")),
+                    "classification_policy": row.get("Frist_Methodenversion") or "archived_report_label",
                     "disposed_at": disposed_at,
                     "acquired_at": self._parse_event_time(row.get("Datum_Kauf")),
                     "event_id": event.get("event_id") if event else None,
@@ -473,6 +483,8 @@ class TaxFilingAuditService:
         year: int,
         source_evidence: dict[str, dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
+        from steuerreport_v2.domain.tax_time import private_disposal_within_year
+
         events = {item.event_id: item for item in self.store.list_canonical_events()}
         raw_metadata = self._raw_metadata()
         rows: list[dict[str, Any]] = []
@@ -490,7 +502,8 @@ class TaxFilingAuditService:
                     "proceeds": line.disposal_proceeds_eur,
                     "gain": line.gain_loss_eur,
                     "holding_days": line.holding_days,
-                    "taxable": line.holding_days <= 365,
+                    "taxable": private_disposal_within_year(line.acquired_at, line.disposed_at),
+                    "classification_policy": PRIVATE_HOLDING_POLICY_VERSION,
                     "disposed_at": line.disposed_at,
                     "acquired_at": line.acquired_at,
                     "event_id": line.source_event_id,
@@ -613,6 +626,10 @@ class TaxFilingAuditService:
             value_delta_eur=(new.get("gain", Decimal("0")) if new else Decimal("0")) - (old.get("gain", Decimal("0")) if old else Decimal("0")),
             holding_days_old=old.get("holding_days") if old else None,
             holding_days_new=new.get("holding_days") if new else None,
+            taxable_old=old.get("taxable") if old else None,
+            taxable_new=new.get("taxable") if new else None,
+            classification_policy_old=old.get("classification_policy") if old else None,
+            classification_policy_new=new.get("classification_policy") if new else None,
             cause=cause,
             cause_explanation=explanation,
             source_role=item.get("source_role", "unknown"),
@@ -795,8 +812,8 @@ class TaxFilingAuditService:
         for item in deltas:
             if item.position_kind != "tax_line":
                 continue
-            old_part = item.old_value_eur if item.holding_days_old is not None and ((item.holding_days_old <= 365) == taxable) else Decimal("0")
-            new_part = item.new_value_eur if item.holding_days_new is not None and ((item.holding_days_new <= 365) == taxable) else Decimal("0")
+            old_part = item.old_value_eur if item.taxable_old is not None and item.taxable_old == taxable else Decimal("0")
+            new_part = item.new_value_eur if item.taxable_new is not None and item.taxable_new == taxable else Decimal("0")
             total += (new_part or Decimal("0")) - (old_part or Decimal("0"))
         return total
 
@@ -809,12 +826,12 @@ class TaxFilingAuditService:
             if item.position_kind != "tax_line":
                 continue
             old_in_bucket = (
-                item.holding_days_old is not None
-                and ((item.holding_days_old <= 365) == taxable)
+                item.taxable_old is not None
+                and item.taxable_old == taxable
             )
             new_in_bucket = (
-                item.holding_days_new is not None
-                and ((item.holding_days_new <= 365) == taxable)
+                item.taxable_new is not None
+                and item.taxable_new == taxable
             )
             value = getattr(item, field) or Decimal("0")
             if old_in_bucket and new_in_bucket:

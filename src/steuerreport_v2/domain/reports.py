@@ -188,7 +188,10 @@ class ReportCenterService:
         self.store = store
 
     def center(self) -> ReportCenterStatus:
+        from steuerreport_v2.domain.product_readiness import ProductReadinessService
+
         export_service = ExportService(self.store)
+        filing = ProductReadinessService(self.store).report()
         price_coverage = PriceCoverageService(self.store).report()
         readiness = export_service.readiness(price_coverage=price_coverage)
         packages = export_service.list_packages()
@@ -215,7 +218,7 @@ class ReportCenterService:
         return ReportCenterStatus(
             generated_at=datetime.now(timezone.utc),
             export_allowed=readiness.allow_export,
-            export_status="freigegeben" if readiness.allow_export else "blockiert",
+            export_status="Vorschau technisch erzeugbar" if readiness.allow_export else "blockiert",
             max_pdf_pages_per_file=readiness.max_pdf_pages_per_file,
             packages_count=len(packages),
             created_pdf_packages_count=len(created_packages),
@@ -225,6 +228,7 @@ class ReportCenterService:
                 allow_export=readiness.allow_export,
                 has_created_package=bool(created_packages),
                 latest_created_at=getattr(latest_created_package, "created_at", None),
+                final_years=set(filing.ready_years) if filing.can_file_without_review else set(),
             ),
             artifacts=self._artifacts(readiness.allow_export, created_packages, latest_created_package),
             csv_exports=self._csv_exports(),
@@ -269,6 +273,7 @@ class ReportCenterService:
         allow_export: bool,
         has_created_package: bool,
         latest_created_at: datetime | None,
+        final_years: set[int] | None = None,
     ) -> list[ReportYearCard]:
         with self.store.connect() as con:
             rows = con.execute(
@@ -376,7 +381,7 @@ class ReportCenterService:
             has_activity = int(activity_events or 0) > 0
             state = "finished" if has_activity else "empty"
             label = "fertig" if has_activity else "leer"
-            filing_status = "ready" if has_activity and allow_export else "blocked" if has_activity else "empty"
+            filing_status = ("ready" if year in (final_years or set()) else "preview") if has_activity and allow_export else "blocked" if has_activity else "empty"
             cex_anchor_count = cex_anchor_counts.get(int(year), 0)
             cex_anchor_endpoint = (
                 f"/api/v1/tax-years/{year}/cex-exchange-outflow-anchor-feasibility"
@@ -493,6 +498,8 @@ class ReportCenterService:
 
     @staticmethod
     def _filing_status_label(status: str) -> str:
+        if status == "preview":
+            return "Vorschau - Jahresfreigabe offen"
         if status == "ready":
             return "Eingabehilfe bereit"
         if status == "blocked":

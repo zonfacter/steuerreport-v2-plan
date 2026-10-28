@@ -7673,15 +7673,15 @@ function CockpitDashboard({
     : !summary.export_allowed
       ? "Export ist blockiert"
       : hasWarnings
-        ? "Steuerexport frei, aber Pruefung offen"
-        : "Steuerstatus sauber";
+        ? "Vorschau exportierbar, Prüfung offen"
+        : "Technische Vorschau verfügbar";
   const filingDetail = !cockpitReady
     ? "Portfolio, Review-Gate und Quellenstatus werden getrennt geladen. Bereits fertige Bereiche erscheinen sofort."
     : !summary.export_allowed
       ? "Mindestens ein Review- oder Belegproblem verhindert aktuell einen sauberen Export."
       : hasWarnings
-        ? "Die Steuerfreigabe ist offen, aber Live-Abgleich oder Quellenstatus sollten vor Abgabe nachvollziehbar dokumentiert werden."
-        : "Keine priorisierten Aufgaben offen. Die Ansicht kann als Einstieg fuer Belege und Steuerjahre genutzt werden.";
+        ? "Keine finale Jahresfreigabe. Live-Abgleich, Quellen und fachliche Voraussetzungen prüfen."
+        : "Keine priorisierten technischen Aufgaben offen. Fachliche Jahresvoraussetzungen bleiben gesondert zu prüfen.";
   const nextStepLabel = !cockpitReady
     ? "Status wird ermittelt"
     : primaryTask?.title ?? (summary.export_allowed ? "Steuerjahre pruefen" : "Review oeffnen");
@@ -8106,7 +8106,7 @@ function BlockpitWorkspaceOverview({
           <span className={`statusPill ${readinessToneValue}`}>{readiness ? readinessLabel(readiness.overall_status) : "laedt"}</span>
         </div>
         <strong>Review & Export</strong>
-        <em>{cockpitReady ? summary.export_allowed ? "freigegeben" : "blockiert" : "wird geladen"}</em>
+        <em>{cockpitReady ? summary.export_allowed ? "Vorschau möglich" : "blockiert" : "wird geladen"}</em>
         <p>{summary?.review?.detail ?? "Review-Gate wird geladen"}{cockpitReady ? ` · ${openTasks} Aufgabe(n)` : ""}</p>
       </button>
 
@@ -12867,7 +12867,7 @@ function ReportCenterPanel({
       <section className={`reportHero ${exportAllowed ? "ok" : "blocked"}`}>
         <div>
           <span className="heroKicker">Report-Center</span>
-          <h2>{exportAllowed ? "Export freigegeben" : "Export blockiert"}</h2>
+          <h2>{exportAllowed ? "Vorschau technisch erzeugbar" : center || readiness ? "Export blockiert" : "Exportvoraussetzungen werden geprüft"}</h2>
           <p>{center?.methodology ?? "Reportstatus wird geladen."}</p>
         </div>
         <div className="reportHeroStats">
@@ -13255,9 +13255,9 @@ function ExportReadinessPanel({
     <Stack>
       <div className={`panel reviewStatusPanel ${readiness?.allow_export ? "ok" : "blocked"}`}>
         <div className="panelToolbar">
-          <strong>Export-Freigabe</strong>
+          <strong>Technischer Exportcheck</strong>
           <span className={`statusPill ${readiness?.allow_export ? "ok" : "blocked"}`}>
-            {readiness?.allow_export ? "freigegeben" : "blockiert"}
+            {!readiness ? "wird geprüft" : readiness.allow_export ? "Nur Vorschau" : "blockiert"}
           </span>
         </div>
         <div className="reviewSummary">

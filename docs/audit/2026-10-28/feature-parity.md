@@ -56,6 +56,33 @@ wiederholt zu haben. Die vorliegenden Pruefungen sind eigene Betriebspruefungen.
 
 ## Sichere Aufrufe
 
+## Funktionsmatrix Fuer Die Weitere Abnahme
+
+Vorhandene Dienste sind keine pauschale End-to-End-Abnahme aller Datenquellen.
+Die nachfolgenden Bereiche bleiben in Docker erreichbar; die aktuelle
+Belegstaerke und der noch offene Vergleich werden getrennt genannt.
+
+| Bereich | Erhaltene Grundlage / Nachweis | Offener Paritaetsnachweis |
+| --- | --- | --- |
+| Konten / Vault | Eigene Installationseinstellungen, verschluesselter Store; Restore erhaelt Profil und Schluessel | Echte Anbieterberechtigung nicht durch Offline-Restore getestet |
+| Dateiimport / Canonical Events | Bestehende Importer und Raw-Objekte unveraendert; synthetische Importtests | Vollstaendige private Quellabdeckung und alle Altentscheidungen |
+| API-Historie | Bestehende Connector-/Jobpfade bleiben vorhanden | Kein neuer produktiver Abruf; Bot-/Earn-/Altperioden je Anbieter offen |
+| Gemeinsame Limits | Vorhandene zentrale Abrufsteuerung weiterverwendet | Kein realer Anbieterlasttest; Mehrhostbetrieb nicht implementiert |
+| Preise / FX | Gleicher Bestand wird restauriert; Lookup/Coverage werden im Audit vereinheitlicht | Tagesreferenz-Methodenkonstanz, vollstaendige historische Belege |
+| Ledger / Mengen | Vollstaendiger logischer DB-Erhalt im Restore | Unterschiedlicher Legacy-/Docker-Datenbestand ist kein Mengenabgleich |
+| FIFO / Lots | Aktive Methode bleibt unveraendert, Vorschau getrennt | Depotbezogene produktive Methodenparitaet und Drittassetgebuehren |
+| Reviews / Freigaben | Restore erhaelt Entscheidungen, keine automatische Annahme | Fehlende Kostenbasis und betrieblicher Scope bleiben pruefpflichtig |
+| Steuerjahre | Jahresdienste erhalten, zentrale Frist im Audit | Kein produktiver Jahresvergleich oder persoenlicher Gesamtsteuerfall |
+| PDF / CSV / JSON | Vorhandene Exportpfade; neue Datenbindung und Vorschaukennzeichnung | Vollstaendiger gebundener Run ueber alle Fachnachweise noch zu pruefen |
+| Abgabearchiv / Revisionen | Archivdateien und alle Tabellen unveraendert restauriert | Vollstaendige private Alt-/Neu-Differenzerklaerung offen |
+| Expertenbelege / KI | Bestehende Beleg- und KI-Dienste weiter vorhanden | Keine externe KI-Anfrage im Audit, kein KI-Ergebnis als Kurs-/Steuerbeleg |
+
+Die separat gespeicherte rein lesende Dateninventur des Koordinators zeigt
+unterschiedliche Tabellenumfaenge zwischen der Legacy-Datentraegerkandidatin
+und Docker. Die Zuordnung dieser Legacy-Datei zum bereits laufenden Prozess
+ist nicht bestaetigt. Daraus folgt weder Datenverlust noch eine erklaerte
+Migration. Private Einzelwerte bleiben ausserhalb des Repositorys.
+
 Nur gepruefte statische GETs, FastAPI-OpenAPI und V1-Health wurden produktiv
 abgerufen. V1-Health baut lediglich die Antwort aus Uhrzeit/UUID, ohne DB-Aufruf.
 V2-Health oeffnet dagegen `DuckDbStore.connect()`, das beim ersten Zugriff

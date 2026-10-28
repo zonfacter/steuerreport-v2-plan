@@ -7,7 +7,7 @@ from decimal import Decimal
 from steuerreport_v2.contracts.prices import PriceLookupCandidate, PriceLookupDecision, PricePoint
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.price_policy import (
-    DERIVED_PRICE_SOURCE_PREFIXES,
+    DERIVED_PRICE_SOURCE_PREFIXES as DERIVED_PRICE_SOURCE_PREFIXES,
     POLICY_ID,
     POLICY_VERSION,
     as_utc,

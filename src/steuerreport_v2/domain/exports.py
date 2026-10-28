@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from uuid import uuid4
 
 from steuerreport_v2.contracts.exports import ExportPackage, ExportReadiness, ExportResult, PdfExportRequest
+from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.contracts.valuation import PriceCoverageReport
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.derivatives import DerivativesManager
 from steuerreport_v2.domain.parity import V1ParityService
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.domain.tax import TaxService
+from steuerreport_v2.domain.filing_binding import BINDING_VERSION, EXPORT_BINDING_PREFIX, current_filing_binding
 
 MAX_PDF_PAGES_PER_FILE = 100
 
@@ -19,6 +22,10 @@ class ExportService:
         self.store = store
 
     def create_pdf_packages(self, request: PdfExportRequest) -> ExportResult:
+        with self.store.exclusive_access():
+            return self._create_pdf_packages(request)
+
+    def _create_pdf_packages(self, request: PdfExportRequest) -> ExportResult:
         readiness = self.readiness()
         if not readiness.allow_export:
             block_reason = (
@@ -64,7 +71,7 @@ class ExportService:
                 """
             ).fetchall()
         return [
-            ExportPackage(
+            self._with_binding(ExportPackage(
                 package_id=row[0],
                 kind=row[1],
                 label=row[2],
@@ -73,7 +80,7 @@ class ExportService:
                 status=row[5],
                 block_reason=row[6],
                 created_at=row[7],
-            )
+            ))
             for row in rows
         ]
 
@@ -91,7 +98,7 @@ class ExportService:
             ).fetchone()
         if row is None:
             return None
-        return ExportPackage(
+        return self._with_binding(ExportPackage(
             package_id=row[0],
             kind=row[1],
             label=row[2],
@@ -100,22 +107,44 @@ class ExportService:
             status=row[5],
             block_reason=row[6],
             created_at=row[7],
-        )
+        ))
+
+    def _with_binding(self, package: ExportPackage) -> ExportPackage:
+        binding = self._package_binding(package.package_id)
+        if binding and binding.get("binding_version") == BINDING_VERSION:
+            return package.model_copy(update={"filing_status": "preview",
+                "input_binding_sha256": binding.get("input_binding_sha256"),
+                "calculation_run_id": binding.get("calculation_run_id")})
+        return package
 
     def render_pdf_package(self, package_id: str) -> tuple[ExportPackage, bytes] | None:
         package = self.get_package(package_id)
         if package is None or package.status != "created":
             return None
+        binding = self._package_binding(package_id)
+        current, run_id = current_filing_binding(self.store)
+        if (not binding or binding.get("binding_version") != BINDING_VERSION
+                or binding.get("input_binding_sha256") != current
+                or binding.get("calculation_run_id") != run_id):
+            return None
+        package = package.model_copy(update={"filing_status": "preview", "input_binding_sha256": current,
+                                             "calculation_run_id": run_id})
         readiness = self.readiness()
+        if not readiness.allow_export:
+            return None
         lines = [
             "Steuerreport V2 Exportpaket",
+            "VORSCHAU - KEINE FINALE JAHRESFREIGABE",
+            f"Gebundener Berechnungslauf: {run_id or 'nicht vorhanden'}",
+            "Daten-/Methodenbindung SHA-256:",
+            current,
             f"Label: {package.label}",
             f"Paket-ID: {package.package_id}",
             f"Datei-Index: {package.file_index}",
             f"Seiten: {package.page_count}",
             f"Erstellt: {package.created_at.isoformat()}",
             "",
-            "Export-Freigabe",
+            "Technische Export-Freigabe (nur Vorschau)",
             f"Review aktuell offen: {readiness.review_issues_current_open}",
             f"Review historisch offen: {readiness.review_issues_historical_open}",
             f"Review gesamt sichtbar: {readiness.review_issues_open_total}",
@@ -135,7 +164,21 @@ class ExportService:
             f"Max Seiten pro PDF: {readiness.max_pdf_pages_per_file}",
             "ELSTER: Vorbereitung ja, direkte ERiC-Uebertragung nein",
         ]
-        return package, _minimal_pdf(lines)
+        content = _minimal_pdf(lines)
+        if current_filing_binding(self.store) != (current, run_id):
+            return None
+        return package, content
+
+    def _package_binding(self, package_id: str) -> dict | None:
+        with self.store.connect() as con:
+            row = con.execute("select value_json from admin_settings where key=?", [EXPORT_BINDING_PREFIX + package_id]).fetchone()
+        if row is None:
+            return None
+        try:
+            value = json.loads(row[0])
+        except (TypeError, ValueError):
+            return None
+        return value if isinstance(value, dict) else None
 
     def delete_package(self, package_id: str) -> bool:
         with self.store.connect() as con:
@@ -146,6 +189,7 @@ class ExportService:
             if existing is None:
                 return False
             con.execute("delete from export_packages where package_id = ?", [package_id])
+            con.execute("delete from admin_settings where key = ?", [EXPORT_BINDING_PREFIX + package_id])
         return True
 
     def readiness(self, price_coverage: PriceCoverageReport | None = None) -> ExportReadiness:
@@ -155,6 +199,9 @@ class ExportService:
         derivative_summary = DerivativesManager(self.store).latest_summary()
         return ExportReadiness(
             allow_export=gate.allow_export and parity.release_ready,
+            technical_export_allowed=gate.allow_export and parity.release_ready,
+            final_filing_allowed=False,
+            filing_status="technical_only" if gate.allow_export and parity.release_ready else "blocked",
             review_issues_open=gate.issues_open,
             review_issues_current_open=(
                 gate.issues_current_open
@@ -246,6 +293,19 @@ class ExportService:
                         package.created_at,
                     ],
                 )
+        if any(package.status == "created" for package in packages):
+            digest, run_id = current_filing_binding(self.store)
+            settings = []
+            for package in packages:
+                if package.status != "created":
+                    continue
+                package.filing_status = "preview"
+                package.input_binding_sha256 = digest
+                package.calculation_run_id = run_id
+                settings.append(AdminSettingWrite(key=EXPORT_BINDING_PREFIX + package.package_id,
+                    value_json=json.dumps({"binding_version": BINDING_VERSION, "input_binding_sha256": digest,
+                                           "calculation_run_id": run_id, "filing_status": "preview"})))
+            self.store.write_admin_settings_batch(settings, [])
 
 
 def _minimal_pdf(lines: list[str]) -> bytes:

@@ -86,3 +86,15 @@ Unabhaengige eigene Repros und amtliche Primärrecherche sind moeglich.
   und https://www.gesetze-im-internet.de/bgb/__188.html
 
 Die Quellen sind keine Genehmigung einer individuellen Steuererklaerung.
+
+## Abgestimmte Ergaenzungen Im Audit
+
+Alle drei Erstrollen bestaetigten den Vertrag vor ihren Edits (Handoffs).
+Der Koordinator integriert anschliessend ausschliesslich auf dem Auditbranch.
+Globaler PDF-Export bleibt technisch/provisorisch; alte ungebundene Pakete
+werden nicht nachtraeglich als freigegeben ausgegeben. Nullkostenbasis und
+nicht vollstaendige Gebuehren-Token-Buchung erzeugen explizite Reviewgrenzen.
+Die Freigrenzenprobe ist reine Arithmetik mit bestaetigtem Zusatzkontext,
+keine persoenliche Steuer-/Verlustverrechnungs- oder Fachentscheidung.
+Der unterschiedliche Scope von Preiszulassung und steuerlicher Freigabe
+einer gleichmaessigen Tageskursmethode bleibt als F06-Review sichtbar.

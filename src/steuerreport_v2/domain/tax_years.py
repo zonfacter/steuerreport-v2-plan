@@ -215,6 +215,11 @@ class TaxYearService:
             ),
         )
 
+    def private_disposal_threshold(self, year, request):
+        from steuerreport_v2.domain.private_disposal_threshold import assess_private_disposal_threshold
+
+        return assess_private_disposal_threshold(year, self._status_for_year(year).realized_gain_loss_eur, request)
+
     def payment_overview(self, *, years: list[int] | None = None) -> TaxPaymentOverview:
         rows: list[TaxPaymentOverviewRow] = []
         statuses = self._payment_statuses(years=years)

@@ -56,7 +56,7 @@ def test_report_center_collects_existing_export_surfaces(tmp_path):
     center = ReportCenterService(store).center()
 
     assert center.export_allowed is True
-    assert center.export_status == "freigegeben"
+    assert center.export_status == "Vorschau technisch erzeugbar"
     assert center.max_pdf_pages_per_file == 100
     assert {action.action_id for action in center.actions} >= {
         "create-pdf",

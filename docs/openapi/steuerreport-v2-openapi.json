@@ -8006,6 +8006,50 @@
         "title": "ApiResponse[PrivateConfigDocument]",
         "type": "object"
       },
+      "ApiResponse_PrivateDisposalThresholdAssessment_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrivateDisposalThresholdAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[PrivateDisposalThresholdAssessment]",
+        "type": "object"
+      },
       "ApiResponse_ProductReadinessReport_": {
         "properties": {
           "data": {
@@ -32094,6 +32138,17 @@
             ],
             "title": "Block Reason"
           },
+          "calculation_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Run Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -32102,6 +32157,26 @@
           "file_index": {
             "title": "File Index",
             "type": "integer"
+          },
+          "filing_status": {
+            "default": "unbound",
+            "enum": [
+              "unbound",
+              "preview"
+            ],
+            "title": "Filing Status",
+            "type": "string"
+          },
+          "input_binding_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Binding Sha256"
           },
           "kind": {
             "const": "pdf",
@@ -32179,6 +32254,20 @@
             "default": "0",
             "title": "Derivative Realized Pnl Eur",
             "type": "string"
+          },
+          "filing_status": {
+            "default": "blocked",
+            "enum": [
+              "technical_only",
+              "blocked"
+            ],
+            "title": "Filing Status",
+            "type": "string"
+          },
+          "final_filing_allowed": {
+            "default": false,
+            "title": "Final Filing Allowed",
+            "type": "boolean"
           },
           "latest_derivative_run_id": {
             "anyOf": [
@@ -32267,6 +32356,11 @@
           "tax_lines_count": {
             "title": "Tax Lines Count",
             "type": "integer"
+          },
+          "technical_export_allowed": {
+            "default": false,
+            "title": "Technical Export Allowed",
+            "type": "boolean"
           },
           "unmatched_disposals": {
             "title": "Unmatched Disposals",
@@ -47077,6 +47171,137 @@
         "title": "PrivateConfigWrite",
         "type": "object"
       },
+      "PrivateDisposalThresholdAssessment": {
+        "properties": {
+          "calculated_crypto_gain_loss_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Calculated Crypto Gain Loss Eur",
+            "type": "string"
+          },
+          "final_filing_allowed": {
+            "default": false,
+            "title": "Final Filing Allowed",
+            "type": "boolean"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "other_private_gain_loss_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Private Gain Loss Eur"
+          },
+          "policy_version": {
+            "default": "de_estg23_freigrenze_2009_2026_v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "context_required",
+              "below_threshold",
+              "threshold_reached",
+              "unsupported_year"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "threshold_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold Eur"
+          },
+          "threshold_reached": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold Reached"
+          },
+          "total_private_gain_loss_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Private Gain Loss Eur"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "threshold_eur",
+          "calculated_crypto_gain_loss_eur",
+          "other_private_gain_loss_eur",
+          "total_private_gain_loss_eur",
+          "status",
+          "threshold_reached",
+          "methodology",
+          "source_refs"
+        ],
+        "title": "PrivateDisposalThresholdAssessment",
+        "type": "object"
+      },
+      "PrivateDisposalThresholdRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_other_private_disposals_complete": {
+            "default": false,
+            "title": "Confirm Other Private Disposals Complete",
+            "type": "boolean"
+          },
+          "other_private_gain_loss_eur": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Private Gain Loss Eur"
+          }
+        },
+        "title": "PrivateDisposalThresholdRequest",
+        "type": "object"
+      },
       "ProductReadinessCheck": {
         "properties": {
           "action_path": {
@@ -47224,6 +47449,17 @@
             "default": 0,
             "title": "Setup Required Sources",
             "type": "integer"
+          },
+          "snapshot_binding_status": {
+            "default": "unbound",
+            "enum": [
+              "missing",
+              "unbound",
+              "stale",
+              "current"
+            ],
+            "title": "Snapshot Binding Status",
+            "type": "string"
           },
           "sources": {
             "items": {
@@ -54272,6 +54508,28 @@
             "title": "Change Kind",
             "type": "string"
           },
+          "classification_policy_new": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Policy New"
+          },
+          "classification_policy_old": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Policy Old"
+          },
           "counterpart_event_ids": {
             "items": {
               "type": "string"
@@ -54577,6 +54835,28 @@
             ],
             "title": "Tax Inclusion Status",
             "type": "string"
+          },
+          "taxable_new": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxable New"
+          },
+          "taxable_old": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxable Old"
           },
           "value_delta_eur": {
             "anyOf": [
@@ -56040,6 +56320,17 @@
             "title": "Available Years",
             "type": "array"
           },
+          "binding_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Version"
+          },
           "blocked_years": {
             "items": {
               "type": "integer"
@@ -56064,6 +56355,28 @@
           "generated_at": {
             "title": "Generated At",
             "type": "string"
+          },
+          "input_binding_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Binding Sha256"
+          },
+          "latest_tax_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Tax Run Id"
           },
           "methodology": {
             "title": "Methodology",
@@ -81572,7 +81885,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc32"
+    "version": "0.2.0rc33.dev0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -98222,6 +98535,62 @@
           }
         },
         "summary": "Tax Year Methodology",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/private-disposal-threshold-assessment": {
+      "post": {
+        "description": "Private disposal threshold assessment. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "private_disposal_threshold_assessment_api_v1_tax_years__year__private_disposal_threshold_assessment_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrivateDisposalThresholdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PrivateDisposalThresholdAssessment_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Private Disposal Threshold Assessment",
         "tags": [
           "Tax"
         ],

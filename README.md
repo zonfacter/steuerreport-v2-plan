@@ -1,6 +1,8 @@
 # Steuerreport V2
 
-Version 0.2.0rc32. Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
+Audit-Entwicklungsstand 0.2.0rc33.dev0 auf Basis 0.2.0rc32, nicht veroeffentlicht.
+Produktion und GHCR-Vorlage bleiben unveraendert auf rc32; kein Updateauftrag.
+Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 [Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc32](docs/RELEASE_0.2.0rc32.md) ·

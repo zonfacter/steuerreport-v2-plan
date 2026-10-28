@@ -142,6 +142,8 @@ def data_effect(methods: Iterable[str], path: str) -> str:
         return "write"  # Existing implementation persists a ZIP cache, even though it uses GET.
     if method_set == {"POST"} and path in {"/api/v1/activity/query", "/api/v1/activity/export.csv", "/api/v1/workspace/review/query"}:
         return "read-only"
+    if method_set == {"POST"} and path.startswith("/api/v1/tax-years/") and path.endswith("/private-disposal-threshold-assessment"):
+        return "read-only"
     if "DELETE" in method_set:
         return "delete"
     if method_set.intersection({"POST", "PUT", "PATCH"}):

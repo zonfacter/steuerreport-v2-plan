@@ -650,6 +650,10 @@ class TaxService:
 
     def _lot_from_buy(self, event: CanonicalEvent, *, value_eur: Decimal | None = None) -> TaxLot:
         cost_basis = value_eur if value_eur is not None else self._eur_value(event)
+        if (event.event_type == "trade" and event.quantity > 0
+                and event.quote_asset == "EUR" and event.fee_asset == "EUR"
+                and event.fee_quantity):
+            cost_basis += abs(event.fee_quantity)
         return self._lot_from_values(
             asset=event.asset,
             acquired_at=event.event_time,

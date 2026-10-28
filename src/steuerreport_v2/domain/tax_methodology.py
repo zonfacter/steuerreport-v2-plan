@@ -309,6 +309,9 @@ class TaxMethodologyService:
     def bmf_filing_readiness(
         self, year: int | None = None
     ) -> TaxBmfFilingReadinessReport:
+        from steuerreport_v2.domain.filing_binding import BINDING_VERSION, current_filing_binding
+
+        binding, run_id = current_filing_binding(self.store)
         generated_at = self._now()
         available_years = (
             [year]
@@ -329,8 +332,13 @@ class TaxMethodologyService:
             )
             for item_year in available_years
         ]
+        if current_filing_binding(self.store) != (binding, run_id):
+            raise ValueError("filing_readiness_inputs_changed")
         return TaxBmfFilingReadinessReport(
             generated_at=generated_at,
+            input_binding_sha256=binding,
+            binding_version=BINDING_VERSION,
+            latest_tax_run_id=run_id,
             years=rows,
             available_years=available_years,
             ready_years=[row.year for row in rows if row.filing_status == "bmf_ready"],
