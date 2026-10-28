@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0rc33.dev0 - 2026-10-28 (Unveroeffentlichter Auditstand)
+## 0.2.0rc33 - 2026-10-28 (Releasekandidat)
 
 - GitHub #2: Bitget-Financial-CSV mit Date, signierten Futures-Gebuehren,
   Funding und neutralen Margin-Aktionen; explizite Nettoexporte ohne doppelten
@@ -38,8 +38,9 @@
   private Belegskips; 52 urspruengliche und 87 zusaetzliche Referenztests
   bestanden. Originalausgaben, Matrix, Diff und Grenzen im Auditordner.
 - Isolierte Restore-/Browser-/Referenzpruefungen und verbleibende Grenzen im
-  Auditordner. Dieser Entwicklungsstand wird getrennt vom veroeffentlichten
-  rc32 gefuehrt; keine produktive Methodenaktivierung oder Containerumschaltung.
+  Auditordner. Die urspruenglichen Nachweise bleiben als Entwicklungsnachweise
+  unveraendert erhalten; der gesonderte rc33-Release aktualisiert keine
+  Finanzdaten automatisch und aktiviert keine neue produktive FIFO-Methode.
 
 ## 0.2.0rc32 - 2026-10-28 (Releasekandidat)
 

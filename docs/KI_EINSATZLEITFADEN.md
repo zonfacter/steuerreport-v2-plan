@@ -1,4 +1,4 @@
-# KI: Einsatz und Grenzen (0.2.0rc33.dev0)
+# KI: Einsatz und Grenzen (0.2.0rc33)
 
 ## Kurz Gesagt
 
