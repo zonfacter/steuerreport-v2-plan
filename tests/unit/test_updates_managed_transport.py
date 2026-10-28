@@ -1,5 +1,6 @@
 """Produktiver Defaultpfad nutzt denselben Limiter wie alle Connectoren."""
 from datetime import datetime, timezone
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -81,3 +82,40 @@ def test_coordinator_failure_is_fail_closed_without_secret_echo(tmp_path, monkey
     result = service.check()
     assert result.status == "unavailable"
     assert "synthetic-sensitive" not in result.model_dump_json()
+
+
+def test_large_public_asset_metadata_fits_bounded_default_transport(tmp_path, monkeypatch):
+    clock = Clock(10)
+    limiter = RequestLimiter(state_root=tmp_path, clock=clock, monotonic=clock, sleep=clock.sleep, random=lambda: 0)
+    payload = [{"id": 35, "tag_name": "v0.2.0rc35", "name": "Synthetischer Release",
+                "draft": False, "prerelease": False, "published_at": "2026-10-27T12:00:00Z",
+                "html_url": "https://github.com/zonfacter/steuerreport-v2-plan/releases/tag/v0.2.0rc35",
+                "body": "Begrenzte Metadatenabfrage.",
+                "assets": [{"id": n, "label": "x" * 1500} for n in range(400)]}]
+    body = json.dumps(payload).encode()
+    assert 512 * 1024 < len(body) < updates.MAX_PAGE_BYTES
+    starts = []
+
+    def handler(request):
+        starts.append(request.url.host)
+        return httpx.Response(200, content=body, headers={"Content-Type": "application/json"})
+
+    def factory(**kwargs):
+        assert kwargs["max_response_bytes"] == 1024 * 1024
+        assert kwargs["max_retries"] == 0
+        kwargs["limiter"] = limiter
+        return managed_client(transport=httpx.MockTransport(handler),
+                              clock=clock, monotonic=clock, **kwargs)
+
+    monkeypatch.setattr(updates, "managed_client", factory)
+    monkeypatch.setattr(updates, "time", SimpleNamespace(time=clock))
+    monkeypatch.setattr(updates, "outbound_scope", lambda **kwargs: outbound_scope(clock=clock, monotonic=clock, **kwargs))
+    store = DuckDbStore(tmp_path / "synthetic.duckdb")
+    service = updates.UpdateService(store, state_dir=tmp_path, installed_version="0.2.0rc34", clock=lambda: NOW)
+    result = service.check()
+    assert result.status == "update_available"
+    assert "v0.2.0rc35" in result.model_dump_json()
+    assert starts == ["api.github.com"]
+    assert all(row.requests_last_minute == 1 and row.in_flight == 0 for row in limiter.status().groups)
+    assert "assets" not in result.model_dump_json()
+    assert updates.MAX_TOTAL_BYTES == 2 * 1024 * 1024

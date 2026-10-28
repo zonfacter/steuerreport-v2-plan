@@ -3464,7 +3464,7 @@ Downgrades sind keine Updateziele.
 
 Der produktive GitHub-Pfad verwendet den gemeinsamen `managed_client` und
 das gemeinsame IP-/Anbieterbudget `github_updates`. Zusaetzliche lokale
-Schranken verschaerfen nur: 512 KiB je Antwort, maximal fuenf Starts,
+Schranken verschaerfen nur: 1 MiB je Antwort, 2 MiB insgesamt, maximal fuenf Starts,
 keine Transport-Retries und begrenzte Auftragsdeadline. Ein Koordinatorfehler
 blockiert den Abruf; er aktiviert keinen unlimitierten Ersatzclient.
 
