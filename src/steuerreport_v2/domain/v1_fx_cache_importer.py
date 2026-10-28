@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 from steuerreport_v2.contracts.prices import (
@@ -12,6 +12,7 @@ from steuerreport_v2.contracts.prices import (
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.valuation import PriceCoverageService
+from steuerreport_v2.domain.historical_fx import cache_fx_reference
 
 
 class V1FxCacheImporter:
@@ -94,30 +95,33 @@ class V1FxCacheImporter:
                         {"asset": item.asset, "price_date": date_str, "reason": "asset_usd_missing"}
                     )
                     continue
-                fx_row = self._fx_on_or_before(con, date_str, "USD", "EUR")
-                if fx_row is None:
+                fx = cache_fx_reference(con, item.price_date)
+                if fx is None:
                     missing_usd_eur += 1
                     missing.append(
                         {"asset": item.asset, "price_date": date_str, "reason": "usd_eur_missing"}
                     )
                     continue
                 price_usd = Decimal(str(asset_row["rate"]))
-                usd_eur = Decimal(str(fx_row["rate"]))
+                usd_eur = fx.rate_eur_per_usd
                 if price_usd <= 0 or usd_eur <= 0:
                     missing.append(
                         {"asset": item.asset, "price_date": date_str, "reason": "non_positive_rate"}
                     )
                     continue
+                with localcontext() as arithmetic:
+                    arithmetic.prec = 60
+                    price_eur = (price_usd * usd_eur).quantize(Decimal("0.000000000000000001"))
                 importable.append(
                     V1FxCacheImportRow(
                         asset=item.asset,
                         price_date=item.price_date,
                         price_usd=price_usd,
                         usd_eur=usd_eur,
-                        price_eur=price_usd * usd_eur,
+                        price_eur=price_eur,
                         asset_source=str(asset_row["source"]),
-                        fx_source=str(fx_row["source"]),
-                        source_rate_date=str(fx_row["rate_date"]),
+                        fx_source=f"{fx.source}:{fx.source_suffix()}",
+                        source_rate_date=fx.reference_date.isoformat(),
                     )
                 )
 
@@ -141,24 +145,6 @@ class V1FxCacheImporter:
             select rate_date, base_ccy, quote_ccy, rate, source, source_rate_date
             from fx_cache
             where rate_date = ? and base_ccy = ? and quote_ccy = ?
-            """,
-            (rate_date, base_ccy.upper(), quote_ccy.upper()),
-        ).fetchone()
-
-    def _fx_on_or_before(
-        self,
-        con: sqlite3.Connection,
-        rate_date: str,
-        base_ccy: str,
-        quote_ccy: str,
-    ) -> sqlite3.Row | None:
-        return con.execute(
-            """
-            select rate_date, base_ccy, quote_ccy, rate, source, source_rate_date
-            from fx_cache
-            where rate_date <= ? and base_ccy = ? and quote_ccy = ?
-            order by rate_date desc
-            limit 1
             """,
             (rate_date, base_ccy.upper(), quote_ccy.upper()),
         ).fetchone()

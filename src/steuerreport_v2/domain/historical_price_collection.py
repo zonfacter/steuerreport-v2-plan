@@ -7,6 +7,7 @@ import json
 
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.domain.request_limits import RequestLimitError
+from steuerreport_v2.domain.historical_fx import select_fx_reference
 from steuerreport_v2.importers.source_history_importer import canonical_json
 
 UTC = timezone.utc
@@ -66,22 +67,10 @@ def historical_quote(payload, row, positive, fail):
 
 
 def historical_fx(payload, day, positive, fail):
-    if not isinstance(payload, list) or not payload:
+    reference = select_fx_reference(payload, day)
+    if reference is None:
         fail("historical_price_fx_date_invalid")
-    candidates = []
-    for row in payload:
-        if not isinstance(row, dict) or row.get("base") != "USD" or row.get("quote") != "EUR":
-            fail("historical_price_fx_date_invalid")
-        instant = date.fromisoformat(row["date"])
-        if instant <= day:
-            candidates.append((instant, positive(row.get("rate"))))
-    if not candidates:
-        fail("historical_price_fx_date_invalid")
-    candidates.sort()
-    latest = candidates[-1]
-    if (day - latest[0]).days > 7 or any(item[0] == latest[0] and item[1] != latest[1] for item in candidates):
-        fail("historical_price_fx_date_invalid")
-    return latest[1], latest[0].isoformat()
+    return positive(reference.rate_eur_per_usd), reference.reference_date.isoformat()
 
 
 def mark_open(row, error):

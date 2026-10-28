@@ -4,7 +4,7 @@ from steuerreport_v2.paths import PROJECT_ROOT as SOFTWARE_ROOT
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import hashlib
 import json
 from pathlib import Path
@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 import httpx
 from steuerreport_v2.domain.external_http import managed_client
+from steuerreport_v2.domain.historical_fx import select_fx_reference
 
 from steuerreport_v2.contracts.bmf_event_evidence import (
     BmfFifoEventEvidenceRunRequest,
@@ -45,6 +46,7 @@ class _FxResult:
     request_url: str
     response_sha256: str
     payload: object
+    response_body_utf8: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,7 @@ class BmfEventPriceRemediationService:
                                 "request_url": fx_item.request_url,
                                 "response_sha256": fx_item.response_sha256,
                                 "payload": fx_item.payload,
+                                "response_body_utf8": fx_item.response_body_utf8,
                             }
                         )
                 fx = fx_cache[requirement.price_date]
@@ -233,7 +236,9 @@ class BmfEventPriceRemediationService:
                     provider_request_url = crypto.request_url
                     provider_response_sha256 = crypto.response_sha256
 
-                price_eur = price_usd * fx.rate
+                with localcontext() as arithmetic:
+                    arithmetic.prec = 60
+                    price_eur = (price_usd * fx.rate).quantize(Decimal("0.000000000000000001"))
                 source = self._source_label(
                     stable=stable,
                     provider_id=provider_id,
@@ -551,21 +556,21 @@ class BmfEventPriceRemediationService:
         )
         if response.status_code >= 400:
             return None
-        payload = response.json()
-        if not isinstance(payload, list) or not payload:
+        try:
+            response_body_utf8 = response.content.decode("utf-8")
+            payload = json.loads(response_body_utf8, parse_float=str)
+            reference = select_fx_reference(payload, price_date)
+        except (TypeError, ValueError):
             return None
-        row = payload[0]
-        if not isinstance(row, dict):
-            return None
-        rate = self._decimal(row.get("rate"))
-        if rate <= 0 or not row.get("date"):
+        if reference is None:
             return None
         return _FxResult(
-            rate=rate,
-            rate_date=date.fromisoformat(str(row["date"])),
+            rate=reference.rate_eur_per_usd,
+            rate_date=reference.reference_date,
             request_url=str(response.request.url),
             response_sha256=self._sha256_bytes(response.content),
             payload=payload,
+            response_body_utf8=response_body_utf8,
         )
 
     def _fetch_crypto(
