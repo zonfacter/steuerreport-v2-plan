@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 from steuerreport_v2.private_settings import private_alias
 
 from datetime import datetime, timezone
@@ -26,6 +28,10 @@ from steuerreport_v2.domain.account_aliases import (
     unresolved_truncated_account_labels,
 )
 from steuerreport_v2.domain.derivatives import DerivativesManager
+from steuerreport_v2.domain.derivative_cash import (
+    BITGET_DERIVATIVE_ACTIONS, BITGET_NEUTRAL_ACTIONS, bitget_financial_row,
+    derivative_cash, derivative_raw_rows,
+)
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.pionex_reconciliation import (
     PionexHntReconciliationService,
@@ -64,6 +70,7 @@ class ReviewService:
                 message="Migration/Wrapping ohne aktuelle eindeutige Beleg-, Mengen- oder Methodenbindung. Keine automatische 1:1-Paritaet oder neutrale Fortschreibung."))
         from steuerreport_v2.db.ai_corrections import conflicts
         with self.store.connect() as con:
+            derivative_calculated = con.execute("select count(*) from derivative_run_summaries").fetchone()[0] > 0
             for kind, target_id, code in conflicts(con):
                 issues.append(ReviewIssue(code=code, severity="high", scope=f"correction:{kind}:{target_id}",
                                           message="Freigegebene Datenkorrektur stimmt nicht mit dem aktuellen Datenstand ueberein.", blocks_export=True))
@@ -71,6 +78,51 @@ class ReviewService:
 
         from steuerreport_v2.domain.lot_origin import LotOriginIndex
         origin_events = self.store.list_canonical_events()
+        derivative_rows = derivative_raw_rows(self.store)
+        stored_cash = defaultdict(dict)
+        stored_derivatives = defaultdict(dict)
+        with self.store.connect() as con:
+            for event_id, asset, amount in con.execute("""select l.event_id,l.asset,sum(l.delta_quantity)
+                from balance_ledger l join canonical_events e on e.event_id=l.event_id
+                where e.event_type='derivative' group by 1,2""").fetchall():
+                stored_cash[event_id][asset.upper()] = amount
+            for event_id, asset, amount in con.execute(
+                "select event_id,asset,sum(quantity) from derivative_lines group by 1,2").fetchall():
+                stored_derivatives[event_id][asset.upper()] = amount
+        for event in origin_events:
+            row = derivative_rows.get(event.event_id, {})
+            action = str(row.get("type") or row.get("action") or row.get("action (english)") or "").strip().lower()
+            neutral = action in BITGET_NEUTRAL_ACTIONS and bitget_financial_row(row)
+            normalization_required = event.source.lower() == "bitget" and (
+                (action in BITGET_DERIVATIVE_ACTIONS or neutral) and event.event_type != "derivative"
+                or neutral and event.quantity != 0
+            )
+            if normalization_required:
+                issues.append(ReviewIssue(code="derivative_normalization_required", severity="high",
+                    scope=f"event:{event.event_id}", tax_year=reporting_tax_year(event.event_time), blocks_export=True,
+                    message="Die gespeicherte Bitget-Einordnung entspricht nicht dem belegten Funding-/Futures-Schema oder enthaelt eine Sicherheitenumbuchung als Geldfluss. Rohimport in einer neuen Vorschau normalisieren und pruefen; kein automatisches Umschreiben alter Daten."))
+            if event.event_type != "derivative":
+                continue
+            cash = derivative_cash(event, row)
+            if cash.review_reason:
+                raw_mismatch = cash.review_reason.startswith("principal_")
+                issues.append(ReviewIssue(code="derivative_normalization_required" if raw_mismatch else "derivative_fee_semantics_required", severity="high",
+                    scope=f"event:{event.event_id}", tax_year=reporting_tax_year(event.event_time), blocks_export=True,
+                    message=(f"Die gespeicherte Derivate-Menge stimmt nicht mit der ausdruecklichen Brutto-/Nettospalte ueberein ({cash.review_reason}). Rohimport in einer neuen Vorschau normalisieren und pruefen."
+                             if raw_mismatch else f"Derivategebuehren sind nicht abschliessend belegt ({cash.review_reason}). Brutto-/Nettokonvention, Gebuehrenwaehrung und gegebenenfalls eigener Token-Lotverbrauch pruefen; keine pauschale Kostenfreigabe.")))
+            expected = {}
+            for asset, amount in cash.legs:
+                key = asset.upper()
+                expected[key] = expected.get(key, Decimal("0")) + amount
+            if (not derivative_calculated and any(expected.values())) or any(
+                calculated and any(stored.get(key, Decimal("0")) != expected.get(key, Decimal("0"))
+                                   for key in expected.keys() | stored.keys())
+                for stored, calculated in ((stored_cash.get(event.event_id, {}), bool(stored_cash)),
+                    (stored_derivatives.get(event.event_id, {}), derivative_calculated))
+            ):
+                issues.append(ReviewIssue(code="derivative_cash_recalculation_required", severity="high",
+                    scope=f"event:{event.event_id}", tax_year=reporting_tax_year(event.event_time), blocks_export=True,
+                    message="Gespeicherte Derivate-/Ledger-Geldbeine weichen von der belegten Gebuehrenkonvention ab. Einen neuen gebundenen Berechnungslauf pruefen; alte Berichte und Abgabestaende bleiben unveraendert."))
         origin_index = LotOriginIndex(TaxService(self.store).list_tax_lots(), origin_events)
         with self.store.connect() as con:
             origin_lines = con.execute("""select tax_line_id,source_event_id,lot_id,asset,acquired_at,
@@ -1119,6 +1171,9 @@ class ReviewService:
             "zero_cost_tax_lots": "FIFO-Lots mit 0 EUR Kosten pruefen",
             "zero_proceeds_tax_lines": "Steuerzeilen mit 0 EUR Erloes pruefen",
             "derivative_missing_prices": "Derivate-Preisbewertung ergaenzen",
+            "derivative_fee_semantics_required": "Derivategebuehren und Nettokonvention pruefen",
+            "derivative_cash_recalculation_required": "Derivateberechnung aktualisieren",
+            "derivative_normalization_required": "Bitget-Funding und Sicherheitenzuordnung pruefen",
             "solana_history_classification_required": "Solana-Bewegung fachlich einordnen",
             "api_history_classification_required": "API-Beleg fachlich einordnen",
         }

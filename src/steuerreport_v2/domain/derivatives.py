@@ -18,6 +18,7 @@ from steuerreport_v2.domain.account_aliases import (
     canonical_account_label,
 )
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.derivative_cash import derivative_cash, derivative_raw_rows
 
 
 class DerivativesManager:
@@ -29,14 +30,18 @@ class DerivativesManager:
         lines: list[DerivativeLine] = []
         missing_price_count = 0
         account_aliases = build_account_alias_map_for_store(self.store)
+        raw_rows = derivative_raw_rows(self.store)
 
         for event in self.store.list_canonical_events():
             if event.event_type != "derivative":
                 continue
-            line = self._line_from_event(event, account_aliases)
-            if line.price_source is None:
-                missing_price_count += 1
-            lines.append(line)
+            for asset, quantity in derivative_cash(event, raw_rows.get(event.event_id)).legs:
+                if quantity == 0:
+                    continue
+                line = self._line_from_event(event.model_copy(update={"asset": asset, "quantity": quantity}), account_aliases)
+                if line.price_source is None:
+                    missing_price_count += 1
+                lines.append(line)
 
         summary = self._replace_derivative_tables(lines, missing_price_count)
         return DerivativeRunResult(lines=lines, summary=summary)
