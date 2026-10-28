@@ -3,6 +3,7 @@ import { RefreshCw, Save, Trash2 } from "lucide-react";
 import { API_BASE } from "./api-base";
 import { HelpTip } from "./Help";
 import { AdminEnvironmentState, useAdminEnvironment } from "./ConnectionSettings";
+import { VersionUpdates } from "./VersionUpdates";
 
 type Field = {
   key: string; label: string; group: string; kind: "account" | "path" | "url" | "text";
@@ -169,6 +170,7 @@ export function InstallationSettings() {
         <button type="submit" className="primaryButton" disabled={busy || environment.locked || demo || !document || content === document.content}><Save size={16} /> Belegdatei speichern</button>
       </form>
     </details>
+    <VersionUpdates />
   </section>;
 }
 
