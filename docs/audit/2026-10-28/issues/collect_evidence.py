@@ -42,15 +42,15 @@ def main():
         "stale-review-before.xml": "/tmp/sr-issues-20261028-bitget-review/review.xml",
         "stale-review-after.xml": "/tmp/sr-issues-20261028-bitget-stale/local-final.xml",
         "cache-coherence-before.xml": "/tmp/sr-issues-20261028/coherence-repro.xml",
-        "browser-fixtures.json": "/tmp/sr-issues-20261028/component-browser/result.json",
-        "browser-backend.json": "/tmp/sr-issues-20261028/browser-proof/result.json",
+        "browser-fixtures.json": "/tmp/sr-issues-20261028/component-final/result.json",
+        "browser-backend.json": "/tmp/sr-issues-20261028/browser-final-build/result.json",
         "reference-source-freeze.json": "/tmp/sr-issues-20261028/acceptance/bitget-stale-source-freeze.json",
         "updates-source-freeze.json": "/tmp/sr-issues-20261028/updates-final/updates-source-freeze.json",
     }
     for name, source in originals.items():
         shutil.copyfile(source, out / name)
         assert sha(Path(source)) == sha(out / name)
-    for source in sorted(Path("/tmp/sr-issues-20261028/browser-proof").glob("*.png")):
+    for source in sorted(Path("/tmp/sr-issues-20261028/browser-final-build").glob("*.png")):
         shutil.copyfile(source, out / source.name)
     (out / "changes.patch").write_bytes(git("diff", "--binary", BASE, commit))
     tests = {}
