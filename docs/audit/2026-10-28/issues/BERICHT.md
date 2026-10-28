@@ -76,6 +76,13 @@ bewahrt und sind keine erwarteten Fehler des CI-Gates.
   OpenAPI-/Endpoint-/Import-/KI-Dokumentationsdrift und private Defaults
   geprueft. Vollsuitenresultat siehe Manifest, bekannte Skips mit Originaltext.
 
+Vorlaeufige Testadapterfehler sind gesondert bewahrt: Vergleich von
+Create-/persistierten UTC-Datumsobjekten, erneutes Oeffnen eines schon
+verwendeten httpx-Clients und ein Reproducer-Aufruf ohne den fuer dev0
+erforderlichen `--expected-version`-Parameter. Diese Fehlversuche sind weder
+fachliche Vorherfehler noch erfolgreiche Nachweise. Beim ersten Browseradapter
+fehlte die Health-Fixture; der korrigierte isolierte Lauf ist separat bestanden.
+
 ## Reproduktion
 
 Aus dem Repository, Python-Abhaengigkeiten gegen `requirements-runtime.lock`

@@ -42,6 +42,9 @@ def main():
         "stale-review-before.xml": "/tmp/sr-issues-20261028-bitget-review/review.xml",
         "stale-review-after.xml": "/tmp/sr-issues-20261028-bitget-stale/local-final.xml",
         "cache-coherence-before.xml": "/tmp/sr-issues-20261028/coherence-repro.xml",
+        "adapter-cash-before.xml": "/tmp/sr-issues-20261028/cash.xml",
+        "adapter-cache-before.xml": "/tmp/sr-issues-20261028/coherence-before.xml",
+        "adapter-version-before.json": "/tmp/sr-issues-20261028/issue2-after-final.json",
         "browser-fixtures.json": "/tmp/sr-issues-20261028/component-final/result.json",
         "browser-backend.json": "/tmp/sr-issues-20261028/browser-final-build/result.json",
         "reference-source-freeze.json": "/tmp/sr-issues-20261028/acceptance/bitget-stale-source-freeze.json",
@@ -68,6 +71,8 @@ def main():
         assert json.loads((out / name).read_text())["unchanged"]
     manifest = {"created_at_utc": datetime.now(timezone.utc).isoformat(), "source_commit": commit,
         "diff_base": BASE, "tests": tests, "financial_approval": False, "production_deployed": False,
+        "frontend_build": [{"path": p.relative_to(ROOT).as_posix(), "sha256": sha(p)}
+                           for p in sorted((ROOT / "frontend/dist").rglob("*")) if p.is_file()],
         "original_reproducer_sha256": sha(ROOT / "docs/audit/2026-10-28/issues/issue2-original.py"),
         "files": [{"path": p.name, "sha256": sha(p)} for p in sorted(out.iterdir()) if p.is_file()]}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
