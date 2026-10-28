@@ -6455,12 +6455,17 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     def download_export_package_pdf(package_id: str) -> Response:
         rendered = ExportService(db).render_pdf_package(package_id)
         if rendered is None:
-            exists = ExportService(db).get_package(package_id) is not None
+            package = ExportService(db).get_package(package_id)
+            exists = package is not None
             payload = ApiResponse(
                 status="error",
                 errors=[
                     {
-                        "code": "export_package_stale_or_unbound" if exists else "export_package_not_downloadable",
+                        "code": (
+                            "export_package_blocked" if package and package.status != "created"
+                            else "export_package_stale_or_unbound" if exists
+                            else "export_package_not_downloadable"
+                        ),
                         "message": f"Exportpaket nicht gefunden oder blockiert: {package_id}",
                         "field": "package_id",
                     }

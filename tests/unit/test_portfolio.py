@@ -385,6 +385,8 @@ def test_portfolio_value_history_uses_as_of_methodology(tmp_path):
             source="manual-usdt",
         )
     )
+    store.add_price_point(PricePointCreate(asset="USDT", price_eur=Decimal("1"),
+        priced_at=datetime(2026, 2, 14, tzinfo=timezone.utc), source="manual-usdt"))
     store.add_price_point(
         PricePointCreate(
             asset="BTC",

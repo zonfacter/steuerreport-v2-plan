@@ -99,6 +99,9 @@ def _store(tmp_path, *, account=WALLET, quantity="1"):
             source="test",
         )
     )
+    store.add_price_point(PricePointCreate(asset="JUP", price_eur=Decimal("1"),
+        priced_at=datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0),
+        source="test-current-reference"))
     BalanceLedgerBuilder(store).rebuild()
     return store
 
@@ -293,6 +296,22 @@ def test_source_registry_explains_expected_zero_live_balance_without_false_delta
         "Main Wallet: erwarteten Nullbestand gegen aktuellen Plattformbeleg "
         "pruefen oder Registry-Policy fachlich anpassen."
     ]
+
+
+def test_source_registry_unpriced_live_balance_is_not_expected_zero(tmp_path):
+    store = _store(tmp_path, quantity="2")
+    with store.connect() as con:
+        con.execute("delete from price_ledger")
+    PortfolioService(store)._replace_live_balance_snapshots([PortfolioLiveBalanceSnapshot(
+        snapshot_id="synthetic-unpriced", connector_id="solana_wallet", source="test",
+        asset="JUP", quantity=Decimal("2"), fetched_at=datetime.now(timezone.utc))])
+    service = SourceRegistryService(store,
+        config_path=_config(tmp_path / "registry.json", portfolio_policy="expected_zero"),
+        artifact_root=tmp_path / "registry-runs")
+    row = service.run().entries[0]
+    assert row.quantity_gate_status == "review" and not row.strict_ready
+    assert any("kein nachgewiesener Nullbestand" in finding for finding in row.findings)
+    assert not any("ueber 1 EUR" in finding for finding in row.findings)
 
 
 def test_source_registry_marks_stale_cex_snapshot_as_ledger_fallback(tmp_path):

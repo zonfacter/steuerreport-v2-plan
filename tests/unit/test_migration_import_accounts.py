@@ -50,8 +50,11 @@ def accounts(tmp_path, monkeypatch):
 def provider(tmp_path, monkeypatch):
     elapsed = [0.0]
     wall, mono = time.time(), time.monotonic()
-    clock = lambda: wall + elapsed[0]
-    monotonic = lambda: mono + elapsed[0]
+    def clock():
+        return wall + elapsed[0]
+
+    def monotonic():
+        return mono + elapsed[0]
     def sleep(seconds):
         elapsed[0] += seconds
     limiter = RequestLimiter(state_root=tmp_path / "request-budget", clock=clock,

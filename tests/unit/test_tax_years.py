@@ -535,6 +535,8 @@ def test_external_inflow_report_excludes_multi_event_solana_program_income(tmp_p
             source="manual-test",
         )
     )
+    store.add_price_point(PricePointCreate(asset="USDT", price_eur=Decimal("0.92"),
+        priced_at=datetime(2024, 3, 13, tzinfo=timezone.utc), source="manual-test"))
 
     income = TaxYearService(store).income_report(2024)
     external = TaxYearService(store).external_inflow_report(2024)

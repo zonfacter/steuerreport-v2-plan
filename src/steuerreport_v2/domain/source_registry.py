@@ -252,6 +252,14 @@ class SourceRegistryService:
                 for position in ledger + live
                 if position.price_eur is not None
             }
+            unpriced = any(
+                position.price_eur is None and abs(position.quantity) > self.QUANTITY_TOLERANCE
+                for position in ledger + live
+            ) or any(
+                abs(item.quantity_delta) > self.QUANTITY_TOLERANCE
+                and item.asset.upper() not in price_by_asset
+                for item in adjustments
+            )
             adjustment_value = sum(
                 (
                     adjustment.quantity_delta
@@ -301,9 +309,12 @@ class SourceRegistryService:
                 quantity_deltas,
                 reconciliation_live_value,
                 live_snapshot_status=live_snapshot_status,
+                unpriced_positions=unpriced,
             )
             coverage_gate_status = self._coverage_gate_status(entry)
             findings: list[str] = []
+            if unpriced:
+                findings.append("EUR-Bewertung fehlt; unbewertete Bestaende sind kein nachgewiesener Nullbestand.")
             if coverage_gate_status == "provider_gap":
                 if entry.coverage_limitation == "provider_api_history_boundary":
                     findings.append(
@@ -354,7 +365,7 @@ class SourceRegistryService:
                     findings.append(
                         "Materielle Live-vs-Ledger-Mengendifferenz oder unbewertete Mengendifferenz."
                     )
-            elif quantity_status == "review":
+            elif quantity_status == "review" and not unpriced:
                 if entry.portfolio_policy == "expected_zero":
                     findings.append(
                         "Live-Bestand ueber 1 EUR widerspricht der Registry-Policy expected_zero."
@@ -558,9 +569,12 @@ class SourceRegistryService:
         live_value: Decimal,
         *,
         live_snapshot_status: str = "not_applicable",
+        unpriced_positions: bool = False,
     ) -> str:
         if entry.portfolio_policy == "exclude":
             return "not_applicable"
+        if unpriced_positions:
+            return "review"
         if live_snapshot_status in {"stale", "missing"}:
             return "review"
         if entry.portfolio_policy == "expected_zero":

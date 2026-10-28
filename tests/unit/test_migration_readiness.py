@@ -145,3 +145,26 @@ def test_audit_uses_archived_classification_and_new_calendar_classification(tmp_
     assert service._line_delta([delta], taxable=True) == Decimal("50")
     assert service._line_delta([delta], taxable=False) == Decimal("-50")
     assert delta.cause == "holding_period_classification"
+
+
+@pytest.mark.parametrize("label,expected", [(" ja ", True), ("NEIN", False), ("ungeklaert", None), ("", None)])
+def test_unknown_archive_label_is_not_silently_tax_free(label, expected):
+    assert TaxFilingAuditService._archived_taxable(label) is expected
+
+
+def test_pdf_api_distinguishes_missing_stale_and_blocked(tmp_path):
+    store = _clean_store(tmp_path)
+    service = ExportService(store)
+    package = service.create_pdf_packages(PdfExportRequest(estimated_pages=1)).packages[0]
+    client = TestClient(create_app(store))
+    prefix = "/api/v1/export/packages/"
+    assert client.get(prefix + "missing/download.pdf").status_code == 404
+    store.upsert_admin_setting(AdminSettingWrite(key="runtime.synthetic.rule", value_json="2"))
+    response = client.get(prefix + package.package_id + "/download.pdf")
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["code"] == "export_package_stale_or_unbound"
+    with store.connect() as con:
+        con.execute("update export_packages set status='blocked' where package_id=?", [package.package_id])
+    response = client.get(prefix + package.package_id + "/download.pdf")
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["code"] == "export_package_blocked"
