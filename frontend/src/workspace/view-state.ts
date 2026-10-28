@@ -5,7 +5,7 @@ const TABS: Record<string, readonly string[]> = {
   flows: ["transactions", "ledger", "flows", "transfers"], review: ["tasks", "evidence", "expert"],
   tax: ["guided", "details", "expert"], export: ["packages", "evidence", "expert"],
   import: ["assistant", "preflight", "expert"], portfolio: ["overview", "reconciliation", "prices", "expert"],
-  admin: ["overview"], ai: ["text", "changes"], help: ["overview"],
+  admin: ["overview", "updates"], ai: ["text", "changes"], help: ["overview"],
   stichtage: ["overview"], zugewinn: ["overview"]
 };
 export type ViewState = {

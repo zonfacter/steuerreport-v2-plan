@@ -236,7 +236,7 @@ def run_case(browser, base, out, name, *, automatic=False, blocked=False, unavai
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("/tmp/sr-issues-20261028-ui"))
-    parser.add_argument("--browser-executable", default="/root/.cache/ms-playwright/chromium-1187/chrome-linux/chrome")
+    parser.add_argument("--browser-executable")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     root = Path(__file__).resolve().parents[1]

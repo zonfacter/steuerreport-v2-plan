@@ -93,9 +93,9 @@ Timestamp UTC+8 (Completion),Coin,Quantity,Type,Transaction hash(txid),Account
 
 | Feld / Bedeutung | Alternative Namen in Profil-Suchreihenfolge |
 | --- | --- |
-| Zeitpunkt: technisch erforderlich | `time` / `timestamp utc+8 (completion)` / `timestamp utc+8 (created)` / `timestamp utc+8 (order)` / `creation timestamp (+8 utc)` / `timestamp utc+8 (submission)` / `ctime` / `utime` |
+| Zeitpunkt: technisch erforderlich | `time` / `date` / `timestamp utc+8 (completion)` / `timestamp utc+8 (created)` / `timestamp utc+8 (order)` / `creation timestamp (+8 utc)` / `timestamp utc+8 (submission)` / `ctime` / `utime` |
 | Asset: erforderlich oder passende Paar-/Spezialableitung | `asset` / `coin` / `currency` |
-| Tokenmenge: technisch erforderlich | `amount` / `quantity` / `executed` / `surplus/deduction (after fee)` / `size` |
+| Tokenmenge: technisch erforderlich | `surplus/deduction (after fee)` / `surplus/deduction (before fee)` / `amount` / `quantity` / `executed` / `size` |
 | Ereignisart: fuer die Zuordnung wesentlich | `type` / `action` / `action (english)` / `status` / `sub category` |
 | Handelspaar: optionaler Asset-Ersatz | `trading pair` |
 | Gegenasset: bei Handel erforderlich zur Rekonstruktion | `quote_asset` / `quote asset` / `fee deducted in` |

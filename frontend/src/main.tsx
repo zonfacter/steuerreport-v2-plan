@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
+import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
 import { ConnectorSetupSettings } from "./ConnectorSetupSettings";
 import { ConnectionSettings, RequestLimitSettings, useAdminEnvironment } from "./ConnectionSettings";
 import { FileImportWizard } from "./FileImportWizard";
@@ -18,6 +19,7 @@ import { navigateView, useViewState } from "./workspace/view-state";
 import {
   AlertTriangle,
   Archive,
+  ArrowLeft,
   ArrowRight,
   Bot,
   BookOpen,
@@ -3256,7 +3258,8 @@ function App() {
   const { view: routeView } = useViewState("dashboard", true);
   const active = routeView.section as Section;
   const setActive = (section: Section) => navigateView(section);
-  const managed = ["dashboard", "sources", "flows", "review", "tax", "export"].includes(active);
+  const managed = ["dashboard", "sources", "flows", "review", "tax", "export"].includes(active)
+    || (active === "admin" && routeView.tab === "updates");
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [loading, setLoading] = useState(false);
@@ -3329,6 +3332,15 @@ function App() {
     const frame = window.requestAnimationFrame(() => document.getElementById("page-heading")?.focus({ preventScroll: true }));
     return () => window.cancelAnimationFrame(frame);
   }, [active]);
+
+  useEffect(() => {
+    if (active !== "admin" || routeView.tab !== "updates") return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById("version-updates")?.scrollIntoView({ block: "start" });
+      document.getElementById("version-updates-heading")?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active, routeView.tab]);
 
   useEffect(() => {
     if (!mobileNavOpen) {
@@ -3781,7 +3793,7 @@ function App() {
           "reportEvidenceManifest", "reportEvidencePackageIndex",
           ...(exportViewMode === "expert" ? ["exports", "priceQuality"] : [])
         ] : [],
-        admin: ["health", "admin", "adminSettings", "sourceConnectorDiagnostics", "jupiterMetadataCache"],
+        admin: routeView.tab === "updates" ? ["health"] : ["health", "admin", "adminSettings", "sourceConnectorDiagnostics", "jupiterMetadataCache"],
         ai: ["health", "ai", "localAiYearPackageQa"],
         help: []
       };
@@ -5514,6 +5526,12 @@ function App() {
             {snapshot.productReadiness?.next_action ? <em>{snapshot.productReadiness.next_action}</em> : null}
           </div>}
           {active !== "help" && <div className="buttonRow topbarActions"><a className="ghostButton" href={`?hilfethema=${active}#help`} target="_blank" rel="noreferrer" title="Hilfe in neuem Tab oeffnen; Eingaben bleiben erhalten"><BookOpen size={16} /> Hilfe zum Bereich <ExternalLink size={14} /></a>
+          <UpdateIndicator onNavigate={() => {
+            setMobileNavOpen(false);
+            navigateView("admin", { tab: "updates" });
+            document.getElementById("version-updates")?.scrollIntoView({ block: "start" });
+            document.getElementById("version-updates-heading")?.focus({ preventScroll: true });
+          }} />
           {["dashboard", "tax", "export"].includes(active) && <label className="wsYearContext">Steuerjahr<select aria-label="Gemeinsames Steuerjahr" value={routeView.year} onChange={(event) => navigateView(active, { year: event.target.value, page: 1 })}>{Array.from({ length: 12 }, (_, index) => String(2020 + index)).map((year) => <option key={year}>{year}</option>)}{(Number(routeView.year) < 2020 || Number(routeView.year) > 2031) && <option>{routeView.year}</option>}</select></label>}
           <button className="statusButton" type="button" title="Vorhandene Daten erneut lesen; kein Anbieterabruf und keine fachliche Neuberechnung" onClick={() => void refresh()} disabled={pageLoading}>
             <RefreshCcw className={pageLoading ? "spin" : ""} size={16} />
@@ -5530,7 +5548,10 @@ function App() {
           lastRefreshAt={lastRefreshAt}
           lastLoadFailureCount={lastLoadFailureCount}
         />}
-        {active === "help" ? <HelpCenter key={helpTopic} initialTopic={helpTopic} /> : <Content
+        {active === "help" ? <HelpCenter key={helpTopic} initialTopic={helpTopic} /> : active === "admin" && routeView.tab === "updates" ? <>
+          <button type="button" className="statusButton" onClick={() => navigateView("admin", { tab: "overview" })}><ArrowLeft size={16} /> Zur Einrichtung</button>
+          <VersionUpdates />
+        </> : <Content
           active={active}
           snapshot={snapshot}
           legacyLoading={pageLoading || loaderStatuses.length === 0}

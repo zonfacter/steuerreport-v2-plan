@@ -56,14 +56,20 @@ function publish(changes: Partial<StoreState>) {
 function scheduleAutomatic() {
   clearTimeout(automaticTimer);
   const data = state.data;
-  if (!listeners.size || settingsPending || state.loading || state.checking || !data?.check_allowed) return;
+  if (!listeners.size || settingsPending || state.loading || state.checking || !data) return;
   if (data.status === "checking") {
-    if (checkingReads < 5) automaticTimer = setTimeout(() => { ++checkingReads; void loadStatus(); }, 2000);
+    if (checkingReads < 25) automaticTimer = setTimeout(() => { ++checkingReads; void loadStatus(); }, 2000);
     return;
   }
   checkingReads = 0;
-  if (!data.settings.automatic) return;
   const retry = data.retry_at ? Date.parse(data.retry_at) : 0;
+  if (!data.check_allowed) {
+    if (data.settings_writable && data.status !== "disabled" && Number.isFinite(retry) && retry > Date.now()) {
+      automaticTimer = setTimeout(() => { void loadStatus(); }, Math.min(retry - Date.now() + 50, 2147483647));
+    }
+    return;
+  }
+  if (!data.settings.automatic) return;
   const delay = Math.max(0, nextAutomaticAt - Date.now(), (Number.isFinite(retry) ? retry : 0) - Date.now());
   automaticTimer = setTimeout(() => { void checkUpdates("automatic"); }, Math.min(delay, 2147483647));
 }
@@ -206,7 +212,7 @@ export function VersionUpdates() {
   }
 
   return <section className="versionUpdates" aria-label="Version & Updates" id="version-updates">
-    <div className="panelToolbar"><h2>Version &amp; Updates</h2><button type="button" className="ghostButton" title="Gespeicherten Update-Status neu laden" aria-label="Gespeicherten Update-Status neu laden" disabled={loading || checking || busy} onClick={refresh}><RefreshCw size={16} /></button></div>
+    <div className="panelToolbar"><h2 id="version-updates-heading" tabIndex={-1}>Version &amp; Updates</h2><button type="button" className="ghostButton" title="Gespeicherten Update-Status neu laden" aria-label="Gespeicherten Update-Status neu laden" disabled={loading || checking || busy} onClick={refresh}><RefreshCw size={16} /></button></div>
     <dl className="updatesFacts">
       <div><dt>Installierte Backend-Version</dt><dd>{data?.installed_version ?? "Unbekannt"}</dd></div>
       <div><dt>Prüfergebnis</dt><dd role="status">{resultLabel(data, error, checking)}</dd></div>
@@ -218,7 +224,8 @@ export function VersionUpdates() {
     {data?.stale && <p className="adminMessage" role="status">Der letzte erfolgreiche Stand ist veraltet und kein Nachweis für Aktualität.</p>}
     {data?.incomplete && <p className="adminMessage" role="status">Nicht alle Releases wurden bewertet. Kein vollständiger Aktualitätsnachweis.</p>}
     {data?.retry_at && <p>Erneute Prüfung frühestens: {timestamp(data.retry_at)}</p>}
-    {data && !data.check_allowed && <p className="adminMessage" role="status">Versionsprüfungen sind in dieser Umgebung gesperrt. Es wird kein Abruf gestartet.</p>}
+    {data && !data.settings_writable && <p className="adminMessage" role="status">Versionsprüfungen sind in dieser Umgebung gesperrt. Es wird kein Abruf gestartet.</p>}
+    {data && !data.check_allowed && data.settings_writable && data.status !== "checking" && <p className="adminMessage" role="status">Die nächste Prüfung wartet auf die angezeigte Wartefrist oder eine korrigierte Serverzeit.</p>}
     {actionError && <p className="adminMessage error" role="alert">{actionError}</p>}
     {notice && <p className="adminMessage" role="status">{notice}</p>}
     <form className="updatesSettings" onSubmit={(event) => { event.preventDefault(); void saveSettings(); }}>

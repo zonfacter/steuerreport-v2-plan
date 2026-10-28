@@ -31,12 +31,21 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m pytest tests/acceptance -q --basetemp="${RUNNER_TEMP}/reference-additional" --junitxml=reference-additional.xml
+      - name: Unchanged public Bitget reproducer
+        env:
+          PYTHONPATH: src
+        run: >-
+          python docs/audit/2026-10-28/issues/issue2-original.py
+          --expected-version "$(python -c 'from steuerreport_v2 import __version__; print(__version__)')"
+          > bitget-original-reference.json
       - name: Original reference results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mandatory-reference-results
-          path: reference-*.xml
+          path: |
+            reference-*.xml
+            bitget-original-reference.json
           if-no-files-found: error
 
   backend:
@@ -132,6 +141,12 @@ jobs:
       - name: Historical EUR prices against isolated backend and mock providers
         working-directory: .
         run: python scripts/check_historical_prices_browser_v2.py --output "${RUNNER_TEMP}/historical-prices-browser"
+      - name: Update settings, selection and clipboard with controlled responses
+        working-directory: .
+        run: python scripts/check_updates_browser_v2.py --output "${RUNNER_TEMP}/updates-browser"
+      - name: Update cooldown, persistence and pinned handoff against isolated backend
+        working-directory: .
+        run: python scripts/check_updates_backend_browser_v2.py --output "${RUNNER_TEMP}/updates-backend-browser"
       - name: UX browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -146,4 +161,6 @@ jobs:
             ${{ runner.temp }}/history-provider-eta-browser/
             ${{ runner.temp }}/solana-limits-browser/
             ${{ runner.temp }}/historical-prices-browser/
+            ${{ runner.temp }}/updates-browser/
+            ${{ runner.temp }}/updates-backend-browser/
           if-no-files-found: ignore

@@ -101,7 +101,12 @@ class WorkspaceFixture:
         if path in self.fail:
             self.send(route, {}, 503)
             return True
-        if path == "/api/v1/workspace/environment":
+        if path == "/api/v1/updates":
+            data = dict(installed_version="0.2.0rc32", status="disabled", settings=dict(channel="stable_rc", automatic=False),
+                        checked_at=None, last_success_at=None, retry_at=None, stale=False, incomplete=False,
+                        message="Synthetische Vorschau ohne externe Versionsabfrage.", releases=[], latest=None,
+                        check_allowed=False, settings_writable=False)
+        elif path == "/api/v1/workspace/environment":
             data = {"synthetic_preview": True, "read_only": True}
         elif path == "/api/v1/admin/connections":
             data = {"connections": [], "legacy_connections": [], "vault_ready": False, "automatic_migration": False}

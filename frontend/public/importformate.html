@@ -66,9 +66,9 @@
 <pre>Timestamp UTC+8 (Completion),Coin,Quantity,Type,Transaction hash(txid),Account
 2025-01-15 18:00:00,USDT,100,Deposit,beispiel-bitget,beispiel-konto
 </pre><h3>Erkannte Spaltennamen</h3><table><thead><tr><th>Feld / Bedeutung</th><th>Alternative Namen in Profil-Suchreihenfolge</th></tr></thead><tbody>
-<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>time</code> / <code>timestamp utc+8 (completion)</code> / <code>timestamp utc+8 (created)</code> / <code>timestamp utc+8 (order)</code> / <code>creation timestamp (+8 utc)</code> / <code>timestamp utc+8 (submission)</code> / <code>ctime</code> / <code>utime</code></td></tr>
+<tr><td>Zeitpunkt: technisch erforderlich</td><td><code>time</code> / <code>date</code> / <code>timestamp utc+8 (completion)</code> / <code>timestamp utc+8 (created)</code> / <code>timestamp utc+8 (order)</code> / <code>creation timestamp (+8 utc)</code> / <code>timestamp utc+8 (submission)</code> / <code>ctime</code> / <code>utime</code></td></tr>
 <tr><td>Asset: erforderlich oder passende Paar-/Spezialableitung</td><td><code>asset</code> / <code>coin</code> / <code>currency</code></td></tr>
-<tr><td>Tokenmenge: technisch erforderlich</td><td><code>amount</code> / <code>quantity</code> / <code>executed</code> / <code>surplus/deduction (after fee)</code> / <code>size</code></td></tr>
+<tr><td>Tokenmenge: technisch erforderlich</td><td><code>surplus/deduction (after fee)</code> / <code>surplus/deduction (before fee)</code> / <code>amount</code> / <code>quantity</code> / <code>executed</code> / <code>size</code></td></tr>
 <tr><td>Ereignisart: fuer die Zuordnung wesentlich</td><td><code>type</code> / <code>action</code> / <code>action (english)</code> / <code>status</code> / <code>sub category</code></td></tr>
 <tr><td>Handelspaar: optionaler Asset-Ersatz</td><td><code>trading pair</code></td></tr>
 <tr><td>Gegenasset: bei Handel erforderlich zur Rekonstruktion</td><td><code>quote_asset</code> / <code>quote asset</code> / <code>fee deducted in</code></td></tr>

@@ -8,6 +8,7 @@ from steuerreport_v2.private_settings import private_config_path, private_value
 from steuerreport_v2.contracts.installation import InstallationSettings, InstallationSettingsWrite, PrivateConfigDocument, PrivateConfigWrite, ProviderSecretWrite
 from steuerreport_v2.domain.installation import InstallationSettingsError, InstallationSettingsService
 from steuerreport_v2.api.connections import build_connections_router
+from steuerreport_v2.api.updates import build_updates_router
 from steuerreport_v2.api.history import build_history_router
 from steuerreport_v2.api.historical_prices import build_historical_prices_router
 from steuerreport_v2.api.request_limits import build_request_limits_router
@@ -738,6 +739,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             return await call_next(request)
     db = store if isinstance(store, DuckDbStore) else DuckDbStore(store)
     app.include_router(build_connections_router(db))
+    app.include_router(build_updates_router(db))
     app.include_router(build_history_router(db, lambda: clear_response_cache()))
     app.include_router(build_historical_prices_router(db, lambda: clear_response_cache()))
     app.include_router(build_request_limits_router())

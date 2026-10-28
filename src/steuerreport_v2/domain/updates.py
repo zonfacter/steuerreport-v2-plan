@@ -217,6 +217,16 @@ class UpdateService:
                     raise ValueError("cache_page")
                 for release in page.releases:
                     self._validate_cached_release(release)
+            if cache.last_success_at and not cache.pages:
+                raise ValueError("cache_missing_pages")
+            if cache.pages:
+                last = max(int(number) for number in cache.pages)
+                if set(cache.pages) != {str(n) for n in range(1, last + 1)}:
+                    raise ValueError("cache_page_gap")
+                for n in range(1, last + 1):
+                    if cache.pages[str(n)].has_next != (n < last):
+                        if not (n == last == MAX_PAGES and cache.incomplete):
+                            raise ValueError("cache_page_chain")
             seen = {}
             for page in cache.pages.values():
                 for release in page.releases:
@@ -365,8 +375,8 @@ class UpdateService:
         )
 
     def status(self) -> UpdateStatus:
-        settings, cache = self._read()
         with self._lock(create=False) as free:
+            settings, cache = self._read()
             return self._status(settings, cache, checking=not free)
 
     def _require_enabled(self):

@@ -12,7 +12,12 @@
 .updatesSettings > label, .updatesRelease > label, .updatesHandoff > label { font-weight: 600; }
 .versionUpdates select, .versionUpdates textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; font: inherit; padding: 9px 10px; border: 1px solid #aeb7bf; border-radius: 4px; background: #fff; color: #182026; }
 .versionUpdates select { text-overflow: ellipsis; }
-.versionUpdates textarea { resize: vertical; font-family: monospace; font-size: 13px; }
+.versionUpdates textarea { resize: vertical; font-family: monospace; font-size: 13px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.versionUpdates button { border: 1px solid #b7c7bd; border-radius: 4px; padding: 8px 12px; background: #edf3ef; color: #243b31; font: inherit; font-size: 13px; cursor: pointer; }
+.versionUpdates button.primaryButton { background: #234c3b; border-color: #234c3b; color: #fff; }
+.versionUpdates button:hover:not(:disabled) { background: #e2eee7; color: #243b31; }
+.versionUpdates button:disabled { opacity: .55; cursor: default; }
+.versionUpdates a { color: #23627a; }
 .versionUpdates label.updatesAutomatic { display: flex; flex-direction: row; gap: 9px; align-items: flex-start; margin: 6px 0; line-height: 1.5; }
 .versionUpdates .updatesAutomatic input[type="checkbox"] { margin: 4px 0 0; padding: 0; width: 17px; min-height: 17px; height: 17px; flex: 0 0 17px; }
 .updatesActions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

@@ -12054,6 +12054,94 @@
         "title": "ApiResponse[Union[WalletFifoParallelRunReport, NoneType]]",
         "type": "object"
       },
+      "ApiResponse_UpdateHandoff_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateHandoff"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[UpdateHandoff]",
+        "type": "object"
+      },
+      "ApiResponse_UpdateStatus_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[UpdateStatus]",
+        "type": "object"
+      },
       "ApiResponse_V1CexCredentialTakeoverReport_": {
         "properties": {
           "data": {
@@ -69354,6 +69442,308 @@
         "title": "TransferCandidateReport",
         "type": "object"
       },
+      "UpdateCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "automatic"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "UpdateCheckRequest",
+        "type": "object"
+      },
+      "UpdateHandoff": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "handoff_schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Handoff Schema Version",
+            "type": "integer"
+          },
+          "installed_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed Version"
+          },
+          "target": {
+            "$ref": "#/components/schemas/UpdateRelease"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "installed_version",
+          "target",
+          "text",
+          "created_at"
+        ],
+        "title": "UpdateHandoff",
+        "type": "object"
+      },
+      "UpdateHandoffRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "release_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Release Id",
+            "type": "integer"
+          },
+          "snapshot_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "snapshot_digest"
+        ],
+        "title": "UpdateHandoffRequest",
+        "type": "object"
+      },
+      "UpdateRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 8000,
+            "title": "Body",
+            "type": "string"
+          },
+          "channel": {
+            "enum": [
+              "stable",
+              "rc"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "github_prerelease": {
+            "title": "Github Prerelease",
+            "type": "boolean"
+          },
+          "image_digest": {
+            "title": "Image Digest",
+            "type": "null"
+          },
+          "image_reference": {
+            "title": "Image Reference",
+            "type": "null"
+          },
+          "open_checks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Open Checks",
+            "type": "array"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "release_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Release Id",
+            "type": "integer"
+          },
+          "snapshot_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Digest",
+            "type": "string"
+          },
+          "source_commit": {
+            "title": "Source Commit",
+            "type": "null"
+          },
+          "tag": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Tag",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 512,
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "tag",
+          "version",
+          "channel",
+          "github_prerelease",
+          "published_at",
+          "url",
+          "body",
+          "open_checks",
+          "snapshot_digest"
+        ],
+        "title": "UpdateRelease",
+        "type": "object"
+      },
+      "UpdateSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic": {
+            "default": false,
+            "title": "Automatic",
+            "type": "boolean"
+          },
+          "channel": {
+            "default": "stable",
+            "enum": [
+              "stable",
+              "stable_rc"
+            ],
+            "title": "Channel",
+            "type": "string"
+          }
+        },
+        "title": "UpdateSettings",
+        "type": "object"
+      },
+      "UpdateStatus": {
+        "properties": {
+          "check_allowed": {
+            "title": "Check Allowed",
+            "type": "boolean"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "incomplete": {
+            "default": false,
+            "title": "Incomplete",
+            "type": "boolean"
+          },
+          "installed_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed Version"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/UpdateRelease"
+            },
+            "title": "Releases",
+            "type": "array"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/UpdateSettings"
+          },
+          "settings_writable": {
+            "title": "Settings Writable",
+            "type": "boolean"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "disabled",
+              "not_checked",
+              "checking",
+              "up_to_date",
+              "update_available",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "installed_version",
+          "status",
+          "settings",
+          "message",
+          "check_allowed",
+          "settings_writable"
+        ],
+        "title": "UpdateStatus",
+        "type": "object"
+      },
       "V1CexCredentialTakeoverItem": {
         "properties": {
           "can_take_over": {
@@ -103072,6 +103462,166 @@
           "Transactions"
         ],
         "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/updates": {
+      "get": {
+        "description": "Status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "status_api_v1_updates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UpdateStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "System"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/updates/check": {
+      "post": {
+        "description": "Check. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "check_api_v1_updates_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UpdateStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check",
+        "tags": [
+          "System"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/updates/handoff": {
+      "post": {
+        "description": "Handoff. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "handoff_api_v1_updates_handoff_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHandoffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UpdateHandoff_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Handoff",
+        "tags": [
+          "System"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/updates/settings": {
+      "put": {
+        "description": "Settings. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "settings_api_v1_updates_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UpdateStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings",
+        "tags": [
+          "System"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

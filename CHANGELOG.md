@@ -2,6 +2,18 @@
 
 ## 0.2.0rc33.dev0 - 2026-10-28 (Unveroeffentlichter Auditstand)
 
+- GitHub #2: Bitget-Financial-CSV mit Date, signierten Futures-Gebuehren,
+  Funding und neutralen Margin-Aktionen; explizite Nettoexporte ohne doppelten
+  Gebuehrenabzug. Generische Derivative-Zeilen erhalten ihre Gebuehrenbeine.
+  Alte Ableitungen und widerspruechliche Brutto-/Netto-Normalisierung erzeugen
+  Review-Sperren statt einer stillen produktiven Datenkorrektur.
+- GitHub #3: Backend-Versionsanzeige und Einrichtung fuer stabile/RC-Releases,
+  ausdrueckliches Opt-in, begrenzte GitHub-Abfragen und persistenter lokaler Cache.
+  Releasegebundener KI-Updateauftrag mit Zwischenablagefallback und TXT/JSON;
+  kein automatisches Deployment und keine erfundenen Commit-/Image-Nachweise.
+- Update-Praeferenzen und Metadatencache sind explizit von finanziellen
+  Vorschau-Fingerprints ausgenommen; neue Fingerprint-Version erfordert fuer
+  bereits gebundene alte Vorschauen eine erneute ausdrueckliche Berechnung.
 - Historische Ersatzkurse, SQL-Coverage und Ableitungen verwenden denselben
   konservativen Tages-/Zeitvertrag; keine verdeckte Altpreis-Wiederverwendung.
 - Private Kalenderjahresfrist in Europe/Berlin fuer Python, SQL, Planung und
@@ -17,7 +29,7 @@
 - Lesende Lot-Herkunft durch Transfers und Umstellungen einschliesslich
   Zwischenbelegen, Vorjahresurspruengen und konsistenten Review-Sperren.
   Herkunftsdetails bleiben im Steuerjahr einsehbar; keine Sphaerenfreigabe.
-- Abschliessender lokaler Stand: 2629 Unit-Tests bestanden, vier bekannte
+- Vorherige Lot-Herkunft-Pruefung: 2629 Unit-Tests bestanden, vier bekannte
   private Belegskips; 52 urspruengliche und 87 zusaetzliche Referenztests
   bestanden. Originalausgaben, Matrix, Diff und Grenzen im Auditordner.
 - Isolierte Restore-/Browser-/Referenzpruefungen und verbleibende Grenzen im

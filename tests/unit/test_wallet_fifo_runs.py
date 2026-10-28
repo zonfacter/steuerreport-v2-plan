@@ -212,7 +212,7 @@ def test_wallet_fifo_input_fingerprint_is_stable_across_fifo_rebuild(tmp_path):
     TaxService(store).rebuild_fifo()
     after = service.input_fingerprint(as_of)
 
-    assert before.fingerprint_version == "wallet_fifo_input_v2_semantic"
+    assert before.fingerprint_version == "wallet_fifo_input_v3_nonfinancial_updates_excluded"
     assert before.component_sha256
     assert after.digest == before.digest
     assert after.component_sha256 == before.component_sha256
