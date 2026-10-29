@@ -84,7 +84,7 @@ const errors: Record<string, string> = {
   history_preview_stale: "Die Vorschau ist veraltet, weil sich die Datenbasis geändert hat. Den Auftrag abbrechen und eine neue Vorschau abrufen; anschließend erneut prüfen und bestätigen.",
   history_preview_changed: "Die gespeicherte Vorschau stimmt nicht mehr mit der Freigabe überein. Status aktualisieren und die Vorschau erneut prüfen; keine Freigabe übernommen.",
   history_source_changed: "Die Quellen- oder Kontenzuordnung hat sich seit Auftragsbeginn geändert. Den alten Auftrag abbrechen und einen neuen Abruf für die aktuelle Quelle starten.",
-  history_legacy_account_assignment_required: "Ältere Importdaten müssen zuerst eindeutig einem Konto zugeordnet werden. Der Historienimport nimmt keine automatische Zuordnung vor.",
+  history_legacy_account_assignment_required: "Im angefragten Zeitraum liegen bereits manuelle Importereignisse ohne eindeutige API-Belegidentität. Eine Kontobindung allein beweist nicht, dass CSV- und API-Zeile dieselbe Buchung sind. Der Historienabruf bleibt gesperrt; Datum oder Betrag werden nicht automatisch zum Zusammenführen verwendet.",
   history_worker_stopped: "Der Abruf wurde unterbrochen, etwa durch einen Serverneustart. Gespeicherten Fortschritt prüfen und den Auftrag ausdrücklich fortsetzen.",
   history_worker_running: "Dieser Auftrag wird bereits verarbeitet. Status aktualisieren; keinen zweiten Abruf starten.",
   history_worker_superseded: "Ein neuer Verarbeitungslauf hat den bisherigen ersetzt. Den aktuellen Auftragsstatus laden.",

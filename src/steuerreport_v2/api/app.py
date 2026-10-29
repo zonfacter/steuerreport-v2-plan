@@ -613,6 +613,7 @@ from steuerreport_v2.domain.wallet_monthly_preflight import (
     WalletMonthlyPreflightService,
 )
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+from steuerreport_v2.importers.bitget_csv import BitgetCsvStructureError
 from steuerreport_v2.importers.file_raw_importer import FileRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 from steuerreport_v2.importers.source_profiles import list_profiles
@@ -1849,13 +1850,18 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         if binding_errors:
             return ApiResponse(status="error", errors=binding_errors)
         importer = CsvRawImporter(db)
-        preview = importer.preview_text(
-            source=source,
-            filename=str(payload["filename"]),
-            content=str(payload["content"]),
-            connection_id=connection_id,
-            mexc=payload.get("mexc"),
-        )
+        try:
+            preview = importer.preview_text(
+                source=source,
+                filename=str(payload["filename"]),
+                content=str(payload["content"]),
+                connection_id=connection_id,
+                mexc=payload.get("mexc"),
+            )
+        except BitgetCsvStructureError as exc:
+            return ApiResponse(status="error", errors=[ApiMessage(
+                code="bitget_csv_structure_invalid", message=str(exc), field="content",
+            )])
         if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
             return ApiResponse(status="error", errors=[_connection_binding_warning()])
         errors = _import_preview_errors(preview, "content")
@@ -1883,13 +1889,18 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         )
         if binding_errors:
             return ApiResponse(status="error", errors=binding_errors)
-        preview = CsvRawImporter(db).preview_text(
-            source=source,
-            filename=str(payload["filename"]),
-            content=str(payload["content"]),
-            connection_id=connection_id,
-            mexc=payload.get("mexc"),
-        )
+        try:
+            preview = CsvRawImporter(db).preview_text(
+                source=source,
+                filename=str(payload["filename"]),
+                content=str(payload["content"]),
+                connection_id=connection_id,
+                mexc=payload.get("mexc"),
+            )
+        except BitgetCsvStructureError as exc:
+            return ApiResponse(status="error", errors=[ApiMessage(
+                code="bitget_csv_structure_invalid", message=str(exc), field="content",
+            )])
         warnings = _import_preview_warnings(preview, "content")
         if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
             warnings.append(_connection_binding_warning())

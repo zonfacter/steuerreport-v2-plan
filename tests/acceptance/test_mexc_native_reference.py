@@ -162,6 +162,20 @@ def _xlsx(rows, kind="spot_statement", *, sheets=("Sheet1",), revision="original
     return buffer.getvalue()
 
 
+def _multi_sheet_xlsx(sheets):
+    book = Workbook()
+    for index, (name, kind, rows) in enumerate(sheets):
+        sheet = book.active if index == 0 else book.create_sheet()
+        sheet.title = name
+        sheet.append(HEADERS[kind])
+        for row in rows:
+            sheet.append([row.get(header) for header in HEADERS[kind]])
+    buffer = BytesIO()
+    book.save(buffer)
+    book.close()
+    return buffer.getvalue()
+
+
 def _numeric_xlsx(uid, quantity):
     source = _xlsx([_spot()])
     output = BytesIO()
@@ -347,6 +361,47 @@ def test_header_only_native_xlsx_is_empty_not_corrupt(case, kind):
     _counts(native, raw_rows=0, bookable_rows=0, linked_rows=0, review_rows=0, snapshot_rows=0, bonus_rows=0)
     assert native["rows"] == []
     assert _state(case) == before
+
+
+def test_multisheet_xlsx_requires_selection_then_previews_and_normalizes_selected_sheet(case, monkeypatch):
+    content = _multi_sheet_xlsx((
+        ("Spot", "spot_statement", [_spot()]),
+        ("Funding", "funding_other", [_funding()]),
+    ))
+    before = _state(case)
+
+    ambiguous = _preview(case, content, _options(), sheet=None)
+    assert ambiguous.file_format == "xlsx"
+    assert ambiguous.sheet_names == ["Spot", "Funding"]
+    assert ambiguous.sheet_name is None
+    assert ambiguous.row_count == 0 and ambiguous.sample_rows == []
+    assert ambiguous.can_import is False
+    assert _native(ambiguous)["detected_kind"] is None
+    assert any("Tabellenblatt ausdruecklich auswaehlen" in reason for reason in _native(ambiguous)["blocking_reasons"])
+    assert _state(case) == before
+    _reject_before_batch(case, monkeypatch, content, _options(), sheet=None)
+
+    options = _options("funding_other", timezone="UTC+01:00")
+    selected = _preview(case, content, options, sheet="Funding")
+    assert selected.can_import is True
+    assert selected.sheet_name == "Funding"
+    assert _native(selected)["detected_kind"] == "funding_other"
+    assert selected.row_count == 1
+
+    batch, events = _import(case, content, options, sheet="Funding")
+    assert len(events) == 1
+    assert (events[0].event_type, events[0].asset, events[0].quantity, events[0].event_time) == (
+        "unknown", "DEMOCOIN", D("2.5"), WHEN,
+    )
+    raw, = _raw(case, batch)
+    payload, meta = _metadata(raw)
+    assert raw.row_number == 2
+    assert meta["sheet_name"] == "Funding"
+    assert payload["Type"] == "Airdrop"
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+    assert _state(case)["tax_lots"] == []
+    archived = case[0].path.parent / "mexc_originals" / (hashlib.sha256(content).hexdigest() + ".original")
+    assert archived.read_bytes() == content
 
 
 def test_missing_options_cannot_guess_product_from_header_or_filename(case, monkeypatch):

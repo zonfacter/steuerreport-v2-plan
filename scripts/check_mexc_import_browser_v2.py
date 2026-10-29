@@ -41,6 +41,7 @@ class Fixture:
         self.skipped_raw_objects = 0
         self.candidate_revision = 0
         self.same_provider_id = False
+        self.multi_sheet = False
         self.last_rows = []
 
     def row_digest(self, payload, row):
@@ -57,13 +58,26 @@ class Fixture:
     def preview(self, payload):
         config = payload.get("mexc", {})
         kind = config.get("export_kind")
+        selected_sheet = payload.get("sheet_name")
         missing = []
         if payload["source"] == "mexc":
             if not config.get("account") or not kind:
                 missing.append("Konto und Exportart ausdruecklich bestaetigen.")
             if kind == "funding_other" and not config.get("timezone"):
                 missing.append("Time ohne Offset: Zeitbasis fehlt.")
+        detected_kind = kind
+        sheet_selection_required = False
+        if self.multi_sheet:
+            detected_kind = "funding_other" if selected_sheet == "Funding" else "spot_statement"
+            if not selected_sheet:
+                detected_kind = None
+                sheet_selection_required = True
+                missing.append("Mehrere Tabellenblaetter vorhanden; ein MEXC-Tabellenblatt ausdruecklich auswaehlen.")
+            elif kind != detected_kind:
+                missing.append("Die bestaetigte Exportart passt nicht zum ausgewaehlten Tabellenblatt.")
         count = 2003 if self.mode == "candidate" else 1
+        if sheet_selection_required:
+            count = 0
         candidates = [{"raw_object_id": "synthetic-raw-A", "filename": "synthetic-origin.xlsx", "row_number": 8, "export_kind": "spot_statement"},
                       {"raw_object_id": "synthetic-raw-B", "filename": None, "row_number": None, "export_kind": "funding_other"}]
         if self.candidate_revision:
@@ -90,13 +104,15 @@ class Fixture:
         disposition = "transactions"
         if self.mode == "empty":
             count, rows, disposition = 0, [], "empty"
-        elif kind == "asset_snapshot":
+        elif detected_kind == "asset_snapshot":
             disposition = "evidence_only"
             rows[0].update(status="evidence_only", reason="Bestandsnachweis, kein Erwerb.")
         elif self.mode == "unsupported":
             disposition = "unsupported"
             missing.append("Dieses Produkt ist fachlich noch nicht unterstuetzt.")
             rows[0].update(status="invalid", reason="Synthetische Richtung widerspruechlich.")
+        if sheet_selection_required:
+            disposition = "unsupported"
         for row in rows:
             row.update(input_digest=self.row_digest(payload, row), decision_stale=False)
             decision = decisions.get(str(row["row_number"]))
@@ -110,17 +126,18 @@ class Fixture:
                 missing.append(reason)
         self.last_rows = rows
         linked = int(bool(rows) and rows[0]["status"] == "linked")
-        mexc = {"detected_kind": kind, "disposition": disposition, "raw_rows": count,
+        mexc = {"detected_kind": detected_kind, "disposition": disposition, "raw_rows": count,
                 # Belegte Mengen koennen zugleich eine offene Fachklassifikation haben.
                 "bookable_rows": sum(row["status"] in {"ready", "review"} for row in rows) if disposition == "transactions" else 0,
                 "linked_rows": linked, "review_rows": sum(row["status"] in {"review", "invalid", "duplicate_candidate"} for row in rows),
-                "snapshot_rows": count if kind == "asset_snapshot" else 0,
-                "bonus_rows": count if kind == "futures_capital_flow" else 0,
+                "snapshot_rows": count if detected_kind == "asset_snapshot" else 0,
+                "bonus_rows": count if detected_kind == "futures_capital_flow" else 0,
                 "blocking_reasons": missing, "warnings": ["Airdrop bleibt Quellbezeichnung, keine Mining-Freigabe."], "rows": rows}
         return {"can_execute": not missing, "warnings": ["Synthetischer allgemeiner Dateihinweis."],
                 "preview": {"row_count": count, "columns": ["Crypto", "Quantity"],
                             "sample_rows": [{"Crypto": "DEMOCOIN", "Quantity": "2.5"}] if count else [],
-                            "sheet_name": payload.get("sheet_name") or "Sheet1", "sheet_names": ["Sheet1", "Sheet2"],
+                            "sheet_name": selected_sheet if selected_sheet else None if self.multi_sheet else "Sheet1",
+                            "sheet_names": ["Spot", "Funding"] if self.multi_sheet else ["Sheet1", "Sheet2"],
                             "file_sha256": "a" * 64, "import_fingerprint": payload["filename"],
                             "missing_required_groups": [], "profile_label": "MEXC nativ",
                             **({"mexc": mexc} if payload["source"] == "mexc" else {})}}
@@ -265,6 +282,33 @@ def scenarios(output):
         check(page)
         expect(approve(page)).to_be_enabled()
         assert not fixture.posts("execute")
+
+    def explicit_multisheet(page, fixture):
+        fixture.multi_sheet = True
+        select_files(page)
+        configure(page)
+        check(page)
+        row = file_row(page)
+        sheet = row.get_by_label("Tabellenblatt fuer synthetic.xlsx", exact=True)
+        expect(sheet).to_have_value("")
+        expect(sheet.locator("option").first).to_have_text("Tabellenblatt auswaehlen")
+        expect(row.locator(".statusPill")).to_have_text("Nicht importierbar")
+        expect(review(page)).to_contain_text("Tabellenblatt noch nicht ausgewaehlt")
+        expect(review(page).get_by_label("MEXC-Gesamtzahlen")).to_have_count(0)
+        expect(approve(page)).to_be_disabled()
+        assert not fixture.posts("execute")
+
+        sheet.select_option("Funding")
+        row.get_by_label("MEXC-Exportart fuer synthetic.xlsx", exact=True).select_option("funding_other")
+        row.get_by_label("MEXC-Zeitbasis fuer synthetic.xlsx", exact=True).select_option("UTC+01:00")
+        check(page)
+        expect(row.get_by_label("Tabellenblatt fuer synthetic.xlsx", exact=True)).to_have_value("Funding")
+        expect(row.locator(".statusPill")).to_have_text("Importierbar")
+        expect(review(page).get_by_label("MEXC-Gesamtzahlen")).to_contain_text("Rohzeilen")
+        approve(page).check()
+        area(page).get_by_role("button", name="1 Datei(en) importieren", exact=True).click()
+        expect(row.locator(".statusPill")).to_have_text("Importiert")
+        assert fixture.posts("execute")[-1]["sheet_name"] == "Funding"
 
     def candidates(page, fixture):
         fixture.mode = "candidate"
@@ -699,7 +743,8 @@ def scenarios(output):
         expect(following).to_have_attribute("title", "Naechste Zeilenseite")
         assert not fixture.posts("execute")
 
-    return {"source-missing-config": missing, "timebasis-safe-errors": timezone_errors, "candidate-pager-confirm": candidates,
+    return {"source-missing-config": missing, "timebasis-safe-errors": timezone_errors,
+            "explicit-multisheet-selection": explicit_multisheet, "candidate-pager-confirm": candidates,
             "config-reset-manual-regression": resets, "empty-evidence-unsupported": dispositions,
             "sequential-import-revalidation": multi, "invalid-files-disabled": invalid_files, "source-specific-formats": source_formats,
             "approval-import-effect": approval_effect, "source-specific-outcomes": outcome_labels,

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.2.0rc37 - 2026-10-29 (Releasekandidat)
+
+- GitHub #4: MEXC-XLSX mit mehreren Tabellenblaettern verlangt jetzt eine
+  ausdrueckliche Blattwahl. Vorher werden keine Tabellenzeilen als gepruefte
+  Importvorschau dargestellt.
+- GitHub #10: Regression fuer einen formal gueltigen, aber nicht passenden
+  Vault-Schluessel. Der Containerstart muss vor Uvicorn abbrechen und den
+  bestehenden Zustand bytegleich erhalten.
+- GitHub #13: Der Historienabruf erklaert jetzt, dass eine Kontobindung allein
+  keinen CSV/API-Belegabgleich beweist. Ungeklaerte Ueberlappungen bleiben
+  gesperrt; Zeit und Betrag werden nicht als automatische Identitaet verwendet.
+- GitHub #22: Bitget-CSV toleriert ausschliesslich leere Zusatzfelder hinter
+  der Kopfzeile. Nichtleere Zusatzfelder werden mit Zeilenhinweis abgewiesen;
+  die Preview-API liefert einen strukturierten Fehler statt HTTP 500. Raw-Zeilen,
+  Originalhash und identischer Wiederimport sind regressionsgetestet.
+- Keine Legacy-Datenmigration, keine Produktiv-Neuberechnung oder
+  Methodenaktivierung. #8, #13, #19, #20 und #22 bleiben teilweise offen.
+
 ## 0.2.0rc36 - 2026-10-29 (Releasekandidat)
 
 - GitHub #12: Solana-Ownership-Konfiguration wird beim Speichern und Laden
