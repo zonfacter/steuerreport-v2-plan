@@ -200,6 +200,48 @@ def test_main_does_not_start_uvicorn_for_existing_state_without_vault_key(bootst
     assert not (bootstrap / "keys/vault.key").exists()
 
 
+def test_main_rejects_incompatible_vault_key_before_start_without_mutating_state(bootstrap, monkeypatch):
+    from types import SimpleNamespace
+    from steuerreport_v2.container_entrypoint import main
+    from steuerreport_v2.contracts.admin import AdminSettingWrite
+    from steuerreport_v2.domain.secret_vault import encrypt_secret_setting
+
+    database = bootstrap / "data/test.duckdb"
+    database.parent.mkdir()
+    setting_name = "secret.cex.connection.synthetic.api_key"
+    original_key = bytes(range(32))
+    wrong_but_well_formed_key = bytes(range(32, 64))
+    store = DuckDbStore(database)
+    store.upsert_admin_setting(AdminSettingWrite(
+        key=setting_name,
+        value_json=encrypt_secret_setting(setting_name, "synthetic-secret", original_key),
+    ))
+    key_file = bootstrap / "keys/vault.key"
+    key_file.parent.mkdir()
+    key_file.write_bytes(wrong_but_well_formed_key)
+    before = {
+        path.relative_to(bootstrap): path.read_bytes()
+        for path in bootstrap.rglob("*")
+        if path.is_file()
+    }
+    uvicorn_calls = []
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *args, **kwargs: uvicorn_calls.append(args)))
+
+    with pytest.raises(RuntimeError, match="existing_secret_vault_key_incompatible") as error:
+        main()
+
+    assert "synthetic-secret" not in str(error.value)
+    assert uvicorn_calls == []
+    after = {
+        path.relative_to(bootstrap): path.read_bytes()
+        for path in bootstrap.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+    assert not (bootstrap / "private_profile.json").exists()
+    assert read_token() == ""
+
+
 def test_preconfigured_profile_requires_explicit_empty_state_provisioning(bootstrap, monkeypatch):
     profile = bootstrap / "private_profile.json"
     profile.write_text('{"installation":"synthetic"}')

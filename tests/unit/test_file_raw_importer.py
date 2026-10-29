@@ -8,6 +8,7 @@ import pytest
 
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+from steuerreport_v2.importers.bitget_csv import BitgetCsvStructureError
 from steuerreport_v2.importers.file_raw_importer import FileRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 
@@ -136,7 +137,7 @@ def test_bitget_csv_preview_rejects_nonempty_fields_beyond_header(tmp_path):
     content = "Date,Coin,Type,Amount\n2025-01-02 12:00:00,DEMOCOIN,trade,4,UNMAPPED\n"
     encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
 
-    with pytest.raises(ValueError, match="Datei konnte nicht gelesen werden"):
+    with pytest.raises(BitgetCsvStructureError, match="Bitget CSV-Zeile 2 enthaelt nichtleere"):
         importer.preview_base64("bitget", "synthetic.csv", encoded)
 
 

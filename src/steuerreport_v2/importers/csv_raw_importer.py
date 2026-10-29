@@ -14,6 +14,7 @@ from steuerreport_v2.contracts.imports import (
     RawObjectCreate,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.importers.bitget_csv import dict_reader as bitget_dict_reader
 from steuerreport_v2.importers.source_profiles import (
     inspect_profile_columns,
     profile_for_source,
@@ -32,7 +33,9 @@ class CsvRawImporter:
             from steuerreport_v2.importers.mexc_native import MexcNativeImporter
             return MexcNativeImporter(self.store).import_file(filename, content.encode("utf-8"), mexc=mexc)
         file_hash = self.hash_text(content)
-        reader = self._dict_reader(content)
+        reader = self._dict_reader(content, source)
+        if source.strip().lower() == "bitget":
+            reader = list(reader)
         return self.import_rows(
             source=source,
             filename=filename,
@@ -92,7 +95,7 @@ class CsvRawImporter:
         if source.strip().lower() == "mexc":
             from steuerreport_v2.importers.mexc_native import MexcNativeImporter
             return MexcNativeImporter(self.store).prepare(filename, content.encode("utf-8"), mexc=mexc)[0]
-        reader = self._dict_reader(content)
+        reader = self._dict_reader(content, source)
         columns = list(reader.fieldnames or [])
         profile = profile_for_source(source)
         matched, missing = inspect_profile_columns(profile, columns)
@@ -128,10 +131,13 @@ class CsvRawImporter:
         return "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     @classmethod
-    def _dict_reader(cls, content: str) -> csv.DictReader:
+    def _dict_reader(cls, content: str, source: str | None = None) -> csv.DictReader:
+        dialect = cls._dialect_for_text(content)
+        if source is not None and source.strip().lower() == "bitget":
+            return bitget_dict_reader(content, dialect)
         return csv.DictReader(
             StringIO(content),
-            dialect=cls._dialect_for_text(content),
+            dialect=dialect,
             skipinitialspace=True,
         )
 

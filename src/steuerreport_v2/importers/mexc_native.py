@@ -223,15 +223,19 @@ class MexcNativeImporter:
         rows, columns, fmt, sheet, names = self.read(filename, content, sheet_name)
         if len(columns) != len(set(columns)) or "_mexc" in columns or None in columns:
             raise MexcValidationError("Doppelte oder reservierte MEXC-Spalten.")
+        sheet_selection_required = fmt == "xlsx" and len(names) > 1 and not sheet_name
         cols = set(columns)
         detected, time_column = layout(columns)
         problems = []
-        if detected is None:
+        if sheet_selection_required:
+            problems.append("Mehrere Tabellenblaetter vorhanden; ein MEXC-Tabellenblatt ausdruecklich auswaehlen.")
+            detected, time_column, columns, rows, cols = None, None, [], [], set()
+        if detected is None and not sheet_selection_required:
             problems.append("MEXC-Exportlayout nicht unterstuetzt; keine generische Ersatzinterpretation.")
         if not options.account:
             problems.append("MEXC-Konto ausdruecklich zuordnen.")
         compatible = options.export_kind in STATEMENT_KINDS if detected == "statement" else options.export_kind == detected
-        if not options.export_kind or not compatible:
+        if not sheet_selection_required and (not options.export_kind or not compatible):
             problems.append("Exportart ausdruecklich passend zum Layout waehlen; Dateiname allein genuegt nicht.")
         basis = options.timezone
         if detected == "asset_snapshot":
@@ -247,13 +251,14 @@ class MexcNativeImporter:
         sha = "sha256:" + hashlib.sha256(content).hexdigest()
         fingerprint = sha + "#mexc=" + _hash({"sheet": sheet, "kind": options.export_kind,
             "account": options.account, "timezone": basis})
-        duplicate = self.store.get_import_batch_by_file_hash("mexc", fingerprint)
+        duplicate = None if sheet_selection_required else self.store.get_import_batch_by_file_hash("mexc", fingerprint)
+        disposition = "unsupported" if sheet_selection_required else "empty" if not rows else "transactions" if options.export_kind in NATIVE_KINDS else "evidence_only"
         report = MexcImportPreview(detected_kind=detected, raw_rows=len(rows),
-            disposition="empty" if not rows else "transactions" if options.export_kind in NATIVE_KINDS else "evidence_only",
+            disposition=disposition,
             blocking_reasons=problems)
-        if not rows:
+        if not rows and not sheet_selection_required:
             report.blocking_reasons.append("Leerer Export: nur Kopfzeile, keine Buchungen.")
-        if detected is None:
+        if detected is None and not sheet_selection_required:
             report.disposition = "unsupported"
         try:
             index, roots, root_ids = self._existing()
@@ -351,10 +356,10 @@ class MexcNativeImporter:
         report.warnings = ["Mengenabgleich ist keine Kostenbasis oder Steuerfreigabe. Airdrop bleibt ungeklart; keine automatische Mining-/Reward-Zuordnung.",
             "Self-Service-Export laut MEXC ab 01.10.2024; angeforderter Zeitraum beweist keine vollstaendige Historie."]
         preview = CsvImportPreview(source="mexc", filename=filename, profile_label="MEXC Account Data Export",
-            file_format=fmt, sheet_name=sheet, sheet_names=names, row_count=len(rows), columns=columns,
+            file_format=fmt, sheet_name=None if sheet_selection_required else sheet, sheet_names=names, row_count=len(rows), columns=columns,
             matched_columns={"time": time_column, "asset": "Crypto" if "Crypto" in cols else None,
                 "quantity": "Quantity" if "Quantity" in cols else "Amount" if "Amount" in cols else None},
-            missing_required_groups=[] if detected else ["mexc_layout"], sample_rows=[r for _, r in rows[:5]],
+            missing_required_groups=["mexc_sheet_selection"] if sheet_selection_required else [] if detected else ["mexc_layout"], sample_rows=[r for _, r in rows[:5]],
             can_import=not report.blocking_reasons and bool(rows), duplicate_batch_id=duplicate.batch_id if duplicate else None,
             file_sha256=sha, import_fingerprint=fingerprint, mexc=report)
         return preview, prepared

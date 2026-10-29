@@ -613,6 +613,7 @@ from steuerreport_v2.domain.wallet_monthly_preflight import (
     WalletMonthlyPreflightService,
 )
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+from steuerreport_v2.importers.bitget_csv import BitgetCsvStructureError
 from steuerreport_v2.importers.file_raw_importer import FileRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 from steuerreport_v2.importers.source_profiles import list_profiles
@@ -737,6 +738,17 @@ def _import_binding_error(code: str) -> ApiMessage | None:
     if message is None:
         return None
     return ApiMessage(code=code, message=message, field="connection_id")
+
+
+def _bitget_csv_structure_error(
+    exc: BitgetCsvStructureError,
+    content_field: str,
+) -> ApiResponse:
+    return ApiResponse(status="error", errors=[ApiMessage(
+        code="bitget_csv_structure_invalid",
+        message=str(exc),
+        field=content_field,
+    )])
 
 
 def _direct_file_connection_id(
@@ -1849,13 +1861,16 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         if binding_errors:
             return ApiResponse(status="error", errors=binding_errors)
         importer = CsvRawImporter(db)
-        preview = importer.preview_text(
-            source=source,
-            filename=str(payload["filename"]),
-            content=str(payload["content"]),
-            connection_id=connection_id,
-            mexc=payload.get("mexc"),
-        )
+        try:
+            preview = importer.preview_text(
+                source=source,
+                filename=str(payload["filename"]),
+                content=str(payload["content"]),
+                connection_id=connection_id,
+                mexc=payload.get("mexc"),
+            )
+        except BitgetCsvStructureError as exc:
+            return _bitget_csv_structure_error(exc, "content")
         if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
             return ApiResponse(status="error", errors=[_connection_binding_warning()])
         errors = _import_preview_errors(preview, "content")
@@ -1883,13 +1898,16 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         )
         if binding_errors:
             return ApiResponse(status="error", errors=binding_errors)
-        preview = CsvRawImporter(db).preview_text(
-            source=source,
-            filename=str(payload["filename"]),
-            content=str(payload["content"]),
-            connection_id=connection_id,
-            mexc=payload.get("mexc"),
-        )
+        try:
+            preview = CsvRawImporter(db).preview_text(
+                source=source,
+                filename=str(payload["filename"]),
+                content=str(payload["content"]),
+                connection_id=connection_id,
+                mexc=payload.get("mexc"),
+            )
+        except BitgetCsvStructureError as exc:
+            return _bitget_csv_structure_error(exc, "content")
         warnings = _import_preview_warnings(preview, "content")
         if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
             warnings.append(_connection_binding_warning())
@@ -1907,14 +1925,17 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         )
         if binding_errors:
             return ApiResponse(status="error", errors=binding_errors)
-        preview = FileRawImporter(CsvRawImporter(db)).preview_base64(
-            source=source,
-            filename=str(payload["filename"]),
-            content_base64=str(payload["content_base64"]),
-            sheet_name=payload.get("sheet_name"),
-            connection_id=connection_id,
-            mexc=payload.get("mexc"),
-        )
+        try:
+            preview = FileRawImporter(CsvRawImporter(db)).preview_base64(
+                source=source,
+                filename=str(payload["filename"]),
+                content_base64=str(payload["content_base64"]),
+                sheet_name=payload.get("sheet_name"),
+                connection_id=connection_id,
+                mexc=payload.get("mexc"),
+            )
+        except BitgetCsvStructureError as exc:
+            return _bitget_csv_structure_error(exc, "content_base64")
         warnings = _import_preview_warnings(preview, "content_base64")
         if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
             warnings.append(_connection_binding_warning())
@@ -1933,14 +1954,17 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         if binding_errors:
             return ApiResponse(status="error", errors=binding_errors)
         importer = FileRawImporter(CsvRawImporter(db))
-        preview = importer.preview_base64(
-            source=source,
-            filename=str(payload["filename"]),
-            content_base64=str(payload["content_base64"]),
-            sheet_name=payload.get("sheet_name"),
-            connection_id=connection_id,
-            mexc=payload.get("mexc"),
-        )
+        try:
+            preview = importer.preview_base64(
+                source=source,
+                filename=str(payload["filename"]),
+                content_base64=str(payload["content_base64"]),
+                sheet_name=payload.get("sheet_name"),
+                connection_id=connection_id,
+                mexc=payload.get("mexc"),
+            )
+        except BitgetCsvStructureError as exc:
+            return _bitget_csv_structure_error(exc, "content_base64")
         if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
             return ApiResponse(status="error", errors=[_connection_binding_warning()])
         errors = _import_preview_errors(preview, "content_base64")
@@ -1967,6 +1991,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     ) -> ApiResponse[ImportAssistantPreview]:
         try:
             preview = ImportAssistantService(db).preview(payload)
+        except BitgetCsvStructureError as exc:
+            content_field = "content_base64" if payload.content_base64 else "content"
+            return _bitget_csv_structure_error(exc, content_field)
         except ValueError as exc:
             binding_error = _import_binding_error(str(exc))
             if binding_error is not None:
@@ -1995,6 +2022,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     ) -> ApiResponse[ImportAssistantExecuteResult]:
         try:
             return ApiResponse(data=ImportAssistantService(db).execute(payload))
+        except BitgetCsvStructureError as exc:
+            content_field = "content_base64" if payload.content_base64 else "content"
+            return _bitget_csv_structure_error(exc, content_field)
         except ValueError as exc:
             binding_error = _import_binding_error(str(exc))
             if binding_error is not None:

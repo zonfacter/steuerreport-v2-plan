@@ -26,7 +26,7 @@ type MexcPreview = {
 type Preview = {
   can_execute: boolean; blocked_reason?: string; warnings: string[];
   preview?: { row_count: number; columns: string[]; sample_rows: Record<string, unknown>[];
-    sheet_name?: string; sheet_names: string[]; duplicate_batch_id?: string;
+    sheet_name?: string | null; sheet_names: string[]; duplicate_batch_id?: string;
     duplicate_batch_connection_id?: string; connection_id?: string;
     file_sha256?: string; import_fingerprint?: string; missing_required_groups: string[]; profile_label: string; mexc?: MexcPreview };
 };
@@ -43,21 +43,22 @@ const MEXC_ROW_LABELS: Record<MexcRow["status"], string> = { ready: "Mengenbeweg
 function MexcReview({ item, disabled, onDecision }: { item: Item; disabled: boolean; onDecision: (row: number, decision?: MexcDecision) => void }) {
   const [page, setPage] = useState(0);
   const review = item.preview?.preview?.mexc || item.review;
+  const sheetSelectionRequired = (item.preview?.preview?.sheet_names.length || 0) > 1 && !item.sheet;
   if (!review) return null;
   const pages = Math.max(1, Math.ceil(review.rows.length / 25));
   const activePage = Math.min(page, pages - 1);
   return <section aria-label={`MEXC-Pruefung fuer ${item.file.name}`} style={{ minWidth: 0, overflowWrap: "anywhere" }}>
     {!item.preview && <p role="status">Vorschau nicht mehr aktuell. Entscheidungen erneut pruefen lassen.</p>}
-    {review.disposition !== "transactions" && <p>{review.disposition === "empty" ? "Leerer Export: keine Datenzeilen, kein erfolgreicher Import." : review.disposition === "evidence_only" ? "Nur Beleg / Bestandsabgleich, keine neuen Erwerbe." : "Export fachlich nicht unterstuetzt."}</p>}
-    <dl className="importFileFacts" aria-label="MEXC-Gesamtzahlen">{[
+    {!sheetSelectionRequired && review.disposition !== "transactions" && <p>{review.disposition === "empty" ? "Leerer Export: keine Datenzeilen, kein erfolgreicher Import." : review.disposition === "evidence_only" ? "Nur Beleg / Bestandsabgleich, keine neuen Erwerbe." : "Export fachlich nicht unterstuetzt."}</p>}
+    {sheetSelectionRequired ? <p role="status">Tabellenblatt noch nicht ausgewaehlt. Vorschau und Zeilenzaehler erscheinen nach der Auswahl.</p> : <dl className="importFileFacts" aria-label="MEXC-Gesamtzahlen">{[
       ["Rohzeilen", review.raw_rows], ["Mengenbuchungen", review.bookable_rows], ["Verknuepft", review.linked_rows],
       ["Doppelbeleg-Kandidaten", review.rows.filter((row) => row.status === "duplicate_candidate").length],
       ["fachlich offen", review.review_rows], ["Bestandszeilen", review.snapshot_rows], ["BONUS-Zeilen", review.bonus_rows],
-    ].map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl>
-    <small>Zaehler sind nicht additiv: Mengenbuchungen koennen fachlich offen sein.</small>
+    ].map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl>}
+    {!sheetSelectionRequired && <small>Zaehler sind nicht additiv: Mengenbuchungen koennen fachlich offen sein.</small>}
     {review.blocking_reasons.map((reason, index) => <p role="status" className="importWarning" key={`block-${index}`}>{reason}</p>)}
     {review.warnings.map((warning, index) => <p className="importWarning" key={`warn-${index}`}>{warning}</p>)}
-    <details><summary>Zeilenpruefung ({review.rows.length})</summary>
+    {sheetSelectionRequired ? null : <details><summary>Zeilenpruefung ({review.rows.length})</summary>
       <p>Erkannte Exportart: {review.detected_kind ? MEXC_KINDS[review.detected_kind as MexcKind] || review.detected_kind : "noch offen"}. Physische Dateizeilen einschliesslich Kopfzeile; Excel-Daten beginnen ab Zeile 2.</p>
       <p>Mengenbuchungen und fachlich offene Zeilen koennen sich ueberschneiden: eine belegte Menge ist noch keine freigegebene Fachklassifikation.</p>
       {review.disposition === "transactions" && <p>Airdrop bleibt zunaechst ein ungeklaerter Vorgang (unknown), keine automatische Mining-, Reward- oder Einkunftseinstufung.</p>}
@@ -97,7 +98,7 @@ function MexcReview({ item, disabled, onDecision }: { item: Item; disabled: bool
         <span role="status">Seite {activePage + 1} von {pages} / {review.rows.length} Zeilen</span>
         <button type="button" title="Naechste Zeilenseite" aria-label="Naechste Zeilenseite" disabled={activePage + 1 >= pages} onClick={() => setPage(activePage + 1)}><ChevronRight size={16} /></button>
       </nav>
-    </details>
+    </details>}
   </section>;
 }
 
@@ -242,8 +243,10 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
           if (repeated) { preview.can_execute = false; preview.blocked_reason = "Identische Datei und dasselbe Tabellenblatt bereits in dieser Auswahl."; }
           const mexc = preview.preview?.mexc;
           const configured = source !== "mexc" || Boolean(item.exportKind && mexcAccount.trim() && mexc && !mexc.blocking_reasons.length && !mexc.rows.some((row) => row.decision_stale) && mexc.disposition !== "unsupported");
-          update(item.id, { encoded, preview, review: mexc, sheets: preview.preview?.sheet_names, sheet: preview.preview?.sheet_name ?? item.sheet,
-            status: mexc?.disposition === "empty" ? "empty" : repeated || preview.preview?.duplicate_batch_id ? "duplicate" : preview.can_execute && configured ? "ready" : "blocked" });
+          const sheets = preview.preview?.sheet_names || [];
+          const sheetSelectionRequired = source === "mexc" && sheets.length > 1 && !item.sheet;
+          update(item.id, { encoded, preview, review: mexc, sheets, sheet: sheetSelectionRequired ? undefined : preview.preview?.sheet_name ?? item.sheet,
+            status: sheetSelectionRequired ? "blocked" : mexc?.disposition === "empty" ? "empty" : repeated || preview.preview?.duplicate_batch_id ? "duplicate" : preview.can_execute && configured ? "ready" : "blocked" });
         } catch (caught) { if (token === generation.current) update(item.id, { status: "error", preview: undefined, error: caught instanceof Error ? caught.message : "Dateipruefung fehlgeschlagen." }); }
       }
     } finally { gate.current = false; if (token === generation.current) setBusy(false); }
@@ -319,7 +322,10 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
       </div>}
       {item.preview?.preview && <div className="importFileFacts"><span>{item.preview.preview.row_count} Zeilen</span><span>{item.preview.preview.profile_label}</span>
         {item.preview.preview.connection_id && <span>Gebunden an ID …{item.preview.preview.connection_id.slice(-8)}</span>}
-        {item.preview.preview.sheet_names.length > 0 && <label>Tabellenblatt<select aria-label={`Tabellenblatt fuer ${item.file.name}`} value={item.sheet || ""} disabled={busy || item.status === "imported"} onChange={(event) => configureItem(item.id, { sheet: event.target.value })}>{item.preview.preview.sheet_names.map((name) => <option key={name}>{name}</option>)}</select></label>}
+        {item.preview.preview.sheet_names.length > 0 && <label>Tabellenblatt<select aria-label={`Tabellenblatt fuer ${item.file.name}`} value={item.sheet || ""} disabled={busy || item.status === "imported"} onChange={(event) => configureItem(item.id, { sheet: event.target.value || undefined })}>
+          {source === "mexc" && item.preview.preview.sheet_names.length > 1 && !item.sheet && <option value="">Tabellenblatt auswaehlen</option>}
+          {item.preview.preview.sheet_names.map((name) => <option key={name}>{name}</option>)}
+        </select></label>}
         <button type="button" className="ghostButton" disabled={busy} onClick={() => setDetails(details === item.id ? null : item.id)}><ArrowRight size={14} /> Vorschau</button></div>}
       {item.preview?.preview?.file_sha256 && <code className="importHash">{item.preview.preview.file_sha256}</code>}
       {item.error && <p role="alert" className="error">{item.error}</p>}
