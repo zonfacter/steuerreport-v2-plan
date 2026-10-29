@@ -103,7 +103,7 @@ def test_bootstrap_does_not_allow_software_or_shared_write_locations(bootstrap, 
 
 
 @pytest.mark.parametrize("existing", [None, "profile", "database", "vault"])
-def test_new_install_prepares_auth_but_update_does_not_grant_it(bootstrap, existing):
+def test_bootstrap_only_prepares_auth_for_a_fresh_installation(bootstrap, existing):
     if existing == "profile":
         (bootstrap / "private_profile.json").write_text("{}")
     elif existing == "database":
@@ -114,6 +114,12 @@ def test_new_install_prepares_auth_but_update_does_not_grant_it(bootstrap, exist
         (bootstrap / "keys/vault.key").write_bytes(bytes(range(32)))
     mask = os.umask(0o077)
     try:
+        if existing in {"profile", "database"}:
+            with pytest.raises(RuntimeError, match="secret_vault_key_missing"):
+                initialize_state()
+            assert not (bootstrap / "keys/vault.key").exists()
+            assert read_token() == ""
+            return
         initialize_state()
         assert bool(read_token()) is (existing is None)
         vault = (bootstrap / "keys/vault.key").read_bytes()

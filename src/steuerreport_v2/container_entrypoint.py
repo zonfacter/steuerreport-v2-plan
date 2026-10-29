@@ -9,20 +9,30 @@ from pathlib import Path
 def initialize_state() -> None:
     os.umask(0o077)
     state = Path(os.environ.get("STEUERREPORT_STATE_DIR", str(Path.home() / ".local/share/steuerreport")))
-    profile = Path(os.environ.get("STEUERREPORT_PRIVATE_PROFILE", str(state / "private_profile.json")))
-    database = Path(os.environ.get("STEUERREPORT_V2_DB", str(state / "data/steuerreport_v2.duckdb")))
-    key_file = Path(os.environ.get("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(state / "keys/vault.key")))
-    fresh_installation = not any(path.exists() for path in (profile, database, key_file))
+    profile_setting = os.environ.get("STEUERREPORT_PRIVATE_PROFILE")
+    profile = (None if profile_setting == "" else Path(profile_setting).expanduser()) if profile_setting is not None else state / "private_profile.json"
+    database_setting = os.environ.get("STEUERREPORT_V2_DB")
+    database = Path(database_setting).expanduser() if database_setting else state / "data/steuerreport_v2.duckdb"
+    key_setting = os.environ.get("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE")
+    if key_setting is not None and not key_setting.strip():
+        raise RuntimeError("secret_vault_key_path_missing; configure_a_private_key_file")
+    key_file = Path(key_setting).expanduser() if key_setting else state / "keys/vault.key"
+    existing_state = (profile is not None and profile.exists()) or database.exists() or key_file.exists()
+    if existing_state and not key_file.exists():
+        raise RuntimeError("secret_vault_key_missing; restore_the_original_key_before_starting_existing_state")
     for name in ("data", "var", "imports", "configs", "keys"):
         (state / name).mkdir(parents=True, exist_ok=True, mode=0o700)
-    profile.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    try:
-        with profile.open("x", encoding="utf-8") as handle:
-            handle.write(json.dumps({}) + "\n")
-    except FileExistsError:
-        pass
-    os.environ.setdefault("STEUERREPORT_PRIVATE_PROFILE", str(profile))
-    os.environ.setdefault("STEUERREPORT_V2_DB", str(state / "data/steuerreport_v2.duckdb"))
+    if profile is not None:
+        profile.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            with profile.open("x", encoding="utf-8") as handle:
+                handle.write(json.dumps({}) + "\n")
+        except FileExistsError:
+            pass
+        os.environ.setdefault("STEUERREPORT_PRIVATE_PROFILE", str(profile))
+    os.environ.setdefault("STEUERREPORT_V2_DB", str(database))
+    if not os.environ["STEUERREPORT_V2_DB"]:
+        os.environ["STEUERREPORT_V2_DB"] = str(database)
     os.environ.setdefault("STEUERREPORT_USERTRANSFER_ROOT", str(state / "imports"))
     key_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
@@ -39,7 +49,7 @@ def initialize_state() -> None:
     from steuerreport_v2.domain.secret_vault import load_vault_key
     if load_vault_key() is None:
         raise RuntimeError("existing_secret_vault_key_invalid; restore_original_key_without_overwriting")
-    if fresh_installation and "STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE" not in os.environ:
+    if not existing_state and "STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE" not in os.environ:
         from steuerreport_v2.domain.connector_bootstrap import initialize_token
         initialize_token()
 

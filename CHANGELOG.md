@@ -1,5 +1,11 @@
 # Changelog
 
+## Unveroeffentlichte Aenderungen
+
+- Ein vorhandener Installationszustand ohne Vault-Schluessel bricht jetzt vor
+  der Initialisierung ab, statt einen nicht passenden Ersatzschluessel zu
+  erzeugen. Die Inbetriebnahme dokumentiert die Wiederherstellung des Originals.
+
 ## 0.2.0rc35 - 2026-10-28 (Releasekandidat)
 
 - Der reale GitHub-Releasekatalog enthaelt nach Entpacken etwa 606 KB inklusive

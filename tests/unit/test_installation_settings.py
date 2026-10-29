@@ -163,3 +163,48 @@ def test_container_state_initialization_never_replaces_profile_or_key(tmp_path, 
         assert json.loads((tmp_path / "profile.json").read_text())["primary_solana_wallet"] == "fixture-only"
     finally:
         os.umask(previous_umask)
+
+
+def test_container_state_with_missing_vault_key_fails_before_generating_replacement(tmp_path, monkeypatch):
+    from steuerreport_v2.container_entrypoint import initialize_state
+    from steuerreport_v2.domain.secret_vault import decode_secret_setting, encrypt_secret_setting
+
+    state = tmp_path / "state"
+    profile = tmp_path / "profile/private_profile.json"
+    database = tmp_path / "database/steuerreport_v2.duckdb"
+    key_file = tmp_path / "vault/vault.key"
+    monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(state))
+    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", str(profile))
+    monkeypatch.setenv("STEUERREPORT_V2_DB", str(database))
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(key_file))
+    monkeypatch.setenv("STEUERREPORT_V2_REQUIRE_ENCRYPTED_SECRETS", "true")
+
+    initialize_state()
+    original_key = key_file.read_bytes()
+    envelope = encrypt_secret_setting("secret.fixture", "fixture-secret", original_key)
+    key_file.unlink()
+
+    with pytest.raises(RuntimeError, match="secret_vault_key_missing"):
+        initialize_state()
+
+    assert not key_file.exists()
+    key_file.write_bytes(original_key)
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(key_file))
+    assert decode_secret_setting("secret.fixture", envelope) == "fixture-secret"
+
+
+def test_container_state_normalizes_empty_optional_paths(tmp_path, monkeypatch):
+    from steuerreport_v2.container_entrypoint import initialize_state
+
+    state = tmp_path / "private-state"
+    monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(state))
+    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", "")
+    monkeypatch.setenv("STEUERREPORT_V2_DB", "")
+    monkeypatch.delenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", raising=False)
+
+    initialize_state()
+
+    assert not (state / "private_profile.json").exists()
+    assert os.environ["STEUERREPORT_PRIVATE_PROFILE"] == ""
+    assert os.environ["STEUERREPORT_V2_DB"] == str(state / "data/steuerreport_v2.duckdb")
+    assert (state / "keys/vault.key").is_file()

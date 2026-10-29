@@ -245,6 +245,17 @@ Vor Updates das gesamte Volume einschliesslich **beider** privaten Dateien
 `keys/vault.key` und `keys/connector-setup.token` sichern. Keine privaten Sicherungen
 an GitHub-Releases anhaengen. Neue Versionen nie mit alten Zugangsdaten im Image bauen.
 
+Fehler `secret_vault_key_missing`: Der Start wurde abgebrochen, weil bereits ein
+Profil oder eine Datenbank vorhanden ist, aber die konfigurierte Vault-Schluesseldatei
+fehlt. Den bestehenden Zustand nicht weiter starten und keinesfalls selbst einen
+Ersatzschluessel erzeugen: Er kann frueher verschluesselte Zugangsdaten nicht
+entschluesseln. Stelle die originale `keys/vault.key` aus derselben konsistenten
+Sicherung wie Datenbank und Profil wieder her und pruefe Dateirechte sowie den
+konfigurierten Schluesselpfad. Ist der Originalschluessel nicht verfuegbar, bleiben
+die verschluesselten Werte unlesbar; sichere den Zustand unveraendert und klaere
+das weitere Vorgehen administrativ. Keine Datenbankmigration oder automatische
+Secret-Neuanlage erfolgt.
+
 ## Historische EUR-Preise Ohne Altinstallation
 
 Ab rc29 benoetigt der gefuehrte Preisablauf keinen V1-Wechselkurscache.
