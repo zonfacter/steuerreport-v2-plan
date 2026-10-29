@@ -242,8 +242,9 @@ def scenarios(output):
         block, choice = decision_fields(page)
         expect(block.get_by_label("MEXC-Gesamtzahlen")).to_contain_text("2003")
         expect(block.get_by_label("MEXC-Gesamtzahlen").locator("div").filter(has_text="Doppelbeleg-Kandidaten").locator("dd")).to_have_text("1")
-        expect(block.get_by_label("MEXC-Gesamtzahlen").locator("div").filter(has_text="Mengenbewegungen (buchbar)").locator("dd")).to_have_text("2002")
-        expect(block.get_by_label("MEXC-Gesamtzahlen").locator("div").filter(has_text="Fachlich zu pruefen").locator("dd")).to_have_text("2")
+        expect(block.get_by_label("MEXC-Gesamtzahlen").locator("div").filter(has_text="Mengenbuchungen").locator("dd")).to_have_text("2002")
+        expect(block.get_by_label("MEXC-Gesamtzahlen").locator("div").filter(has_text="fachlich offen").locator("dd")).to_have_text("2")
+        expect(block.get_by_text("Zaehler sind nicht additiv: Mengenbuchungen koennen fachlich offen sein.", exact=True)).to_be_visible()
         expect(block).to_contain_text("koennen sich ueberschneiden")
         expect(block).to_contain_text("ungeklaerter Vorgang (unknown)")
         expect(block.locator("strong")).to_have_count(25)
@@ -372,10 +373,95 @@ def scenarios(output):
 
     def invalid_files(page, fixture):
         select_files(page, ("synthetic.txt",))
-        expect(file_row(page, "synthetic.txt").get_by_role("alert")).to_contain_text("CSV, XLSX oder XLS erforderlich")
+        expect(file_row(page, "synthetic.txt").get_by_role("alert")).to_contain_text("MEXC unterstuetzt nur CSV oder XLSX")
         expect(area(page).get_by_role("button", name="Dateien pruefen", exact=True)).to_be_disabled()
         expect(approve(page)).to_be_disabled()
         assert not fixture.posts("preview") and not fixture.posts("execute")
+
+    def source_formats(page, fixture):
+        source = area(page).get_by_label("Importquelle", exact=True)
+        files = area(page).get_by_label("Importdateien auswaehlen", exact=True)
+        drop_label = area(page).locator(".fileDropZone > span")
+        expect(files).to_have_attribute("accept", ".csv,.xlsx")
+        expect(drop_label).to_have_text("CSV / XLSX")
+        select_files(page, ("synthetic.xls",))
+        expect(file_row(page, "synthetic.xls").locator(".statusPill")).to_have_text("Fehler")
+        expect(area(page).get_by_role("button", name="Dateien pruefen", exact=True)).to_be_disabled()
+        area(page).get_by_role("button", name="Neuer Import", exact=True).click()
+
+        source.select_option("")
+        select_files(page, ("synthetic.xls",))
+        expect(file_row(page, "synthetic.xls").locator(".statusPill")).to_have_text("Ungeprueft")
+        expect(file_row(page, "synthetic.xls").get_by_role("alert")).to_have_count(0)
+        expect(area(page).get_by_role("button", name="Hilfe: MEXC Exportart und Zeitbasis", exact=True)).to_have_count(0)
+        source.select_option("mexc")
+        expect(file_row(page, "synthetic.xls").locator(".statusPill")).to_have_text("Fehler")
+        expect(file_row(page, "synthetic.xls").get_by_role("alert")).to_contain_text("kein XLS")
+        expect(approve(page)).to_be_disabled()
+        assert not fixture.posts("preview")
+
+        source.select_option("manual-csv")
+        expect(files).to_have_attribute("accept", ".csv,.xlsx,.xls")
+        expect(drop_label).to_have_text("CSV / XLSX / XLS")
+        expect(file_row(page, "synthetic.xls").get_by_role("alert")).to_have_count(0)
+        expect(area(page).locator("#mexc-import-effect")).to_have_count(0)
+        check(page)
+        approve(page).check()
+        source.select_option("mexc")
+        expect(file_row(page, "synthetic.xls").locator(".statusPill")).to_have_text("Fehler")
+        expect(approve(page)).not_to_be_checked()
+        expect(approve(page)).to_be_disabled()
+        expect(approve(page)).to_have_accessible_name("Gepruefte Dateien freigeben (0)")
+        expect(area(page).get_by_role("button", name="Dateien pruefen", exact=True)).to_be_disabled()
+        expect(file_row(page, "synthetic.xls").get_by_role("button", name="Vorschau", exact=True)).to_have_count(0)
+
+        area(page).get_by_role("button", name="Neuer Import", exact=True).click()
+        page.evaluate("""() => {
+          const data = new DataTransfer();
+          data.items.add(new File(['SYNTHETIC-UI-ONLY'], 'synthetic-drop.xls'));
+          document.querySelector('.fileDropZone').dispatchEvent(new DragEvent('drop', {bubbles: true, dataTransfer: data}));
+        }""")
+        expect(file_row(page, "synthetic-drop.xls").locator(".statusPill")).to_have_text("Fehler")
+        area(page).get_by_role("button", name="Neuer Import", exact=True).click()
+        names = ("synthetic.csv", "synthetic.XLSX")
+        select_files(page, names)
+        for name in names:
+            configure(page, filename=name)
+        check(page)
+        expect(approve(page)).to_have_accessible_name("Gepruefte Dateien freigeben (2)")
+        expect(approve(page)).to_be_enabled()
+        assert [call["source"] for call in fixture.posts("preview")] == ["manual-csv", "mexc", "mexc"]
+        assert not fixture.posts("execute")
+
+    def approval_effect(page, fixture):
+        for kind in ("spot_statement", "asset_snapshot"):
+            select_files(page)
+            configure(page, kind=kind)
+            check(page)
+            effect = area(page).locator("#mexc-import-effect")
+            expect(effect).to_be_visible()
+            expect(effect).to_contain_text("speichert Rohbelege")
+            expect(effect).to_contain_text("bestehende Ledger-/Steuervorschau-Pipeline")
+            expect(effect).to_contain_text("keine fachliche oder steuerliche Freigabe")
+            expect(approve(page)).not_to_be_checked()
+            expect(approve(page)).to_have_attribute("aria-describedby", "mexc-import-effect")
+            assert effect.evaluate("el => !!(el.compareDocumentPosition(el.parentElement.querySelector('input[type=checkbox]')) & Node.DOCUMENT_POSITION_FOLLOWING)")
+            if kind == "spot_statement":
+                for width in (390, 1440):
+                    page.set_viewport_size({"width": width, "height": 900})
+                    effect.scroll_into_view_if_needed()
+                    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
+                    page.screenshot(path=str(output / f"synthetic-mexc-import-effect-{width}.png"), animations="disabled")
+            before = len(fixture.calls)
+            approve(page).check()
+            assert len(fixture.posts("execute")) == fixture.executed
+            area(page).get_by_role("button", name="1 Datei(en) importieren", exact=True).click()
+            expect(file_row(page).locator(".statusPill")).to_have_text("Importiert")
+            assert [call["path"] for call in fixture.calls[before:] if call["method"] == "POST"] == [PREFIX + "execute"]
+            if kind == "asset_snapshot":
+                expect(review(page)).to_contain_text("keine neuen Erwerbe")
+                expect(file_row(page).locator(".importOutcome")).to_contain_text("0 Ereignisse")
+            area(page).get_by_role("button", name="Neuer Import", exact=True).click()
 
     def multi(page, fixture):
         fixture.mode = "multi"
@@ -436,7 +522,8 @@ def scenarios(output):
 
     return {"source-missing-config": missing, "timebasis-safe-errors": timezone_errors, "candidate-pager-confirm": candidates,
             "config-reset-manual-regression": resets, "empty-evidence-unsupported": dispositions,
-            "sequential-import-revalidation": multi, "invalid-files-disabled": invalid_files, "mobile-form-accessibility": mobile}
+            "sequential-import-revalidation": multi, "invalid-files-disabled": invalid_files, "source-specific-formats": source_formats,
+            "approval-import-effect": approval_effect, "mobile-form-accessibility": mobile}
 
 
 def main():

@@ -48,15 +48,16 @@ function MexcReview({ item, disabled, onDecision }: { item: Item; disabled: bool
     {!item.preview && <p role="status">Vorschau nicht mehr aktuell. Entscheidungen erneut pruefen lassen.</p>}
     {review.disposition !== "transactions" && <p>{review.disposition === "empty" ? "Leerer Export: keine Datenzeilen, kein erfolgreicher Import." : review.disposition === "evidence_only" ? "Nur Beleg / Bestandsabgleich, keine neuen Erwerbe." : "Export fachlich nicht unterstuetzt."}</p>}
     <dl className="importFileFacts" aria-label="MEXC-Gesamtzahlen">{[
-      ["Rohzeilen", review.raw_rows], ["Mengenbewegungen (buchbar)", review.bookable_rows], ["Verknuepft", review.linked_rows],
+      ["Rohzeilen", review.raw_rows], ["Mengenbuchungen", review.bookable_rows], ["Verknuepft", review.linked_rows],
       ["Doppelbeleg-Kandidaten", review.rows.filter((row) => row.status === "duplicate_candidate").length],
-      ["Fachlich zu pruefen", review.review_rows], ["Bestandszeilen", review.snapshot_rows], ["BONUS-Zeilen", review.bonus_rows],
+      ["fachlich offen", review.review_rows], ["Bestandszeilen", review.snapshot_rows], ["BONUS-Zeilen", review.bonus_rows],
     ].map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl>
+    <small>Zaehler sind nicht additiv: Mengenbuchungen koennen fachlich offen sein.</small>
     {review.blocking_reasons.map((reason, index) => <p role="status" className="importWarning" key={`block-${index}`}>{reason}</p>)}
     {review.warnings.map((warning, index) => <p className="importWarning" key={`warn-${index}`}>{warning}</p>)}
     <details><summary>Zeilenpruefung ({review.rows.length})</summary>
       <p>Erkannte Exportart: {review.detected_kind ? MEXC_KINDS[review.detected_kind as MexcKind] || review.detected_kind : "noch offen"}. Physische Dateizeilen einschliesslich Kopfzeile; Excel-Daten beginnen ab Zeile 2.</p>
-      <p>Mengenbewegungen und fachlich zu pruefende Zeilen koennen sich ueberschneiden: eine belegte Menge ist noch keine freigegebene Fachklassifikation.</p>
+      <p>Mengenbuchungen und fachlich offene Zeilen koennen sich ueberschneiden: eine belegte Menge ist noch keine freigegebene Fachklassifikation.</p>
       {review.disposition === "transactions" && <p>Airdrop bleibt zunaechst ein ungeklaerter Vorgang (unknown), keine automatische Mining-, Reward- oder Einkunftseinstufung.</p>}
       {review.rows.slice(activePage * 25, (activePage + 1) * 25).map((row) => {
         const decision = item.decisions?.[String(row.row_number)];
@@ -91,9 +92,11 @@ function MexcReview({ item, disabled, onDecision }: { item: Item; disabled: bool
   </section>;
 }
 
-function fileProblem(file: File): string | undefined {
+function fileProblem(file: File, source: string): string | undefined {
+  if (source === "mexc" && !/\.(csv|xlsx)$/i.test(file.name)) return "MEXC unterstuetzt nur CSV oder XLSX (kein XLS).";
+  const formats = source === "mexc" ? "CSV oder XLSX" : "CSV, XLSX oder XLS";
   return !/\.(csv|xlsx|xls)$/i.test(file.name) || file.size === 0 || file.size > 25 * 1024 * 1024
-    ? "CSV, XLSX oder XLS erforderlich; Datei darf nicht leer und hoechstens 25 MiB gross sein." : undefined;
+    ? `${formats} erforderlich; Datei darf nicht leer und hoechstens 25 MiB gross sein.` : undefined;
 }
 
 async function api<T>(path: string, payload?: unknown, timeout = 60000): Promise<T> {
@@ -151,13 +154,14 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
   const stage = imported.length ? 4 : ready.length ? 3 : items.length ? 2 : 1;
   const update = (id: string, value: Partial<Item>) => setItems((rows) => rows.map((row) => row.id === id ? { ...row, ...value } : row));
 
-  function resetItem(item: Item): Item {
-    return { ...item, status: fileProblem(item.file) ? "error" : "pending", preview: undefined, review: undefined, decisions: undefined, error: fileProblem(item.file) };
+  function resetItem(item: Item, selectedSource: string): Item {
+    const problem = fileProblem(item.file, selectedSource);
+    return { ...item, status: problem ? "error" : "pending", preview: undefined, review: undefined, decisions: undefined, error: problem };
   }
 
   function configureItem(id: string, value: Partial<Item>) {
     generation.current += 1; setApproved(false); setError("");
-    setItems((rows) => rows.map((row) => row.id === id ? resetItem({ ...row, ...value }) : row));
+    setItems((rows) => rows.map((row) => row.id === id ? resetItem({ ...row, ...value }, source) : row));
   }
 
   function mexcPayload(item: Item) {
@@ -174,7 +178,7 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
     }
     const added: Item[] = files.map((file) => ({ id: String(++nextId.current), file, status: "pending" }));
     for (const item of added) {
-      const problem = fileProblem(item.file);
+      const problem = fileProblem(item.file, source);
       if (problem) { item.status = "error"; item.error = problem; }
     }
     setItems((rows) => [...rows, ...added]);
@@ -186,7 +190,7 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
     const token = generation.current;
     const fingerprints = new Set<string>();
     try {
-      for (const item of items.filter((row) => row.status !== "imported" && !fileProblem(row.file))) {
+      for (const item of items.filter((row) => row.status !== "imported" && !fileProblem(row.file, source))) {
         if (token !== generation.current) break;
         update(item.id, { status: "checking", error: undefined });
         try {
@@ -230,7 +234,7 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
 
   return <section className="fileImportWizard" aria-label="Dateiimport">
     <div className="panelToolbar"><h2>Dateien importieren</h2><div className="buttonRow">
-      <HelpTip label="Importquelle und Dateiformat">Die Quelle bestimmt Spalten und Bedeutung der Buchungen. CSV, XLSX und XLS werden nur mit passendem Layout verarbeitet. Erst pruefen und die Vorschau kontrollieren; die Pruefung allein importiert noch keine Datei.</HelpTip>
+      <HelpTip label="Importquelle und Dateiformat">{`Die Quelle bestimmt Spalten und Bedeutung der Buchungen. ${source === "mexc" ? "MEXC unterstuetzt nur CSV oder XLSX (kein XLS)." : "CSV, XLSX und XLS werden nur mit passendem Layout verarbeitet."} Erst pruefen und die Vorschau kontrollieren; die Pruefung allein importiert noch keine Datei.`}</HelpTip>
       <a href="/benutzerleitfaden.html#import" target="_blank" rel="noreferrer" className="ghostButton"><FileDown size={16} /> Leitfaden</a>
       <a href={`/importformate.html${source ? `#${source}` : ""}`} target="_blank" rel="noreferrer" className="ghostButton"><FileDown size={16} /> Formate &amp; Spalten</a>
       <a href={source ? `/import-vorlagen/${source}.csv` : "/import-vorlage.csv"} download className="ghostButton"><Download size={16} /> CSV-Vorlage</a>
@@ -239,20 +243,20 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
     <ol className="importStages" aria-label="Importfortschritt">{["Dateien", "Pruefung", "Freigabe", "Ergebnis"].map((label, index) => <li key={label} aria-current={stage === index + 1 ? "step" : undefined} className={stage > index + 1 ? "complete" : ""}><span>{stage > index + 1 ? <Check size={15} /> : index + 1}</span>{label}</li>)}</ol>
     <p className="actionRequirement" role="status">{busy ? "Dateivorgang wird verarbeitet." : !source ? "Zuerst die Quelle fuer deine Dateien waehlen." : !items.length ? "Dateien auswaehlen oder hierher ziehen." : ready.length && !approved ? "Vorschau und Warnungen pruefen, dann die geprueften Dateien freigeben." : ready.length ? "Freigegebene Dateien sind bereit fuer den Import." : imported.length === items.length ? "Import abgeschlossen. Ergebnis und offene Hinweise pruefen." : items.every((item) => item.status === "empty") ? "Leere Exporte enthalten keine Datenzeilen und werden nicht importiert." : items.some((item) => ["error", "blocked"].includes(item.status)) ? "Dateihinweise klaeren oder betroffene Dateien aus der Auswahl entfernen." : "Dateien pruefen und danach die Vorschau kontrollieren."}</p>
     {error && <p role="alert" className="error">{error}</p>}
-    <div className="importSelection"><label>Quelle<select aria-label="Importquelle" value={source} disabled={busy || imported.length > 0} onChange={(event) => { generation.current += 1; setSource(event.target.value); setApproved(false); setError(""); setItems((rows) => rows.map(resetItem)); }}>
+    <div className="importSelection"><label>Quelle<select aria-label="Importquelle" value={source} disabled={busy || imported.length > 0} onChange={(event) => { const selectedSource = event.target.value; generation.current += 1; setSource(selectedSource); setApproved(false); setError(""); setItems((rows) => rows.map((row) => resetItem(row, selectedSource))); }}>
       <option value="">Quelle auswaehlen</option>{profiles.map((profile) => <option key={profile.source} value={profile.source}>{profile.label}</option>)}
     </select></label>
     {source === "mexc" && <label>MEXC-Konto<input aria-label="MEXC-Konto" value={mexcAccount} maxLength={128} disabled={busy || imported.length > 0}
-      onChange={(event) => { generation.current += 1; setMexcAccount(event.target.value); setApproved(false); setError(""); setItems((rows) => rows.map(resetItem)); }} /></label>}
-    <input ref={fileInput} hidden type="file" multiple accept=".csv,.xlsx,.xls" aria-label="Importdateien auswaehlen" disabled={busy} onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.target.value = ""; }} />
-    <button type="button" disabled={busy || !source || !items.some((item) => item.status !== "imported" && !fileProblem(item.file))} onClick={() => void checkFiles()}><ClipboardCheck size={16} /> Dateien pruefen</button></div>
+      onChange={(event) => { generation.current += 1; setMexcAccount(event.target.value); setApproved(false); setError(""); setItems((rows) => rows.map((row) => resetItem(row, source))); }} /></label>}
+    <input ref={fileInput} hidden type="file" multiple accept={source === "mexc" ? ".csv,.xlsx" : ".csv,.xlsx,.xls"} aria-label="Importdateien auswaehlen" disabled={busy} onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.target.value = ""; }} />
+    <button type="button" disabled={busy || !source || !items.some((item) => item.status !== "imported" && !fileProblem(item.file, source))} onClick={() => void checkFiles()}><ClipboardCheck size={16} /> Dateien pruefen</button></div>
     {source === "mexc" && <>
       <p className="importWarning">Bestandsbelege und ungeklaerte Mengen sind keine Erwerbsbasis und erzeugen keine belegten Anschaffungskosten. Eine Belegzuordnung ist keine Steuerentscheidung; fehlende Anfangshistorie bleibt offen.</p>
       <HelpTip label="MEXC Exportart und Zeitbasis">Die Exportart muss zum tatsaechlichen Produkt passen; der Dateiname allein ist kein Nachweis. Ohne Konto und Exportart ist eine erste Vorschau moeglich, aber keine Freigabe. Bei Time ohne Offset bleibt die Zeitbasis offen. UTC+01:00 ist ein fester Offset, Europe/Berlin wechselt zwischen Sommer- und Winterzeit. Eine abweichende Header-Zeitbasis muss der Server pruefen. Sicherheitsgrenzen fuer MEXC: 10.000 Datenzeilen, 25 MiB je Datei und 100 MiB entpackter XLSX-Inhalt; serverseitige Pruefung.</HelpTip>
       {items.length > 1 && <p className="importWarning">Jede Datei wird beim Import serverseitig erneut geprueft. Nach der ersten Datei kann eine weitere Datei wegen eines neu entstandenen Dublettenkandidaten blockieren. Keine automatische Zusammenlegung; danach erneut pruefen und Belege zuordnen.</p>}
     </>}
     <div className={`fileDropZone ${busy ? "busy" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!busy) addFiles(Array.from(event.dataTransfer.files)); }}>
-      <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}><FolderOpen size={22} /> Dateien auswaehlen</button><span>CSV / XLSX / XLS</span>
+      <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}><FolderOpen size={22} /> Dateien auswaehlen</button><span>{source === "mexc" ? "CSV / XLSX" : "CSV / XLSX / XLS"}</span>
     </div>
     {items.length > 0 && <div className="importFileList" aria-live="polite">{items.map((item) => <article className="importFile" key={item.id}>
       <div className="importFileHeading"><div><strong>{item.file.name}</strong><small>{(item.file.size / 1024).toFixed(1)} KB</small></div><span className={`statusPill ${item.status === "ready" || item.status === "imported" ? "ok" : item.status === "error" || item.status === "blocked" ? "blocked" : "pending"}`}>{["checking", "writing"].includes(item.status) && <LoaderCircle size={14} />}{LABELS[item.status]}</span>
@@ -288,7 +292,9 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
       </div>}
     </article>)}</div>}
     {current?.preview?.preview && <section className="importSample" aria-label="Dateivorschau"><h3>{current.file.name}</h3><div className="tableScroll"><table><thead><tr>{current.preview.preview.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{current.preview.preview.sample_rows.map((row, index) => <tr key={index}>{current.preview?.preview?.columns.map((column) => <td key={column}>{String(row[column] ?? "")}</td>)}</tr>)}</tbody></table></div></section>}
-    {items.length > 0 && <div className="importApproval"><label><input type="checkbox" checked={approved} disabled={busy || !ready.length} onChange={(event) => setApproved(event.target.checked)} /> Gepruefte Dateien freigeben ({ready.length})</label>
+    {items.length > 0 && <div className="importApproval">
+      {source === "mexc" && <p id="mexc-import-effect" style={{ flexBasis: "100%" }}>Der Import speichert Rohbelege und fuehrt die bestehende Ledger-/Steuervorschau-Pipeline aus. Die Importfreigabe ist keine fachliche oder steuerliche Freigabe.</p>}
+      <label><input type="checkbox" checked={approved} disabled={busy || !ready.length} aria-describedby={source === "mexc" ? "mexc-import-effect" : undefined} onChange={(event) => setApproved(event.target.checked)} /> Gepruefte Dateien freigeben ({ready.length})</label>
       <button type="button" className="primaryButton" disabled={busy || !approved || !ready.length} onClick={() => void importFiles()}>{busy ? <LoaderCircle size={16} /> : <Upload size={16} />}{busy ? "Vorgang laeuft" : `${ready.length} Datei(en) importieren`}</button>
       <button type="button" className="ghostButton" disabled={busy} onClick={() => { generation.current += 1; setItems([]); setApproved(false); setDetails(null); setError(""); }}>Neuer Import</button>
     </div>}
