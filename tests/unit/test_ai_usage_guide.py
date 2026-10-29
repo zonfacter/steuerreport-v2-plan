@@ -1,6 +1,7 @@
 from html.parser import HTMLParser
 import importlib.util
 from pathlib import Path
+import tomllib
 
 from pypdf import PdfReader
 
@@ -71,5 +72,7 @@ def test_usage_pdf_is_readable_and_within_page_limit():
     pdf = PdfReader(ROOT / "frontend/public/ki-einsatzleitfaden.pdf")
     assert 1 <= len(pdf.pages) <= 100
     text = " ".join(" ".join(page.extract_text() for page in pdf.pages).split())
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    assert f"Version {version}" in text
     for fragment in ("KI: Einsatz und Grenzen", "Konkrete Einsatzfaelle", "32000", "nicht automatisch anonymisiert", "organisatorische Kennzeichnungen"):
         assert fragment in text, fragment
