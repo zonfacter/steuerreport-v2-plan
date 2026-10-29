@@ -3499,12 +3499,22 @@ bookable_rows und review_rows koennen sich ueberschneiden. Entscheidungen
 verwenden physische Dateizeilen (erste Excel-Datenzeile 2), action
 link_existing/separate, passende target_raw_object_id und eine Begruendung.
 Der Import validiert frisch gegen den aktuellen gespeicherten Stand.
+Fuer Entscheidungen ist zusaetzlich der input_digest der konkreten
+Zeilenvorschau Pflicht. Er bindet Originalbytes, Zuordnung, Zeile und
+Kandidatenfakten; decision_stale kennzeichnet veraltete Entscheidungen auch
+bei Konto-, Exportart- oder Zeitbasiswechsel. Der Client erneuert den Digest
+nur nach ausdruecklicher Neubestaetigung, niemals automatisch.
 
 MEXC Spot Statement und Funding Other besitzen einen ersten Airdrop-
 Mengenpfad als unknown mit Review-Sperre, nicht als automatisch anerkannter
 Mining-/Reward-Ertrag. Bestands-/BONUS- und weitere Produktbelege bleiben
 Rohbelege; keine erfundenen Erwerbe, Gegenwerte oder Lots. Fremde Bitget-/
 API-Belegmarker koennen MEXC-Rohzeilen nicht vom Review ausnehmen.
+Bekannte identische Provider-Buchungs-IDs sind nicht per separate uebersteuerbar;
+IDs auf verknuepften Originalen gehen ebenfalls in die Konfliktpruefung ein.
+Snapshots haben einen eigenen offenen Historienabgleich. Originalverlust,
+SHA256-Fehler, ungueltige Metadaten und wirksame Canonical-Abweichungen bei
+Links erzeugen eigene Sperren. Reine bestaetigte Typklaerungen bleiben zulaessig.
 
 Originalbytes werden privat hashadressiert archiviert; der Importfingerprint
 bindet Dateihash, Blatt, Konto, Exportart und Zeitbasis. Batch und Rohzeilen

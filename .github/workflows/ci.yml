@@ -120,6 +120,9 @@ jobs:
       - name: Install backend for isolated review browser regression
         working-directory: .
         run: python -m pip install -c requirements-runtime.lock -e '.[dev]'
+      - name: MEXC file wizard against real isolated import backend
+        working-directory: .
+        run: python scripts/check_mexc_import_backend_browser_v2.py --output "${RUNNER_TEMP}/mexc-backend-browser"
       - name: Review context browser checks against actual isolated backend
         working-directory: .
         run: python scripts/check_review_backend_browser_v2.py
@@ -167,4 +170,5 @@ jobs:
             ${{ runner.temp }}/updates-browser/
             ${{ runner.temp }}/updates-backend-browser/
             ${{ runner.temp }}/mexc-import-browser/
+            ${{ runner.temp }}/mexc-backend-browser/
           if-no-files-found: ignore

@@ -91,8 +91,9 @@ def test_execute_revalidates_overlap_and_links_both_originals(api):
     stale = client.post("/api/v1/import/assistant/execute", json=second).json()
     assert stale["status"] == "error" and len(store.list_import_batches()) == 1
     raw_id = store.list_raw_objects(root)[0].raw_object_id
+    current = client.post("/api/v1/import/assistant/preview", json=second).json()["data"]["preview"]["mexc"]["rows"][0]
     second["mexc"]["decisions"] = {"2": {"action": "link_existing", "target_raw_object_id": raw_id,
-        "reason": "Synthetisches Belegpaar anhand Originaldaten geprueft."}}
+        "reason": "Synthetisches Belegpaar anhand Originaldaten geprueft.", "input_digest": current["input_digest"]}}
     linked = client.post("/api/v1/import/assistant/execute", json=second).json()
     assert linked["status"] == "ok"
     other = linked["data"]["batch"]["batch_id"]
@@ -134,3 +135,18 @@ def test_native_decimal_and_running_balance_do_not_round_at_28_digits(api):
     entries = BalanceLedgerBuilder(store).rebuild()
     assert len(entries) == 1 and entries[0].delta_quantity == expected
     assert entries[0].balance_quantity == expected
+
+
+def test_snapshot_without_events_still_links_its_review_to_the_import_source(api):
+    from steuerreport_v2.domain.workspace import WorkspaceService
+    client, store = api
+    content = xlsx(["UID", "Date(UTC+8)", "Account", "Crypto", "Total", "USDT Valuation"],
+        [["SYNTHETIC-ACCOUNT", "20310709", "Spot", "DEMOCOIN", "2.5", "123"]])
+    result = client.post("/api/v1/import/assistant/execute", json=payload(content, "asset_snapshot")).json()
+    assert result["status"] == "ok" and store.list_canonical_events() == []
+    workspace = WorkspaceService(store)
+    scopes = workspace.source_scopes()
+    tasks = ReviewService(store).tasks().tasks
+    resolved = workspace._review_items(tasks, scopes)
+    task = next(item for item in resolved if item.task.decision_status == "mexc_snapshot_reconciliation_required")
+    assert task.context_status == "matched" and task.source_ref

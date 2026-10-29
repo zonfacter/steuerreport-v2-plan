@@ -39249,6 +39249,18 @@
             "title": "Action",
             "type": "string"
           },
+          "input_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Digest"
+          },
           "reason": {
             "maxLength": 1000,
             "minLength": 10,
@@ -39295,6 +39307,11 @@
             "title": "Candidates",
             "type": "array"
           },
+          "decision_stale": {
+            "default": false,
+            "title": "Decision Stale",
+            "type": "boolean"
+          },
           "event_time": {
             "anyOf": [
               {
@@ -39305,6 +39322,11 @@
               }
             ],
             "title": "Event Time"
+          },
+          "input_digest": {
+            "default": "",
+            "title": "Input Digest",
+            "type": "string"
           },
           "quantity": {
             "anyOf": [

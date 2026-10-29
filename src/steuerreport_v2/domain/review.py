@@ -234,22 +234,8 @@ class ReviewService:
                 blocks_export=True,
             ))
 
-        from steuerreport_v2.importers.mexc_native import metadata as mexc_metadata
-        with self.store.connect() as con:
-            mexc_rows = con.execute("""select r.raw_object_id,r.payload_json,e.event_id,e.event_type
-                from raw_objects r join raw_import_batches b on b.batch_id=r.batch_id
-                left join canonical_events e on e.raw_object_id=r.raw_object_id
-                where b.source='mexc'""").fetchall()
-        mexc_roots = {raw_id for raw_id, payload, _event_id, _event_type in mexc_rows if mexc_metadata(json.loads(payload)).get("role") == "book"}
-        for raw_id, payload, event_id, event_type in mexc_rows:
-            mexc = mexc_metadata(json.loads(payload))
-            if mexc.get("role") == "book" and event_type in {None, "unknown"}:
-                issues.append(ReviewIssue(code="mexc_classification_required", severity="high",
-                    scope="event:" + event_id if event_id else "raw_object:" + raw_id, blocks_export=True,
-                    message="MEXC-Mengenbewegung belegt, Ursache/Einkunftsart offen. Airdrop ist keine automatische Mining-/Reward- oder Privatzuordnung."))
-            if mexc.get("role") == "linked" and mexc.get("link_target_raw_object_id") not in mexc_roots:
-                issues.append(ReviewIssue(code="mexc_link_target_missing", severity="high", scope="raw_object:" + raw_id,
-                    blocks_export=True, message="Verknuepfter MEXC-Originalbeleg fehlt oder ist kein Buchungsbeleg mehr. Keine Ersatzbuchung erfunden."))
+        from steuerreport_v2.importers.mexc_native import review_issues as mexc_review_issues
+        issues.extend(mexc_review_issues(self.store))
 
         for batch_id, count in self.store.unmapped_raw_object_counts().items():
             issues.append(
@@ -849,7 +835,7 @@ class ReviewService:
             blocks_export=issue.blocks_export,
             tax_year=issue.tax_year,
             asset=self._scope_part(issue.scope, "asset"),
-            source_group=self._scope_part(issue.scope, "source"),
+            source_group="mexc" if issue.code.startswith("mexc_") else self._scope_part(issue.scope, "source"),
             count=1,
             evidence_refs=[issue.scope],
             decision_status=issue.code,
@@ -1162,6 +1148,10 @@ class ReviewService:
 
     @staticmethod
     def _issue_category(issue: ReviewIssue) -> str:
+        if issue.code == "mexc_snapshot_reconciliation_required":
+            return "reconciliation"
+        if issue.code.startswith("mexc_") and issue.code != "mexc_classification_required":
+            return "import"
         if issue.code in {"missing_price", "missing_event_price"}:
             return "price"
         if issue.code == "unmapped_raw_objects":
@@ -1193,6 +1183,12 @@ class ReviewService:
             "derivative_normalization_required": "Bitget-Funding und Sicherheitenzuordnung pruefen",
             "solana_history_classification_required": "Solana-Bewegung fachlich einordnen",
             "api_history_classification_required": "API-Beleg fachlich einordnen",
+            "mexc_classification_required": "MEXC-Bewegung fachlich einordnen",
+            "mexc_link_target_missing": "Fehlenden MEXC-Originalbeleg klaeren",
+            "mexc_link_target_conflict": "MEXC-Beleg und korrigierte Buchung abgleichen",
+            "mexc_original_integrity_failed": "MEXC-Originalintegritaet wiederherstellen",
+            "mexc_native_binding_invalid": "MEXC-Belegbindung pruefen",
+            "mexc_snapshot_reconciliation_required": "MEXC-Bestand und Historie abgleichen",
         }
         return titles.get(issue.code, issue.code.replace("_", " ").title())
 

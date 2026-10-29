@@ -16,6 +16,7 @@ class MexcRowDecision(BaseModel):
     action: Literal["link_existing", "separate"]
     target_raw_object_id: str | None = Field(default=None, max_length=128)
     reason: str = Field(min_length=10, max_length=1000)
+    input_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("reason")
     @classmethod
@@ -57,6 +58,8 @@ class MexcRowPreview(BaseModel):
     quantity: str | None = None
     event_time: str | None = None
     candidates: list[MexcCandidate] = Field(default_factory=list)
+    input_digest: str = ""
+    decision_stale: bool = False
 
 
 class MexcImportPreview(BaseModel):

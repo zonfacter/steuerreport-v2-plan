@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from functools import lru_cache
 import csv
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, localcontext
@@ -12,6 +13,7 @@ import os
 from pathlib import Path
 import posixpath
 import re
+import stat
 from threading import RLock
 from urllib.parse import quote
 from xml.etree import ElementTree as ET
@@ -32,6 +34,10 @@ NATIVE_KINDS = {"spot_statement", "funding_other"}
 NS = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
+class MexcValidationError(ValueError):
+    """Feste, eingabefreie Meldung fuer die native Dateivorschau."""
+
+
 def metadata(row: dict) -> dict:
     try:
         value = json.loads(row.get("_mexc") or "{}")
@@ -41,7 +47,22 @@ def metadata(row: dict) -> dict:
 
 
 def _hash(value) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def layout(columns):
+    cols = set(columns)
+    time_column = next((c for c in columns if re.fullmatch(r"Creation Time\(UTC[+-]\d{2}:\d{2}\)", c)), None)
+    capital_time = next((c for c in columns if re.fullmatch(r"Time\(UTC[+-]\d{2}:\d{2}\)", c)), None)
+    if {"UID", "Crypto", "Transaction Type", "Direction", "Quantity"} <= cols and time_column:
+        return "statement", time_column
+    if {"UID", "Time", "Crypto", "Type", "Quantity", "Status", "Remark"} <= cols:
+        return "funding_other", "Time"
+    if {"UID", "Date(UTC+8)", "Account", "Crypto", "Total", "USDT Valuation"} <= cols:
+        return "asset_snapshot", None
+    if {"UID", "Futures Trading Pair", "Crypto", "Fund Type", "Fund Flow Type", "Amount"} <= cols and capital_time:
+        return "futures_capital_flow", capital_time
+    return None, None
 
 
 def _normalized(value: Decimal) -> Decimal:
@@ -57,7 +78,7 @@ def _offset(value: str):
         return timezone.utc
     match = re.fullmatch(r"UTC([+-])(\d{2}):(\d{2})", value)
     if not match or int(match[2]) > 14 or int(match[3]) > 59:
-        raise ValueError("Unbekannte Zeitbasis.")
+        raise MexcValidationError("Unbekannte Zeitbasis.")
     delta = timedelta(hours=int(match[2]), minutes=int(match[3]))
     return timezone(delta if match[1] == "+" else -delta)
 
@@ -66,19 +87,19 @@ def _timestamp(text: str, basis: str | None) -> datetime:
     try:
         value = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        raise ValueError("Zeitpunkt ist nicht als Datum mit Uhrzeit lesbar.") from None
+        raise MexcValidationError("Zeitpunkt ist nicht als Datum mit Uhrzeit lesbar.") from None
     if "T" not in text and " " not in text:
-        raise ValueError("Ein Datum allein ist kein Transaktionszeitpunkt.")
+        raise MexcValidationError("Ein Datum allein ist kein Transaktionszeitpunkt.")
     if value.tzinfo is not None:
         if basis and value.utcoffset() != value.astimezone(_offset(basis)).utcoffset():
-            raise ValueError("Zeitstempel und zugeordnete Zeitbasis widersprechen sich.")
+            raise MexcValidationError("Zeitstempel und zugeordnete Zeitbasis widersprechen sich.")
     else:
         if not basis:
-            raise ValueError("Zeitbasis fehlt; keine UTC-Annahme fuer Time.")
+            raise MexcValidationError("Zeitbasis fehlt; keine UTC-Annahme fuer Time.")
         zone = _offset(basis)
         first, second = value.replace(tzinfo=zone, fold=0), value.replace(tzinfo=zone, fold=1)
         if first.utcoffset() != second.utcoffset():
-            raise ValueError("Mehrdeutiger oder nicht existierender Zeitpunkt beim Zeitwechsel.")
+            raise MexcValidationError("Mehrdeutiger oder nicht existierender Zeitpunkt beim Zeitwechsel.")
         value = first
     return value.astimezone(timezone.utc)
 
@@ -92,11 +113,11 @@ class MexcNativeImporter:
         try:
             return self._read(filename, content, sheet_name)
         except (BadZipFile, KeyError, IndexError, StopIteration, ET.ParseError, UnicodeError):
-            raise ValueError("MEXC-Datei nicht lesbar; unverschluesseltes XLSX/UTF-8-CSV mit Originalkopfzeile verwenden.") from None
+            raise MexcValidationError("MEXC-Datei nicht lesbar; unverschluesseltes XLSX/UTF-8-CSV mit Originalkopfzeile verwenden.") from None
 
     def _read(self, filename: str, content: bytes, sheet_name: str | None):
         if len(content) > 25 * 1024 * 1024:
-            raise ValueError("MEXC-Datei ist groesser als 25 MiB.")
+            raise MexcValidationError("MEXC-Datei ist groesser als 25 MiB.")
         if Path(filename).suffix.lower() == ".csv":
             text = content.decode("utf-8-sig")
             from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
@@ -105,27 +126,27 @@ class MexcNativeImporter:
             rows = []
             for row in reader:
                 if None in row:
-                    raise ValueError("MEXC-CSV enthaelt mehr Werte als Spalten.")
+                    raise MexcValidationError("MEXC-CSV enthaelt mehr Werte als Spalten.")
                 rows.append((reader.line_num, dict(row)))
                 if len(rows) > MAX_ROWS:
-                    raise ValueError("MEXC: maximal 10000 Datenzeilen je Datei; Export bitte aufteilen.")
+                    raise MexcValidationError("MEXC: maximal 10000 Datenzeilen je Datei; Export bitte aufteilen.")
             return rows, columns, "csv", None, []
         if Path(filename).suffix.lower() != ".xlsx":
-            raise ValueError("Native MEXC-Dateien bitte als XLSX oder UTF-8-CSV bereitstellen.")
+            raise MexcValidationError("Native MEXC-Dateien bitte als XLSX oder UTF-8-CSV bereitstellen.")
         with ZipFile(BytesIO(content)) as archive:
             if sum(x.file_size for x in archive.infolist()) > 100 * 1024 * 1024:
-                raise ValueError("MEXC-XLSX entpackt groesser als 100 MiB.")
+                raise MexcValidationError("MEXC-XLSX entpackt groesser als 100 MiB.")
             book = load_workbook(BytesIO(content), read_only=True, data_only=False, keep_links=False)
             try:
                 names = book.sheetnames
                 selected = sheet_name or names[0]
                 if selected not in names:
-                    raise ValueError("Tabellenblatt nicht vorhanden.")
+                    raise MexcValidationError("Tabellenblatt nicht vorhanden.")
                 sheet = book[selected]
                 if sheet.max_row and sheet.max_row > MAX_ROWS + 1:
-                    raise ValueError("MEXC: maximal 10000 Datenzeilen je Datei; Export bitte aufteilen.")
+                    raise MexcValidationError("MEXC: maximal 10000 Datenzeilen je Datei; Export bitte aufteilen.")
                 if sheet.max_column and sheet.max_column > 256:
-                    raise ValueError("MEXC: hoechstens 256 Spalten.")
+                    raise MexcValidationError("MEXC: hoechstens 256 Spalten.")
                 # Numerische XML-Literale erhalten; kein Float-Roundtrip fuer Mengen oder UID.
                 workbook = ET.fromstring(archive.read("xl/workbook.xml"))
                 sheet_id = next(x.attrib["{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"]
@@ -134,7 +155,7 @@ class MexcNativeImporter:
                 target = next(x.attrib["Target"] for x in relations if x.attrib["Id"] == sheet_id)
                 path = posixpath.normpath(target.lstrip("/") if target.startswith("/") else posixpath.join("xl", target))
                 if not path.startswith("xl/worksheets/") or ".." in Path(path).parts:
-                    raise ValueError("Ungueltiger Tabellenblattpfad.")
+                    raise MexcValidationError("Ungueltiger Tabellenblattpfad.")
                 xml = ET.fromstring(archive.read(path))
                 numerics = {c.attrib["r"]: c.find("s:v", NS).text for c in xml.findall("s:sheetData/s:row/s:c", NS)
                             if c.attrib.get("t", "n") == "n" and c.find("s:v", NS) is not None}
@@ -164,42 +185,46 @@ class MexcNativeImporter:
 
     def _existing(self):
         with self.store.connect() as con:
-            rows = con.execute("""select r.raw_object_id,b.filename,r.row_number,r.payload_json
+            rows = con.execute("""select r.raw_object_id,b.filename,r.row_number,r.payload_json,b.file_hash,
+                e.event_time,e.asset,e.quantity,e.account,e.event_type
                 from raw_objects r join raw_import_batches b on b.batch_id=r.batch_id
+                left join canonical_events e on e.raw_object_id=r.raw_object_id
                 where b.source='mexc' order by b.created_at,r.row_number,r.raw_object_id""").fetchall()
         index = defaultdict(list)
         roots = {}
-        for raw_id, filename, number, payload in rows:
-            meta = metadata(json.loads(payload))
-            if meta.get("version") != 1:
-                raise ValueError("Vorhandene MEXC-Altbelege haben keine native Konto-/Exportartbindung; zuerst gesondert pruefen.")
-            if meta.get("version") == 1 and meta.get("role") == "book":
-                if not {"uid", "account", "signature", "export_kind", "quantity", "event_time"} <= meta.keys():
-                    raise ValueError("Vorhandene MEXC-Belegzuordnung ist unvollstaendig; keine unsichere Dublettenpruefung.")
-                roots[raw_id] = meta
+        links = []
+        for raw_id, filename, number, payload, fingerprint, instant, asset, quantity, account, event_type in rows:
+            meta = validated_metadata(fingerprint, number, json.loads(payload))
+            if meta is None:
+                raise MexcValidationError("Vorhandene MEXC-Altbelege haben keine native Konto-/Exportartbindung; zuerst gesondert pruefen.")
+            if meta["role"] == "book":
+                roots[raw_id] = {**meta, "_canonical": [instant.isoformat() if instant else None, asset,
+                    str(quantity) if quantity is not None else None, account, event_type]}
                 index[meta.get("signature")].append(MexcCandidate(raw_object_id=raw_id,
                     filename=filename, row_number=number, export_kind=meta["export_kind"], provider_id=meta.get("provider_id")))
-        return index, roots
+            elif meta["role"] == "linked":
+                links.append(meta)
+        ids = {key: {value["provider_id"]} if value.get("provider_id") else set() for key, value in roots.items()}
+        for meta in links:
+            target = meta["link_target_raw_object_id"]
+            if target not in roots or roots[target]["signature"] != meta["signature"]:
+                raise MexcValidationError("Vorhandene MEXC-Belegverknuepfung ist nicht mehr eindeutig; zuerst pruefen.")
+            if meta.get("provider_id"):
+                ids[target].add(meta["provider_id"])
+        if any(len(values) > 1 for values in ids.values()):
+            raise MexcValidationError("Widerspruechliche Provider-IDs zu einer MEXC-Buchung.")
+        for candidates in index.values():
+            for candidate in candidates:
+                candidate.provider_id = next(iter(ids[candidate.raw_object_id]), None)
+        return index, roots, ids
 
     def prepare(self, filename: str, content: bytes, sheet_name=None, mexc=None):
         options = MexcImportOptions.model_validate(mexc or {})
         rows, columns, fmt, sheet, names = self.read(filename, content, sheet_name)
         if len(columns) != len(set(columns)) or "_mexc" in columns or None in columns:
-            raise ValueError("Doppelte oder reservierte MEXC-Spalten.")
+            raise MexcValidationError("Doppelte oder reservierte MEXC-Spalten.")
         cols = set(columns)
-        time_column = next((c for c in columns if re.fullmatch(r"Creation Time\(UTC[+-]\d{2}:\d{2}\)", c)), None)
-        capital_time = next((c for c in columns if re.fullmatch(r"Time\(UTC[+-]\d{2}:\d{2}\)", c)), None)
-        detected = None
-        if {"UID", "Crypto", "Transaction Type", "Direction", "Quantity"} <= cols and time_column:
-            detected = "statement"
-        elif {"UID", "Time", "Crypto", "Type", "Quantity", "Status", "Remark"} <= cols:
-            detected = "funding_other"
-            time_column = "Time"
-        elif {"UID", "Date(UTC+8)", "Account", "Crypto", "Total", "USDT Valuation"} <= cols:
-            detected = "asset_snapshot"
-        elif {"UID", "Futures Trading Pair", "Crypto", "Fund Type", "Fund Flow Type", "Amount"} <= cols and capital_time:
-            detected = "futures_capital_flow"
-            time_column = capital_time
+        detected, time_column = layout(columns)
         problems = []
         if detected is None:
             problems.append("MEXC-Exportlayout nicht unterstuetzt; keine generische Ersatzinterpretation.")
@@ -230,19 +255,27 @@ class MexcNativeImporter:
             report.blocking_reasons.append("Leerer Export: nur Kopfzeile, keine Buchungen.")
         if detected is None:
             report.disposition = "unsupported"
-        index, roots = self._existing()
+        try:
+            index, roots, root_ids = self._existing()
+        except MexcValidationError as exc:
+            report.blocking_reasons.append(str(exc))
+            index, roots, root_ids = {}, {}, {}
         provider_ids = defaultdict(set)
-        for root in roots.values():
-            if root.get("provider_id"):
-                provider_ids[(root["uid"], root["account"], root["provider_id"])].add(root["signature"])
+        for raw_id, root in roots.items():
+            for provider_id in root_ids[raw_id]:
+                provider_ids[(root["uid"], root["account"], provider_id)].add(root["signature"])
         seen_provider_ids = set()
         prepared = []
         valid_decisions = set()
         for number, row in rows:
             meta = {"version": 1, "export_kind": options.export_kind, "account": options.account,
                     "timezone": basis, "sheet_name": sheet, "file_sha256": sha,
-                    "row_number": number, "file_format": fmt, "role": "review"}
+                    "row_number": number, "file_format": fmt, "selected_timezone": options.timezone, "role": "review"}
             item = MexcRowPreview(row_number=number, status="review", reason="Vorgang fachlich nicht unterstuetzt; nur Rohbeleg, keine Bestandsbuchung.")
+            item.input_digest = _hash(["mexc-row-v1", fingerprint, number, row, [], options.timezone])
+            decision = options.decisions.get(str(number))
+            if decision:
+                valid_decisions.add(str(number))
             try:
                 self._row(row, detected, time_column, basis, options, meta, item)
                 if meta["role"] == "book" and not duplicate:
@@ -250,13 +283,21 @@ class MexcNativeImporter:
                     if provider:
                         key = (meta["uid"], meta["account"], provider)
                         if key in seen_provider_ids or provider_ids.get(key, {meta["signature"]}) != {meta["signature"]}:
-                            raise ValueError("Wiederholte oder widerspruechliche Provider-Buchungs-ID.")
+                            raise MexcValidationError("Wiederholte oder widerspruechliche Provider-Buchungs-ID.")
                         seen_provider_ids.add(key)
                     candidates = index.get(meta["signature"], [])
                     if provider:
                         candidates = [c for c in candidates if not c.provider_id or c.provider_id == provider]
                     item.candidates = candidates
-                    decision = options.decisions.get(str(number))
+                    facts = [{"raw_object_id": c.raw_object_id,
+                        **{k: roots[c.raw_object_id].get(k) for k in ("signature", "uid", "account", "file_sha256", "row_number",
+                            "sheet_name", "export_kind", "quantity", "event_time", "asset", "label")},
+                        "provider_ids": sorted(root_ids[c.raw_object_id]), "canonical": roots[c.raw_object_id]["_canonical"]}
+                        for c in candidates]
+                    item.input_digest = _hash(["mexc-row-v1", fingerprint, number, row, facts, options.timezone])
+                    if decision and decision.input_digest != item.input_digest:
+                        item.decision_stale = True
+                        raise MexcValidationError("stale_mexc_decision")
                     if candidates:
                         valid_decisions.add(str(number))
                         if not decision:
@@ -265,20 +306,38 @@ class MexcNativeImporter:
                             report.blocking_reasons.append(f"Zeile {number}: moeglicher Doppelbeleg noch nicht zugeordnet.")
                         elif decision.action == "link_existing":
                             if decision.target_raw_object_id not in {x.raw_object_id for x in candidates}:
-                                raise ValueError("Linkziel passt nicht zu Konto, UID, Zeitpunkt, Asset, Menge und Quelltyp.")
+                                raise MexcValidationError("Linkziel passt nicht zu Konto, UID, Zeitpunkt, Asset, Menge und Quelltyp.")
                             meta.update(role="linked", link_target_raw_object_id=decision.target_raw_object_id,
-                                        decision_reason=decision.reason)
+                                        decision_reason=decision.reason, decision_input_digest=decision.input_digest,
+                                        decision_evidence=facts)
                             item.status, item.reason = "linked", "Zusaetzlicher Originalbeleg; keine zweite Bestandsbuchung."
                         else:
+                            if provider and any(c.provider_id == provider for c in candidates):
+                                raise MexcValidationError("same_provider_id_cannot_be_separate")
                             if decision.target_raw_object_id:
-                                raise ValueError("Eigenstaendige Buchung darf kein Linkziel enthalten.")
+                                raise MexcValidationError("Eigenstaendige Buchung darf kein Linkziel enthalten.")
                             meta["decision_reason"] = decision.reason
+                            meta["decision_input_digest"] = decision.input_digest
+                            meta["decision_evidence"] = facts
                     elif decision:
-                        raise ValueError("Zuordnungsentscheidung passt nicht mehr zur aktuellen Vorschau.")
-            except (ValueError, InvalidOperation, TypeError):
+                        raise MexcValidationError("Zuordnungsentscheidung passt nicht mehr zur aktuellen Vorschau.")
+                elif decision and not duplicate:
+                    if decision.input_digest != item.input_digest:
+                        item.decision_stale = True
+                        raise MexcValidationError("stale_mexc_decision")
+                    raise MexcValidationError("Diese Belegart besitzt keine bestaetigbare Buchungszuordnung.")
+            except (ValueError, InvalidOperation, TypeError) as exc:
+                if decision and not duplicate and decision.input_digest != item.input_digest:
+                    item.decision_stale = True
                 meta["role"] = "review"
                 item.status = "invalid"
                 item.reason = "Pflichtwerte, Richtung, Zeitpunkt oder Belegzuordnung ungueltig; Original und Zuordnung pruefen."
+                if isinstance(exc, MexcValidationError):
+                    item.reason = str(exc)
+                if str(exc) == "stale_mexc_decision":
+                    item.reason = "Datei oder Kandidatenstand geaendert: Zuordnung anhand aktueller Vorschau erneut bestaetigen."
+                elif str(exc) == "same_provider_id_cannot_be_separate":
+                    item.reason = "Identische belegte Provider-Buchungs-ID: kein zweites Ereignis per separate erlauben; passenden Beleg verknuepfen."
                 report.blocking_reasons.append(f"Zeile {number}: {item.reason}")
             report.rows.append(item)
             report.bookable_rows += meta["role"] == "book" and item.status != "duplicate_candidate"
@@ -304,17 +363,17 @@ class MexcNativeImporter:
     def _row(row, detected, time_column, basis, options, meta, item):
         uid, asset = str(row.get("UID") or "").strip(), str(row.get("Crypto") or "").strip()
         if not uid or len(uid) > 128 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", asset):
-            raise ValueError("UID/Asset fehlt.")
+            raise MexcValidationError("UID/Asset fehlt.")
         meta.update(uid=uid, asset=asset.upper())
         provider_id = str(row.get("Transaction ID") or row.get("Record ID") or "").strip()
         if len(provider_id) > 256:
-            raise ValueError("Buchungs-ID zu lang.")
+            raise MexcValidationError("Buchungs-ID zu lang.")
         if provider_id:
             meta["provider_id"] = provider_id
         item.asset = asset.upper()
         if detected == "asset_snapshot":
             if not re.fullmatch(r"\d{8}", str(row.get("Date(UTC+8)") or "")):
-                raise ValueError("Snapshotdatum muss YYYYMMDD entsprechen.")
+                raise MexcValidationError("Snapshotdatum muss YYYYMMDD entsprechen.")
             datetime.strptime(str(row.get("Date(UTC+8)") or ""), "%Y%m%d")
             meta.update(role="snapshot", snapshot_date=row["Date(UTC+8)"])
             item.status, item.reason = "evidence_only", "Bestandsnachweis; Total und USDT Valuation erzeugen keine Erwerbe oder Kostenbasis."
@@ -324,17 +383,17 @@ class MexcNativeImporter:
         instant = _timestamp(str(row.get(time_column) or ""), basis)
         text = str(row.get("Quantity") if "Quantity" in row else row.get("Amount") or "").strip()
         if not re.fullmatch(r"[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?", text):
-            raise ValueError("Menge ist keine eindeutige Dezimalzahl.")
+            raise MexcValidationError("Menge ist keine eindeutige Dezimalzahl.")
         quantity = Decimal(text)
         if not quantity.is_finite() or quantity.copy_abs() >= Decimal("1e20") or _normalized(quantity).as_tuple().exponent < -18:
-            raise ValueError("Menge ausserhalb verlustfreier Datenbankpraezision.")
+            raise MexcValidationError("Menge ausserhalb verlustfreier Datenbankpraezision.")
         direction = str(row.get("Direction") or row.get("Fund Flow Type") or "").strip().lower()
         if direction and direction not in {"inflow", "outflow"}:
-            raise ValueError("Richtung unbekannt.")
+            raise MexcValidationError("Richtung unbekannt.")
         if detected == "statement" and not direction:
-            raise ValueError("Richtung fehlt.")
+            raise MexcValidationError("Richtung fehlt.")
         if direction == "inflow" and quantity < 0:
-            raise ValueError("Negativer Inflow widerspricht der Richtung.")
+            raise MexcValidationError("Negativer Inflow widerspricht der Richtung.")
         if direction == "outflow":
             quantity = quantity.copy_abs().copy_negate()
         label = str(row.get("Transaction Type") or row.get("Type") or row.get("Fund Type") or "").strip()
@@ -356,14 +415,14 @@ class MexcNativeImporter:
             if preview.duplicate_batch_id:
                 return self.store.get_import_batch(preview.duplicate_batch_id)
             if not preview.can_import:
-                raise ValueError("; ".join(preview.mexc.blocking_reasons))
+                raise MexcValidationError("; ".join(preview.mexc.blocking_reasons))
             self.archive.mkdir(parents=True, exist_ok=True, mode=0o700)
             original = self.archive / (preview.file_sha256.removeprefix("sha256:") + ".original")
             try:
                 fd = os.open(original, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
             except FileExistsError:
                 if original.is_symlink() or hashlib.sha256(original.read_bytes()).hexdigest() != preview.file_sha256[7:]:
-                    raise ValueError("Gespeicherter MEXC-Originalbeleg stimmt nicht mit seinem Hash ueberein.") from None
+                    raise MexcValidationError("Gespeicherter MEXC-Originalbeleg stimmt nicht mit seinem Hash ueberein.") from None
             else:
                 with os.fdopen(fd, "wb") as handle:
                     handle.write(content)
@@ -374,31 +433,138 @@ class MexcNativeImporter:
                 for number, row, meta in prepared])
 
 
-def event_from_raw(batch, raw) -> CanonicalEventCreate | None:
-    row = json.loads(raw.payload_json)
-    meta = metadata(row)
-    if meta.get("version") != 1 or meta.get("role") != "book":
+def validated_metadata(fingerprint, number, row) -> dict | None:
+    if not isinstance(row, dict):
         return None
-    if meta.get("row_number") != raw.row_number or not str(batch.file_hash or "").startswith(str(meta.get("file_sha256")) + "#mexc="):
+    if not isinstance(row.get("_mexc"), str):
+        return None
+    meta = metadata(row)
+    if type(meta.get("version")) is not int or meta["version"] != 1:
+        return None
+    if meta.get("row_number") != number or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(meta.get("file_sha256"))):
         return None
     expected_context = _hash({"sheet": meta.get("sheet_name"), "kind": meta.get("export_kind"),
         "account": meta.get("account"), "timezone": meta.get("timezone")})
-    if batch.file_hash != meta["file_sha256"] + "#mexc=" + expected_context:
+    if fingerprint != meta["file_sha256"] + "#mexc=" + expected_context or meta.get("file_format") not in {"csv", "xlsx"}:
         return None
     try:
-        options = MexcImportOptions(export_kind=meta["export_kind"], account=meta["account"])
-        time_column = "Time" if options.export_kind == "funding_other" else next(
-            key for key in row if re.fullmatch(r"Creation Time\(UTC[+-]\d{2}:\d{2}\)", key))
-        check = {}
-        MexcNativeImporter._row(row, "funding_other" if options.export_kind == "funding_other" else "statement",
-            time_column, meta["timezone"], options, check, MexcRowPreview(row_number=raw.row_number, status="review", reason=""))
-        if any(check.get(key) != meta.get(key) for key in ("role", "uid", "asset", "quantity", "event_time", "label", "signature", "provider_id")):
+        options = MexcImportOptions(export_kind=meta["export_kind"], account=meta["account"], timezone=meta.get("selected_timezone"))
+        detected, time_column = layout(row)
+        if not options.account or not detected or not (options.export_kind in STATEMENT_KINDS if detected == "statement" else options.export_kind == detected):
             return None
+        basis = meta.get("timezone")
+        if detected == "asset_snapshot" and basis != "UTC+08:00":
+            return None
+        if detected == "funding_other" and basis not in {"UTC", "UTC+01:00", "UTC+08:00", "Europe/Berlin"}:
+            return None
+        if options.timezone and options.timezone != basis:
+            return None
+        if time_column and "(UTC" in time_column and basis != time_column[time_column.index("(") + 1:-1]:
+            return None
+        check = {"role": "review"}
+        MexcNativeImporter._row(row, detected, time_column, basis, options, check,
+            MexcRowPreview(row_number=number, status="review", reason=""))
+        if meta.get("role") == "linked":
+            if check["role"] != "book" or not meta.get("link_target_raw_object_id") or len(str(meta.get("decision_reason", "")).strip()) < 10:
+                return None
+            if not re.fullmatch(r"[0-9a-f]{64}", str(meta.get("decision_input_digest"))):
+                return None
+        elif check["role"] != meta.get("role"):
+            return None
+        if any(check.get(key) != meta.get(key) for key in ("uid", "asset", "quantity", "event_time", "label", "signature", "provider_id", "snapshot_date")):
+            return None
+        if "decision_reason" in meta:
+            original = {k: v for k, v in row.items() if k != "_mexc"}
+            if (len(str(meta["decision_reason"]).strip()) < 10 or not isinstance(meta.get("decision_evidence"), list)
+                or _hash(["mexc-row-v1", fingerprint, number, original, meta["decision_evidence"], options.timezone]) != meta.get("decision_input_digest")):
+                return None
     except (ValueError, KeyError, StopIteration, TypeError, InvalidOperation):
+        return None
+    return meta
+
+
+def event_from_raw(batch, raw) -> CanonicalEventCreate | None:
+    meta = validated_metadata(batch.file_hash, raw.row_number, json.loads(raw.payload_json))
+    if meta is None or meta["role"] != "book":
         return None
     return CanonicalEventCreate(source="mexc", source_ref="mexc:v1:" + meta["signature"] + ":" + str(raw.row_number),
         event_time=datetime.fromisoformat(meta["event_time"]), event_type="unknown", asset=meta["asset"],
         quantity=Decimal(meta["quantity"]), account="mexc:" + quote(meta["uid"], safe="") + ":" + quote(meta["account"], safe=""), raw_object_id=raw.raw_object_id)
+
+
+@lru_cache(maxsize=128)
+def _original_hash_ok(filename, digest, stamp):
+    try:
+        fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as handle:
+            before = os.fstat(handle.fileno())
+            actual = (before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+            if actual != stamp:
+                return False
+            value = hashlib.file_digest(handle, "sha256").hexdigest()
+            after = os.fstat(handle.fileno())
+            return value == digest and actual == (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+    except OSError:
+        return False
+
+
+def original_integrity(store, meta):
+    digest = str(meta.get("file_sha256", "")).removeprefix("sha256:")
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        return False
+    original = Path(store.path).parent / "mexc_originals" / (digest + ".original")
+    try:
+        info = original.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 25 * 1024 * 1024:
+            return False
+        stamp = (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        return _original_hash_ok(str(original), digest, stamp)
+    except OSError:
+        return False
+
+
+def review_issues(store):
+    from steuerreport_v2.contracts.review import ReviewIssue
+    with store.connect() as con:
+        rows = con.execute("""select r.raw_object_id,r.batch_id,r.row_number,r.payload_json,b.file_hash,
+            e.event_id,e.event_time,e.asset,e.quantity,e.account,e.event_type
+            from raw_objects r join raw_import_batches b on b.batch_id=r.batch_id
+            left join canonical_events e on e.raw_object_id=r.raw_object_id where b.source='mexc'""").fetchall()
+    valid = {r[0]: (validated_metadata(r[4], r[2], json.loads(r[3])), r) for r in rows}
+    result, seen = [], set()
+
+    def issue(code, scope, message):
+        if (code, scope) not in seen:
+            seen.add((code, scope))
+            result.append(ReviewIssue(code=code, severity="high", scope=scope, blocks_export=True, message=message))
+
+    for raw_id, (meta, row) in valid.items():
+        scope = "import_batch:" + row[1]
+        if meta is None:
+            issue("mexc_native_binding_invalid", scope, "MEXC-Rohbeleg/Metadaten passen nicht konsistent zu Layout, Datei, Zeile oder Konto. Keine fachliche Freigabe aus einem Rollenmarker.")
+            continue
+        if not original_integrity(store, meta):
+            issue("mexc_original_integrity_failed", scope, "MEXC-Originaldatei fehlt, ist veraendert oder kein regulaerer Beleg. SHA256 pruefen und Original wiederherstellen.")
+        if meta["role"] == "book" and row[10] in {None, "unknown"}:
+            issue("mexc_classification_required", "event:" + row[5] if row[5] else scope,
+                "MEXC-Mengenbewegung belegt, Ursache/Einkunftsart offen. Airdrop ist keine automatische Mining-/Reward- oder Privatzuordnung.")
+        if meta["role"] == "snapshot":
+            issue("mexc_snapshot_reconciliation_required", scope,
+                "MEXC-Bestandsbeleg vorhanden, Transaktions-/Anschaffungshistorie noch nicht nachvollziehbar abgeglichen. Der Snapshot ersetzt keine Historie.")
+        if meta["role"] != "linked":
+            continue
+        root, target = valid.get(meta["link_target_raw_object_id"], (None, None))
+        if root is None or root["role"] != "book" or target[5] is None:
+            issue("mexc_link_target_missing", scope, "Verknuepfter MEXC-Originalvorgang fehlt oder ist nicht mehr eindeutig gebucht. Keine Ersatzbuchung erfinden.")
+            continue
+        instant = target[6].replace(tzinfo=timezone.utc) if target[6].tzinfo is None else target[6].astimezone(timezone.utc)
+        account = "mexc:" + quote(meta["uid"], safe="") + ":" + quote(meta["account"], safe="")
+        if (root.get("signature") != meta.get("signature") or target[7] != meta["asset"]
+            or target[8] != Decimal(meta["quantity"]) or instant != datetime.fromisoformat(meta["event_time"])
+            or target[9] != account):
+            issue("mexc_link_target_conflict", scope,
+                "MEXC-Zusatzbeleg und wirksame Buchung weichen in Menge, Asset, Zeitpunkt oder Konto ab. Bestaetigte Korrektur und Originale gemeinsam pruefen.")
+    return result
 
 
 def evidence_for_batch(store, batch_id):

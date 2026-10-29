@@ -22,6 +22,9 @@ Die Implementierung wird separat von der produktiven rc35 geprueft.
    eigenstaendige Buchung bestaetigen. Begruendung mit mindestens zehn Zeichen
    erfassen und erneut pruefen. Gleiche Zeit/Menge bedeutet nicht automatisch
    Dublette. Zwei echte gleiche Buchungen bleiben erhalten.
+   Jede Entscheidung benoetigt den input_digest der aktuellen Zeilenvorschau.
+   Nach Datei-/Konto-/Kandidatenwechsel bewusst erneut bestaetigen; dieser
+   Wert wird nicht still durch eine neue Serverantwort ersetzt.
 6. Erst die geprueften Dateien freigeben und importieren. Der vorhandene
    Assistent speichert Rohbelege, normalisiert den Batch und fuehrt die
    bestehende Ledger-/Steuervorschau-Pipeline aus. Er akzeptiert keine
@@ -77,6 +80,12 @@ nicht auf eine weitere Verknuepfung. Fremde Ziele, veraltete Zeilenangaben
 und leere Begruendungen werden abgewiesen. Zwei gleiche Zeilen in einer
 ersten Datei werden ohne ID nicht pauschal entfernt.
 
+Dieselbe belegte Provider-Buchungs-ID darf nicht durch separate als zweiter
+Vorgang gebucht werden. IDs auf verknuepften Zusatzbelegen werden dem Root
+zugerechnet und bei spaeteren Konflikten mitgeprueft. input_digest bindet
+Datei, Kontext, physische Zeile und Kandidatenfakten. Die gespeicherte
+Entscheidung erhaelt den Digest und die damaligen Fakten zur spaeteren Pruefung.
+
 Originalfelder werden nicht ersetzt; zusaetzliche Interpretations-/Entscheidungs-
 metadaten liegen als JSON-String im reservierten Raw-Feld _mexc. Originalbytes
 liegen hashadressiert und privat neben der Datenbank in mexc_originals.
@@ -106,7 +115,8 @@ enthaelt die Anfrage beispielsweise:
       "2": {
         "action": "link_existing",
         "target_raw_object_id": "synthetic-existing-raw-id",
-        "reason": "Beide Originalbelege wurden als dieselbe Buchung geprueft."
+        "reason": "Beide Originalbelege wurden als dieselbe Buchung geprueft.",
+        "input_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
     }
   }
@@ -118,6 +128,18 @@ eine eigenstaendige Buchung und darf kein Linkziel enthalten. Entscheidungen
 sind keine Steuerfreigaben und koennen vorhandene Raw-Objekte nicht aendern.
 Erneutes Normalisieren konsumiert die gespeicherte Bindung; fehlende Linkziele
 erzeugen eine Sperre, keine erfundene Ersatzbuchung.
+Der beispielhafte Digest muss durch den tatsaechlichen Wert der vorherigen
+Zeilenvorschau ersetzt werden. Bei decision_stale=true die veraenderten
+Belege erneut ansehen, Zuordnung bewusst bestaetigen und neu pruefen lassen.
+
+Reine Snapshots bleiben mit einem ausdruecklichen Bestands-/Historien-
+Abgleichpunkt gesperrt. Fehlende, veraenderte oder symlinkte Originale
+blockieren den Review-/Exportstatus ebenfalls, nicht erst den Download.
+Ungueltige Rollen-/Kontextmetadaten duerfen keine Rohzeile unsichtbar machen.
+Ein Original-Link bleibt bei spaeterer Canonical-Korrektur erhalten; weichen
+Menge, Asset, Konto oder Zeitpunkt ab, gilt er bis zur Klaerung nicht als
+aktueller Mengenabgleich. Eine reine Typklaerung bei unveraenderten Fakten
+wird nicht pauschal gesperrt.
 
 GET /api/v1/import/batches/{id}/trace.json liefert zusaetzlich mexc_evidence.
 GET /api/v1/import/batches/{id}/original prueft den gespeicherten SHA256 vor

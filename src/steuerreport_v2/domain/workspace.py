@@ -412,6 +412,8 @@ class WorkspaceService:
                 rows = con.execute(f"select distinct e.account, e.wallet, e.source from canonical_events e where {scope.predicate}", scope.parameters).fetchall()
                 accounts[scope.item.ref] = {value for row in rows for value in row[:2] if value}
                 sources[scope.item.ref] = {row[2] for row in rows}
+                if scope.item.source_type == "import" and scope.predicate == "e.source=?" and len(scope.parameters) == 1:
+                    sources[scope.item.ref].add(scope.parameters[0])
                 if scope.registry:
                     for identifier in scope.registry.identifiers:
                         if identifier.kind == "canonical_source":

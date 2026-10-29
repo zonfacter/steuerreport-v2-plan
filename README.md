@@ -11,18 +11,22 @@ Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
 
+Unveroeffentlichte Erweiterung zu Issue #4: nativer erster MEXC-Dateiimport
+mit Konto-/Exportartzuordnung und begruendeter Belegverknuepfung.
+[Umfang und Grenzen](docs/MEXC_IMPORT.md). Noch nicht im veroeffentlichten
+rc35-Image enthalten; kein automatisches produktives Update.
+
 ## Docker-Installation
 
 ### Fertiges Image aus GHCR
 
-Registry: `ghcr.io/zonfacter/steuerreport-v2`. Das Repository ist oeffentlich;
-die Sichtbarkeit des Containerpakets wird bei GitHub separat verwaltet.
-Fuer ein privates Paket ein GitHub Personal Access Token (classic) mit
+Registry: `ghcr.io/zonfacter/steuerreport-v2`. Das Containerpaket ist jetzt
+oeffentlich; zum Herunterladen ist keine Anmeldung erforderlich. Bei einer
+eigenen privaten Paketbereitstellung ein GitHub Personal Access Token (classic) mit
 `read:packages` verwenden. Token nur lokal beim Docker-Login eingeben,
 nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
-docker login ghcr.io -u zonfacter
 docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc35
 docker compose -f compose.ghcr.yml up -d
 ```
