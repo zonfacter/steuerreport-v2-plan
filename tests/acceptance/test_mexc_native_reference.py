@@ -1623,3 +1623,102 @@ def test_persisted_decision_digest_and_evidence_are_verified_not_tax_release(cas
     assert invalid.allow_export is False
     assert any(i.code == "mexc_native_binding_invalid" and i.blocks_export for i in invalid.issues)
     assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+FUNDING_REVIEW_STATUSES = ("Failed", "Pending", "Completed", "Success", "SYNTHETIC_UNDOCUMENTED_STATUS")
+
+
+def _funding_status_input(file_format, status):
+    row = _funding(Status=status)
+    if file_format == "xlsx":
+        return _xlsx([row], "funding_other"), {}
+    return _csv([row]), {"filename": "synthetic.csv", "sheet": None}
+
+
+@pytest.mark.parametrize("file_format", ["xlsx", "csv"])
+@pytest.mark.parametrize("status", FUNDING_REVIEW_STATUSES)
+def test_funding_status_guard_nonempty_is_raw_review_without_events_ledger_or_lots(case, file_format, status):
+    from steuerreport_v2.domain.review import ReviewService
+    from steuerreport_v2.domain.tax import TaxService
+
+    content, kwargs = _funding_status_input(file_format, status)
+    options = _options("funding_other")
+    before = _state(case)
+    preview = _preview(case, content, options, **kwargs)
+    assert preview.can_import is True
+    native = _native(preview)
+    _counts(native, raw_rows=1, bookable_rows=0, linked_rows=0, review_rows=1, snapshot_rows=0, bonus_rows=0)
+    row, = native["rows"]
+    assert row["row_number"] == 2
+    assert row["status"] == "review"
+    assert "status" in row["reason"].lower()
+    assert row["candidates"] == []
+    assert _state(case) == before
+    batch, events = _import(case, content, options, **kwargs)
+    assert events == []
+    raw, = _raw(case, batch)
+    payload, meta = _metadata(raw)
+    assert raw.row_number == 2
+    assert payload["Status"] == status
+    assert payload["Type"] == "Airdrop"
+    assert payload["Quantity"] == "2.5"
+    assert meta["role"] == "review"
+    assert not meta.get("link_target_raw_object_id")
+    assert case[0].list_canonical_events() == []
+    assert _positions(case) == {}
+    TaxService(case[0]).rebuild_fifo()
+    state = _state(case)
+    assert state["balance_ledger"] == []
+    assert state["tax_lots"] == []
+    assert state["tax_lines"] == []
+    assert case[0].unmapped_raw_object_counts().get(batch.batch_id) == 1
+    gate = ReviewService(case[0]).gate()
+    assert gate.allow_export is False
+    assert any(i.blocks_export and batch.batch_id in i.scope for i in gate.issues)
+    original = case[0].path.parent / "mexc_originals" / (hashlib.sha256(content).hexdigest() + ".original")
+    assert original.read_bytes() == content
+
+
+@pytest.mark.parametrize("file_format", ["xlsx", "csv"])
+@pytest.mark.parametrize("status", [None, "", "  ", " \t "])
+def test_funding_status_guard_empty_or_whitespace_preserves_bookable_unknown_control(case, file_format, status):
+    content, kwargs = _funding_status_input(file_format, status)
+    options = _options("funding_other")
+    preview = _preview(case, content, options, **kwargs)
+    assert preview.can_import is True
+    native = _native(preview)
+    _counts(native, raw_rows=1, bookable_rows=1, linked_rows=0, review_rows=1)
+    assert native["rows"][0]["status"] == "ready"
+    batch, events = _import(case, content, options, **kwargs)
+    assert len(events) == 1
+    assert (events[0].event_type, events[0].quantity) == ("unknown", D("2.5"))
+    assert events[0].event_time.astimezone(timezone.utc) == WHEN
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+    raw, = _raw(case, batch)
+    payload, meta = _metadata(raw)
+    assert meta["role"] == "book"
+    assert payload["Status"] == (status if status else None if file_format == "xlsx" else "")
+
+
+@pytest.mark.parametrize("file_format", ["xlsx", "csv"])
+@pytest.mark.parametrize("status", FUNDING_REVIEW_STATUSES)
+def test_funding_status_guard_fresh_candidate_link_cannot_override_nonempty_status(case, monkeypatch, file_format, status):
+    _, root = _seed(case)
+    before = _state(case)
+    content, kwargs = _funding_status_input(file_format, status)
+    unclaimed = _preview(case, content, _options("funding_other"), **kwargs)
+    native = _native(unclaimed)
+    _counts(native, raw_rows=1, bookable_rows=0, linked_rows=0, review_rows=1)
+    assert native["rows"][0]["status"] == "review"
+    assert native["rows"][0]["candidates"] == []
+    options = _options("funding_other", decisions={"2": _decision("link_existing", root.raw_object_id)})
+    _bind_decisions(case, content, options, **kwargs)
+    assert options["decisions"]["2"]["input_digest"] == native["rows"][0]["input_digest"]
+    preview = _preview(case, content, options, **kwargs)
+    assert preview.can_import is False
+    _counts(_native(preview), bookable_rows=0, linked_rows=0)
+    assert _native(preview)["rows"][0]["decision_stale"] is False
+    _reject_before_batch(case, monkeypatch, content, options, **kwargs)
+    assert _state(case) == before
+    assert len(case[0].list_canonical_events()) == 1
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
