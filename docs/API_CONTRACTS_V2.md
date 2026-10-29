@@ -570,6 +570,16 @@ Pflichtgruppen und keine leere Datei meldet. Ungueltige Rohimporte liefern
 `status=error` und persistieren keine Raw Objects. Bei identischem Import wird
 der vorhandene Batch mit `duplicate_import`-Warnung zurueckgegeben.
 
+Fuer Bitget werden dieselben Regeln auch auf CSV-Dateien per Base64 und auf
+beide Vorschau-/Ausfuehrungspfade des Importassistenten angewendet. Leere
+Zusatzfelder hinter der Kopfzeile duerfen beim Parsen entfernt werden; der
+Hash bleibt an den unveraenderten Eingabebytes gebunden. Nichtleere unbenannte
+Felder werden ueber alle Pfade mit `status=error` und dem Code
+`bitget_csv_structure_invalid` abgewiesen. Die Fehlermeldung enthaelt die
+Zeilennummer; Preview, Raw-Import und Assistant-Execute erzeugen dabei keinen
+Importbatch. Dieses Verhalten gilt auch fuer fehlerhafte Zeilen ausserhalb der
+ersten fuenf Vorschauzeilen.
+
 `POST /api/v1/import/file/preview`
 
 Prueft eine CSV-, XLSX- oder XLS-Datei als Base64-Payload vor dem Speichern.

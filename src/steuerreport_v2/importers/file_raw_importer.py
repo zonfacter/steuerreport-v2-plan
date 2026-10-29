@@ -11,6 +11,7 @@ import pandas as pd
 
 from steuerreport_v2.contracts.imports import CsvImportPreview, ImportBatch
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
+from steuerreport_v2.importers.bitget_csv import BitgetCsvStructureError, validate_extra_values
 from steuerreport_v2.importers.source_profiles import (
     inspect_profile_columns,
     profile_for_source,
@@ -38,6 +39,7 @@ class FileRawImporter:
             filename,
             content,
             sheet_name,
+            source,
         )
         file_hash = self._file_hash(content, selected_sheet)
         duplicate = self.csv_importer.store.get_import_batch_by_file_hash(
@@ -81,7 +83,7 @@ class FileRawImporter:
         if source.strip().lower() == "mexc":
             from steuerreport_v2.importers.mexc_native import MexcNativeImporter
             return MexcNativeImporter(self.csv_importer.store).import_file(filename, content, sheet_name, mexc)
-        rows, _, _, selected_sheet, _ = self._rows_from_bytes(filename, content, sheet_name)
+        rows, _, _, selected_sheet, _ = self._rows_from_bytes(filename, content, sheet_name, source)
         file_hash = self._file_hash(content, selected_sheet)
         return self.csv_importer.import_rows(
             source=source,
@@ -105,20 +107,23 @@ class FileRawImporter:
         filename: str,
         content: bytes,
         sheet_name: str | None = None,
+        source: str | None = None,
     ) -> tuple[list[dict[str, str | None]], list[str], str, str | None, list[str]]:
         try:
-            return self._parse_rows_from_bytes(filename, content, sheet_name)
+            return self._parse_rows_from_bytes(filename, content, sheet_name, source)
+        except BitgetCsvStructureError:
+            raise
         except Exception:
             raise ValueError("Datei konnte nicht gelesen werden. UTF-8-CSV oder eine gueltige Excel-Datei und das Tabellenblatt pruefen.") from None
 
     def _parse_rows_from_bytes(
-        self, filename: str, content: bytes, sheet_name: str | None,
+        self, filename: str, content: bytes, sheet_name: str | None, source: str | None = None,
     ) -> tuple[list[dict[str, str | None]], list[str], str, str | None, list[str]]:
         suffix = Path(filename).suffix.lower()
         if suffix in {".xlsx", ".xls"}:
             return self._excel_rows(filename, content, sheet_name)
         text = content.decode("utf-8-sig")
-        detected = self._csv_frame_with_detected_header(text)
+        detected = self._csv_frame_with_detected_header(text, source)
         if detected is not None:
             detected = detected.where(pd.notna(detected), None)
             columns = [str(column) for column in detected.columns]
@@ -133,10 +138,15 @@ class FileRawImporter:
             skipinitialspace=True,
         )
         columns = list(reader.fieldnames or [])
-        rows = [self._stringify_row(row) for row in reader]
+        row_reader = self.csv_importer._dict_reader(text, source)
+        rows = [self._stringify_row(row) for row in row_reader]
         return rows, columns, "csv", None, []
 
-    def _csv_frame_with_detected_header(self, text: str) -> pd.DataFrame | None:
+    def _csv_frame_with_detected_header(
+        self,
+        text: str,
+        source: str | None = None,
+    ) -> pd.DataFrame | None:
         dialect = CsvRawImporter._dialect_for_text(text)
         raw_rows = list(
             csv.reader(
@@ -162,6 +172,8 @@ class FileRawImporter:
                 continue
             if len(row) > len(header):
                 extra_values = row[len(header) :]
+                if source and source.strip().lower() == "bitget":
+                    validate_extra_values(extra_values, row_number)
                 if any(value.strip() for value in extra_values):
                     raise ValueError(
                         f"CSV-Zeile {row_number} enthaelt nichtleere Felder hinter der Kopfzeile."

@@ -24,6 +24,11 @@ Sie ist keine vollstaendige Migrationsabnahme oder steuerliche Freigabe.
   nicht still verworfen. Die direkte Preview-/Import-API liefert dazu einen
   strukturierten, zeilengenauen Fehler statt HTTP 500. Datei-Hash, Rohzeile und
   Wiederimport-Idempotenz sind synthetisch getestet.
+- **GitHub #26:** Dieselbe Bitget-CSV-Validierung gilt jetzt fuer Text-CSV,
+  Base64-Datei sowie die Preview- und Execute-Pfade des Importassistenten.
+  Nichtleere Zusatzfelder werden auch hinter den ersten fuenf Vorschauzeilen
+  strukturiert abgewiesen, ohne einen Importbatch anzulegen. Die bestehende
+  Erkennung von Headern unter einem Exporttitel bleibt erhalten.
 
 ## Pruefstand
 
@@ -34,7 +39,11 @@ Ausgefuehrte gezielte Pruefungen:
   `tests/unit/test_history_review_regressions.py`: 27 bestanden.
 - MEXC-API-/Referenz-/Review-Suite: 266 bestanden; die neue
   Mehrblattregression zusaetzlich einzeln bestanden.
-- Bitget-CSV- und bestehende Bitget-Referenztests: 22 bestanden.
+- `PYTHONPATH=src:/tmp/steuerreport-v2-test-deps pytest -q
+  tests/unit/test_bitget_csv.py tests/unit/test_file_raw_importer.py
+  tests/unit/test_guided_file_import.py`: 52 bestanden.
+- `ruff check` auf den geaenderten Python-Dateien und `git diff --check`:
+  bestanden.
 - Synthetischer MEXC-Browserablauf `explicit-multisheet-selection`: bestanden.
 - `npm run build`, Python-Ruff auf geaenderten Python-Dateien und
   `git diff --check`: bestanden. Der Frontendbundler meldet weiterhin einen
@@ -57,6 +66,9 @@ Projekt-Testmatrix wurde nicht ausgefuehrt.
 - **GitHub #22:** Explizite Bitget-Exportzeitzone mit Persistenz, vollstaendiger
   Produkt-/Kontoskope, Margin-Gebuehrenzuordnung und belegte Handelsbein-
   Verknuepfung bleiben offen.
+- **GitHub #26:** Der reproduzierte Text-/Datei-API-Fehler ist im Branch
+  behoben und lokal getestet. Das Issue wird erst nach erfolgreichem Merge und
+  verpflichtendem CI-Abschluss geschlossen.
 - **GitHub #4:** Weitere MEXC-Exporttypen werden nicht pauschal als voll
   unterstuetzt erklaert; Futures/Earn/Transfers brauchen eigenstaendige
   Belegsemantik und Tests.

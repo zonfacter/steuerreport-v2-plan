@@ -17,6 +17,11 @@
   der Kopfzeile. Nichtleere Zusatzfelder werden mit Zeilenhinweis abgewiesen;
   die Preview-API liefert einen strukturierten Fehler statt HTTP 500. Raw-Zeilen,
   Originalhash und identischer Wiederimport sind regressionsgetestet.
+- GitHub #26: Bitget-CSV-Text, Base64-Datei und Importassistent verwenden
+  dieselbe Ueberhangvalidierung. Strukturfehler liefern ueber Preview-, Raw-
+  und Execute-Routen einen zeilengenauen API-Fehler, auch hinter den ersten
+  fuenf Vorschauzeilen. Leere Zusatzfelder bleiben erlaubt; Originalhash und
+  bisherige Erkennung von Kopfzeilen unter Exporttiteln bleiben erhalten.
 - Keine Legacy-Datenmigration, keine Produktiv-Neuberechnung oder
   Methodenaktivierung. #8, #13, #19, #20 und #22 bleiben teilweise offen.
 

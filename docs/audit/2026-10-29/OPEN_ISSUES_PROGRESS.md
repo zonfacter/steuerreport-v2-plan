@@ -15,6 +15,7 @@ trennt Codekorrektur, gezielten Test, Legacy-Nachweis und fachliche Abnahme.
 | #19 Legacy-Laufzeit | Native V1/V2-Dienste und Docker sind als getrennte Laufzeitbereiche bestaetigt. Aktive DuckDB der nativen V2 ist nicht sicher zugeordnet. | Offen, Datenquellenblocker |
 | #20 Semantischer Alt-/Neu-Vergleich | Kein gebundener, konsistenter nativer Datenstand. Kein Ergebnisvergleich behauptet. | Offen, abhaengig von #19 und gesicherter Kopie |
 | #22 Bitget-CSV | Leere Ueberhangfelder werden kontrolliert toleriert; nichtleere Extras liefern strukturierten Zeilenfehler. Datei-Hash und Wiederimport getestet. | Teilweise behoben, offen |
+| #26 CSV-/Datei-API-Paritaet | Bitget Text-, Base64- und Assistant-Pfade nutzen gemeinsame Ueberhangregeln; Strukturfehler erzeugen keinen Batch und kein HTTP 500. | Im Branch umgesetzt, lokal getestet; Merge/CI ausstehend |
 
 ## Laufzeit- und Datenschutzgrenze
 
@@ -41,6 +42,9 @@ fuer #20 verglichen werden. Der Docker-rc36-Stand ist kein Ersatz dafuer.
 - MEXC-API-/Referenz-/Review-Suite: 266 bestanden; die neue Mehrblattregression
   zusaetzlich einzeln bestanden.
 - Bitget-CSV- und Bitget-Referenztests: 22 bestanden.
+- Bitget-CSV-/Datei-/Assistent-Paritaet nach #26: 52 Tests bestanden
+  (`test_bitget_csv.py`, `test_file_raw_importer.py`,
+  `test_guided_file_import.py`).
 - `scripts/check_mexc_import_browser_v2.py --scenario
   explicit-multisheet-selection`: bestanden mit synthetischen API-Antworten;
   keine echten Providerrequests.
