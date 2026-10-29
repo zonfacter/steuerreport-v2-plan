@@ -505,10 +505,13 @@ def test_existing_index_rejects_invalid_metadata_instead_of_trusting_native_labe
                     [json.dumps(payload), raw.raw_object_id])
     unrelated = _xlsx([_spot(Crypto="UNRELATED")], revision="invalid-existing-binding")
     before = _state(case)
-    with pytest.raises(ValueError):
-        _preview(case, unrelated, _options())
+    preview = _preview(case, unrelated, _options())
+    assert preview.can_import is False
+    assert ("Vorhandene MEXC-Altbelege haben keine native Konto-/Exportartbindung; "
+            "zuerst gesondert pruefen.") in preview.mexc.blocking_reasons
     _reject_without_writes(case, unrelated, _options())
     assert _state(case) == before
+    _mexc_blocker(ReviewService(case[0]).gate(), "mexc_native_binding_invalid")
 
 
 @pytest.mark.parametrize("field", ["decision_evidence", "decision_input_digest"])
