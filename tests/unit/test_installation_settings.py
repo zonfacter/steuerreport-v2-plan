@@ -183,6 +183,34 @@ def test_invalid_existing_ownership_config_does_not_break_installation_settings(
     assert "config_json_or_schema_invalid" in response.text
 
 
+def test_unreadable_ownership_config_does_not_hide_other_installation_settings(
+    service, monkeypatch
+):
+    path = service.config_dir / "solana_v1_ownership_scope.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"outside_owned_wallet_scope_txids":[]}', encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def deny_config_read(candidate, *args, **kwargs):
+        if candidate == path:
+            raise PermissionError("synthetic config permission error")
+        return original_read_text(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", deny_config_read)
+    restarted_service = InstallationSettingsService(service.store)
+    assert restarted_service.read().revision
+    with pytest.raises(InstallationSettingsError, match="config_unreadable"):
+        restarted_service.read_config(path.name)
+
+    from steuerreport_v2.api.app import create_app
+
+    client = TestClient(create_app(service.store))
+    assert client.get("/api/v1/admin/installation").status_code == 200
+    response = client.get(f"/api/v1/admin/installation/configs/{path.name}")
+    assert response.status_code == 400
+    assert "config_unreadable" in response.text
+
+
 def test_provider_secret_requires_encryption_and_is_never_returned(service, tmp_path, monkeypatch):
     monkeypatch.delenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", raising=False)
     with pytest.raises(InstallationSettingsError, match="encrypted_secret_vault_required"):

@@ -235,7 +235,10 @@ class InstallationSettingsService:
         return content
 
     def _config_revision(self, filename: str) -> str:
-        content = self._read_config_content(filename)
+        try:
+            content = self._read_config_content(filename)
+        except InstallationSettingsError as error:
+            return f"error:{error}"
         return hashlib.sha256(content.encode()).hexdigest()
 
     def read_config(self, filename: str) -> PrivateConfigDocument:
