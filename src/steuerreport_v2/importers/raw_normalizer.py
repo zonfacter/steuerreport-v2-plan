@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from steuerreport_v2.contracts.events import CanonicalEvent, CanonicalEventCreate
+from steuerreport_v2.contracts.solana_ownership import SolanaOwnershipScopeConfig
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.derivative_cash import BITGET_NEUTRAL_ACTIONS, bitget_financial_row
@@ -1641,15 +1642,17 @@ class RawNormalizer:
 
     @staticmethod
     def _load_solana_unowned_txids(path: Path) -> set[str]:
+        if not path.exists():
+            return set()
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return set()
-        return {
-            str(value)
-            for value in payload.get("outside_owned_wallet_scope_txids", [])
-            if value
-        }
+        except (OSError, UnicodeDecodeError, ValueError):
+            raise ValueError("solana_ownership_config_unreadable") from None
+        try:
+            config = SolanaOwnershipScopeConfig.model_validate(payload)
+        except ValueError:
+            raise ValueError("solana_ownership_config_invalid") from None
+        return set(config.outside_owned_wallet_scope_txids)
 
     def _is_solana_helium_reward_transfer(
         self,

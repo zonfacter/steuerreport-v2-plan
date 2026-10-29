@@ -99,6 +99,59 @@ def test_config_editor_is_external_revision_bound_and_does_not_run_pipeline(serv
         service.write_config(before.filename, PrivateConfigWrite(revision=result.revision, content='{"entries":"wrong"}'))
 
 
+def test_solana_ownership_config_is_typed_and_preserves_existing_metadata(service):
+    document = service.read_config("solana_v1_ownership_scope.json")
+    content = json.dumps(
+        {
+            "outside_owned_wallet_scope_txids": ["synthetic-tx-1"],
+            "audit_metadata": {"review_ref": "synthetic-review-1"},
+        }
+    )
+    saved = service.write_config(
+        document.filename,
+        PrivateConfigWrite(revision=document.revision, content=content),
+    )
+    assert saved.content == content
+
+    for invalid in [
+        {"outside_owned_wallet_scope_txids": "synthetic-tx-1"},
+        {"outside_owned_wallet_scope_txids": None},
+        {"outside_owned_wallet_scope_txids": [None]},
+        {"outside_owned_wallet_scope_txids": [1]},
+        {"outside_owned_wallet_scope_txids": [""]},
+        {"outside_owned_wallet_scope_txids": [" padded "]},
+    ]:
+        with pytest.raises(InstallationSettingsError, match="config_json_or_schema_invalid"):
+            service.write_config(
+                document.filename,
+                PrivateConfigWrite(
+                    revision=saved.revision,
+                    content=json.dumps(invalid),
+                ),
+            )
+        assert service.read_config(document.filename).content == content
+
+
+def test_solana_ownership_config_api_rejects_invalid_values_without_writing(service):
+    from steuerreport_v2.api.app import create_app
+
+    client = TestClient(create_app(service.store))
+    document = client.get(
+        "/api/v1/admin/installation/configs/solana_v1_ownership_scope.json"
+    ).json()["data"]
+    response = client.put(
+        "/api/v1/admin/installation/configs/solana_v1_ownership_scope.json",
+        json={
+            "revision": document["revision"],
+            "content": '{"outside_owned_wallet_scope_txids":"synthetic-tx"}',
+        },
+    )
+
+    assert response.status_code == 400
+    assert "config_json_or_schema_invalid" in response.text
+    assert service.read_config("solana_v1_ownership_scope.json").content == document["content"]
+
+
 def test_provider_secret_requires_encryption_and_is_never_returned(service, tmp_path, monkeypatch):
     monkeypatch.delenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", raising=False)
     with pytest.raises(InstallationSettingsError, match="encrypted_secret_vault_required"):

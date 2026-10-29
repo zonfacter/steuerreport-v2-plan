@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import json
 
+import pytest
+
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
@@ -686,6 +688,75 @@ def test_solana_rpc_native_reconciliation_neutralizes_verified_outside_scope_txi
     assert events[0].quantity == 0
     assert events[0].fee_asset is None
     assert events[0].account == "solana_rpc_unowned_evidence"
+
+
+def test_solana_ownership_scope_loads_typed_ids_and_keeps_missing_file_optional(
+    tmp_path, monkeypatch
+):
+    config = tmp_path / "solana_v1_ownership_scope.json"
+    assert RawNormalizer._load_solana_unowned_txids(config) == set()
+    config.write_text(
+        json.dumps(
+            {
+                "outside_owned_wallet_scope_txids": ["verified-unowned"],
+                "audit_metadata": {"review_ref": "synthetic-review-1"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert RawNormalizer._load_solana_unowned_txids(config) == {"verified-unowned"}
+
+    config.write_text('{"outside_owned_wallet_scope_txids":"verified-unowned"}', encoding="utf-8")
+    with pytest.raises(ValueError, match="solana_ownership_config_invalid"):
+        RawNormalizer._load_solana_unowned_txids(config)
+
+    config.write_text("{broken json", encoding="utf-8")
+    with pytest.raises(ValueError, match="solana_ownership_config_unreadable"):
+        RawNormalizer._load_solana_unowned_txids(config)
+
+
+def test_solana_ownership_scope_file_controls_only_explicit_txid(tmp_path, monkeypatch):
+    config = tmp_path / "solana_v1_ownership_scope.json"
+    config.write_text(
+        json.dumps({"outside_owned_wallet_scope_txids": ["verified-unowned"]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("steuerreport_v2.importers.raw_normalizer.DEFAULT_SOLANA_OWNERSHIP_CONFIG", config)
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    batch = CsvRawImporter(store).import_rows(
+        source="solana_rpc",
+        filename="synthetic.json",
+        file_hash="synthetic-ownership-scope",
+        rows=[
+            {
+                "timestamp_utc": "2025-01-01T00:00:00Z",
+                "event_type": "solana_tx",
+                "asset": "SOL",
+                "quantity": "0",
+                "fee_asset": "SOL",
+                "fee": "0.000005",
+                "tx_id": "verified-unowned",
+                "wallet_address": "synthetic-wallet",
+            },
+            {
+                "timestamp_utc": "2025-01-01T00:00:01Z",
+                "event_type": "solana_tx",
+                "asset": "SOL",
+                "quantity": "0",
+                "fee_asset": "SOL",
+                "fee": "0.000005",
+                "tx_id": "not-in-scope-config",
+                "wallet_address": "synthetic-wallet",
+            },
+        ],
+    )
+
+    events = {event.tx_id: event for event in RawNormalizer(store).normalize_batch(batch.batch_id)}
+
+    assert events["verified-unowned"].account == "solana_rpc_unowned_evidence"
+    assert events["verified-unowned"].fee_asset is None
+    assert events["not-in-scope-config"].account == "synthetic-wallet"
+    assert events["not-in-scope-config"].fee_asset == "SOL"
 
 
 def test_helium_raw_assert_location_uses_hnt_fee_not_mobile_oracle_column(tmp_path):

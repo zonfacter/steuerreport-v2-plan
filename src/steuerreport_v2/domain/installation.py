@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from steuerreport_v2.contracts.installation import InstallationField, InstallationSettings, InstallationSettingsWrite, PrivateConfigDocument, PrivateConfigWrite
 from steuerreport_v2.contracts.source_registry import SourceRegistryConfig
+from steuerreport_v2.contracts.solana_ownership import SolanaOwnershipScopeConfig
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.secret_vault import load_vault_key
 from steuerreport_v2.domain.secrets import resolve_secret_value, upsert_secret
@@ -241,6 +242,8 @@ class InstallationSettingsService:
                 raise ValueError()
             if filename == "source_registry.json":
                 SourceRegistryConfig.model_validate(value)
+            elif filename == "solana_v1_ownership_scope.json":
+                SolanaOwnershipScopeConfig.model_validate(value)
             elif filename == "token_conversion_mappings.json":
                 from steuerreport_v2.contracts.token_conversion import TokenConversionConfig
                 TokenConversionConfig.model_validate(value)

@@ -245,6 +245,16 @@ Vor Updates das gesamte Volume einschliesslich **beider** privaten Dateien
 `keys/vault.key` und `keys/connector-setup.token` sichern. Keine privaten Sicherungen
 an GitHub-Releases anhaengen. Neue Versionen nie mit alten Zugangsdaten im Image bauen.
 
+Die optionale Datei `solana_v1_ownership_scope.json` muss ein JSON-Objekt mit
+`outside_owned_wallet_scope_txids` als Liste nichtleerer Zeichenketten enthalten,
+zum Beispiel `{"outside_owned_wallet_scope_txids":["<txid>"]}`. Vorhandene
+zusaetzliche Audit-Metadaten bleiben erhalten. Fehlt die Datei, ist die
+Ausschlussliste leer. Eine beschaedigte Datei oder ein falscher Feldtyp wird beim
+Speichern abgelehnt und beim Laden als `solana_ownership_config_unreadable` oder
+`solana_ownership_config_invalid` gemeldet; der Fehler wird nicht als leere Liste
+interpretiert. Diese Liste ist nur eine explizite Normalisierungskonfiguration,
+kein Wallet-Eigentumsnachweis und keine steuerliche Entscheidung.
+
 ## Historische EUR-Preise Ohne Altinstallation
 
 Ab rc29 benoetigt der gefuehrte Preisablauf keinen V1-Wechselkurscache.

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unveroeffentlicht
+
+- GitHub #12: Solana-Ownership-Scope-JSON wird beim Speichern und Laden
+  typisiert validiert. Beschaedigte oder falsch typisierte Konfigurationen
+  werden nicht mehr still als leere Ausschlussliste behandelt.
+
 ## 0.2.0rc35 - 2026-10-28 (Releasekandidat)
 
 - Der reale GitHub-Releasekatalog enthaelt nach Entpacken etwa 606 KB inklusive
