@@ -138,12 +138,13 @@ class HistoryFixture(WorkspaceFixture):
     def accept_start(self, route, ref, body):
         assert UUID(body["request_id"]).version == 4
         assert body["confirm_external_request"] is True
-        expected_keys = {"request_id", "confirm_external_request", "start", "end", "symbols", "public_rpc_only", "max_records"}
+        expected_keys = {"request_id", "confirm_external_request", "start", "end", "symbols", "public_rpc_only", "max_records", "include_binance_earn"}
         if ref == OTHER:
             expected_keys.add("rpc_provider")
             assert body["rpc_provider"] == "public"
         assert set(body) == expected_keys
         assert body["max_records"] == 100000 and body["public_rpc_only"] is True
+        assert body["include_binance_earn"] is False
         assert body["symbols"] == (["BTCUSDT", "ETHUSDT"] if self.capabilities[ref]["requires_symbols"] else [])
         value = self.job(ref, "queued", start=body["start"], end=body["end"], records_fetched=0, pages_fetched=0,
                          requests=0, new_records=0, duplicate_records=0, sample_rows=[],
@@ -454,7 +455,7 @@ class Run:
             area = open_source(page, self.base)
             expect(count_value(area, "Datensätze")).to_have_text("12")
             expect(count_value(area, "Anfragen gespeicherter Seiten")).to_have_text("5")
-            expect(area.get_by_text("Anfragen gespeicherter Seiten", exact=True)).to_have_attribute("title", re.compile("keine vollständige Anbieterabrechnung"))
+            expect(area.get_by_text("Anfragen gespeicherter Seiten", exact=True)).to_have_attribute("title", re.compile("Wiederholungen abzubilden"))
             page.clock.install()
             start_fields(area)
             confirm_external(area)
