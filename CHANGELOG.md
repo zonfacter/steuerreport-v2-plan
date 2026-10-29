@@ -46,7 +46,9 @@
 
 - GitHub #4: MEXC Spot Statement und Funding Other koennen nach ausdruecklicher
   Konto-, Exportart- und Zeitbasiszuordnung als beleggebundene XLSX-/CSV-Dateien
-  geprueft und importiert werden. Snapshot-/BONUS- und andere Produktbelege
+  geprueft und importiert werden. Die Exportart wird vor der ersten Pruefung
+  je Datei festgelegt; Kontextwechsel verwerfen alte Vorschauen und
+  Zeilenentscheidungen. Snapshot-/BONUS- und andere Produktbelege
   erzeugen keine erfundenen Erwerbe oder Gewinne; Airdrop bleibt fachlich offen.
   Dublettenkandidaten erfordern eine begruendete Zuordnung.
 - Nichtleere Funding-Statuswerte bleiben ohne belegte Anbietersemantik reine
@@ -120,8 +122,9 @@
   bestanden. Originalausgaben, Matrix, Diff und Grenzen im Auditordner.
 - Isolierte Restore-/Browser-/Referenzpruefungen und verbleibende Grenzen im
   Auditordner. Die urspruenglichen Nachweise bleiben als Entwicklungsnachweise
-  unveraendert erhalten; der gesonderte rc33-Release aktualisiert keine
-  Finanzdaten automatisch und aktiviert keine neue produktive FIFO-Methode.
+  unveraendert erhalten. Die Veroeffentlichung dieser Version aktualisiert
+  keine Finanzdaten automatisch und aktiviert keine neue produktive
+  FIFO-Methode.
 
 ## 0.2.0rc32 - 2026-10-28 (Releasekandidat)
 

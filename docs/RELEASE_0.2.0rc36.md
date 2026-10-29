@@ -8,6 +8,8 @@ amtliche Zertifizierung noch eine steuerliche Freigabe eines Jahres.
 
 - **GitHub #4:** MEXC Spot- und Funding-Dateien koennen in einer isolierten
   Vorschau mit Konto-, Exportart- und Zeitbasisbindung geprueft werden.
+  Die Exportart wird vor der ersten Pruefung je Datei festgelegt; ein Wechsel
+  des Pruefkontexts verwirft die alte Vorschau und Zeilenentscheidungen.
   Dubletten, unklare Statuswerte und nicht belegte Erwerbe werden nicht still
   bestandswirksam. Es wurde kein produktiver MEXC-Zugang verwendet.
 - **GitHub #9:** Der Image-Publish verlangt einen synthetischen Benutzerpfad
