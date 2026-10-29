@@ -399,6 +399,9 @@ class MexcNativeImporter:
         label = str(row.get("Transaction Type") or row.get("Type") or row.get("Fund Type") or "").strip()
         meta.update(event_time=instant.isoformat(), quantity=str(quantity), label=label)
         item.quantity, item.event_time = str(quantity), instant.isoformat()
+        if detected == "funding_other" and str(row.get("Status") or "").strip():
+            item.reason = "Ausgefuellter Funding-Status ist noch nicht fachlich zugeordnet; nur Rohbeleg, keine Bestandsbuchung."
+            return
         if detected == "futures_capital_flow" and label.upper() == "BONUS":
             meta["role"] = "bonus"
             item.status, item.reason = "evidence_only", "BONUS-Zuteilung/Ruecknahme: Rechte und Kontowirkung offen; keine Gewinne oder Lots."

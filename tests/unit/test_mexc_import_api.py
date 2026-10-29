@@ -150,3 +150,19 @@ def test_snapshot_without_events_still_links_its_review_to_the_import_source(api
     resolved = workspace._review_items(tasks, scopes)
     task = next(item for item in resolved if item.task.decision_status == "mexc_snapshot_reconciliation_required")
     assert task.context_status == "matched" and task.source_ref
+
+
+@pytest.mark.parametrize("status", ["Failed", "Pending", "Completed"])
+def test_funding_status_is_preserved_without_claiming_a_completed_booking(api, status):
+    client, store = api
+    content = xlsx(["UID", "Time", "Crypto", "Type", "Quantity", "Status", "Remark"],
+        [["SYNTHETIC-ACCOUNT", ROW[1], ROW[2], "Airdrop", "2.5", status, "synthetic"]])
+    request = payload(content, "funding_other", timezone="UTC+01:00")
+    preview = client.post("/api/v1/import/assistant/preview", json=request).json()["data"]
+    assert preview["can_execute"] and preview["preview"]["mexc"]["bookable_rows"] == 0
+    result = client.post("/api/v1/import/assistant/execute", json=request).json()
+    assert result["status"] == "ok" and store.list_canonical_events() == []
+    raw, = store.list_raw_objects(result["data"]["batch"]["batch_id"])
+    assert json.loads(raw.payload_json)["Status"] == status
+    assert BalanceLedgerBuilder(store).positions() == []
+    assert not ReviewService(store).gate().allow_export

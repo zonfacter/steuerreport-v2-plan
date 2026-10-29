@@ -9,6 +9,8 @@
 - Manuelle, begruendete Belegverknuepfung statt automatischer Dublettenklaerung
   nach Zeit/Betrag; Wiederholungen idempotent, fremde/veraltete Linkziele gesperrt.
   Airdrop bleibt unknown mit Review statt automatischem Mining-/Reward-Ertrag.
+- Nichtleere Funding-Statuswerte bleiben ohne belegte Anbietersemantik reine
+  Rohbelege/Review statt scheinbar abgeschlossener Bestandsbuchungen.
 - Laufende Ledger-Salden addieren innerhalb eines ausreichend grossen lokalen
   Decimal-Kontexts; lange belegte Mengen werden nicht schon bei 28 Stellen
   gerundet. Keine Aenderung steuerlicher Fristen oder fachlicher Freigaben.

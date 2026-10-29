@@ -99,7 +99,7 @@ werden tatsaechlich ueber den isolierten HTTP-/Backendpfad geprueft.
 | --- | --- |
 | Native unabhaengige Referenzproben | 186 bestanden, keine Skips |
 | Unabhaengige Review-/Manipulationsproben | 40 bestanden, keine Skips |
-| Native API-Proben inkl. Snapshot-Quellenzuordnung | 9 bestanden |
+| Native API-Proben inkl. Snapshot-Quellenzuordnung und Funding-Status | 12 bestanden; aelteres 9er-Protokoll zusaetzlich erhalten |
 | Mock-Browser | 13/13 Szenarien bestanden; auch 320 px und 2003 Zeilen |
 | Reales isoliertes Importbackend im Browser | Zwei Raw-Belege, ein Ereignis, Menge 2.5, zwei Trace-Bezuege; Original byteidentisch, Review blockiert; 1440/390 px ohne Seitenoverflow |
 | Ruff / Privacy / Vertrags-/Vorlagen-Drift | Erfolgreich; 0 private Standardwerte |
@@ -124,6 +124,14 @@ Job und kein fehlgeschlagener Rechen-Sollwert. Der Reference-Job aktiviert nun
 dieselbe vorhandene Bereinigung erfolgreicher Test-DuckDBs wie die Unit-Suite.
 Budget, Sollwerte, Fehlertests und originale Proben bleiben unveraendert;
 fehlgeschlagene Testdatenbanken werden nicht automatisch beseitigt.
+
+Zusaetzliche Abschlusskorrektur: Funding Other darf ein nichtleeres Statusfeld
+nicht ignorieren. Solche Zeilen bleiben bis zur belegten Anbietersemantik
+offene Rohbelege ohne Bestandsbuchung, auch bei scheinbaren Erfolgsnamen.
+Der belegte leere Statuspfad bleibt erhalten. Eigene CSV-/XLSX-Gegenproben
+werden dem verpflichtenden Referenzjob hinzugefuegt; die oben archivierten
+186/40-Protokolle dokumentieren den davor geprueften Stand, nicht diese neue
+Statuspruefung. Der nachfolgende CI-Lauf bindet alle Proben gemeinsam.
 
 Es gibt keine fachliche Gesamtfreigabe, keinen Produktionsimport und keine
 gepruefte private MEXC-Historie. Reale Auslegung spezieller Geschaefte und

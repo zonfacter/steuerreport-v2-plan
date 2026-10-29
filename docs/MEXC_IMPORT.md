@@ -52,6 +52,12 @@ Auszahlungen, interne Transfers, Migrationen und echte Futures-Abrechnungen
 sind mit diesem ersten Pfad nicht abschliessend normalisiert. Eine heutige
 Bestandsmenge ersetzt weder Anfangshistorie noch Anschaffungsbelege.
 
+Funding Other mit ausgefuelltem Status bleibt bis zur belegten Zuordnung der
+Anbieterstatuswerte ein offener Rohbeleg ohne Bestandsbuchung. Insbesondere
+werden Failed, Pending oder beliebige Erfolgsbezeichnungen nicht blind als
+abgeschlossene Zahlung verstanden. Das bislang belegte Beispiel besitzt
+ein leeres Statusfeld; daraus wird keine allgemeine Statusliste abgeleitet.
+
 Die nativen Header entsprechen dem MEXC-Export und muessen unveraendert
 erhalten bleiben. Grenzen: 10000 Datenzeilen je nativer Datei, 25 MiB je
 Datei, 100 MiB entpacktes XLSX, 256 Spalten; keine verschluesselten Dateien,
