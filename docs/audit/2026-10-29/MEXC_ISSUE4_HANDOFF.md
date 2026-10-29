@@ -4,6 +4,8 @@ Stand: 29.10.2026, Entwicklungsbranch feat/mexc-native-xlsx.
 Reviewbarer Diff: [PR #7](https://github.com/zonfacter/steuerreport-v2-plan/pull/7).
 Basis main: eee90f24a3b7cda8a7f7bef6f8105185f632a4d1, rc35.
 Gepruefter Implementierungscommit: d655fedd48bf120ec4b97303971eedafcba0f9e8.
+Status-Nachhaertung: 9e50bd7ecbbe6c2da26b55c09851271afa0d0205, mit zusaetzlichen
+unabhaengigen Statusproben; der finale gemeinsame CI-Lauf wird im PR/Issue gebunden.
 Keine produktive Umschaltung, kein neues Image/Release, keine Finanzdaten-
 oder Methodenmigration und keine steuerfachliche Gesamtfreigabe.
 
@@ -97,7 +99,7 @@ werden tatsaechlich ueber den isolierten HTTP-/Backendpfad geprueft.
 
 | Pruefung | Tatsaechliches lokales Ergebnis |
 | --- | --- |
-| Native unabhaengige Referenzproben | 186 bestanden, keine Skips |
+| Native unabhaengige Referenzproben | 186 bestanden, zusaetzlich 28 Statusproben separat bestanden; keine Skips |
 | Unabhaengige Review-/Manipulationsproben | 40 bestanden, keine Skips |
 | Native API-Proben inkl. Snapshot-Quellenzuordnung und Funding-Status | 12 bestanden; aelteres 9er-Protokoll zusaetzlich erhalten |
 | Mock-Browser | 13/13 Szenarien bestanden; auch 320 px und 2003 Zeilen |
@@ -112,7 +114,7 @@ werden tatsaechlich ueber den isolierten HTTP-/Backendpfad geprueft.
 fuehrt die vollstaendige Unit-Suite, Build-/Driftchecks, die vorhandenen
 Browserregressionen und beide neuen MEXC-Browserlaeufe aus. Der verpflichtende
 Reference-Job umfasst die unveraenderten 52 Originalproben, alle bisherigen
-Referenzfaelle plus die 226 neuen MEXC-Proben und den originalen Bitget-Reproducer.
+Referenzfaelle plus die 254 neuen MEXC-Proben und den originalen Bitget-Reproducer.
 Der aktuelle CI-Abschluss wird im PR/Issue verlinkt; ein gestarteter Job gilt
 nicht als bestanden. Screenshots und maschinenlesbare Ergebnisse liegen im
 CI-Artefakt ux-browser-evidence, JUnit im mandatory-reference-results.
@@ -129,9 +131,11 @@ Zusaetzliche Abschlusskorrektur: Funding Other darf ein nichtleeres Statusfeld
 nicht ignorieren. Solche Zeilen bleiben bis zur belegten Anbietersemantik
 offene Rohbelege ohne Bestandsbuchung, auch bei scheinbaren Erfolgsnamen.
 Der belegte leere Statuspfad bleibt erhalten. Eigene CSV-/XLSX-Gegenproben
-werden dem verpflichtenden Referenzjob hinzugefuegt; die oben archivierten
-186/40-Protokolle dokumentieren den davor geprueften Stand, nicht diese neue
-Statuspruefung. Der nachfolgende CI-Lauf bindet alle Proben gemeinsam.
+sind separat mit 28/28 erfolgreich ausgefuehrt (originales XML unter mexc-proof/),
+einschliesslich leerer Gegenkontrolle und abgewiesener Linkentscheidung trotz
+frischem Digest. Die archivierten 186/40-Protokolle dokumentieren den davor
+geprueften Stand, nicht diese neue Statuspruefung. Zusaetzliche drei HTTP-Proben
+bestanden im 12er-API-Lauf. Der nachfolgende CI-Lauf bindet alle Proben gemeinsam.
 
 Es gibt keine fachliche Gesamtfreigabe, keinen Produktionsimport und keine
 gepruefte private MEXC-Historie. Reale Auslegung spezieller Geschaefte und
