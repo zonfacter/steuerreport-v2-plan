@@ -117,6 +117,14 @@ Der aktuelle CI-Abschluss wird im PR/Issue verlinkt; ein gestarteter Job gilt
 nicht als bestanden. Screenshots und maschinenlesbare Ergebnisse liegen im
 CI-Artefakt ux-browser-evidence, JUnit im mandatory-reference-results.
 
+Der erste integrierte CI-Lauf bestand alle 330 zusaetzlichen Referenzproben,
+scheiterte aber im Session-Teardown am bestehenden 500-MiB-Tmpbudget:
+1.345.249.104 Bytes behaltener synthetischer Testdateien. Das ist kein gruener
+Job und kein fehlgeschlagener Rechen-Sollwert. Der Reference-Job aktiviert nun
+dieselbe vorhandene Bereinigung erfolgreicher Test-DuckDBs wie die Unit-Suite.
+Budget, Sollwerte, Fehlertests und originale Proben bleiben unveraendert;
+fehlgeschlagene Testdatenbanken werden nicht automatisch beseitigt.
+
 Es gibt keine fachliche Gesamtfreigabe, keinen Produktionsimport und keine
 gepruefte private MEXC-Historie. Reale Auslegung spezieller Geschaefte und
 fehlende Anschaffungskosten bleiben beim bestehenden Review-/Methodenverfahren.

@@ -30,6 +30,7 @@ jobs:
       - name: Independent FX, identity and lot-origin probes
         env:
           PYTHONPATH: src
+          STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
         run: python -m pytest tests/acceptance -q --basetemp="${RUNNER_TEMP}/reference-additional" --junitxml=reference-additional.xml
       - name: Unchanged public Bitget reproducer
         env:
