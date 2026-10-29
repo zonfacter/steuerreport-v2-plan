@@ -249,9 +249,10 @@ def main():
                     if request.method == "POST" and parsed.path == history_base + "/jobs":
                         body = request.post_data_json
                         assert set(body) == {"request_id", "confirm_external_request", "start", "end", "symbols",
-                                             "public_rpc_only", "rpc_provider", "max_records"}
+                                             "public_rpc_only", "rpc_provider", "max_records", "include_binance_earn"}
                         assert UUID(body["request_id"]).version == 4 and body["confirm_external_request"] is True
                         assert body["rpc_provider"] == "public" and body["public_rpc_only"] is True
+                        assert body["include_binance_earn"] is False
                         assert body["symbols"] == [] and body["max_records"] == 100000
                         assert body["start"] == "2025-01-01" and body["end"] == "2025-01-02"
                     response = client.request(request.method, parsed.path + ("?" + parsed.query if parsed.query else ""),
