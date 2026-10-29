@@ -253,6 +253,8 @@ def _reject_before_batch(case, monkeypatch, content, options, **kwargs):
 
     with monkeypatch.context() as patch:
         patch.setattr(case[0], "create_import_batch", forbidden)
+        if hasattr(case[0], "create_import_batch_with_raw"):
+            patch.setattr(case[0], "create_import_batch_with_raw", forbidden)
         with pytest.raises(ValueError):
             case[1].import_base64(**_request(content, options, **kwargs))
     assert _state(case) == before
@@ -1003,3 +1005,226 @@ def test_assistant_preview_passes_native_options_and_trace_exposes_both_evidence
             assert {root.raw_object_id, linked_raw.raw_object_id} <= ids
         assert len(case[0].list_canonical_events()) == 1
         assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+@pytest.mark.parametrize("id_column", ["Transaction ID", "Record ID"])
+@pytest.mark.parametrize("layout", ["same_file", "separate_files", "cross_export"])
+def test_distinct_provider_ids_preserve_two_legitimate_equal_bookings(case, id_column, layout):
+    first_id, second_id = "SYNTHETIC-TXN-A", "SYNTHETIC-TXN-B"
+    first_row = _spot(**{id_column: first_id})
+    first_content = _xlsx([first_row], extra_headers=(id_column,))
+    if layout == "same_file":
+        content = _xlsx([first_row, _spot(**{id_column: second_id})], extra_headers=(id_column,))
+        preview = _preview(case, content, _options())
+        batches = [_import(case, content, _options())[0]]
+    else:
+        first_batch, _ = _import(case, first_content, _options())
+        kind = "funding_other" if layout == "cross_export" else "spot_statement"
+        second_row = _funding(**{id_column: second_id}) if layout == "cross_export" else _spot(**{id_column: second_id})
+        content = _xlsx([second_row], kind, extra_headers=(id_column,))
+        preview = _preview(case, content, _options(kind))
+        batches = [first_batch, _import(case, content, _options(kind))[0]]
+    assert preview.can_import is True
+    native = _native(preview)
+    _counts(native, raw_rows=2 if layout == "same_file" else 1,
+            bookable_rows=2 if layout == "same_file" else 1, linked_rows=0)
+    assert all(row["status"] == "ready" and row["candidates"] == [] for row in native["rows"])
+    raws = [raw for batch in batches for raw in _raw(case, batch)]
+    assert len(raws) == 2
+    assert {_metadata(raw)[1]["provider_id"] for raw in raws} == {first_id, second_id}
+    assert {_metadata(raw)[0][id_column] for raw in raws} == {first_id, second_id}
+    events = case[0].list_canonical_events()
+    assert len(events) == 2
+    assert all(event.quantity == D("2.5") and event.event_type == "unknown" for event in events)
+    assert len({event.raw_object_id for event in events}) == 2
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("5.0")}
+
+
+@pytest.mark.parametrize("id_column", ["Transaction ID", "Record ID"])
+@pytest.mark.parametrize("mismatch", ["quantity", "time", "asset", "direction"])
+@pytest.mark.parametrize("action", [None, "separate", "link_existing"])
+def test_same_provider_id_conflict_blocks_even_with_decision_before_batch(case, monkeypatch, id_column, mismatch, action):
+    provider_id = "SYNTHETIC-CONFLICT-ID"
+    first = _xlsx([_spot(**{id_column: provider_id})], extra_headers=(id_column,))
+    root_batch, _ = _import(case, first, _options())
+    root, = _raw(case, root_batch)
+    changes = {
+        "quantity": {"Quantity": "3.5"},
+        "time": {"Creation Time(UTC+01:00)": "2031-07-09 12:00:01"},
+        "asset": {"Crypto": "OTHERCOIN"},
+        "direction": {"Direction": "Outflow"},
+    }[mismatch]
+    content = _xlsx([_spot(**{id_column: provider_id, **changes})], extra_headers=(id_column,))
+    options = _options()
+    if action:
+        options["decisions"] = {"2": _decision(action, root.raw_object_id if action == "link_existing" else None)}
+    before = _state(case)
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    native = _native(preview)
+    _counts(native, raw_rows=1, bookable_rows=0, linked_rows=0)
+    assert native["blocking_reasons"]
+    assert native["rows"][0]["status"] == "invalid"
+    assert native["rows"][0]["reason"]
+    assert _state(case) == before
+    _reject_before_batch(case, monkeypatch, content, options)
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+@pytest.mark.parametrize("id_column", ["Transaction ID", "Record ID"])
+def test_provider_id_conflict_in_second_physical_row_cannot_partially_import_first(case, monkeypatch, id_column):
+    content = _xlsx([
+        _spot(**{id_column: "SYNTHETIC-ONE-ID"}),
+        _spot(**{id_column: "SYNTHETIC-ONE-ID", "Quantity": "3.5"}),
+    ], extra_headers=(id_column,))
+    preview = _preview(case, content, _options())
+    assert preview.can_import is False
+    assert _native(preview)["rows"][1]["row_number"] == 3
+    assert _native(preview)["rows"][1]["status"] == "invalid"
+    _reject_before_batch(case, monkeypatch, content, _options())
+    assert case[0].list_import_batches() == []
+    assert case[0].list_canonical_events() == []
+
+
+@pytest.mark.parametrize("id_column", ["Transaction ID", "Record ID"])
+def test_same_provider_id_across_header_aliases_links_one_event_two_evidence_rows(case, monkeypatch, id_column):
+    provider_id = "SYNTHETIC-SHARED-ID"
+    first = _xlsx([_spot(**{id_column: provider_id})], extra_headers=(id_column,))
+    root_batch, _ = _import(case, first, _options())
+    root, = _raw(case, root_batch)
+    other_column = "Record ID" if id_column == "Transaction ID" else "Transaction ID"
+    content = _xlsx([_funding(**{other_column: provider_id})], "funding_other", extra_headers=(other_column,))
+    options = _options("funding_other")
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    row, = _native(preview)["rows"]
+    assert row["status"] == "duplicate_candidate"
+    assert root.raw_object_id in set(_string_leaves(row["candidates"]))
+    _reject_before_batch(case, monkeypatch, content, options)
+    options["decisions"] = {"2": _decision("link_existing", root.raw_object_id)}
+    batch, events = _import(case, content, options)
+    assert events == []
+    linked, = _raw(case, batch)
+    payload, meta = _metadata(linked)
+    assert payload[other_column] == provider_id
+    assert meta["provider_id"] == provider_id
+    assert meta["link_target_raw_object_id"] == root.raw_object_id
+    assert meta["role"] == "linked"
+    assert len(case[0].list_canonical_events()) == 1
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+@pytest.mark.parametrize("id_column", ["Transaction ID", "Record ID"])
+@pytest.mark.parametrize("boundary", ["account", "uid"])
+def test_provider_id_scope_is_uid_and_account_not_global(case, id_column, boundary):
+    provider_id = "SYNTHETIC-ID-REUSED-IN-OTHER-CONTEXT"
+    content = _xlsx([_spot(**{id_column: provider_id})], extra_headers=(id_column,))
+    first_batch, _ = _import(case, content, _options())
+    second_options = _options(account="synthetic-other-account") if boundary == "account" else _options()
+    other_uid = "SYNTHETIC-OTHER-UID" if boundary == "uid" else UID
+    second_content = _xlsx([_spot(**{id_column: provider_id, "UID": other_uid, "Quantity": "3.5"})], extra_headers=(id_column,))
+    preview = _preview(case, second_content, second_options)
+    assert preview.can_import is True
+    assert _native(preview)["rows"][0]["status"] == "ready"
+    assert _native(preview)["rows"][0]["candidates"] == []
+    second_batch, _ = _import(case, second_content, second_options)
+    assert first_batch.batch_id != second_batch.batch_id
+    events = case[0].list_canonical_events()
+    assert len(events) == 2
+    assert len({event.account for event in events}) == 2
+    assert sorted(_positions(case).values()) == [D("2.5"), D("3.5")]
+
+
+@pytest.mark.parametrize("generic_id_column", [False, True])
+@pytest.mark.parametrize("second_quantity,expected_balance", [("2.5", "5.0"), ("3.5", "6.0")])
+def test_uid_or_generic_id_equal_uid_is_never_a_provider_transaction_id(case, generic_id_column, second_quantity, expected_balance):
+    extra = ("ID",) if generic_id_column else ()
+    arbitrary_id = {"ID": UID} if generic_id_column else {}
+    first = _xlsx([_spot(**arbitrary_id)], extra_headers=extra)
+    first_batch, _ = _import(case, first, _options())
+    second = _xlsx([_spot(**{**arbitrary_id, "Quantity": second_quantity})], extra_headers=extra, revision="second-export")
+    options = _options()
+    preview = _preview(case, second, options)
+    row, = _native(preview)["rows"]
+    if second_quantity == "2.5":
+        assert row["status"] == "duplicate_candidate"
+        options["decisions"] = {"2": _decision("separate")}
+    else:
+        assert preview.can_import is True
+        assert row["status"] == "ready"
+        assert row["candidates"] == []
+    second_batch, _ = _import(case, second, options)
+    for batch in (first_batch, second_batch):
+        raw, = _raw(case, batch)
+        payload, meta = _metadata(raw)
+        assert payload["UID"] == UID
+        assert meta["uid"] == UID
+        assert meta.get("provider_id") in (None, ""), "UID ist Kontokennung, keine Provider-Buchungs-ID"
+        if generic_id_column:
+            assert payload["ID"] == UID
+    assert len(case[0].list_canonical_events()) == 2
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D(expected_balance)}
+
+
+@pytest.mark.parametrize("legacy_meta", [None, "{}", "not-json", '{"version":0,"role":"book"}'])
+@pytest.mark.parametrize("decision", [False, True])
+def test_legacy_mexc_without_native_binding_blocks_before_batch(case, monkeypatch, legacy_meta, decision):
+    legacy = case[0].create_import_batch(ImportBatchCreate(source="mexc", filename="synthetic-legacy.xlsx", file_hash="synthetic-legacy-hash"))
+    payload = _spot()
+    if legacy_meta is not None:
+        payload["_mexc"] = legacy_meta
+    case[0].add_raw_objects(legacy.batch_id, [RawObjectCreate(row_number=2, payload_json=json.dumps(payload, sort_keys=True))])
+    original, = _raw(case, legacy)
+    before = _state(case)
+    content = _xlsx([_spot()])
+    options = _options(decisions={"2": _decision("separate")}) if decision else _options()
+    try:
+        preview = _preview(case, content, options)
+    except ValueError as error:
+        assert str(error)
+    else:
+        assert preview.can_import is False
+        assert _native(preview)["blocking_reasons"]
+    assert _state(case) == before
+    _reject_before_batch(case, monkeypatch, content, options)
+    assert _raw(case, legacy)[0].payload_json == original.payload_json
+    assert len(case[0].list_import_batches()) == 1
+    assert case[0].list_canonical_events() == []
+
+
+def test_foreign_source_legacy_raw_does_not_block_native_mexc(case):
+    legacy = case[0].create_import_batch(ImportBatchCreate(source="manual-csv", filename="synthetic-foreign.csv", file_hash="synthetic-foreign-legacy"))
+    case[0].add_raw_objects(legacy.batch_id, [RawObjectCreate(row_number=2, payload_json=json.dumps(_spot()))])
+    content = _xlsx([_spot()])
+    preview = _preview(case, content, _options())
+    assert preview.can_import is True
+    assert _native(preview)["rows"][0]["candidates"] == []
+    batch, events = _import(case, content, _options())
+    assert batch.batch_id != legacy.batch_id
+    assert len(events) == 1
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+def test_37_digit_running_balance_keeps_single_atto_unit_changes_and_replay(case):
+    rows = [
+        _spot(Quantity="1234567890123456789.123456789012345678"),
+        _spot(**{"Creation Time(UTC+01:00)": "2031-07-09 12:00:01", "Quantity": "0.000000000000000001"}),
+        _spot(**{"Creation Time(UTC+01:00)": "2031-07-09 12:00:02", "Direction": "Outflow", "Quantity": "0.000000000000000002"}),
+    ]
+    batch, events = _import(case, _xlsx(rows), _options())
+    assert len(events) == 3
+    raw_before = [(raw.raw_object_id, raw.payload_json) for raw in _raw(case, batch)]
+    expected = [
+        (D("1234567890123456789.123456789012345678"), D("1234567890123456789.123456789012345678")),
+        (D("0.000000000000000001"), D("1234567890123456789.123456789012345679")),
+        (D("-0.000000000000000002"), D("1234567890123456789.123456789012345677")),
+    ]
+    for replay in (False, True):
+        if replay:
+            assert len(RawNormalizer(case[0]).normalize_batch(batch.batch_id)) == 3
+            BalanceLedgerBuilder(case[0]).rebuild()
+        with case[0].connect() as con:
+            actual = con.execute("select delta_quantity,balance_quantity from balance_ledger order by event_time").fetchall()
+        assert actual == expected
+        assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("1234567890123456789.123456789012345677")}
+        assert [(raw.raw_object_id, raw.payload_json) for raw in _raw(case, batch)] == raw_before
