@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from contextlib import ExitStack
 from functools import partial
+import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
@@ -38,6 +39,17 @@ class Fixture:
         self.error = None
         self.executed = 0
         self.skipped_raw_objects = 0
+        self.candidate_revision = 0
+        self.same_provider_id = False
+        self.last_rows = []
+
+    def row_digest(self, payload, row):
+        config = payload.get("mexc", {})
+        inputs = {"content_base64": payload["content_base64"], "source": payload["source"],
+                  "sheet": payload.get("sheet_name") or "Sheet1", "account": config.get("account"),
+                  "export_kind": config.get("export_kind"), "timezone": config.get("timezone"),
+                  "row_number": row["row_number"], "candidates": row["candidates"], "same_provider_id": self.same_provider_id}
+        return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
     def posts(self, operation):
         return [call["body"] for call in self.calls if call["path"] == PREFIX + operation]
@@ -54,6 +66,8 @@ class Fixture:
         count = 2003 if self.mode == "candidate" else 1
         candidates = [{"raw_object_id": "synthetic-raw-A", "filename": "synthetic-origin.xlsx", "row_number": 8, "export_kind": "spot_statement"},
                       {"raw_object_id": "synthetic-raw-B", "filename": None, "row_number": None, "export_kind": "funding_other"}]
+        if self.candidate_revision:
+            candidates[0]["filename"] = f"synthetic-origin-revision-{self.candidate_revision}.xlsx"
         rows = [{"row_number": index + 2, "status": "ready", "reason": "Synthetische Kontobewegung, Klassifikation offen.",
                  "asset": "DEMOCOIN", "quantity": "2.500000000000000001", "event_time": "2031-07-09T11:00:00Z", "candidates": []}
                 for index in range(count)]
@@ -83,6 +97,18 @@ class Fixture:
             disposition = "unsupported"
             missing.append("Dieses Produkt ist fachlich noch nicht unterstuetzt.")
             rows[0].update(status="invalid", reason="Synthetische Richtung widerspruechlich.")
+        for row in rows:
+            row.update(input_digest=self.row_digest(payload, row), decision_stale=False)
+            decision = decisions.get(str(row["row_number"]))
+            if decision and decision.get("input_digest") != row["input_digest"]:
+                reason = "Zuordnung veraltet: Originalbytes, Kontext oder Kandidatenfakten geaendert. Erneut bestaetigen."
+                row.update(status="invalid", reason=reason, decision_stale=True)
+                missing.append(reason)
+            elif decision and self.same_provider_id and decision["action"] == "separate":
+                reason = "Identische echte Provider-ID: keine eigenstaendige Buchung; bestehenden Beleg verknuepfen."
+                row.update(status="invalid", reason=reason)
+                missing.append(reason)
+        self.last_rows = rows
         linked = int(bool(rows) and rows[0]["status"] == "linked")
         mexc = {"detected_kind": kind, "disposition": disposition, "raw_rows": count,
                 # Belegte Mengen koennen zugleich eine offene Fachklassifikation haben.
@@ -120,6 +146,9 @@ class Fixture:
                 assert set(body["mexc"]) <= {"export_kind", "account", "timezone", "decisions"}
                 assert body["mexc"]["export_kind"] in KINDS
                 assert 0 < len(body["mexc"]["account"]) <= 128
+                for decision in body["mexc"]["decisions"].values():
+                    if "input_digest" in decision:
+                        assert re.fullmatch(r"[0-9a-fA-F]{64}", decision["input_digest"])
             if self.error:
                 if self.error == "network":
                     route.abort("failed")
@@ -129,6 +158,8 @@ class Fixture:
             elif path.endswith("preview"):
                 self.workspace.send(route, self.preview(body))
             elif self.mode == "multi" and self.executed:
+                route.fulfill(status=409, content_type="application/json", body=json.dumps({"detail": SECRET}))
+            elif body["source"] == "mexc" and not self.preview(body)["can_execute"]:
                 route.fulfill(status=409, content_type="application/json", body=json.dumps({"detail": SECRET}))
             else:
                 self.executed += 1
@@ -240,6 +271,7 @@ def scenarios(output):
         select_files(page)
         configure(page)
         check(page)
+        initial_digest = fixture.last_rows[0]["input_digest"]
         block, choice = decision_fields(page)
         expect(block.get_by_label("MEXC-Gesamtzahlen")).to_contain_text("2003")
         expect(block.get_by_label("MEXC-Gesamtzahlen").locator("div").filter(has_text="Doppelbeleg-Kandidaten").locator("dd")).to_have_text("1")
@@ -269,7 +301,7 @@ def scenarios(output):
         expect(block).to_contain_text("Vorschau nicht mehr aktuell")
         check(page)
         decision = fixture.posts("preview")[-1]["mexc"]["decisions"]["2"]
-        assert decision == {"action": "link_existing", "target_raw_object_id": "synthetic-raw-B", "reason": reason.input_value()}
+        assert decision == {"action": "link_existing", "target_raw_object_id": "synthetic-raw-B", "reason": reason.input_value(), "input_digest": initial_digest}
         expect(block).to_contain_text("Zeile 2: Verknuepft")
         approve(page).check()
         choice.select_option("separate")
@@ -277,6 +309,7 @@ def scenarios(output):
         expect(approve(page)).to_be_disabled()
         check(page)
         assert fixture.posts("preview")[-1]["mexc"]["decisions"]["2"]["action"] == "separate"
+        assert fixture.posts("preview")[-1]["mexc"]["decisions"]["2"]["input_digest"] == initial_digest
         assert "target_raw_object_id" not in fixture.posts("preview")[-1]["mexc"]["decisions"]["2"]
         fixture.error = "envelope"
         check(page)
@@ -517,8 +550,119 @@ def scenarios(output):
             if mode == "linked":
                 assert fixture.posts("execute")[-1]["mexc"]["decisions"]["2"] == {
                     "action": "link_existing", "target_raw_object_id": "synthetic-raw-A",
-                    "reason": "Synthetischer Zweitbeleg, keine eigene Ereignisbuchung."}
+                    "reason": "Synthetischer Zweitbeleg, keine eigene Ereignisbuchung.", "input_digest": fixture.last_rows[0]["input_digest"]}
             area(page).get_by_role("button", name="Neuer Import", exact=True).click()
+
+    def digest_binding(page, fixture):
+        """Dateibytes werden adversarial im Request getauscht, nicht durch ein neues UI-Dateiaustauschfeature."""
+        fixture.mode = "linked"
+        page.evaluate(r"""() => {
+          const original = window.fetch;
+          window.__mexcReplacement = '';
+          window.fetch = (input, options = {}) => {
+            if (window.__mexcReplacement && options.body && /\/api\/v1\/import\/assistant\/(preview|execute)$/.test(String(input))) {
+              const body = JSON.parse(options.body);
+              if (body.source === 'mexc') options = {...options, body: JSON.stringify({...body, content_base64: window.__mexcReplacement})};
+            }
+            return original(input, options);
+          };
+        }""")
+        for change in ("file", "candidates"):
+            select_files(page)
+            configure(page)
+            check(page)
+            old_digest = fixture.last_rows[0]["input_digest"]
+            assert re.fullmatch(r"[0-9a-f]{64}", old_digest)
+            block, choice = decision_fields(page)
+            target = "raw:synthetic-raw-A" if change == "file" else "separate"
+            choice.select_option(target)
+            reason = block.get_by_label("Begruendung Zeile 2 fuer synthetic.xlsx", exact=True)
+            reason.fill("Synthetischer Zweitbeleg mit belegtem Ursprung.")
+            check(page)
+            original_payload = fixture.posts("preview")[-1]
+            assert original_payload["mexc"]["decisions"]["2"]["input_digest"] == old_digest
+            approve(page).check()
+            if change == "file":
+                page.evaluate("window.__mexcReplacement = btoa('SYNTHETIC-REPLACED-ORIGINAL-BYTES')")
+            else:
+                fixture.candidate_revision += 1
+            check(page)
+            new_digest = fixture.last_rows[0]["input_digest"]
+            assert new_digest != old_digest and fixture.last_rows[0]["decision_stale"]
+            expect(block).to_contain_text("Zeile 2: Ungueltig")
+            expect(block).to_contain_text("Zuordnung veraltet")
+            expect(choice).to_be_enabled()
+            expect(reason).to_be_enabled()
+            expect(approve(page)).not_to_be_checked()
+            expect(approve(page)).to_be_disabled()
+            renew = block.get_by_role("button", name="Zuordnung erneut bestaetigen, Zeile 2 fuer synthetic.xlsx", exact=True)
+            expect(renew).to_be_enabled()
+            expect(renew.locator("svg")).to_have_count(1)
+            if change == "file":
+                assert fixture.posts("preview")[-1]["content_base64"] != original_payload["content_base64"]
+            else:
+                assert fixture.posts("preview")[-1]["content_base64"] == original_payload["content_base64"]
+                expect(choice.locator('option[value="raw:synthetic-raw-A"]')).to_contain_text("revision-1")
+            reason.fill("Begruendung geprueft; Belegstand noch nicht neu bestaetigt.")
+            for _ in range(2):
+                check(page)
+                assert fixture.posts("preview")[-1]["mexc"]["decisions"]["2"]["input_digest"] == old_digest
+                assert fixture.last_rows[0]["decision_stale"]
+                expect(approve(page)).to_be_disabled()
+            page.set_viewport_size({"width": 390, "height": 900})
+            renew.scroll_into_view_if_needed()
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.screenshot(path=str(output / f"synthetic-stale-{change}-390.png"), animations="disabled")
+            renew.focus()
+            expect(renew).to_be_focused()
+            page.keyboard.press("Enter")
+            expect(renew).to_be_disabled()
+            expect(block).to_contain_text("Vorschau nicht mehr aktuell")
+            expect(choice).to_have_value(target)
+            expect(reason).to_have_value("Begruendung geprueft; Belegstand noch nicht neu bestaetigt.")
+            expect(approve(page)).to_be_disabled()
+            check(page)
+            expected = {"action": "link_existing" if change == "file" else "separate",
+                        "reason": reason.input_value(), "input_digest": new_digest}
+            if change == "file":
+                expected["target_raw_object_id"] = "synthetic-raw-A"
+            assert fixture.posts("preview")[-1]["mexc"]["decisions"]["2"] == expected
+            assert not fixture.last_rows[0]["decision_stale"]
+            expect(renew).to_have_count(0)
+            expect(approve(page)).to_be_enabled()
+            expect(approve(page)).not_to_be_checked()
+            approve(page).check()
+            area(page).get_by_role("button", name="1 Datei(en) importieren", exact=True).click()
+            expect(file_row(page).locator(".statusPill")).to_have_text("Importiert")
+            assert fixture.posts("execute")[-1]["mexc"]["decisions"]["2"] == expected
+            area(page).get_by_role("button", name="Neuer Import", exact=True).click()
+            page.evaluate("window.__mexcReplacement = ''")
+
+    def provider_id_requires_link(page, fixture):
+        fixture.mode = "linked"
+        fixture.same_provider_id = True
+        select_files(page)
+        configure(page)
+        check(page)
+        block, choice = decision_fields(page)
+        # Die eigene Provider-ID ist nicht im Row-Vertrag: keine lokale Schlussfolgerung.
+        expect(choice.locator('option[value="separate"]')).to_be_enabled()
+        choice.select_option("separate")
+        reason = block.get_by_label("Begruendung Zeile 2 fuer synthetic.xlsx", exact=True)
+        reason.fill("Eigenstaendigkeit zur serverseitigen Pruefung vorgelegt.")
+        check(page)
+        expect(block).to_contain_text("Identische echte Provider-ID")
+        expect(block).to_contain_text("Zeile 2: Ungueltig")
+        expect(approve(page)).to_be_disabled()
+        expect(choice).to_be_enabled()
+        expect(reason).to_be_enabled()
+        choice.select_option("raw:synthetic-raw-A")
+        expect(reason).to_have_value("Eigenstaendigkeit zur serverseitigen Pruefung vorgelegt.")
+        check(page)
+        expect(block).to_contain_text("Zeile 2: Verknuepft")
+        expect(approve(page)).to_be_enabled()
+        assert fixture.posts("preview")[-1]["mexc"]["decisions"]["2"]["input_digest"] == fixture.last_rows[0]["input_digest"]
+        assert not fixture.posts("execute")
 
     def mobile(page, fixture):
         fixture.mode = "candidate"
@@ -558,7 +702,8 @@ def scenarios(output):
     return {"source-missing-config": missing, "timebasis-safe-errors": timezone_errors, "candidate-pager-confirm": candidates,
             "config-reset-manual-regression": resets, "empty-evidence-unsupported": dispositions,
             "sequential-import-revalidation": multi, "invalid-files-disabled": invalid_files, "source-specific-formats": source_formats,
-            "approval-import-effect": approval_effect, "source-specific-outcomes": outcome_labels, "mobile-form-accessibility": mobile}
+            "approval-import-effect": approval_effect, "source-specific-outcomes": outcome_labels,
+            "decision-digest-binding": digest_binding, "provider-id-requires-link": provider_id_requires_link, "mobile-form-accessibility": mobile}
 
 
 def main():

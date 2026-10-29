@@ -11,10 +11,10 @@ const MEXC_KINDS = {
 } as const;
 type MexcKind = keyof typeof MEXC_KINDS;
 type MexcTimezone = "UTC" | "UTC+01:00" | "UTC+08:00" | "Europe/Berlin";
-type MexcDecision = { action: "link_existing" | "separate"; target_raw_object_id?: string; reason: string };
+type MexcDecision = { action: "link_existing" | "separate"; target_raw_object_id?: string; reason: string; input_digest?: string };
 type MexcRow = {
   row_number: number; status: "ready" | "review" | "duplicate_candidate" | "linked" | "evidence_only" | "invalid";
-  reason: string; asset?: string; quantity?: string; event_time?: string;
+  reason: string; asset?: string; quantity?: string; event_time?: string; input_digest: string; decision_stale?: boolean;
   candidates: { raw_object_id: string; filename: string | null; row_number: number | null; export_kind: string }[];
 };
 type MexcPreview = {
@@ -61,17 +61,19 @@ function MexcReview({ item, disabled, onDecision }: { item: Item; disabled: bool
       {review.disposition === "transactions" && <p>Airdrop bleibt zunaechst ein ungeklaerter Vorgang (unknown), keine automatische Mining-, Reward- oder Einkunftseinstufung.</p>}
       {review.rows.slice(activePage * 25, (activePage + 1) * 25).map((row) => {
         const decision = item.decisions?.[String(row.row_number)];
+        const validDigest = /^[a-f0-9]{64}$/i.test(row.input_digest || "");
         const reasonInvalid = Boolean(decision && decision.reason.trim().length < 10);
         const reasonId = `mexc-reason-${item.id}-${row.row_number}`;
         return <div key={row.row_number} style={{ borderTop: "1px solid #d6ded9", paddingBlock: 12 }}>
           <strong>Zeile {row.row_number}: {MEXC_ROW_LABELS[row.status]}</strong>
           <p>{[row.asset, row.quantity, row.event_time].filter(Boolean).join(" / ")}</p><p>{row.reason}</p>
+          {row.decision_stale && decision && <p className="importWarning">Zuordnung veraltet: Belegstand oder Kandidaten haben sich geaendert.</p>}
           {(row.status === "duplicate_candidate" || row.candidates.length > 0 || decision) && <div className="importSelection">
-            <label>Belegzuordnung, Zeile {row.row_number}<select aria-label={`Belegzuordnung Zeile ${row.row_number} fuer ${item.file.name}`} disabled={disabled}
+            <label>Belegzuordnung, Zeile {row.row_number}<select aria-label={`Belegzuordnung Zeile ${row.row_number} fuer ${item.file.name}`} disabled={disabled || !validDigest}
               value={decision?.action === "separate" ? "separate" : decision?.target_raw_object_id ? `raw:${decision.target_raw_object_id}` : ""}
               onChange={(event) => onDecision(row.row_number, !event.target.value ? undefined : {
                 action: event.target.value === "separate" ? "separate" : "link_existing",
-                ...(event.target.value.startsWith("raw:") ? { target_raw_object_id: event.target.value.slice(4) } : {}), reason: decision?.reason || "",
+                ...(event.target.value.startsWith("raw:") ? { target_raw_object_id: event.target.value.slice(4) } : {}), reason: decision?.reason || "", input_digest: row.input_digest,
               })}>
               <option value="">Zuordnung offen</option><option value="separate">Eigenstaendige Buchung (separat)</option>
               {row.candidates.map((candidate) => <option key={candidate.raw_object_id} value={`raw:${candidate.raw_object_id}`}>{candidate.filename || "Beleg ohne Dateiname"} / Zeile {candidate.row_number ?? "unbekannt"} / {MEXC_KINDS[candidate.export_kind as MexcKind] || candidate.export_kind} / {candidate.raw_object_id}</option>)}
@@ -80,6 +82,11 @@ function MexcReview({ item, disabled, onDecision }: { item: Item; disabled: bool
             {decision && <label>Begruendung, Zeile {row.row_number}<input aria-label={`Begruendung Zeile ${row.row_number} fuer ${item.file.name}`} value={decision.reason} disabled={disabled} minLength={10} required
               aria-invalid={reasonInvalid} aria-describedby={reasonId} onChange={(event) => onDecision(row.row_number, { ...decision, reason: event.target.value })} />
               <small id={reasonId}>Mindestens 10 Zeichen; Beleggrund fuer die Zuordnung.</small></label>}
+            {row.decision_stale && decision && <button type="button" title="Zuordnung fuer den aktuellen Belegstand erneut bestaetigen"
+              aria-label={`Zuordnung erneut bestaetigen, Zeile ${row.row_number} fuer ${item.file.name}`}
+              disabled={disabled || !validDigest || decision.input_digest === row.input_digest}
+              onClick={() => onDecision(row.row_number, { ...decision, input_digest: row.input_digest })}><Check size={16} /> Zuordnung erneut bestaetigen</button>}
+            {!validDigest && <p role="status">Aktueller Belegstand fehlt. Dateien erneut pruefen.</p>}
           </div>}
         </div>;
       })}
@@ -205,7 +212,7 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
           if (fingerprint) fingerprints.add(fingerprint);
           if (repeated) { preview.can_execute = false; preview.blocked_reason = "Identische Datei und dasselbe Tabellenblatt bereits in dieser Auswahl."; }
           const mexc = preview.preview?.mexc;
-          const configured = source !== "mexc" || Boolean(item.exportKind && mexcAccount.trim() && mexc && !mexc.blocking_reasons.length && mexc.disposition !== "unsupported");
+          const configured = source !== "mexc" || Boolean(item.exportKind && mexcAccount.trim() && mexc && !mexc.blocking_reasons.length && !mexc.rows.some((row) => row.decision_stale) && mexc.disposition !== "unsupported");
           update(item.id, { encoded, preview, review: mexc, sheets: preview.preview?.sheet_names, sheet: preview.preview?.sheet_name ?? item.sheet,
             status: mexc?.disposition === "empty" ? "empty" : repeated || preview.preview?.duplicate_batch_id ? "duplicate" : preview.can_execute && configured ? "ready" : "blocked" });
         } catch (caught) { if (token === generation.current) update(item.id, { status: "error", preview: undefined, error: caught instanceof Error ? caught.message : "Dateipruefung fehlgeschlagen." }); }
