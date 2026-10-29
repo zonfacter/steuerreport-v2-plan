@@ -37,6 +37,7 @@ class Fixture:
         self.mode = "ready"
         self.error = None
         self.executed = 0
+        self.skipped_raw_objects = 0
 
     def posts(self, operation):
         return [call["body"] for call in self.calls if call["path"] == PREFIX + operation]
@@ -57,7 +58,7 @@ class Fixture:
                  "asset": "DEMOCOIN", "quantity": "2.500000000000000001", "event_time": "2031-07-09T11:00:00Z", "candidates": []}
                 for index in range(count)]
         decisions = config.get("decisions", {})
-        if payload["source"] == "mexc" and (self.mode == "candidate" or (self.mode == "multi" and self.executed)):
+        if payload["source"] == "mexc" and (self.mode in {"candidate", "linked"} or (self.mode == "multi" and self.executed)):
             rows[0].update(status="duplicate_candidate", reason="Weitere Ansicht derselben Buchung moeglich.", candidates=candidates)
             if "2" in decisions:
                 decision = decisions["2"]
@@ -132,7 +133,7 @@ class Fixture:
             else:
                 self.executed += 1
                 self.workspace.send(route, {"batch": {"batch_id": "synthetic-batch"},
-                                            "run": {"imported_rows": 1, "normalized_events": 0, "skipped_raw_objects": 0}})
+                                            "run": {"imported_rows": 1, "normalized_events": 0, "skipped_raw_objects": self.skipped_raw_objects}})
         elif method == "GET" and path == "/api/v1/health":
             self.workspace.send(route, {"app_version": "synthetic", "status": "ok"})
         elif method == "GET" and self.workspace.handle(route):
@@ -485,6 +486,40 @@ def scenarios(output):
         expect(approve(page)).to_be_disabled()
         assert len(fixture.posts("execute")) == 2
 
+    def outcome_labels(page, fixture):
+        fixture.skipped_raw_objects = 1
+        cases = (("mexc", "asset_snapshot", "ready"), ("mexc", "spot_statement", "linked"), ("manual-csv", None, "ready"))
+        for source, kind, mode in cases:
+            fixture.mode = mode
+            area(page).get_by_label("Importquelle", exact=True).select_option(source)
+            select_files(page)
+            if kind:
+                configure(page, kind=kind)
+            check(page)
+            if mode == "linked":
+                block, choice = decision_fields(page)
+                choice.select_option("raw:synthetic-raw-A")
+                block.get_by_label("Begruendung Zeile 2 fuer synthetic.xlsx", exact=True).fill("Synthetischer Zweitbeleg, keine eigene Ereignisbuchung.")
+                check(page)
+                expect(block).to_contain_text("Zeile 2: Verknuepft")
+            approve(page).check()
+            area(page).get_by_role("button", name="1 Datei(en) importieren", exact=True).click()
+            expect(file_row(page).locator(".statusPill")).to_have_text("Importiert")
+            outcome = file_row(page).locator(".importOutcome > span")
+            label = "Rohzeilen ohne eigene Ereignisbuchung (Beleg/Review)" if source == "mexc" else "nicht zugeordnet"
+            expect(outcome).to_have_text(f"1 Rohzeilen / 0 Ereignisse / 1 {label}")
+            if source == "mexc":
+                expect(outcome).not_to_contain_text("nicht zugeordnet")
+                page.set_viewport_size({"width": 320, "height": 900})
+                outcome.scroll_into_view_if_needed()
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                page.screenshot(path=str(output / f"synthetic-mexc-outcome-{kind}-320.png"), animations="disabled")
+            if mode == "linked":
+                assert fixture.posts("execute")[-1]["mexc"]["decisions"]["2"] == {
+                    "action": "link_existing", "target_raw_object_id": "synthetic-raw-A",
+                    "reason": "Synthetischer Zweitbeleg, keine eigene Ereignisbuchung."}
+            area(page).get_by_role("button", name="Neuer Import", exact=True).click()
+
     def mobile(page, fixture):
         fixture.mode = "candidate"
         select_files(page)
@@ -523,7 +558,7 @@ def scenarios(output):
     return {"source-missing-config": missing, "timebasis-safe-errors": timezone_errors, "candidate-pager-confirm": candidates,
             "config-reset-manual-regression": resets, "empty-evidence-unsupported": dispositions,
             "sequential-import-revalidation": multi, "invalid-files-disabled": invalid_files, "source-specific-formats": source_formats,
-            "approval-import-effect": approval_effect, "mobile-form-accessibility": mobile}
+            "approval-import-effect": approval_effect, "source-specific-outcomes": outcome_labels, "mobile-form-accessibility": mobile}
 
 
 def main():

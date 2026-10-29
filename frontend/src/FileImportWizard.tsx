@@ -286,7 +286,7 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
         generation.current += 1; setApproved(false); setError("");
         update(item.id, { decisions, preview: undefined, review: item.preview?.preview?.mexc || item.review, status: "pending", error: undefined });
       }} />}
-      {item.result && <div className="importOutcome"><span>{item.result.run.imported_rows} Rohzeilen / {item.result.run.normalized_events} Ereignisse / {item.result.run.skipped_raw_objects} nicht zugeordnet</span>
+      {item.result && <div className="importOutcome"><span>{item.result.run.imported_rows} Rohzeilen / {item.result.run.normalized_events} Ereignisse / {item.result.run.skipped_raw_objects} {source === "mexc" ? "Rohzeilen ohne eigene Ereignisbuchung (Beleg/Review)" : "nicht zugeordnet"}</span>
         <a href={`${API_BASE}/api/v1/import/batches/${encodeURIComponent(item.result.batch.batch_id)}/trace.json`} download><Download size={16} /> {source === "mexc" ? "Belegspur (JSON)" : "Belegspur"}</a>
         {source === "mexc" && <a href={`${API_BASE}/api/v1/import/batches/${encodeURIComponent(item.result.batch.batch_id)}/original`} download><FileDown size={16} /> Originaldatei</a>}
       </div>}
