@@ -15,7 +15,7 @@ type Settings = {
   profile_issue?: string | null; server_time_utc?: string; demo_mode?: boolean;
   storage_checks?: Array<{ code: string; status: "ready" | "blocked"; label: string; detail: string; action: string }>;
 };
-type ConfigDocument = { filename: string; content: string; revision: string };
+type ConfigDocument = { filename: string; content: string; revision: string; exists: boolean; valid: boolean; validation_error?: string | null };
 const CONFIGS = [
   "source_registry.json", "solana_v1_ownership_scope.json", "solana_service_swap_tax_mappings.json",
   "pionex_hnt_reconciliation.json", "fairspot_hnt_staking_reconciliation.json", "solana_staking_position_reconciliations.json",
@@ -43,6 +43,7 @@ async function request<T>(path: string, method = "GET", body?: unknown, signal?:
       profile_revision_conflict: "Die Konfiguration wurde zwischenzeitlich geändert. Vor erneutem Speichern neu laden.",
       config_revision_conflict: "Die Datei wurde zwischenzeitlich geändert. Vor erneutem Speichern neu laden.",
       config_json_or_schema_invalid: "JSON oder Konfigurationsschema ist ungültig.",
+      config_unreadable: "Die Konfigurationsdatei ist nicht lesbar. Pfad und Leserechte des Dienstbenutzers administrativ prüfen.",
       encrypted_secret_vault_required: "Ein verschlüsselter Secret-Vault ist erforderlich. Die Administration muss den Schlüssel sicher bereitstellen.",
       profile_url_invalid_or_contains_credentials: "Die Dienstadresse muss eine HTTP(S)-URL ohne Zugangsdaten, Query-Parameter oder Fragment sein.",
       profile_location_not_writable: "Das private Profil muss außerhalb des Softwareverzeichnisses liegen und für den Dienstbenutzer beschreibbar sein.",
@@ -96,7 +97,7 @@ export function InstallationSettings() {
     setDocument(null); setContent(""); setDocumentError(""); setDocumentLoading(true);
     void request<ConfigDocument>(`/configs/${filename}`, "GET", undefined, controller.signal).then((result) => {
       if (!controller.signal.aborted) { setDocument(result); setContent(result.content); }
-    }).catch(() => { if (!controller.signal.aborted) setDocumentError("Die Konfigurationsdatei konnte nicht geladen werden."); })
+    }).catch((caught) => { if (!controller.signal.aborted) setDocumentError(caught instanceof Error ? caught.message : "Die Konfigurationsdatei konnte nicht geladen werden."); })
       .finally(() => { if (!controller.signal.aborted) setDocumentLoading(false); });
     return () => controller.abort();
   }, [filename, advancedOpen, documentAttempt]);
@@ -158,6 +159,8 @@ export function InstallationSettings() {
       <p className="adminInlineHelp">Nur geprüfte Quellen-/Belegzuordnungen bearbeiten. Keine API-Keys oder sonstigen Secrets in JSON ablegen. Eine Änderung übernimmt keine fachliche Review-Entscheidung.</p>
       {documentLoading && <p role="status">Belegkonfiguration wird geladen.</p>}
       {documentError && <p role="alert" className="adminMessage error">{documentError} <button className="ghostButton" type="button" onClick={() => setDocumentAttempt((value) => value + 1)}>Erneut laden</button></p>}
+      {document && !document.exists && <p role="status" className="adminInlineHelp">Diese optionale Konfigurationsdatei ist noch nicht angelegt. Derzeit gilt der leere Standard; beim Speichern wird die Datei neu erstellt.</p>}
+      {document && !document.valid && <p role="alert" className="adminMessage error">Die gespeicherte Ownership-Konfiguration ist ungültig. Ein Import wird dadurch blockiert. Dateiinhalt korrigieren und mit der angezeigten Revision speichern; es wird keine Eigentums- oder Steuerentscheidung übernommen.</p>}
       <form onSubmit={(event) => { event.preventDefault(); if (!document || environment.locked || demo || busy) return; void act(async () => {
         const result = await request<ConfigDocument>(`/configs/${filename}`, "PUT", { revision: document.revision, content });
         setDocument(result); await load(true); setNotice("Private Belegkonfiguration gespeichert. Keine Berechnung wurde gestartet.");

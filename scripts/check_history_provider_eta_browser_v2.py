@@ -120,7 +120,8 @@ class ProviderFixture(HistoryFixture):
         parsed = HistoryStart.model_validate(body)
         assert UUID(body["request_id"]).version == 4
         assert set(body) == {"request_id", "confirm_external_request", "start", "end", "symbols",
-                             "rpc_provider", "public_rpc_only", "max_records"}, body
+                             "rpc_provider", "public_rpc_only", "max_records", "include_binance_earn"}, body
+        assert body["include_binance_earn"] is False, body
         assert parsed.rpc_provider in {"public", "helius", "alchemy", "custom"}, body
         assert body["public_rpc_only"] is (body["rpc_provider"] == "public"), body
         assert parsed.symbols == [] and parsed.max_records == 100000, body

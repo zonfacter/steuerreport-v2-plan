@@ -12,6 +12,7 @@ export type ViewState = {
   section: string; tab: string; page: number; size: number; sort: string; year: string;
   asset: string; source: string; status: string; type: string; start: string; end: string;
   detail: string; detailTab: string; detailPage: number; category: string; account: string; task: string;
+  target: string; targetKind: string; evidenceId: string; returnTo: string;
 };
 const TYPES = ["trade", "transfer", "fee", "reward", "income", "staking", "mining", "derivative", "unknown"];
 const STATUSES = ["configured", "setup", "failed", "stale", "reconciliation", "review", "present", "none", "high", "medium", "low", "fifo", "price", "import", "wallet", "evidence", "tax"];
@@ -44,6 +45,10 @@ export function parseView(hash = window.location.hash): ViewState {
     source: /^s_[a-f0-9]{20}$/.test(values.get("source") || "") ? values.get("source")! : "",
     account: /^a_[a-f0-9]{20}$/.test(values.get("account") || "") ? values.get("account")! : "",
     task: /^[A-Za-z0-9_-]{1,80}$/.test(values.get("task") || "") ? values.get("task")! : "",
+    target: /^[A-Za-z0-9._:/-]{1,128}$/.test(values.get("target") || "") ? values.get("target")! : "",
+    targetKind: ["event", "price"].includes(values.get("target_kind") || "") ? values.get("target_kind")! : "",
+    evidenceId: /^[A-Za-z0-9_-]{1,128}$/.test(values.get("evidence_id") || "") ? values.get("evidence_id")! : "",
+    returnTo: ["review", "flows", "sources"].includes(values.get("return_to") || "") ? values.get("return_to")! : "",
     status: STATUSES.includes(values.get("status") || "") ? values.get("status")! : "",
     type: TYPES.includes(values.get("type") || "") ? values.get("type")! : "",
     category: ["fifo", "price", "import", "wallet", "reconciliation", "evidence", "tax"].includes(values.get("category") || "") ? values.get("category")! : "",
@@ -54,6 +59,12 @@ export function parseView(hash = window.location.hash): ViewState {
     detailPage: int("detailPage", 1, 1_000_000)
   };
   if (state.start && state.end && state.start > state.end) state.end = "";
+  if (!state.target || !state.targetKind || section !== "ai") {
+    state.target = "";
+    state.targetKind = "";
+    state.evidenceId = "";
+    state.returnTo = "";
+  }
   if (section === "flows" && !["newest", "oldest"].includes(state.sort)) state.sort = "newest";
   if (section === "sources" && !["name", "value", "issues"].includes(state.sort)) state.sort = "name";
   const validStatuses = section === "sources" ? ["configured", "setup", "failed", "stale", "reconciliation", "review"] : section === "review" ? ["high", "medium", "low"] : section === "flows" ? ["present", "none"] : [];
@@ -69,6 +80,12 @@ export function viewHash(view: ViewState) {
   if (view.size !== 25) values.set("size", String(view.size));
   if (view.sort !== (view.section === "sources" ? "name" : "newest")) values.set("sort", view.sort);
   for (const key of ["asset", "source", "status", "type", "start", "end", "detail", "category", "account", "task"] as const) if (view[key]) values.set(key, view[key]);
+  if (view.section === "ai" && view.target && view.targetKind) {
+    values.set("target", view.target);
+    values.set("target_kind", view.targetKind);
+    if (view.evidenceId) values.set("evidence_id", view.evidenceId);
+    if (view.returnTo) values.set("return_to", view.returnTo);
+  }
   if (view.detail && view.detailTab !== "overview") values.set("detailTab", view.detailTab);
   if (view.detail && view.detailPage !== 1) values.set("detailPage", String(view.detailPage));
   return `#${view.section}${values.size ? "?" + values.toString() : ""}`;

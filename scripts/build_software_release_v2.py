@@ -29,6 +29,8 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/MEXC_IMPORT.md",
+    "docs/RELEASE_0.2.0rc36.md",
     "docs/RELEASE_0.2.0rc35.md",
     "docs/RELEASE_0.2.0rc34.md",
     "docs/RELEASE_0.2.0rc33.md",

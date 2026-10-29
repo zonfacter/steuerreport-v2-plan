@@ -163,6 +163,14 @@ class ConnectionService:
             raise ConnectionError("connection_not_found", 404)
         return dict(record)
 
+    def validate_import_binding(self, connection_id: str | UUID, provider: str) -> str:
+        """Validate a stored connection identity without reading or using credentials."""
+        connection_id = _id(connection_id)
+        record = self._record(self._read(), connection_id)
+        if record.get("provider") != provider:
+            raise ConnectionError("connection_provider_mismatch", 400)
+        return connection_id
+
     def _metadata(self, prefix: str, provider: str, *, legacy: bool = False) -> CredentialMetadata:
         rows = {row.key: row for row in self.store.list_admin_settings() if row.key.startswith(prefix)}
         present = {field: bool(rows.get(f"{prefix}{field}")) for field in FIELDS}

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from steuerreport_v2.contracts.pipeline import ImportRunResult
+from steuerreport_v2.contracts.mexc_import import MexcImportOptions, MexcImportPreview
 
 ImportStatus = Literal["created", "loaded", "normalized", "failed"]
 
@@ -14,6 +16,7 @@ class ImportBatchCreate(BaseModel):
     source: str = Field(min_length=1)
     filename: str | None = None
     file_hash: str | None = None
+    connection_id: UUID | None = None
 
 
 class ImportBatch(BaseModel):
@@ -21,6 +24,7 @@ class ImportBatch(BaseModel):
     source: str
     filename: str | None = None
     file_hash: str | None = None
+    connection_id: UUID | None = None
     status: ImportStatus
     created_at: datetime
     raw_object_count: int = 0
@@ -53,8 +57,11 @@ class CsvImportPreview(BaseModel):
     sample_rows: list[dict[str, str | None]]
     can_import: bool
     duplicate_batch_id: str | None = None
+    duplicate_batch_connection_id: UUID | None = None
+    connection_id: UUID | None = None
     file_sha256: str | None = None
     import_fingerprint: str | None = None
+    mexc: MexcImportPreview | None = None
 
 
 ImportAssistantMode = Literal["file", "api", "onchain", "v1_cache"]
@@ -67,6 +74,8 @@ class ImportAssistantRequest(BaseModel):
     content: str | None = None
     content_base64: str | None = None
     sheet_name: str | None = None
+    connection_id: UUID | None = None
+    mexc: MexcImportOptions | None = None
 
 
 class ImportAssistantPriceNeed(BaseModel):

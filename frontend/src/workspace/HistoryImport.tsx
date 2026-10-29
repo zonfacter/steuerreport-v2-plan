@@ -30,7 +30,8 @@ type HistoryProgress = {
 };
 type HistoryCapability = {
   source_ref: string; label: string; provider: string | null; supported: boolean; ready: boolean;
-  blocked_reason: string | null; requires_symbols: boolean; coverage_notes: string[]; default_start: string;
+  blocked_reason: string | null; requires_symbols: boolean; supports_binance_earn: boolean;
+  coverage_notes: string[]; default_start: string;
   rpc_options?: HistoryRpcOption[];
 };
 type HistoryJob = {
@@ -40,6 +41,7 @@ type HistoryJob = {
   phase: string; created_at: string; updated_at: string; start: string; end: string;
   records_fetched: number; pages_fetched: number; new_records: number; duplicate_records: number;
   imported_events: number; requests: number; max_records: number; preview_sha256: string | null;
+  includes_binance_earn: boolean; provider_requests_reserved: number; provider_request_limit: number;
   sample_rows: Record<string, unknown>[]; before_summary: Record<string, unknown> | null;
   after_summary: Record<string, unknown> | null; review_issues_open: number | null;
   error_code: string | null; coverage_notes: string[]; complete_history_proven: boolean; can_resume?: boolean;
@@ -47,7 +49,7 @@ type HistoryJob = {
   transport?: HistoryRpcOption | null; progress?: HistoryProgress | null;
 };
 type HistoryView = { capability: HistoryCapability; jobs: HistoryJob[] };
-type HistoryStart = { request_id: string; confirm_external_request: true; start: string; end: string | null; symbols: string[]; public_rpc_only: boolean; rpc_provider?: RpcProvider | null; max_records: number };
+type HistoryStart = { request_id: string; confirm_external_request: true; start: string; end: string | null; symbols: string[]; public_rpc_only: boolean; rpc_provider?: RpcProvider | null; max_records: number; include_binance_earn: boolean };
 type HistoryResume = { confirm_external_request: true; max_records?: number };
 type HistoryApprove = { preview_sha256: string; actor: string; confirm_import: true; confirm_recalculation: true };
 type Props = { sourceRef: string; sourceLabel: string; onApplied: () => void };
@@ -103,6 +105,10 @@ const errors: Record<string, string> = {
   history_job_id_invalid: "Die Auftragskennung ist ungültig. Den Auftrag erneut aus der gespeicherten Liste auswählen.",
   history_job_storage_limit: "Die maximale Zahl gespeicherter Historienaufträge ist erreicht. Die serverseitige Auftragsverwaltung prüfen.",
   history_job_capacity: "Alle verfügbaren Abrufplätze sind belegt. Laufende Aufträge abwarten und später erneut versuchen.",
+  history_binance_earn_connection_required: "Simple Earn ist nur mit einer ausdrücklich ausgewählten Binance-Kontoverbindung verfügbar. Globale oder Legacy-Zugangsdaten werden dafür nicht verwendet.",
+  history_provider_request_budget_exhausted: "Das sichere Kontingent von 10.000 Anbieteranfragen für diesen Historienauftrag ist erreicht. Der Auftrag wird nicht weiter abgerufen; Umfang und gespeicherten Fortschritt prüfen.",
+  history_binance_earn_product_limit: "Die Zahl der Earn-Produktanker überschreitet die Sicherheitsgrenze. Produkte dieser Verbindung prüfen; kein Abruf gestartet.",
+  history_binance_earn_product_anchor_invalid: "Ein gespeicherter Earn-Produktanker ist ungültig. Verbindungssnapshot und Originalbelege prüfen.",
   missing_credentials: "API-Zugangsdaten fehlen. Die bestehende Einrichtung prüfen.",
   missing_configuration: "Die bestehende Quellen- und Anbietereinrichtung ist noch unvollständig.",
   history_missing_credentials: "API-Zugangsdaten fehlen. Die bestehende Einrichtung prüfen.",
@@ -186,6 +192,7 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
   const [jobs, setJobs] = useState<HistoryJob[]>([]), [selectedId, setSelectedId] = useState("");
   const [start, setStart] = useState(""), [end, setEnd] = useState(new Date().toISOString().slice(0, 10));
   const [symbols, setSymbols] = useState(""), [rpcMode, setRpcMode] = useState<"public" | "configured" | "">("");
+  const [includeEarn, setIncludeEarn] = useState(false);
   const [configuredProvider, setConfiguredProvider] = useState<Exclude<RpcProvider, "public"> | "">("");
   const [maxRecords, setMaxRecords] = useState("100000");
   const [externalConsent, setExternalConsent] = useState(false), [resumeConsent, setResumeConsent] = useState("");
@@ -309,6 +316,7 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
           : <form className="hiStart" onSubmit={(event) => {
             event.preventDefault(); if (!canStart) return;
             const options: Omit<HistoryStart, "request_id" | "confirm_external_request"> = { start, end: end || null, symbols: parsedSymbols, public_rpc_only: !isSolana || rpcProvider === "public", max_records: limit,
+              include_binance_earn: !!capability.supports_binance_earn && includeEarn,
               ...(isSolana && rpcProvider ? { rpc_provider: rpcProvider } : {}) };
             const key = JSON.stringify(options);
             if (request.current?.key !== key) request.current = { key, id: uuid() };
@@ -321,6 +329,11 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
             {capability.requires_symbols && <label>Handelspaare (kommagetrennt)<input type="text" placeholder={capability.provider === "pionex" ? "BTC_USDT, ETH_USDT" : "BTCUSDT, ETHUSDT"} maxLength={8200} value={symbols} required aria-invalid={symbolError} onChange={(event) => { setSymbols(event.target.value); changeStartOptions(); }} /></label>}
             {symbolError && <p className="wsWarning">{errorText("history_symbols_invalid")} Höchstens 200 Handelspaare.</p>}
             {start && end && end < start && <p className="wsWarning">{errorText("history_date_range_invalid")}</p>}
+            {capability.supports_binance_earn && <fieldset className="hiModes" disabled={!!busy}>
+              <legend>Zusätzliche Historie</legend>
+              <label className="hiCheck"><input type="checkbox" checked={includeEarn} onChange={(event) => { setIncludeEarn(event.target.checked); changeStartOptions(); }} /><span>Binance Simple Earn (Flexible und Locked) in diesem Kontoauftrag einbeziehen</span></label>
+              <p className="wsMuted">Nur Produkte aus dem gespeicherten Snapshot dieser Verbindung und bereits kontogebundenen Earn-Belegen. Anbieter-Retention und Vollständigkeit sind nicht nachgewiesen; unbekannte Produkte und mögliche Überschneidungen mit Dateiimporten bleiben zur Prüfung.</p>
+            </fieldset>}
             {isSolana && <div className="hiRpcChoice">
               <fieldset className="hiModes" disabled={!!busy}><legend>Abrufmodus</legend>
                 <label className={`hiMode${rpcMode === "public" ? " hiModeSelected" : ""}`}><input type="radio" name="history-rpc-mode" value="public" checked={rpcMode === "public"} onChange={() => { setRpcMode("public"); changeStartOptions(); }} /><span>Öffentlicher RPC (Free)</span></label>
@@ -358,10 +371,10 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
     {resource.status === "ready" && !ordered.length && !resource.data?.jobs.length && <p className="wsMuted">Für diese Quelle ist noch kein Historienauftrag gespeichert.</p>}
     {job && <section className="hiJob" aria-label="Ausgewählter Historienauftrag">
       <div className="hiJobHeading"><h3>Auftrag für {sourceLabel}</h3><Badge tone={job.status === "failed" ? "danger" : job.status === "paused" ? "warning" : "neutral"}>{jobStatusText(job)}</Badge></div>
-      <p className="wsMuted">{job.start} bis {job.end} · Stand: {timestamp(job.updated_at)}</p>
+      <p className="wsMuted">{job.start} bis {job.end} · Stand: {timestamp(job.updated_at)}{job.includes_binance_earn ? " · Simple Earn eingeschlossen" : ""}</p>
       <p role="status" aria-live="polite">{jobStatusText(job)} · {job.records_fetched} Datensätze · {job.pages_fetched} Seiten</p>
       {job.provider.toLowerCase().includes("solana") && <><PinnedJobProvider job={job} /><JobProgress job={job} stale={!!pollError} /></>}
-      <dl className="hiCounts"><div><dt>Datensätze</dt><dd>{job.records_fetched}</dd></div><div><dt>Seiten</dt><dd>{job.pages_fetched}</dd></div><div><dt title="Nur Anfragen erfolgreich gespeicherter Seiten; keine vollständige Anbieterabrechnung">Anfragen gespeicherter Seiten</dt><dd>{job.requests}</dd></div><div><dt>Neu</dt><dd>{job.new_records}</dd></div><div><dt>Duplikate</dt><dd>{job.duplicate_records}</dd></div><div><dt>Importierte Ereignisse</dt><dd>{job.imported_events}</dd></div></dl>
+      <dl className="hiCounts"><div><dt>Datensätze</dt><dd>{job.records_fetched}</dd></div><div><dt>Seiten</dt><dd>{job.pages_fetched}</dd></div><div><dt title="Anfragen der gespeicherten Seiten, ohne notwendigerweise alle Wiederholungen abzubilden">Anfragen gespeicherter Seiten</dt><dd>{job.requests}</dd></div>{job.includes_binance_earn && <div><dt title="Vor jeder HTTP-Sendung einschließlich Wiederholung reserviert; die gemeinsamen Anbieterlimits gelten zusätzlich">Reserviertes Anbieterbudget</dt><dd>{job.provider_requests_reserved} / {job.provider_request_limit}</dd></div>}<div><dt>Neu</dt><dd>{job.new_records}</dd></div><div><dt>Duplikate</dt><dd>{job.duplicate_records}</dd></div><div><dt>Importierte Ereignisse</dt><dd>{job.imported_events}</dd></div></dl>
       {job.phase && <p className="wsMuted">Phase: {job.phase}</p>}
       {job.error_code && <p className="wsInlineWarning" role="alert">{errorText(job.error_code, "Der Anbieterabruf wurde nicht vollständig abgeschlossen. Einrichtung und technischen Fehlercode prüfen.")}</p>}
       {!job.complete_history_proven && <p className="wsInlineWarning">Verfügbare Anbieterhistorie, Vollständigkeit nicht bestätigt</p>}

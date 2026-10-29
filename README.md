@@ -1,29 +1,33 @@
 # Steuerreport V2
 
-Version 0.2.0rc35, Releasekandidat mit geprueften Bewertungs-, Lot- und
-Importkorrekturen sowie Versions-/Updateeinrichtung. Kein amtliches
+Version 0.2.0rc36, Releasekandidat mit issuebezogenen Import-, Konfigurations-,
+Bewertungs- und Docker-Abnahmekorrekturen. Kein amtliches
 Guetesiegel und keine automatische steuerliche Jahresfreigabe.
 Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc35](docs/RELEASE_0.2.0rc35.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc36](docs/RELEASE_0.2.0rc36.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
+
+Issue #4: nativer MEXC-Dateiimport mit Konto-/Exportartzuordnung und
+begruendeter Belegverknuepfung. [Umfang und Grenzen](docs/MEXC_IMPORT.md).
+Release und Image werden am unveraenderlichen rc36-Quellstand geprueft;
+produktive Container werden nur mit gesondertem Backup-/Rollbacknachweis ersetzt.
 
 ## Docker-Installation
 
 ### Fertiges Image aus GHCR
 
-Registry: `ghcr.io/zonfacter/steuerreport-v2`. Das Repository ist oeffentlich;
-die Sichtbarkeit des Containerpakets wird bei GitHub separat verwaltet.
-Fuer ein privates Paket ein GitHub Personal Access Token (classic) mit
+Registry: `ghcr.io/zonfacter/steuerreport-v2`. Das Containerpaket ist jetzt
+oeffentlich; zum Herunterladen ist keine Anmeldung erforderlich. Bei einer
+eigenen privaten Paketbereitstellung ein GitHub Personal Access Token (classic) mit
 `read:packages` verwenden. Token nur lokal beim Docker-Login eingeben,
 nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
-docker login ghcr.io -u zonfacter
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc35
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc36
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -35,9 +39,9 @@ Die zusaetzliche Kennung `sha-<vollstaendiger Release-Commit>` bezeichnet
 denselben veroeffentlichten Quellstand. Vorabversionen erhalten kein `latest`.
 Aktuell wird `linux/amd64` gebaut und geprueft, nicht ARM64.
 
-rc35 ist ein Releasekandidat. Die obige Image-Referenz ist die Zielversion;
-Build, Veroeffentlichung und produktives Deployment sind erst nach den
-gesonderten Nachweisen im Release bestaetigt.
+rc36 ist ein Releasekandidat. Massgeblich sind der Release-Commit und der in
+den GitHub-Aktionen dokumentierte Image-Digest. Eine Produktivumschaltung ist
+davon getrennt und wird erst nach konsistenter Sicherung und Smoke-Test bestaetigt.
 
 ### Lokal aus dem Quellstand bauen
 
@@ -94,6 +98,10 @@ Volume `steuerreport-data`. Das Image laeuft ohne Root, mit schreibgeschuetztem
 Software-Dateisystem und nur einem API-Worker. Die Portfreigabe ist auf
 127.0.0.1 begrenzt. Keine direkte Internetfreigabe; fuer Fernzugriff ist ein
 authentifiziertes TLS-Gateway oder VPN erforderlich.
+Bei bestehender Datenbank und fehlendem Vault-Schluessel startet der Container
+nicht mit einem Ersatzschluessel. Den zur Sicherung passenden Originalschluessel
+wiederherstellen; Details und die eng begrenzte Profil-Erstbereitstellung stehen
+in [Inbetriebnahme](docs/INBETRIEBNAHME.md#wiederherstellung-des-secret-vault-schluessels).
 Eine gepflegte Docker-Version verwenden: Bei Docker vor 28.0.0 koennen
 localhost-Portfreigaben unter Umstaenden aus demselben Layer-2-Netz
 erreichbar sein. Details: https://docs.docker.com/engine/network/port-publishing/

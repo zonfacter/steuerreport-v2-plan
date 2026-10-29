@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from steuerreport_v2.contracts.events import CanonicalEvent, CanonicalEventCreate
+from steuerreport_v2.contracts.installation import SolanaV1OwnershipScopeConfig
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.derivative_cash import BITGET_NEUTRAL_ACTIONS, bitget_financial_row
@@ -100,16 +101,26 @@ class RawNormalizer:
         event_payloads: list[CanonicalEventCreate] = []
         raw_objects = self.store.list_raw_objects(batch_id, limit=None)
         batch_timezone = self._timezone_from_text(batch.filename) if batch.source == "binance" else None
+        bound_account = (
+            f"connection:{batch.connection_id}"
+            if batch.source == "binance" and batch.connection_id is not None
+            else None
+        )
         skipped = 0
         event_rows: list[tuple[CanonicalEventCreate, dict[str, str | None]]] = []
         for raw in raw_objects:
             row = json.loads(raw.payload_json)
-            event = self._row_to_event(
-                batch.source,
-                raw.raw_object_id,
-                row,
-                default_timezone=batch_timezone,
-            )
+            if batch.source == "mexc":
+                from steuerreport_v2.importers.mexc_native import event_from_raw
+                event = event_from_raw(batch, raw)
+            else:
+                event = self._row_to_event(
+                    batch.source,
+                    raw.raw_object_id,
+                    row,
+                    default_timezone=batch_timezone,
+                    bound_account=bound_account,
+                )
             if event is not None:
                 event_rows.append((event, row))
             else:
@@ -466,7 +477,10 @@ class RawNormalizer:
         row: dict[str, str | None],
         *,
         default_timezone: timezone | None = None,
+        bound_account: str | None = None,
     ) -> CanonicalEventCreate | None:
+        if source.strip().lower() == "mexc":
+            return None
         if row.get("history_evidence_only") == "1" and row.get("history_scope_identity"):
             return None
         profile = profile_for_source(source)
@@ -564,7 +578,9 @@ class RawNormalizer:
         sign_context = raw_type
         if profile.source == "solana_rpc" and normalized.get("side"):
             sign_context = f"{raw_type} {normalized.get('side')}"
-        account = self._event_account(normalized, profile, event_type)
+        account = self._event_account(
+            normalized, profile, event_type, bound_account=bound_account,
+        )
         if profile.source == "helium" and event_type == "transfer":
             sign_context = self._helium_transfer_sign_context(normalized, account, raw_type)
         quantity = self._signed_quantity(quantity, event_type, sign_context)
@@ -1642,14 +1658,20 @@ class RawNormalizer:
     @staticmethod
     def _load_solana_unowned_txids(path: Path) -> set[str]:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            content = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
             return set()
-        return {
-            str(value)
-            for value in payload.get("outside_owned_wallet_scope_txids", [])
-            if value
-        }
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError("solana_ownership_scope_config_unreadable") from exc
+        try:
+            payload = json.loads(content)
+        except ValueError as exc:
+            raise ValueError("solana_ownership_scope_config_invalid") from exc
+        try:
+            config = SolanaV1OwnershipScopeConfig.model_validate(payload)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("solana_ownership_scope_config_invalid") from exc
+        return set(config.outside_owned_wallet_scope_txids)
 
     def _is_solana_helium_reward_transfer(
         self,
@@ -1983,6 +2005,8 @@ class RawNormalizer:
         row: dict[str, str | None],
         profile: SourceProfile,
         event_type: str,
+        *,
+        bound_account: str | None = None,
     ) -> str:
         if profile.source == "helium" and event_type == "transfer":
             transfer_account = self._helium_transfer_account(row)
@@ -1995,7 +2019,7 @@ class RawNormalizer:
             and configured_account is None
         ):
             return self.HELIUM_MAIN_LEGACY_WALLET
-        return configured_account or profile.default_account
+        return bound_account or configured_account or profile.default_account
 
     def _helium_transfer_account(self, row: dict[str, str | None]) -> str | None:
         payer = row.get("payer") or row.get("sender")

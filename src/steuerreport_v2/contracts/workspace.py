@@ -124,6 +124,7 @@ class WorkspaceSources(BaseModel):
 class WorkspaceReviewItem(BaseModel):
     task: ReviewTask
     event_ids: list[str] = Field(default_factory=list)
+    raw_evidence_by_event: dict[str, str] = Field(default_factory=dict)
     source_ref: str | None = None
     candidate_source_refs: list[str] = Field(default_factory=list)
     account: str | None = None

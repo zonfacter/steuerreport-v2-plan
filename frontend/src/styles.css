@@ -6614,6 +6614,12 @@ th {
 .aiEffectTable th, .aiEffectTable td { vertical-align: top; text-align: left; padding: 8px 4px; overflow-wrap: anywhere; white-space: normal; overflow: visible; text-overflow: clip; border-bottom: 1px solid #c8d4cc; }
 .aiPatchField { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
 .aiPatchField > label:first-child { flex: 1; }
+.aiTargetContext { min-width: 0; padding: 12px 0 12px 14px; border-left: 3px solid #4d755e; background: #f3f7f4; }
+.aiTargetContext .panelToolbar, .aiConflict .panelToolbar { flex-wrap: wrap; gap: 8px; }
+.aiConflict { min-width: 0; padding: 12px 0 12px 14px; border-left: 3px solid #a4483d; background: #fbf4f2; }
+.aiConflictTarget { min-width: 0; padding: 12px 0; border-top: 1px solid #dec9c4; }
+.aiConflictTarget > strong, .aiConflictTarget code { overflow-wrap: anywhere; }
+.wsActionGroup { display: flex; gap: 8px; flex-wrap: wrap; }
 .aiWorkspace [role="tab"][aria-selected="true"] { background: #234c3b; color: #fff; }
 @media (max-width: 600px) { .aiChangesEffects { grid-template-columns: minmax(0,1fr); } .aiChangesTable th:first-child, .aiChangesTable td:first-child { width: 52px; } .aiChanges .panelToolbar { flex-wrap: wrap; gap: 8px; } }
 .aiWorkspace h2 { margin: 0; font-size: 20px; }

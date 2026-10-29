@@ -1,0 +1,68 @@
+{
+  "passed": true,
+  "synthetic_only": true,
+  "real_import_backend": true,
+  "workspace_displays_mocked": true,
+  "no_external_requests": true,
+  "raw_rows": 2,
+  "canonical_events": 1,
+  "quantity": "2.5",
+  "review_blocks_export": true,
+  "original_download_exact": true,
+  "trace_originals": 2,
+  "viewports": [
+    1440,
+    390
+  ],
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/api/v1/import/profiles"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/import/batches"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/assistant/preview"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/assistant/execute"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/import/batches"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/import/batches/94dd4357-169d-40ec-9e23-26c1a91aaa1a/original"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/assistant/preview"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/assistant/preview"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/assistant/preview"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/import/assistant/execute"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/import/batches"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/import/batches/fef16fd0-dd54-4d2b-aeb6-35535a00a984/trace.json"
+    }
+  ],
+  "unmodelled_workspace_reads": []
+}

@@ -234,6 +234,9 @@ class ReviewService:
                 blocks_export=True,
             ))
 
+        from steuerreport_v2.importers.mexc_native import review_issues as mexc_review_issues
+        issues.extend(mexc_review_issues(self.store))
+
         for batch_id, count in self.store.unmapped_raw_object_counts().items():
             issues.append(
                 ReviewIssue(
@@ -832,7 +835,7 @@ class ReviewService:
             blocks_export=issue.blocks_export,
             tax_year=issue.tax_year,
             asset=self._scope_part(issue.scope, "asset"),
-            source_group=self._scope_part(issue.scope, "source"),
+            source_group="mexc" if issue.code.startswith("mexc_") else self._scope_part(issue.scope, "source"),
             count=1,
             evidence_refs=[issue.scope],
             decision_status=issue.code,
@@ -1145,6 +1148,10 @@ class ReviewService:
 
     @staticmethod
     def _issue_category(issue: ReviewIssue) -> str:
+        if issue.code == "mexc_snapshot_reconciliation_required":
+            return "reconciliation"
+        if issue.code.startswith("mexc_") and issue.code != "mexc_classification_required":
+            return "import"
         if issue.code in {"missing_price", "missing_event_price"}:
             return "price"
         if issue.code == "unmapped_raw_objects":
@@ -1176,6 +1183,12 @@ class ReviewService:
             "derivative_normalization_required": "Bitget-Funding und Sicherheitenzuordnung pruefen",
             "solana_history_classification_required": "Solana-Bewegung fachlich einordnen",
             "api_history_classification_required": "API-Beleg fachlich einordnen",
+            "mexc_classification_required": "MEXC-Bewegung fachlich einordnen",
+            "mexc_link_target_missing": "Fehlenden MEXC-Originalbeleg klaeren",
+            "mexc_link_target_conflict": "MEXC-Beleg und korrigierte Buchung abgleichen",
+            "mexc_original_integrity_failed": "MEXC-Originalintegritaet wiederherstellen",
+            "mexc_native_binding_invalid": "MEXC-Belegbindung pruefen",
+            "mexc_snapshot_reconciliation_required": "MEXC-Bestand und Historie abgleichen",
         }
         return titles.get(issue.code, issue.code.replace("_", " ").title())
 

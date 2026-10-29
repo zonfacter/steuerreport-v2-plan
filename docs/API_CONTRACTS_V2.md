@@ -54,6 +54,15 @@ Neue additive Endpunkte unter `/api/v1/prices/historical`: lokales `POST /plan`,
 private `GET/PUT /mappings`, bestaetigtes `POST /previews`, lesende
 `GET /previews` und `GET /previews/{id}`, gebundene Originalbelege unter
 `GET /previews/{id}/evidence/{sha}`, sowie explizites `POST /previews/{id}/apply`.
+`POST /manual-previews` erstellt zusaetzlich eine isolierte Vorschau fuer genau
+einen manuellen EUR-Beleg oder USD-Beleg mit separatem, hashgebundenem FX-
+Original. Der bestehende FX-Referenzvertrag gilt unveraendert; fehlende,
+zukuenftige, veraltete oder widerspruechliche FX-Belege bleiben blockiert.
+Der Endpunkt schreibt nur private Original-/Vorschauartefakte, ruft weder
+Preisprovider noch KI auf und veraendert keine produktiven Finanzdaten. Eine
+Uebernahme verlangt den vorhandenen Apply-Endpunkt mit Akteur, zwei getrennten
+Bestaetigungen und Vorschauhash. Der bestehende EUR-CSV-Import bleibt
+unveraendert.
 Request-/Plan-/Vorschauhash, HTTP-Budget einschliesslich Retry/FX, Datum,
 Methodik und Grenzen: [vollstaendiger Ablauf](HISTORISCHE_EUR_PREISE.md).
 Die neue Oberflaeche verwendet keine V1-FX-Datenbank. Legacy-Preisendpunkte
@@ -575,6 +584,39 @@ Die Deduplizierung nutzt Quelle, Dateihash und bei Excel das Tabellenblatt.
 Gefuehrte Import-Preview fuer Dateiimporte. Die Antwort buendelt CSV-/Excel-
 Preview, Preisbedarf und Steuerwirkungs-Schaetzung. Sie persistiert keine
 Daten und fuehrt keinen Pipeline-Rebuild aus.
+
+Fuer Binance-Dateien kann `connection_id` die Datei ausdruecklich an eine
+bereits gespeicherte Binance-Verbindung binden. Die API prueft die stabile
+Verbindungs-ID und den Anbieter aus dem gespeicherten Verbindungsdatensatz;
+Anzeigename, Dateiname und Credentials sind keine Identitaetsquellen. Die
+Bindung wird in `ImportBatch.connection_id` sowie in der Vorschau gespiegelt.
+Fuer eine Binance-Datei ohne `account`-/`wallet`-Spalte ist die Bindung
+Pflicht. Im gefuehrten Assistenten muss sie vor der Vorschau ausgewaehlt sein.
+Bei solchen Dateien verwendet die Normalisierung `connection:<UUID>` als
+abgeleitetes Konto; die Originaldatei, ihr SHA-256 und die gespeicherten
+Rohspalten werden nicht geaendert. Wenn eine Verbindung ausdruecklich
+ausgewaehlt wurde, bestimmt sie das normalisierte Konto auch dann, wenn die
+Datei eine eigene Konto-/Wallet-Bezeichnung enthaelt; diese Originalspalte
+bleibt als Rohbeleg erhalten.
+
+Schema 2 fuehrt das nullable Feld `raw_import_batches.connection_id` ein.
+Vorhandene Schema-1-Batches werden mit `connection_id=NULL` migriert und
+weder nachtraeglich zugeordnet noch umgeschrieben. Die Dateidublettenpruefung
+ist bei gebundenen Binance-Dateien verbindungsspezifisch: gleicher Hash und
+dieselbe Verbindung blockieren den Reimport; gleiche Bytes fuer eine andere
+explizit ausgewaehlte Verbindung bleiben getrennt. Ein ungebundener Altbatch
+mit gleichem Quell-/Dateihash blockiert die automatische Neuzuordnung.
+
+Diese Bindung loest keine CSV-/API-Recordueberlappung auf. Der vorhandene
+`history_preview`-Legacy-Kontenschutz bleibt unveraendert; bei fehlender
+`history_scope_identity` bleibt die Ueberlappung blockiert. Es gibt in diesem
+Slice keine passende persistierte Reviewentscheidung, die Record-ID, finanzielle
+Semantik, Belege und Vorschauhash gemeinsam bestaetigt. Daher kein automatisches
+Zusammenfuehren und keine Unterdrueckung des Guards. Die niedrigstufigen
+`/api/v1/import/file/raw`- und CSV-Endpunkte akzeptieren ebenfalls
+`connection_id` und blockieren kontolose Binance-Rohimporte ohne ausdrueckliche
+Bindung. Die Preview-Endpunkte bleiben lesend und weisen auf eine fehlende
+Bindung hin.
 
 Zusaetzliche Wirkungsfelder:
 
@@ -1423,6 +1465,22 @@ Vorschlag bereits uebernommen, wird die bestehende Decision mit
 `status=warning` zurueckgegeben statt ein Duplikat zu erzeugen.
 
 ## Steuerlauf
+
+`GET /api/v1/tax-methodology/bmf-filing-readiness-snapshot` liest den
+gespeicherten Methoden-Pruefstand einschliesslich seiner aktuellen
+Eingangsbindung. Ein lesbarer Snapshot mit Status `stale` oder `unbound` ist
+nicht der aktuelle Pruefstand. Beim Lesen und beim Oeffnen der Steuerjahresseite
+wird nichts erzeugt.
+
+`POST /api/v1/tax-methodology/bmf-filing-readiness-snapshot` erzeugt den
+gespeicherten Pruefstand nach ausdruecklicher Aktion. Die Anfrage muss den
+Umfang `years_2021_2025`, den erwarteten SHA-256 der Eingangsbindung und die
+erwartete letzte Steuerlauf-ID (auch explizit `null`) enthalten. Bei einer
+geaenderten Eingabe oder parallelen Erzeugung wird der Vorgang mit einem
+Konfliktcode abgewiesen. Eine Aenderung waehrend des Schreibens liefert
+`status=stale`; sie wird nicht als aktuell ausgewiesen. Die Antwort bindet den
+Bericht an den Eingangshash und Lauf, erteilt keine finale Jahresfreigabe,
+aendert keine Steuerdaten und startet weder Import, Providerabfrage noch KI.
 
 `GET /api/v1/tax-methodology/bmf-compliance-matrix`
 
@@ -3429,6 +3487,32 @@ Reasoning-only-Antworten gelten als fehlgeschlagen. Validierungsantworten der
 KI-Endpunkte spiegeln keine Eingabewerte zurueck. Die bestehende Verantwortung
 des Betreibers fuer Zugriffsschutz und Transportabsicherung bleibt bestehen.
 
+## Manuelle Datenkorrektur mit exakter Zielrevision (ab Issue #17)
+
+Review-Aufgaben liefern `raw_evidence_by_event` als Zuordnung von stabiler
+Ereignis-ID zu exakt verknuepfter `raw_object_id`. Review- und
+Transaktionsdetails koennen damit den manuellen Korrekturpfad oeffnen und
+Jahr, Aufgabe, Quelle, Konto, Rohbeleg sowie einen Rueckweg mitgeben. Diese
+Ansicht benoetigt weder einen KI-Provider noch einen Agenten und ruft kein
+Modell auf. URL-Werte enthalten keine Secrets.
+
+`POST /api/v1/ai/data-context/targets` ist ein lesender, ID-exakter Lookup mit
+1 bis 25 eindeutigen `{kind, target_id}`-Eintraegen. `kind` ist `event` oder
+`price`. Die Antwort enthaelt `rows`, `missing_targets` und einen
+`context_sha256`; nicht gefundene IDs werden einzeln ausgewiesen. Es gibt keine
+Suche nach aehnlichen Ereignissen oder Ersatzdatensaetzen.
+
+`POST /api/v1/ai/changes/{identifier}/rebase` verlangt
+`{reviewed: true, targets: [{kind, target_id, current_sha256}]}` fuer exakt
+alle Ziele des alten Entwurfs. Der Server prueft Status, Vollstaendigkeit,
+Existenz und aktuelle Hashes erneut. Ein Konflikt oder geloeschtes Ziel
+erzeugt keinen Folgeentwurf. Bei Erfolg wird ein neues `human_rebase`-Kind mit
+`parent_id` angelegt; Entwurf, Vorschau und Freigabe des Elternstands werden
+nicht veraendert oder uebernommen. Das Kind hat keine Vorschau und keine
+Freigabe und muss die bestehenden Validierungs-, Vorschau-, Beleg- und
+menschlichen Apply-Gates erneut durchlaufen. Zugelassene Felder und die
+begrenzten Patchoperationen bleiben unveraendert.
+
 Die Modellliste ergaenzt `is_free` (bool oder null),
 `prompt_price_usd_per_token`, `completion_price_usd_per_token`,
 `request_price_usd` und `context_length`. Preisfelder werden ausschliesslich
@@ -3482,3 +3566,49 @@ Demo-/Sandboxbetrieb sperrt Speichern, Pruefen und Auftrag mit 403. Validierung
 `updates.settings.v1` und `updates.cache.v1` sind die beiden exakt benannten
 nichtfinanziellen Admin-Schluessel. Der finanzielle Vorschau-Fingerprint v3
 schliesst nur diese zusaetzlich aus; andere Admin-Regeln bleiben gebunden.
+
+## Nativer MEXC-Dateiimport (Entwicklung zu Issue #4)
+
+Die bestehenden Datei-/CSV- und Assistentenpfade akzeptieren fuer source=mexc
+eine optionale, streng validierte mexc-Zuordnung: export_kind, account,
+timezone und zeilenbezogene decisions. Der Assistentenvertrag beschreibt
+diese Felder im OpenAPI-Schema. Fehlende Zuordnung sperrt den Import;
+bare Time wird nicht als UTC angenommen. Ein expliziter Headeroffset hat
+eine andere Semantik als Europe/Berlin.
+
+CsvImportPreview.mexc trennt raw_rows, bookable_rows, linked_rows,
+review_rows, snapshot_rows, bonus_rows, blocking_reasons und rows.
+Mengenbuchung und fachlicher Review sind verschiedene Dimensionen;
+bookable_rows und review_rows koennen sich ueberschneiden. Entscheidungen
+verwenden physische Dateizeilen (erste Excel-Datenzeile 2), action
+link_existing/separate, passende target_raw_object_id und eine Begruendung.
+Der Import validiert frisch gegen den aktuellen gespeicherten Stand.
+Fuer Entscheidungen ist zusaetzlich der input_digest der konkreten
+Zeilenvorschau Pflicht. Er bindet Originalbytes, Zuordnung, Zeile und
+Kandidatenfakten; decision_stale kennzeichnet veraltete Entscheidungen auch
+bei Konto-, Exportart- oder Zeitbasiswechsel. Der Client erneuert den Digest
+nur nach ausdruecklicher Neubestaetigung, niemals automatisch.
+
+MEXC Spot Statement und Funding Other besitzen einen ersten Airdrop-
+Mengenpfad als unknown mit Review-Sperre, nicht als automatisch anerkannter
+Mining-/Reward-Ertrag. Bestands-/BONUS- und weitere Produktbelege bleiben
+Rohbelege; keine erfundenen Erwerbe, Gegenwerte oder Lots. Fremde Bitget-/
+API-Belegmarker koennen MEXC-Rohzeilen nicht vom Review ausnehmen.
+Bekannte identische Provider-Buchungs-IDs sind nicht per separate uebersteuerbar;
+IDs auf verknuepften Originalen gehen ebenfalls in die Konfliktpruefung ein.
+Snapshots haben einen eigenen offenen Historienabgleich. Originalverlust,
+SHA256-Fehler, ungueltige Metadaten und wirksame Canonical-Abweichungen bei
+Links erzeugen eigene Sperren. Reine bestaetigte Typklaerungen bleiben zulaessig.
+
+Originalbytes werden privat hashadressiert archiviert; der Importfingerprint
+bindet Dateihash, Blatt, Konto, Exportart und Zeitbasis. Batch und Rohzeilen
+werden transaktional gespeichert. Ausfuehrung nutzt die bestehende Pipeline
+und berechnet damit Ledger-/Steuervorschauen neu; keine fachliche Freigabe.
+
+GET /api/v1/import/batches/{batch_id}/trace.json enthaelt bei MEXC das
+zusaetzliche Feld mexc_evidence mit verknuepften Originalspuren. MEXC-
+Canonical-Zeiten werden dort explizit in UTC ausgegeben. Der neue lesende
+GET /api/v1/import/batches/{batch_id}/original liefert Originalbytes nach
+SHA256-Pruefung oder 404/409, niemals einen ungeprueften Ersatzbeleg.
+
+Weitere Layouts, Grenzen, Herkunftsregeln und Beispiele: [MEXC_IMPORT.md](MEXC_IMPORT.md).

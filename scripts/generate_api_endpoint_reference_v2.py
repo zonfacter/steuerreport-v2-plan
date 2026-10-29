@@ -61,6 +61,7 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 PURPOSE_OVERRIDES = {
     ("POST", "/api/v1/prices/historical/plan"): "Plant historische Tagespreise lokal mit Jahresuebersicht und reiner Listenpagination",
+    ("POST", "/api/v1/prices/historical/manual-previews"): "Prueft einen einzelnen manuellen EUR- oder USD/FX-Originalbeleg in einer isolierten Vorschau ohne Anbieterabruf",
     ("POST", "/api/v1/prices/historical/previews"): "Sammelt bestaetigte Preisbelege und berechnet eine isolierte Vorschau",
     ("POST", "/api/v1/prices/historical/previews/{request_id}/continue"): "Ergaenzt eine kumulative Preisvorschau nach erneuter externer Bestaetigung",
     ("POST", "/api/v1/prices/historical/previews/{request_id}/apply"): "Uebernimmt bestaetigte Preise und Neuberechnung bei unveraenderten Quellen",
@@ -72,6 +73,7 @@ PURPOSE_OVERRIDES = {
     ("POST", "/api/v1/workspace/sources/{ref}/history/jobs"): "Startet bestaetigten externen Abruf und isolierte Vorschau ohne produktiven Finanzimport",
     ("GET", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}"): "Liest den gespeicherten quellengebundenen Auftragsstatus",
     ("GET", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/audit.json"): "Liest Quellenbindung, Originalhashes, Vorschau und Importfreigabe",
+    ("POST", "/api/v1/tax-methodology/bmf-filing-readiness-snapshot"): "Erzeugt ausdruecklich den gebundenen BMF-Methoden-Pruefstand fuer den Umfang 2021-2025 ohne Steuerdatenkorrektur oder finale Freigabe",
     ("POST", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/pause"): "Speichert eine Pause fuer den laufenden Abruf",
     ("POST", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/cancel"): "Bricht Folgeabrufe und Importfreigabe ab; Originalbelege bleiben erhalten",
     ("POST", "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/resume"): "Setzt den Abruf nach ausdruecklicher Anbieterbestaetigung am gespeicherten Cursor fort",
@@ -261,6 +263,8 @@ def default_purpose(route: Route) -> str:
 def default_effect(route: Route) -> str:
     if route.path == "/api/v1/prices/historical/plan":
         return "read-only; keine Anbieterabfrage"
+    if route.path == "/api/v1/prices/historical/manual-previews":
+        return "speichert private Originalbelege und isolierte Vorschauartefakte; keine externe Anfrage oder produktive Preisuebernahme"
     if route.method == "POST" and route.path in {"/api/v1/prices/historical/previews", "/api/v1/prices/historical/previews/{request_id}/continue"}:
         return "externer Abruf und private Vorschauartefakte; keine produktive Preisuebernahme"
     if route.path == "/api/v1/prices/historical/previews/{request_id}/apply":

@@ -46,8 +46,56 @@ class BinanceEarnHistoryService:
     DIVIDEND_WINDOW_DAYS = 179
     DIVIDEND_LIMIT = 500
 
-    def __init__(self, store: DuckDbStore) -> None:
+    def __init__(self, store: DuckDbStore, *, connection_id: str | None = None) -> None:
         self.store = store
+        self.connection_id = str(connection_id).strip() if connection_id is not None else None
+
+    def history_products_for_connection(self) -> list[dict[str, str | None]]:
+        """Return Earn product anchors only from the selected account's evidence."""
+        if self.connection_id is None:
+            raise RuntimeError("binance_earn_connection_required")
+        from steuerreport_v2.domain.connections import ConnectionService
+
+        connections = ConnectionService(self.store)
+        connections.validate_import_binding(self.connection_id, "binance")
+        snapshots = connections.snapshots(self.connection_id).snapshots
+        products: set[tuple[str, str, str | None, str | None]] = set()
+        for snapshot in snapshots:
+            account_type = str(snapshot.account_type or "")
+            asset = str(snapshot.asset or "").strip().upper()
+            if account_type not in {"simple_earn_flexible", "simple_earn_locked"} or not asset:
+                continue
+            products.add((asset, account_type, snapshot.product_id or None, snapshot.position_id or None))
+
+        account = f"connection:{self.connection_id}"
+        with self.store.connect() as con:
+            rows = con.execute(
+                """
+                select distinct
+                    upper(json_extract_string(raw.payload_json, '$.asset')) as asset,
+                    json_extract_string(raw.payload_json, '$.account_type') as account_type,
+                    nullif(json_extract_string(raw.payload_json, '$.product_id'), '') as product_id,
+                    nullif(json_extract_string(raw.payload_json, '$.position_id'), '') as position_id
+                from raw_objects raw
+                join raw_import_batches batch using(batch_id)
+                where lower(batch.source) = 'binance_simple_earn_api'
+                  and batch.connection_id = ?
+                  and json_extract_string(raw.payload_json, '$.account') = ?
+                  and json_extract_string(raw.payload_json, '$.account_type')
+                      in ('simple_earn_flexible', 'simple_earn_locked')
+                  and coalesce(json_extract_string(raw.payload_json, '$.asset'), '') <> ''
+                """,
+                [self.connection_id, account],
+            ).fetchall()
+        for asset, account_type, product_id, position_id in rows:
+            products.add((str(asset).upper(), str(account_type), product_id, position_id))
+        return [
+            {"asset": asset, "account_type": account_type,
+             "product_id": product_id, "position_id": position_id}
+            for asset, account_type, product_id, position_id in sorted(
+                products, key=lambda item: (item[0], item[1], item[2] or "", item[3] or ""),
+            )
+        ]
 
     def api_preview(
         self,
@@ -347,6 +395,8 @@ class BinanceEarnHistoryService:
         harvest_path: str,
         execute: bool = False,
     ) -> BinanceEarnHarvestImportResult:
+        if execute and self.connection_id is not None:
+            raise RuntimeError("binance_earn_connection_import_requires_history_job")
         preview = self.preview_harvest_import(harvest_path)
         if not execute or not preview.can_execute:
             return BinanceEarnHarvestImportResult(preview=preview)
@@ -371,6 +421,8 @@ class BinanceEarnHistoryService:
         max_records: int = 50000,
         execute: bool = False,
     ) -> BinanceEarnApiImportResult:
+        if execute and self.connection_id is not None:
+            raise RuntimeError("binance_earn_connection_import_requires_history_job")
         api_preview = self.api_preview(
             since=since,
             until=until,
@@ -417,6 +469,8 @@ class BinanceEarnHistoryService:
         max_records: int = 5000,
         execute: bool = False,
     ) -> BinanceCapitalWithdrawalApiImportResult:
+        if execute and self.connection_id is not None:
+            raise RuntimeError("binance_withdrawal_connection_import_requires_history_job")
         api_preview = self.withdrawal_history_api_preview(
             since=since,
             until=until,
@@ -462,6 +516,8 @@ class BinanceEarnHistoryService:
         max_records: int = 5000,
         execute: bool = False,
     ) -> BinanceAssetDividendApiImportResult:
+        if execute and self.connection_id is not None:
+            raise RuntimeError("binance_dividend_connection_import_requires_history_job")
         api_preview = self.asset_dividend_history_api_preview(
             since=since,
             until=until,
@@ -1282,6 +1338,13 @@ class BinanceEarnHistoryService:
         return f"binance_http_{response.status_code}"
 
     def _credentials(self) -> tuple[str, str]:
+        if self.connection_id is not None:
+            from steuerreport_v2.domain.connections import ConnectionService
+
+            api_key, secret_key, _passphrase = ConnectionService(self.store).credentials(
+                self.connection_id, "binance"
+            )
+            return api_key, secret_key
         api_key = (
             self._secret_value("secret.cex.binance.api_key")
             or self._secret_value("secret.binance.api_key")

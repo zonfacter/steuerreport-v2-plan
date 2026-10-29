@@ -133,7 +133,7 @@ class ExportService:
         if not readiness.allow_export:
             return None
         lines = [
-            "Steuerreport V2 Exportpaket",
+            "Steuerreport V2 – Technisches Statuspaket",
             "VORSCHAU - KEINE FINALE JAHRESFREIGABE",
             f"Gebundener Berechnungslauf: {run_id or 'nicht vorhanden'}",
             "Daten-/Methodenbindung SHA-256:",
@@ -247,28 +247,17 @@ class ExportService:
         )
 
     def _split_pdf_packages(self, request: PdfExportRequest) -> list[ExportPackage]:
-        if request.estimated_pages == 0:
-            page_counts = [0]
-        else:
-            remaining = request.estimated_pages
-            page_counts = []
-            while remaining > 0:
-                page_count = min(remaining, MAX_PDF_PAGES_PER_FILE)
-                page_counts.append(page_count)
-                remaining -= page_count
-
         created_at = datetime.now(timezone.utc)
         return [
             ExportPackage(
                 package_id=str(uuid4()),
                 kind="pdf",
                 label=request.label,
-                file_index=index,
-                page_count=page_count,
+                file_index=1,
+                page_count=1,
                 status="created",
                 created_at=created_at,
             )
-            for index, page_count in enumerate(page_counts, start=1)
         ]
 
     def _store_packages(self, packages: list[ExportPackage]) -> None:

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
+import pytest
 
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
@@ -59,6 +60,47 @@ def test_normalize_batch_report_counts_skipped_rows(tmp_path):
     assert report.created_events == 1
     assert report.skipped_raw_objects == 1
     assert store.unmapped_raw_object_counts()[batch.batch_id] == 1
+
+
+def test_solana_ownership_loader_distinguishes_missing_valid_and_corrupt_configs(tmp_path):
+    missing = tmp_path / "not-created.json"
+    assert RawNormalizer._load_solana_unowned_txids(missing) == set()
+
+    valid = tmp_path / "ownership.json"
+    valid.write_text(json.dumps({
+        "generated_at": "2026-10-29T12:00:00+00:00",
+        "wallet": "synthetic-wallet",
+        "outside_owned_wallet_scope_txids": ["signature-a", "signature-b"],
+    }))
+    assert RawNormalizer._load_solana_unowned_txids(valid) == {"signature-a", "signature-b"}
+
+    invalid_documents = [
+        "{broken",
+        "[]",
+        '{"outside_owned_wallet_scope_txids":"signature"}',
+        '{"outside_owned_wallet_scope_txids":null}',
+        '{"outside_owned_wallet_scope_txids":[123]}',
+        '{"outside_owned_wallet_scope_txids":[""]}',
+    ]
+    corrupt = tmp_path / "corrupt.json"
+    for content in invalid_documents:
+        corrupt.write_text(content)
+        try:
+            RawNormalizer._load_solana_unowned_txids(corrupt)
+        except ValueError as exc:
+            assert str(exc) == "solana_ownership_scope_config_invalid"
+        else:
+            raise AssertionError(f"invalid ownership scope was accepted: {content}")
+
+
+def test_raw_normalizer_blocks_when_existing_solana_ownership_file_is_corrupt(tmp_path, monkeypatch):
+    import steuerreport_v2.importers.raw_normalizer as raw_normalizer
+
+    config = tmp_path / "solana_v1_ownership_scope.json"
+    config.write_text('{"outside_owned_wallet_scope_txids":null}')
+    monkeypatch.setattr(raw_normalizer, "DEFAULT_SOLANA_OWNERSHIP_CONFIG", config)
+    with pytest.raises(ValueError, match="solana_ownership_scope_config_invalid"):
+        RawNormalizer(DuckDbStore(tmp_path / "ledger.duckdb"))
 
 
 def test_binance_profile_maps_utc_time_operation_and_change(tmp_path):

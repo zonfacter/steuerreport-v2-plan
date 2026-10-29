@@ -5,7 +5,9 @@ Token-, Quellen- oder Jahresfreigabe. Originalantworten bleiben privat erhalten.
 """
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal, InvalidOperation, localcontext
+from decimal import Decimal, DecimalException, InvalidOperation, localcontext
+import base64
+import binascii
 import fcntl
 import hashlib
 import json
@@ -15,7 +17,11 @@ from uuid import UUID
 
 from steuerreport_v2 import __version__
 from steuerreport_v2.contracts.admin import AdminSettingWrite
-from steuerreport_v2.contracts.historical_prices import HistoricalPriceQuery, PriceMapping
+from steuerreport_v2.contracts.historical_prices import (
+    HistoricalPriceQuery,
+    ManualHistoricalPricePreviewRequest,
+    PriceMapping,
+)
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.contracts.review import ReviewDecision
 from steuerreport_v2.domain.ai_changes import DERIVED_TABLES, _fingerprint, _summary, _tax_delta, _tax_groups, encoded
@@ -310,6 +316,385 @@ class HistoricalPriceService:
             return self._fetch_observed(request)
         return self._fetch_tax_required(request)
 
+    @staticmethod
+    def _manual_attachment(file, kind):
+        try:
+            content = base64.b64decode(file.content_base64, validate=True)
+        except (binascii.Error, ValueError):
+            fail("historical_price_manual_evidence_invalid")
+        if not content or len(content) > 2 * 1024 * 1024:
+            fail("historical_price_manual_evidence_size_invalid")
+        sha = hashlib.sha256(content).hexdigest()
+        return content, {
+            "kind": kind,
+            "filename": file.filename,
+            "media_type": file.media_type,
+            "source_name": file.source_name,
+            "source_reference": file.source_reference,
+            "source_observed_at": file.source_observed_at.isoformat(),
+            "source_observed_at_utc": file.source_observed_at.astimezone(timezone.utc).isoformat(),
+            "sha256": sha,
+            "byte_length": len(content),
+        }
+
+    @staticmethod
+    def _manual_fx_reference(observations, price_day):
+        from steuerreport_v2.domain.historical_fx import (
+            FX_POLICY_ID,
+            MAX_REFERENCE_AGE_DAYS,
+            select_fx_reference,
+        )
+
+        payload = [item.model_dump(mode="json") for item in observations]
+        reference = select_fx_reference(payload, price_day)
+        if reference is not None:
+            return reference, None, FX_POLICY_ID
+        if not payload:
+            return None, "historical_price_fx_evidence_required", FX_POLICY_ID
+
+        past = []
+        future = False
+        for row in payload:
+            try:
+                observed = date.fromisoformat(row["date"])
+                rate = Decimal(str(row["rate"]))
+            except (KeyError, TypeError, ValueError, InvalidOperation):
+                return None, "historical_price_fx_evidence_invalid", FX_POLICY_ID
+            if not rate.is_finite() or rate <= 0 or row.get("base") == row.get("quote"):
+                return None, "historical_price_fx_evidence_invalid", FX_POLICY_ID
+            if row.get("base") not in {"USD", "EUR"} or row.get("quote") not in {"USD", "EUR"}:
+                return None, "historical_price_fx_evidence_invalid", FX_POLICY_ID
+            if observed > price_day:
+                future = True
+            else:
+                past.append((observed, row))
+        if not past:
+            reason = "historical_price_fx_future" if future else "historical_price_fx_evidence_invalid"
+            return None, reason, FX_POLICY_ID
+        latest_day = max(day for day, _ in past)
+        if (price_day - latest_day).days > MAX_REFERENCE_AGE_DAYS:
+            return None, "historical_price_fx_stale", FX_POLICY_ID
+        latest = [row for day, row in past if day == latest_day]
+        normalized = set()
+        with localcontext() as arithmetic:
+            arithmetic.prec = 60
+            for row in latest:
+                rate = Decimal(str(row["rate"]))
+                try:
+                    value = rate if row["base"] == "USD" else Decimal("1") / rate
+                except DecimalException:
+                    return None, "historical_price_fx_evidence_invalid", FX_POLICY_ID
+                if not value.is_finite() or not 0 < value < Decimal("1e19"):
+                    return None, "historical_price_fx_evidence_invalid", FX_POLICY_ID
+                normalized.add(value)
+        if len(normalized) > 1:
+            return None, "historical_price_fx_conflict", FX_POLICY_ID
+        reason = "historical_price_fx_future" if future and not any(
+            (price_day - day).days <= MAX_REFERENCE_AGE_DAYS for day, _ in past
+        ) else "historical_price_fx_evidence_invalid"
+        return None, reason, FX_POLICY_ID
+
+    @staticmethod
+    def _manual_request_document(request, price_file, fx_file):
+        payload = request.model_dump(mode="json")
+        payload.pop("request_id", None)
+        payload["price_evidence"].pop("content_base64", None)
+        payload["price_evidence"].update(
+            sha256=price_file["sha256"], byte_length=price_file["byte_length"]
+        )
+        if payload.get("fx_evidence") is not None:
+            payload["fx_evidence"].pop("content_base64", None)
+            payload["fx_evidence"].update(
+                sha256=fx_file["sha256"], byte_length=fx_file["byte_length"]
+            )
+        return payload
+
+    @staticmethod
+    def _manual_identity_is_clear(row):
+        mints = row.get("mints") or []
+        if len(mints) > 1:
+            return False
+        basis = row.get("identity_basis")
+        identity = row.get("asset_identity") or {}
+        return bool(
+            len(mints) == 1
+            or basis in {"original_mint", "native_sol_reference", "configured_mapping"}
+            or (identity.get("network") and identity.get("contract_address"))
+        )
+
+    def _existing_manual_preview(self, evidence_key, submission_sha256):
+        if not self.root.exists() or self.root.is_symlink():
+            return None
+        for path in self.root.glob("*/preview.json"):
+            if path.is_symlink():
+                continue
+            try:
+                preview = self._json(path)
+            except (ValueError, OSError, KeyError):
+                continue
+            if preview.get("manual_evidence_key") != evidence_key:
+                continue
+            if preview.get("manual_submission_sha256") != submission_sha256:
+                fail("historical_price_manual_evidence_conflict")
+            return self.get(preview["id"])
+        return None
+
+    def manual_preview(self, request: ManualHistoricalPricePreviewRequest):
+        price_bytes, price_file = self._manual_attachment(request.price_evidence, "manual_price_original")
+        fx_bytes = None
+        fx_file = None
+        if request.fx_evidence is not None:
+            fx_bytes, fx_file = self._manual_attachment(request.fx_evidence, "manual_fx_original")
+
+        if request.query.assets and request.asset not in request.query.assets:
+            fail("historical_price_manual_need_not_found")
+        query = request.query
+        price_time = request.priced_at.astimezone(timezone.utc)
+        now = datetime.now(timezone.utc)
+        if price_time.date() != request.price_date or price_time > now:
+            fail("historical_price_manual_timestamp_invalid")
+        if request.price_evidence.source_observed_at.astimezone(timezone.utc) > now:
+            fail("historical_price_manual_source_time_future")
+        if request.fx_evidence and request.fx_evidence.source_observed_at.astimezone(timezone.utc) > now:
+            fail("historical_price_manual_source_time_future")
+
+        with self._lock(self._path("collection")), self._lock(self._directory(request.request_id)):
+            directory = self._directory(request.request_id)
+            plan = self._full_plan(query)
+            if plan["plan_sha256"] != request.plan_sha256:
+                fail("historical_price_plan_stale")
+            matches = [
+                row for row in plan["rows"]
+                if row["asset"].upper() == request.asset
+                and row["price_date"] == request.price_date.isoformat()
+            ]
+            if len(matches) != 1:
+                fail("historical_price_manual_need_not_found")
+            need = matches[0]
+            if need.get("status") not in {"planned", "blocked"}:
+                fail("historical_price_manual_need_not_open")
+            if not self._manual_identity_is_clear(need):
+                fail("historical_price_manual_identity_ambiguous")
+            if need.get("status") == "blocked" and need.get("reason") != "asset_not_configured":
+                fail("historical_price_manual_need_blocked")
+            if datetime.fromisoformat(need["first_event_at"]).astimezone(timezone.utc) < price_time:
+                fail("historical_price_manual_timestamp_after_event")
+
+            need_sha = digest(need)
+            fx_reference = None
+            fx_reason = None
+            fx_policy_id = None
+            if request.price_currency == "USD":
+                if request.fx_evidence is None:
+                    fx_reason = "historical_price_fx_evidence_required"
+                    from steuerreport_v2.domain.historical_fx import FX_POLICY_ID
+                    fx_policy_id = FX_POLICY_ID
+                elif not request.fx_observations:
+                    fx_reason = "historical_price_fx_evidence_required"
+                    from steuerreport_v2.domain.historical_fx import FX_POLICY_ID
+                    fx_policy_id = FX_POLICY_ID
+                elif any(item.source != request.fx_evidence.source_name for item in request.fx_observations):
+                    fx_reason = "historical_price_fx_source_mismatch"
+                    from steuerreport_v2.domain.historical_fx import FX_POLICY_ID
+                    fx_policy_id = FX_POLICY_ID
+                else:
+                    fx_reference, fx_reason, fx_policy_id = self._manual_fx_reference(
+                        request.fx_observations, request.price_date
+                    )
+            price_observation = {
+                "raw_value": str(request.price_value),
+                "raw_currency": request.price_currency,
+                "unit": f"{request.price_currency} per 1 {request.asset}",
+                "priced_at_original": request.priced_at.isoformat(),
+                "priced_at_utc": price_time.isoformat(),
+                "source_name": request.price_evidence.source_name,
+                "source_reference": request.price_evidence.source_reference,
+                "source_observed_at": price_file["source_observed_at"],
+                "source_observed_at_utc": price_file["source_observed_at_utc"],
+                "evidence_sha256": price_file["sha256"],
+                "evidence_filename": price_file["filename"],
+                "evidence_media_type": price_file["media_type"],
+                "evidence_byte_length": price_file["byte_length"],
+            }
+            fx_observation = None
+            if request.price_currency == "USD":
+                fx_observation = {
+                    "policy_id": fx_policy_id,
+                    "source_name": request.fx_evidence.source_name if request.fx_evidence else None,
+                    "source_reference": request.fx_evidence.source_reference if request.fx_evidence else None,
+                    "source_observed_at": fx_file["source_observed_at"] if fx_file else None,
+                    "source_observed_at_utc": fx_file["source_observed_at_utc"] if fx_file else None,
+                    "observations": [
+                        {**item.model_dump(mode="json"), "unit": f"{item.quote} per 1 {item.base}"}
+                        for item in request.fx_observations
+                    ],
+                    "selected_reference": None if fx_reference is None else {
+                        "date": fx_reference.reference_date.isoformat(),
+                        "base": fx_reference.original_base,
+                        "quote": fx_reference.original_quote,
+                        "unit": f"{fx_reference.original_quote} per 1 {fx_reference.original_base}",
+                        "raw_rate": str(fx_reference.original_rate),
+                        "rate_eur_per_usd": str(fx_reference.rate_eur_per_usd),
+                        "source": fx_reference.source,
+                    },
+                    "evidence_sha256": fx_file["sha256"] if fx_file else None,
+                    "evidence_filename": fx_file["filename"] if fx_file else None,
+                    "evidence_media_type": fx_file["media_type"] if fx_file else None,
+                    "evidence_byte_length": fx_file["byte_length"] if fx_file else None,
+                }
+            manual_submission = {
+                "schema": "manual-historical-price-evidence-v1",
+                "need_sha256": need_sha,
+                "need": need,
+                "price": price_observation,
+                "fx": fx_observation,
+                "fx_block_reason": fx_reason,
+            }
+            manual_submission_sha = digest(manual_submission)
+            evidence_key = digest({
+                "need_sha256": need_sha,
+                "price_evidence_sha256": price_file["sha256"],
+                "fx_evidence_sha256": fx_file["sha256"] if fx_file else None,
+            })
+            request_doc = self._manual_request_document(request, price_file, fx_file)
+            request_path = directory / "request.json"
+            preview_path = directory / "preview.json"
+            if request_path.exists():
+                if self._json(request_path) != request_doc:
+                    fail("historical_price_request_conflict")
+                if not preview_path.exists():
+                    fail("historical_price_incomplete_request")
+                return self.get(request.request_id)
+            previous = self._existing_manual_preview(evidence_key, manual_submission_sha)
+            if previous is not None:
+                return previous
+
+            self._write(directory / "plan.json", canonical_json(plan).encode())
+            self._write(self._path("evidence", price_file["sha256"] + ".body"), price_bytes)
+            evidence = [price_file]
+            row = {**need, "manual_evidence": price_observation}
+            if fx_file is not None:
+                self._write(self._path("evidence", fx_file["sha256"] + ".body"), fx_bytes)
+                evidence.append(fx_file)
+                row["evidence_sha256"] = [price_file["sha256"], fx_file["sha256"]]
+            else:
+                row["evidence_sha256"] = [price_file["sha256"]]
+            prices = []
+            status = "ready"
+            reason = None
+            eur_price = request.price_value
+            if request.price_currency == "USD":
+                if fx_reason:
+                    status, reason = "blocked", fx_reason
+                elif fx_reference is None:
+                    status, reason = "blocked", "historical_price_fx_evidence_invalid"
+                else:
+                    with localcontext() as arithmetic:
+                        arithmetic.prec = 60
+                        eur_price = request.price_value * fx_reference.rate_eur_per_usd
+            if status == "ready":
+                unit = Decimal("0.000000000000000001")
+                if not eur_price.is_finite() or eur_price <= 0 or eur_price >= Decimal("1e19"):
+                    status, reason = "blocked", "historical_price_value_invalid"
+                else:
+                    try:
+                        with localcontext() as arithmetic:
+                            arithmetic.prec = 60
+                            rounded = eur_price.quantize(unit)
+                    except InvalidOperation:
+                        status, reason = "blocked", "historical_price_manual_precision_exceeds_storage"
+                if status == "ready" and request.price_currency == "EUR" and rounded != eur_price:
+                    status, reason = "blocked", "historical_price_manual_precision_exceeds_storage"
+                if status == "ready" and rounded <= 0:
+                    status, reason = "blocked", "historical_price_manual_precision_exceeds_storage"
+                if status == "ready":
+                    eur_price = positive(rounded)
+                    fx_sha = fx_file["sha256"] if fx_file else "direct-eur"
+                    source_hash = digest({
+                        "need_sha256": need_sha,
+                        "price_sha256": price_file["sha256"],
+                        "fx_sha256": fx_sha,
+                        "raw_value": str(request.price_value),
+                        "currency": request.price_currency,
+                        "priced_at": price_time.isoformat(),
+                    })
+                    source = f"manual:historical-evidence:v1:{source_hash}"
+                    price = PricePointCreate(
+                        asset=request.asset,
+                        price_eur=eur_price,
+                        priced_at=price_time.replace(tzinfo=None),
+                        source=source,
+                        confidence=Decimal("0.95"),
+                    )
+                    prices.append(price)
+                    row.update(
+                        status="fetched",
+                        reason=None,
+                        price_eur=str(eur_price),
+                        priced_at=price_time.isoformat(),
+                        fx_date=fx_reference.reference_date.isoformat() if fx_reference else None,
+                        source=source,
+                        evidence_sha256=row["evidence_sha256"],
+                        manual_fx=fx_observation,
+                    )
+            if status == "blocked":
+                row.update(status="blocked", reason=reason, price_eur=None, priced_at=None, source=None)
+            years = need.get("years", [])
+            year_summary = [{
+                "year": year,
+                "events_count": need.get("event_year_counts", {}).get(str(year), need["event_count"]),
+                "tokens_count": 1,
+                "inventory_count": 1,
+                "requirements_count": 1 if status == "blocked" else 0,
+                "covered_count": 0 if status == "blocked" else 1,
+                "fetchable_count": 0,
+                "blocked_count": 1 if status == "blocked" else 0,
+                "open_count": 0,
+            } for year in years]
+            preview = {
+                "id": str(request.request_id),
+                "software_version": __version__,
+                "methodology": "manual-evidence-direct-eur-v1" if request.price_currency == "EUR" else f"manual-evidence-usd-fx:{fx_policy_id}",
+                "time_basis": "Manuell belegter Kurszeitpunkt; UTC normalisiert, derselbe UTC-Tag und nicht nach dem ersten betroffenen Ereignis.",
+                "created_at": now.isoformat(),
+                "plan_sha256": plan["plan_sha256"],
+                "database_revision": plan["database_revision"],
+                "query": query.model_dump(mode="json"),
+                "manual": True,
+                "manual_evidence_key": evidence_key,
+                "manual_submission_sha256": manual_submission_sha,
+                "manual_submission": manual_submission,
+                "manual_evidence": [price_observation, *([fx_observation] if fx_observation else [])],
+                "rows": [row],
+                "evidence": evidence,
+                "prices": [price.model_dump(mode="json") for price in prices],
+                "prices_count": len(prices),
+                "requests_started": 0,
+                "requirements_count": 1,
+                "total_rows": 1,
+                "pending_count": 0,
+                "open_count": 0,
+                "collection_complete": True,
+                "source_events_count": need["event_count"],
+                "source_event_types": {},
+                "year_summary": year_summary,
+                "status": status,
+                "block_reason": reason,
+                "writes_financial_data": False,
+            }
+            if prices:
+                self._prepare(directory, preview, prices)
+            else:
+                with self.store.connect() as con:
+                    preview["before_summary"] = _summary(con)
+                    preview["before_valuation_summary"] = self._valuation_summary(con)
+                    preview["frozen_source_sha256"] = self._source_digest(con)
+                preview["canonical_events_unchanged"] = True
+            self._write(request_path, canonical_json(request_doc).encode())
+            preview["preview_sha256"] = digest(preview)
+            self._write(preview_path, canonical_json(preview).encode())
+            return self.get(request.request_id)
+
     def _fetch_tax_required(self, request):
         directory = self._directory(request.request_id)
         query = HistoricalPriceQuery.model_validate(request.model_dump(include=set(HistoricalPriceQuery.model_fields)))
@@ -560,7 +945,7 @@ class HistoricalPriceService:
         for path in sorted(self.root.glob("*/preview.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
             try:
                 preview = self.get(path.parent.name)
-                results.append({k: preview.get(k) for k in ("id", "created_at", "prices_count", "status", "applied", "preview_sha256", "pending_count", "open_count", "parent_preview_id", "collection_complete")})
+                results.append({k: preview.get(k) for k in ("id", "created_at", "prices_count", "status", "applied", "preview_sha256", "pending_count", "open_count", "parent_preview_id", "collection_complete", "manual")})
             except (ValueError, KeyError):
                 continue
         return results
@@ -575,6 +960,8 @@ class HistoricalPriceService:
                 result = {"applied": True, "prices_count": preview["prices_count"], "decision_id": "historical-price:" + str(request_id)}
                 self._write(directory / "applied.json", canonical_json(result).encode())
                 return result
+            if preview.get("manual") and preview["status"] != "ready":
+                fail("historical_price_manual_evidence_blocked")
             if preview["status"] != "ready" or preview["software_version"] != __version__:
                 fail("historical_price_preview_stale")
             if self._uses_collection(preview["query"]) and preview.get("pending_count", 0):

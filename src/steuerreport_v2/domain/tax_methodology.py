@@ -5,7 +5,9 @@ from steuerreport_v2.paths import PROJECT_ROOT
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import json
+import os
 from pathlib import Path
+from uuid import uuid4
 
 from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfActionItem,
@@ -373,10 +375,11 @@ class TaxMethodologyService:
                 snapshot_exists=False,
                 artifact_path=str(path),
                 report=None,
+                binding_status="missing",
                 status="missing",
                 note=(
                     "Noch kein BMF-Filing-Readiness-Snapshot vorhanden. "
-                    "Erzeuge ihn mit scripts/run_bmf_filing_readiness_snapshot_20260621.py."
+                    "Erzeuge ihn ausdrücklich über die Steuerjahresansicht."
                 ),
             )
         try:
@@ -388,14 +391,25 @@ class TaxMethodologyService:
                 snapshot_exists=True,
                 artifact_path=str(path),
                 report=None,
+                binding_status=None,
                 status="invalid",
                 note=f"Snapshot konnte nicht validiert werden: {exc}",
             )
+        from steuerreport_v2.domain.filing_binding import snapshot_binding_status
+
+        binding_status = snapshot_binding_status(self.store, report)
+        if binding_status == "current":
+            note = "Gebundener Snapshot ist aktuell. Er erteilt keine menschliche Methodenpruefung oder finale Jahresfreigabe."
+        elif binding_status == "stale":
+            note = "Snapshot ist lesbar, aber seine Eingangsbindung ist veraltet; er ist nicht der aktuelle Pruefstand."
+        else:
+            note = "Snapshot ist lesbar, hat aber keine gueltige Eingangsbindung; er ist nicht als aktuell bestaetigt."
         return TaxBmfFilingReadinessSnapshot(
             generated_at=self._now(),
             snapshot_exists=True,
             artifact_path=str(path),
             report=report,
+            binding_status=binding_status,
             years_count=len(report.years),
             available_years=list(report.available_years),
             ready_years=list(report.ready_years),
@@ -404,7 +418,7 @@ class TaxMethodologyService:
             blocked_years=list(report.blocked_years),
             empty_years=list(report.empty_years),
             status="available",
-            note="Read-only Snapshot aus var/bmf_filing_readiness; API berechnet dabei keine Methodology neu.",
+            note=note,
         )
 
     def bmf_finalization_matrix(
@@ -418,7 +432,11 @@ class TaxMethodologyService:
             years if years is not None else [2021, 2022, 2023, 2024, 2025]
         )
         snapshot = self.bmf_filing_readiness_snapshot()
-        if snapshot.status == "available" and snapshot.report is not None:
+        if (
+            snapshot.status == "available"
+            and snapshot.binding_status == "current"
+            and snapshot.report is not None
+        ):
             readiness = snapshot.report
         else:
             readiness = self.bmf_filing_readiness()
@@ -1560,19 +1578,78 @@ class TaxMethodologyService:
         self,
         *,
         output_dir: Path | None = None,
+        expected_binding: tuple[str, str | None] | None = None,
     ) -> Path:
-        out = output_dir or self.DEFAULT_BMF_FILING_READINESS_DIR
-        out.mkdir(parents=True, exist_ok=True)
+        with self.store.exclusive_access():
+            return self._write_bmf_filing_readiness_snapshot(
+                output_dir=output_dir,
+                expected_binding=expected_binding,
+            )
+
+    def _write_bmf_filing_readiness_snapshot(
+        self,
+        *,
+        output_dir: Path | None,
+        expected_binding: tuple[str, str | None] | None,
+    ) -> Path:
+        from steuerreport_v2.domain.filing_binding import current_filing_binding
+
+        binding_before = current_filing_binding(self.store)
+        if expected_binding is not None and binding_before != expected_binding:
+            raise ValueError("filing_readiness_inputs_changed")
         report = self.bmf_filing_readiness()
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        artifact = out / f"{timestamp}_bmf_filing_readiness_2021_2025.json"
+        report_binding = (
+            report.input_binding_sha256,
+            report.latest_tax_run_id,
+        )
+        if report_binding != binding_before or (
+            expected_binding is not None and report_binding != expected_binding
+        ):
+            raise ValueError("filing_readiness_inputs_changed")
+        if current_filing_binding(self.store) != report_binding:
+            raise ValueError("filing_readiness_inputs_changed")
+
+        out = output_dir or self._default_bmf_filing_readiness_dir()
+        out.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        artifact = out / (
+            f"{timestamp}_{uuid4().hex[:8]}_bmf_filing_readiness_2021_2025.json"
+        )
         latest = out / "latest_bmf_filing_readiness_2021_2025.json"
         content = json.dumps(
             report.model_dump(mode="json"), indent=2, ensure_ascii=False
         ).encode("utf-8")
-        artifact.write_bytes(content)
-        latest.write_bytes(content)
+        if current_filing_binding(self.store) != report_binding:
+            raise ValueError("filing_readiness_inputs_changed")
+        artifact_temporary = out / f".{artifact.name}.{uuid4().hex}.tmp"
+        try:
+            with artifact_temporary.open("xb") as stream:
+                stream.write(content)
+            os.replace(artifact_temporary, artifact)
+        finally:
+            artifact_temporary.unlink(missing_ok=True)
+        temporary = out / f".{latest.name}.{uuid4().hex}.tmp"
+        try:
+            with temporary.open("xb") as stream:
+                stream.write(content)
+            os.replace(temporary, latest)
+        finally:
+            temporary.unlink(missing_ok=True)
         return latest
+
+    def _default_bmf_filing_readiness_dir(self) -> Path:
+        configured_default = Path(
+            str(PROJECT_ROOT / "var/bmf_filing_readiness")
+        ).resolve()
+        if self.DEFAULT_BMF_FILING_READINESS_DIR.resolve() != configured_default:
+            return self.DEFAULT_BMF_FILING_READINESS_DIR
+        database_parent = self.store.path.expanduser().resolve().parent
+        state_root = (
+            database_parent.parent
+            if database_parent.name == "data"
+            else database_parent
+        )
+        return state_root / "var/bmf_filing_readiness"
 
     def _bmf_finalization_year(
         self,

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictInput(BaseModel):
@@ -20,6 +20,22 @@ class AiDataQuery(StrictInput):
     limit: int = Field(default=20, ge=1, le=50)
 
 
+class AiDataTarget(StrictInput):
+    kind: Literal["event", "price"]
+    target_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:/-]+$")
+
+
+class AiDataTargets(StrictInput):
+    targets: list[AiDataTarget] = Field(min_length=1, max_length=25)
+
+    @model_validator(mode="after")
+    def unique_targets(self):
+        keys = [(target.kind, target.target_id) for target in self.targets]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate target")
+        return self
+
+
 class AiDataRow(BaseModel):
     kind: Literal["event", "price"]
     target_id: str
@@ -32,6 +48,12 @@ class AiDataContext(BaseModel):
     context_sha256: str
     total: int
     rows: list[AiDataRow]
+
+
+class AiDataTargetContext(BaseModel):
+    context_sha256: str
+    rows: list[AiDataRow]
+    missing_targets: list[AiDataTarget]
 
 
 class AiChange(StrictInput):
@@ -77,6 +99,22 @@ class AiChangeSet(BaseModel):
 
 class AiChangePreview(StrictInput):
     selected_indices: list[int] = Field(min_length=1, max_length=25)
+
+
+class AiChangeTargetRevision(AiDataTarget):
+    current_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class AiChangeRebase(StrictInput):
+    reviewed: Literal[True]
+    targets: list[AiChangeTargetRevision] = Field(min_length=1, max_length=25)
+
+    @model_validator(mode="after")
+    def unique_targets(self):
+        keys = [(target.kind, target.target_id) for target in self.targets]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate target")
+        return self
 
 
 class AiChangeApply(StrictInput):

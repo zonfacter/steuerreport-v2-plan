@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+import base64
 import csv
 import hashlib
 import io
@@ -178,6 +179,37 @@ def requested_points(requests):
     return [(identifier, instant) for request in requests
             for identifier, instants in json.loads(request.url.params["coins"]).items()
             for instant in instants]
+
+
+def manual_evidence_file(content, *, source="Synthetic source", filename="price-note.bin"):
+    return {
+        "filename": filename,
+        "media_type": "application/octet-stream",
+        "source_name": source,
+        "source_reference": "synthetic fixture page 1",
+        "source_observed_at": "2024-06-02T14:30:00+02:00",
+        "content_base64": base64.b64encode(content).decode("ascii"),
+    }
+
+
+def manual_price_request(workflow, *, currency="EUR", value="125.50", request_id=None,
+                         price_content=b"synthetic original price evidence", fx_evidence=None,
+                         fx_observations=None):
+    query, planned = plan(workflow, assets=["TOKEN000"])
+    return {
+        "request_id": request_id or str(uuid4()),
+        "query": query,
+        "plan_sha256": planned["plan_sha256"],
+        "asset": "TOKEN000",
+        "price_date": "2024-06-02",
+        "price_value": value,
+        "price_currency": currency,
+        "price_unit": "currency_per_asset",
+        "priced_at": "2024-06-02T11:30:00+00:00",
+        "price_evidence": manual_evidence_file(price_content),
+        "fx_evidence": fx_evidence,
+        "fx_observations": fx_observations or [],
+    }
 
 
 def test_api_plan_paginates_full_inventory_in_25_rows_without_writes(workflow):
@@ -770,3 +802,280 @@ def test_tax_required_reporting_year_csv_uses_source_policy_not_utc_price_day(wo
     assert json.loads(exported["event_year_counts"]) == {str(expected_year): 1}
     assert source_snapshot(workflow) == before
     assert len(workflow.calls) == calls_before and not workflow.store.list_price_points()
+
+
+def test_manual_eur_preview_preserves_original_and_writes_only_after_confirmed_apply(workflow):
+    seed(workflow)
+    request = manual_price_request(workflow)
+    before = source_snapshot(workflow)
+    revision = workflow.service._revision()
+    response = workflow.client.post(BASE + "/manual-previews", json=request)
+    preview = data(response)
+
+    original = b"synthetic original price evidence"
+    assert preview["manual"] is True and preview["status"] == "ready"
+    assert preview["prices_count"] == 1 and preview["requests_started"] == 0
+    assert Decimal(preview["prices"][0]["price_eur"]) == Decimal("125.50")
+    assert preview["manual_submission"]["price"]["unit"] == "EUR per 1 TOKEN000"
+    assert preview["manual_submission"]["price"]["source_observed_at"] == "2024-06-02T14:30:00+02:00"
+    assert preview["manual_submission"]["price"]["source_observed_at_utc"] == "2024-06-02T12:30:00+00:00"
+    assert preview["manual_submission"]["price"]["evidence_byte_length"] == len(original)
+    assert preview["manual_submission"]["fx"] is None
+    assert preview["canonical_events_unchanged"] is True
+    assert preview["preview_sha256"] == workflow.service.get(preview["id"])["preview_sha256"]
+    price_evidence = preview["evidence"][0]
+    assert price_evidence["sha256"] == hashlib.sha256(original).hexdigest()
+    assert workflow.service.evidence(preview["id"], price_evidence["sha256"]) == original
+    assert source_snapshot(workflow) == before
+    assert workflow.service._revision() == revision
+    assert not workflow.store.list_price_points() and not workflow.store.list_review_decisions()
+    assert not workflow.calls and not workflow.applied_callbacks
+
+    report = workflow.client.get(BASE + f"/previews/{preview['id']}/report.md")
+    assert report.status_code == 200
+    assert "Synthetic source" in report.text and "EUR per 1 TOKEN000" in report.text
+    report_json = workflow.client.get(BASE + f"/previews/{preview['id']}/report.json")
+    assert report_json.status_code == 200
+    assert report_json.json()["preview"]["manual_submission"]["price"]["evidence_sha256"] == price_evidence["sha256"]
+    report_zip = workflow.client.get(BASE + f"/previews/{preview['id']}/report.zip")
+    assert report_zip.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(report_zip.content)) as archive:
+        assert archive.read(f"evidence/{price_evidence['sha256']}.original") == original
+        assert b"Synthetic source" in archive.read("report.md")
+    download = workflow.client.get(
+        BASE + f"/previews/{preview['id']}/evidence/{price_evidence['sha256']}"
+    )
+    assert download.content == original
+    assert download.headers["content-type"].startswith("application/octet-stream")
+    assert "filename*=UTF-8''price-note.bin" in download.headers["content-disposition"]
+    assert source_snapshot(workflow) == before and not workflow.store.list_price_points()
+
+    apply_path = BASE + f"/previews/{preview['id']}/apply"
+    applied = data(workflow.client.post(apply_path, json=approval(preview)))
+    assert applied["applied"] is True and applied["prices_count"] == 1
+    assert len(workflow.store.list_price_points()) == 1
+    assert workflow.store.list_price_points()[0].price_eur == Decimal("125.500000000000000000")
+    assert len(workflow.store.list_review_decisions()) == 1
+    assert len(workflow.applied_callbacks) == 1
+    assert not workflow.calls
+    assert data(workflow.client.post(apply_path, json=approval(preview))) == applied
+    assert len(workflow.store.list_price_points()) == 1
+    assert len(workflow.store.list_review_decisions()) == 1
+
+
+@pytest.mark.parametrize(
+    "base,quote,rate,expected",
+    [("USD", "EUR", "0.9", "90"), ("EUR", "USD", "1.25", "80")],
+)
+def test_manual_usd_price_uses_bound_fx_evidence_and_existing_fx_policy(
+    workflow, base, quote, rate, expected,
+):
+    seed(workflow)
+    fx_original = b"synthetic documented FX evidence"
+    request = manual_price_request(
+        workflow,
+        currency="USD",
+        value="100",
+        fx_evidence=manual_evidence_file(
+            fx_original, source="Synthetic FX source", filename="fx-note.txt",
+        ),
+        fx_observations=[{
+            "date": "2024-05-31", "base": base, "quote": quote,
+            "rate": rate, "source": "Synthetic FX source",
+        }],
+    )
+    before = source_snapshot(workflow)
+    revision = workflow.service._revision()
+    preview = data(workflow.client.post(BASE + "/manual-previews", json=request))
+    assert preview["status"] == "ready" and preview["prices_count"] == 1
+    assert Decimal(preview["prices"][0]["price_eur"]) == Decimal(expected)
+    selected = preview["manual_submission"]["fx"]["selected_reference"]
+    assert selected["base"] == base and selected["quote"] == quote
+    assert selected["raw_rate"] == rate
+    assert Decimal(selected["rate_eur_per_usd"]) == (Decimal("0.9") if base == "USD" else Decimal("0.8"))
+    assert preview["manual_submission"]["fx"]["policy_id"] == "fx_reference_on_or_before_max_7_calendar_days_v1"
+    assert preview["manual_submission"]["fx"]["selected_reference"]["unit"] == f"{quote} per 1 {base}"
+    hashes = {item["sha256"] for item in preview["evidence"]}
+    assert hashlib.sha256(fx_original).hexdigest() in hashes
+    assert workflow.service.evidence(preview["id"], hashlib.sha256(fx_original).hexdigest()) == fx_original
+    assert source_snapshot(workflow) == before and workflow.service._revision() == revision
+    assert not workflow.store.list_price_points() and not workflow.calls
+
+    report = workflow.client.get(BASE + f"/previews/{preview['id']}/report.md")
+    assert report.status_code == 200
+    assert "USD per 1 TOKEN000" in report.text
+    assert f"{quote} per 1 {base}" in report.text
+    assert "fx_reference_on_or_before_max_7_calendar_days_v1" in report.text
+    report_json = workflow.client.get(BASE + f"/previews/{preview['id']}/report.json")
+    assert report_json.status_code == 200
+    assert {item["sha256"] for item in report_json.json()["preview"]["evidence"]} == hashes
+    assert source_snapshot(workflow) == before and not workflow.store.list_price_points()
+    assert not workflow.calls
+
+    applied = data(workflow.client.post(
+        BASE + f"/previews/{preview['id']}/apply", json=approval(preview),
+    ))
+    assert applied["applied"] is True
+    assert workflow.store.list_price_points()[0].price_eur == Decimal(expected)
+    assert not workflow.calls
+
+
+@pytest.mark.parametrize(
+    "observations,expected_reason",
+    [
+        ([], "historical_price_fx_evidence_required"),
+        ([{"date": "2024-06-03", "base": "USD", "quote": "EUR", "rate": "0.9"}], "historical_price_fx_future"),
+        ([{"date": "2024-05-01", "base": "USD", "quote": "EUR", "rate": "0.9"}], "historical_price_fx_stale"),
+        ([{"date": "2024-05-31", "base": "EUR", "quote": "USD", "rate": "1e-30"}], "historical_price_fx_evidence_invalid"),
+        ([
+            {"date": "2024-05-31", "base": "USD", "quote": "EUR", "rate": "0.9"},
+            {"date": "2024-05-31", "base": "USD", "quote": "EUR", "rate": "0.91"},
+        ], "historical_price_fx_conflict"),
+    ],
+    ids=["missing", "future", "stale", "unrepresentable", "conflict"],
+)
+def test_manual_fx_gap_is_saved_as_blocked_without_a_financial_write_or_provider_call(
+    workflow, observations, expected_reason,
+):
+    seed(workflow)
+    if observations:
+        for item in observations:
+            item["source"] = "Synthetic FX source"
+    request = manual_price_request(
+        workflow,
+        currency="USD",
+        fx_evidence=manual_evidence_file(b"synthetic FX source file", source="Synthetic FX source"),
+        fx_observations=observations,
+        price_content=expected_reason.encode("ascii"),
+    )
+    before = source_snapshot(workflow)
+    preview = data(workflow.client.post(BASE + "/manual-previews", json=request))
+    assert preview["manual"] is True
+    assert preview["status"] == "blocked" and preview["block_reason"] == expected_reason
+    assert preview["prices_count"] == 0 and preview["rows"][0]["status"] == "blocked"
+    assert preview["rows"][0]["price_eur"] is None
+    assert preview["manual_submission"]["fx_block_reason"] == expected_reason
+    assert source_snapshot(workflow) == before
+    assert not workflow.store.list_price_points() and not workflow.store.list_review_decisions()
+    assert not workflow.calls and not workflow.applied_callbacks
+    error(
+        workflow.client.post(
+            BASE + f"/previews/{preview['id']}/apply", json=approval(preview),
+        ),
+        "historical_price_manual_evidence_blocked",
+    )
+    assert source_snapshot(workflow) == before and not workflow.store.list_price_points()
+    assert not workflow.calls
+
+
+def test_manual_evidence_is_idempotent_and_same_document_with_changed_value_conflicts(workflow):
+    seed(workflow)
+    request = manual_price_request(workflow)
+    first = data(workflow.client.post(BASE + "/manual-previews", json=request))
+    repeated_same_id = data(workflow.client.post(BASE + "/manual-previews", json=request))
+    assert repeated_same_id["id"] == first["id"]
+    repeated_new_id = dict(request, request_id=str(uuid4()))
+    repeated_new_id_preview = data(workflow.client.post(BASE + "/manual-previews", json=repeated_new_id))
+    assert repeated_new_id_preview["id"] == first["id"]
+
+    changed = dict(request, request_id=str(uuid4()), price_value="126")
+    error(workflow.client.post(BASE + "/manual-previews", json=changed),
+          "historical_price_manual_evidence_conflict")
+    assert not workflow.store.list_price_points() and not workflow.store.list_review_decisions()
+    assert not workflow.calls
+
+
+def test_manual_missing_fx_can_be_replaced_by_a_new_hash_bound_fx_preview(workflow):
+    seed(workflow)
+    request = manual_price_request(workflow, currency="USD", value="100")
+    blocked = data(workflow.client.post(BASE + "/manual-previews", json=request))
+    assert blocked["status"] == "blocked"
+
+    corrected = dict(request)
+    corrected["request_id"] = str(uuid4())
+    corrected["fx_evidence"] = manual_evidence_file(
+        b"corrected synthetic FX original", source="Synthetic FX source", filename="fx.txt",
+    )
+    corrected["fx_observations"] = [{
+        "date": "2024-05-31", "base": "USD", "quote": "EUR",
+        "rate": "0.9", "source": "Synthetic FX source",
+    }]
+    ready = data(workflow.client.post(BASE + "/manual-previews", json=corrected))
+    assert ready["status"] == "ready" and ready["prices_count"] == 1
+    assert ready["id"] != blocked["id"]
+    assert Decimal(ready["prices"][0]["price_eur"]) == Decimal("90")
+    assert not workflow.store.list_price_points() and not workflow.store.list_review_decisions()
+    assert not workflow.calls
+
+
+def test_manual_usd_value_below_storage_precision_is_blocked_without_zero_price(workflow):
+    seed(workflow)
+    request = manual_price_request(
+        workflow,
+        currency="USD",
+        value="1e-30",
+        fx_evidence=manual_evidence_file(b"synthetic FX evidence", source="Synthetic FX source"),
+        fx_observations=[{
+            "date": "2024-05-31", "base": "USD", "quote": "EUR",
+            "rate": "0.9", "source": "Synthetic FX source",
+        }],
+    )
+    preview = data(workflow.client.post(BASE + "/manual-previews", json=request))
+    assert preview["status"] == "blocked"
+    assert preview["block_reason"] == "historical_price_manual_precision_exceeds_storage"
+    assert preview["prices_count"] == 0 and preview["rows"][0]["price_eur"] is None
+    assert not workflow.store.list_price_points() and not workflow.calls
+
+
+def test_manual_preview_blocks_database_change_before_apply(workflow):
+    seed(workflow)
+    request = manual_price_request(workflow)
+    preview = data(workflow.client.post(BASE + "/manual-previews", json=request))
+    with workflow.store.connect() as con:
+        con.execute("update canonical_events set event_type='income'")
+    error(workflow.client.post(
+        BASE + f"/previews/{preview['id']}/apply", json=approval(preview),
+    ), "historical_price_preview_stale")
+    assert not workflow.store.list_price_points() and not workflow.store.list_review_decisions()
+    assert not workflow.calls
+
+
+def test_manual_preview_blocks_changed_evidence_or_database_before_apply(workflow):
+    seed(workflow)
+    request = manual_price_request(workflow)
+    preview = data(workflow.client.post(BASE + "/manual-previews", json=request))
+    sha = preview["evidence"][0]["sha256"]
+    evidence_path = workflow.service.root / "evidence" / f"{sha}.body"
+    evidence_path.chmod(0o600)
+    evidence_path.write_bytes(b"tampered original")
+    error(workflow.client.post(
+        BASE + f"/previews/{preview['id']}/apply", json=approval(preview),
+    ), "historical_price_evidence_changed")
+    assert not workflow.store.list_price_points() and not workflow.store.list_review_decisions()
+    assert not workflow.calls
+
+
+def test_manual_preview_requires_same_open_need_and_unambiguous_identity(workflow):
+    seed(workflow)
+    request = manual_price_request(workflow)
+    stale = dict(request, plan_sha256="0" * 64)
+    error(workflow.client.post(BASE + "/manual-previews", json=stale), "historical_price_plan_stale")
+    assert not workflow.store.list_price_points()
+
+    for mint in ("Ab" + "1" * 30, "Cd" + "2" * 30):
+        batch = workflow.store.create_import_batch(ImportBatchCreate(source="solana_rpc"))
+        raw = workflow.store.add_raw_object(
+            batch.batch_id, RawObjectCreate(payload_json=json.dumps({"mint": mint})),
+        )
+        workflow.store.add_canonical_event(CanonicalEventCreate(
+            source="solana_rpc", source_ref="ambiguous-" + mint, asset="TOKEN000",
+            quantity=Decimal("1"), event_time=AT, event_type="transfer",
+            account="synthetic-account", raw_object_id=raw.raw_object_id,
+        ))
+    _, ambiguous_plan = plan(workflow, assets=["TOKEN000"])
+    assert ambiguous_plan["rows"][0]["status"] == "blocked"
+    assert ambiguous_plan["rows"][0]["reason"] == "asset_mint_conflict"
+    request["plan_sha256"] = ambiguous_plan["plan_sha256"]
+    error(workflow.client.post(BASE + "/manual-previews", json=request),
+          "historical_price_manual_identity_ambiguous")
+    assert not workflow.store.list_price_points() and not workflow.calls

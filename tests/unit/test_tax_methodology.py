@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import json
+from threading import Event, Thread
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -15,7 +17,9 @@ from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax import TaxService
+from steuerreport_v2.domain.filing_binding import current_filing_binding
 from steuerreport_v2.domain.tax_methodology import TaxMethodologyService
+from steuerreport_v2.domain.tax_years import TaxYearService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.raw_normalizer import RawNormalizer
 
@@ -317,8 +321,12 @@ def test_bmf_filing_readiness_treats_documented_review_only_year_as_conservative
 def test_bmf_filing_readiness_snapshot_roundtrip(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     service = TaxMethodologyService(store)
+    binding, run_id = current_filing_binding(store)
     service.bmf_filing_readiness = lambda year=None: TaxBmfFilingReadinessReport(
         generated_at="2026-06-21T00:00:00+00:00",
+        input_binding_sha256=binding,
+        binding_version="filing_state_binding_v1",
+        latest_tax_run_id=run_id,
         years=[],
         available_years=[2021, 2022, 2023, 2024, 2025],
         ready_years=[],
@@ -340,6 +348,36 @@ def test_bmf_filing_readiness_snapshot_roundtrip(tmp_path):
     assert snapshot.years_count == 0
     assert snapshot.available_years == [2021, 2022, 2023, 2024, 2025]
     assert snapshot.blocked_years == [2021, 2022, 2023]
+    assert snapshot.binding_status == "current"
+
+
+def test_bmf_filing_readiness_snapshot_defaults_to_database_state_volume(tmp_path):
+    state_root = tmp_path / "private-state"
+    store = DuckDbStore(state_root / "data" / "steuerreport_v2.duckdb")
+    service = TaxMethodologyService(store)
+    binding, run_id = current_filing_binding(store)
+    service.bmf_filing_readiness = lambda year=None: TaxBmfFilingReadinessReport(
+        generated_at="2026-10-29T00:00:00+00:00",
+        input_binding_sha256=binding,
+        binding_version="filing_state_binding_v1",
+        latest_tax_run_id=run_id,
+        years=[],
+        available_years=[],
+        ready_years=[],
+        conservative_appendix_years=[],
+        review_years=[],
+        blocked_years=[],
+        empty_years=[],
+        ascii_table="Jahr | Status",
+        methodology="synthetic state-volume path test",
+    )
+
+    latest = service.write_bmf_filing_readiness_snapshot()
+
+    assert latest == state_root / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json"
+    assert latest.is_file()
+    archived = list(latest.parent.glob("*Z_*_bmf_filing_readiness_2021_2025.json"))
+    assert len(archived) == 1
 
 
 def test_bmf_finalization_matrix_combines_filing_correction_rewards_and_fx(tmp_path):
@@ -1257,3 +1295,228 @@ def test_tax_methodology_api_endpoints(tmp_path):
         status.json()["data"]["methodology_endpoint"]
         == "/api/v1/tax-years/2024/methodology"
     )
+
+
+def _filing_readiness_refresh_payload(store: DuckDbStore) -> dict[str, object]:
+    binding, run_id = current_filing_binding(store)
+    return {
+        "scope": "years_2021_2025",
+        "expected_input_binding_sha256": binding,
+        "expected_latest_tax_run_id": run_id,
+    }
+
+
+def test_filing_readiness_snapshot_is_read_only_until_explicit_refresh(
+    tmp_path, monkeypatch
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    _import_trade_csv(
+        store,
+        "time,asset,amount,type,quote_asset,quote_quantity\n"
+        "2024-01-01T00:00:00Z,SOL,1,buy,EUR,50\n",
+    )
+    output_dir = tmp_path / "private-state" / "var" / "bmf_filing_readiness"
+    monkeypatch.setattr(
+        TaxMethodologyService,
+        "DEFAULT_BMF_FILING_READINESS_DIR",
+        output_dir,
+    )
+    client = TestClient(create_app(store))
+
+    before = current_filing_binding(store)
+    read = client.get("/api/v1/tax-methodology/bmf-filing-readiness-snapshot")
+    assert read.status_code == 200
+    assert read.json()["data"]["status"] == "missing"
+    assert not output_dir.exists()
+
+    payload = _filing_readiness_refresh_payload(store)
+    created = client.post(
+        "/api/v1/tax-methodology/bmf-filing-readiness-snapshot",
+        json=payload,
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()["data"]
+    assert body["scope"] == "years_2021_2025"
+    assert body["status"] == "completed"
+    assert body["binding_status"] == "current"
+    assert body["report"]["input_binding_sha256"] == payload[
+        "expected_input_binding_sha256"
+    ]
+    assert body["final_approval_granted"] is False
+    assert body["tax_data_changed"] is False
+    assert body["external_provider_calls_made"] is False
+    assert current_filing_binding(store) == before
+    assert (
+        output_dir / "latest_bmf_filing_readiness_2021_2025.json"
+    ).is_file()
+
+    read_after = client.get("/api/v1/tax-methodology/bmf-filing-readiness-snapshot")
+    assert read_after.json()["data"]["binding_status"] == "current"
+
+
+def test_filing_readiness_snapshot_rejects_stale_expected_binding(
+    tmp_path, monkeypatch
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    output_dir = tmp_path / "private-state" / "var" / "bmf_filing_readiness"
+    monkeypatch.setattr(
+        TaxMethodologyService,
+        "DEFAULT_BMF_FILING_READINESS_DIR",
+        output_dir,
+    )
+    client = TestClient(create_app(store))
+    payload = _filing_readiness_refresh_payload(store)
+    store.upsert_admin_setting(
+        AdminSettingWrite(key="runtime.synthetic.changed", value_json='"after-read"')
+    )
+
+    response = client.post(
+        "/api/v1/tax-methodology/bmf-filing-readiness-snapshot",
+        json=payload,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["code"] == "filing_readiness_inputs_changed"
+    assert not output_dir.exists()
+
+
+def test_filing_readiness_snapshot_reports_change_during_write_as_stale(
+    tmp_path, monkeypatch
+):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    output_dir = tmp_path / "private-state" / "var" / "bmf_filing_readiness"
+    monkeypatch.setattr(
+        TaxMethodologyService,
+        "DEFAULT_BMF_FILING_READINESS_DIR",
+        output_dir,
+    )
+    client = TestClient(create_app(store))
+    payload = _filing_readiness_refresh_payload(store)
+    original = TaxMethodologyService.write_bmf_filing_readiness_snapshot
+
+    def write_then_change_inputs(self, *, output_dir=None, expected_binding=None):
+        result = original(
+            self,
+            output_dir=output_dir,
+            expected_binding=expected_binding,
+        )
+        self.store.upsert_admin_setting(
+            AdminSettingWrite(
+                key="runtime.synthetic.concurrent_change",
+                value_json='"during-write"',
+            )
+        )
+        return result
+
+    monkeypatch.setattr(
+        TaxMethodologyService,
+        "write_bmf_filing_readiness_snapshot",
+        write_then_change_inputs,
+    )
+
+    response = client.post(
+        "/api/v1/tax-methodology/bmf-filing-readiness-snapshot",
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "stale"
+    assert response.json()["data"]["binding_status"] == "stale"
+    stale_read = client.get("/api/v1/tax-methodology/bmf-filing-readiness-snapshot")
+    assert stale_read.json()["data"]["binding_status"] == "stale"
+    fresh_readiness = client.get("/api/v1/tax-methodology/bmf-filing-readiness")
+    assert fresh_readiness.json()["data"]["input_binding_sha256"] == current_filing_binding(
+        store
+    )[0]
+
+
+def test_tax_year_read_models_ignore_stale_bound_readiness_snapshot(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    _import_trade_csv(
+        store,
+        "time,asset,amount,type,quote_asset,quote_quantity\n"
+        "2025-01-01T00:00:00Z,SOL,1,buy,EUR,50\n",
+    )
+    report = TaxMethodologyService(store).bmf_filing_readiness()
+    snapshot_path = (
+        tmp_path
+        / "var"
+        / "bmf_filing_readiness"
+        / "latest_bmf_filing_readiness_2021_2025.json"
+    )
+    snapshot_path.parent.mkdir(parents=True)
+    snapshot_path.write_text(
+        json.dumps(report.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    store.upsert_admin_setting(
+        AdminSettingWrite(key="runtime.synthetic.after_snapshot", value_json='"changed"')
+    )
+
+    service = TaxYearService(store)
+
+    assert service._readiness_snapshot_binding_is_current_or_legacy(
+        report.model_dump(mode="json")
+    ) is False
+    assert service._filing_matrix_from_readiness_snapshot() is None
+    assert service._correction_map_from_readiness_snapshot() is None
+
+
+def test_filing_readiness_snapshot_rejects_concurrent_refresh(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    output_dir = tmp_path / "private-state" / "var" / "bmf_filing_readiness"
+    monkeypatch.setattr(
+        TaxMethodologyService,
+        "DEFAULT_BMF_FILING_READINESS_DIR",
+        output_dir,
+    )
+    client = TestClient(create_app(store))
+    payload = _filing_readiness_refresh_payload(store)
+    entered = Event()
+    release = Event()
+    original = TaxMethodologyService.write_bmf_filing_readiness_snapshot
+
+    def held_write(self, *, output_dir=None, expected_binding=None):
+        entered.set()
+        if not release.wait(timeout=5):
+            raise TimeoutError("synthetic writer release timed out")
+        return original(
+            self,
+            output_dir=output_dir,
+            expected_binding=expected_binding,
+        )
+
+    monkeypatch.setattr(
+        TaxMethodologyService,
+        "write_bmf_filing_readiness_snapshot",
+        held_write,
+    )
+    first_result: list[object] = []
+
+    def run_first_request() -> None:
+        first_result.append(
+            client.post(
+                "/api/v1/tax-methodology/bmf-filing-readiness-snapshot",
+                json=payload,
+            )
+        )
+
+    thread = Thread(target=run_first_request, daemon=True)
+    thread.start()
+    try:
+        assert entered.wait(timeout=3)
+        duplicate = client.post(
+            "/api/v1/tax-methodology/bmf-filing-readiness-snapshot",
+            json=payload,
+        )
+        assert duplicate.status_code == 409
+        assert duplicate.json()["errors"][0]["code"] == (
+            "filing_readiness_snapshot_refresh_running"
+        )
+    finally:
+        release.set()
+        thread.join(timeout=6)
+
+    assert not thread.is_alive()
+    assert len(first_result) == 1
+    assert first_result[0].status_code == 200

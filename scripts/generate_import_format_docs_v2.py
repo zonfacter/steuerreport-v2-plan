@@ -17,9 +17,14 @@ from steuerreport_v2.importers.source_profiles import PROFILES
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = ("manual-csv", "binance", "bitget", "pionex", "coinbase", "helium", "solana_rpc")
+SOURCES = ("manual-csv", "binance", "bitget", "pionex", "coinbase", "mexc", "helium", "solana_rpc")
 # Examples are deliberately fictitious; downloads contain headers only.
 LAYOUTS = {
+    "mexc": {
+        "headers": "UID,Creation Time(UTC+01:00),Crypto,Transaction Type,Direction,Quantity",
+        "example": "beispiel-uid,2025-01-15 11:00:00,DEMOCOIN,Airdrop,Inflow,2.5",
+        "note": "Nativer Account Data Export: XLSX oder UTF-8-CSV. Konto und Exportart ausdruecklich zuordnen. Diese Statement-Spalten unterscheiden Spot, Futures Statement, Earn und Send History nicht allein; nur Spot Statement und Funding Other bilden den ersten Mengenpfad. Funding Other verwendet UID,Time,Crypto,Type,Quantity,Status,Remark und benoetigt eine bestaetigte Zeitbasis. UTC+01:00 im Header ist ein fester Offset, keine Berliner Sommerzeit. Airdrop bleibt unknown mit blockierender fachlicher Pruefung, kein automatisches Mining/Reward oder steuerlich bestaetigter Erwerb. Unbekannte Produkttypen und BONUS bleiben Rohbelege; Asset Snapshots erzeugen keine Erwerbe aus Total/USDT Valuation. Gleiche Zeit/Menge anderer Dateien sind Kandidaten, keine automatischen Dubletten: vorhandenen Originalbeleg verknuepfen oder getrennte Buchung begruenden und erneut pruefen. Provider-Buchungs-IDs werden, soweit vorhanden, kontogebunden verglichen; UID ist keine Buchungs-ID. Identische Originale bleiben im selben Kontext idempotent. Physische Zeile, Blatt, Originaldatei und SHA256 bleiben abrufbar. Hoechstens 10000 Datenzeilen je nativer Datei, 25 MiB komprimiert/100 MiB entpackt; groessere Exporte aufteilen. Self-Service-Historie laut MEXC ab 01.10.2024 ist keine Zusicherung eigener Vollstaendigkeit. API-Optionen und Beispiele: docs/MEXC_IMPORT.md.",
+    },
     "manual-csv": {
         "headers": "time,asset,amount,type,quote_asset,quote_quantity,fee_asset,fee_quantity,account,tx_id",
         "example": "2025-01-15T10:00:00Z,BTC,0.001,buy,EUR,70,EUR,0.10,beispiel-konto,beispiel-manuell",

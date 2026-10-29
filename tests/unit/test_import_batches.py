@@ -1,4 +1,5 @@
 import pytest
+import duckdb
 
 from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
 from steuerreport_v2.contracts.events import CanonicalEventCreate
@@ -26,6 +27,42 @@ def test_create_and_list_import_batch(tmp_path):
     assert store.get_import_batch(batch.batch_id) == batch
     assert store.get_import_batch_by_file_hash("binance", "sha256:test") == batch
     assert store.list_import_batches() == [batch]
+
+
+def test_schema_v1_migration_preserves_old_imports_as_unbound(tmp_path):
+    path = tmp_path / "legacy-v1.duckdb"
+    con = duckdb.connect(str(path))
+    con.execute("create table schema_meta (key varchar primary key, value varchar not null)")
+    con.execute("insert into schema_meta values ('schema_version', '1')")
+    con.execute("""create table raw_import_batches (
+        batch_id varchar primary key, source varchar not null, filename varchar,
+        file_hash varchar, status varchar not null, created_at timestamp not null
+    )""")
+    con.execute("""create table raw_objects (
+        raw_object_id varchar primary key, batch_id varchar not null, row_number integer,
+        payload_json varchar not null, created_at timestamp not null
+    )""")
+    created = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    original_payload = '{"coin":"BTC","change":"1"}'
+    con.execute("insert into raw_import_batches values (?, ?, ?, ?, ?, ?)", [
+        "legacy-batch", "binance", "old.csv", "sha256:legacy", "loaded", created,
+    ])
+    con.execute("insert into raw_objects values (?, ?, ?, ?, ?)", [
+        "legacy-raw", "legacy-batch", 1, original_payload, created,
+    ])
+    con.close()
+
+    store = DuckDbStore(path)
+    migrated = store.get_import_batch("legacy-batch")
+    assert migrated is not None
+    assert migrated.connection_id is None
+    assert migrated.file_hash == "sha256:legacy"
+    assert store.list_raw_objects("legacy-batch", limit=None)[0].payload_json == original_payload
+    assert store.health()["schema_version"] == 2
+    with store.connect() as upgraded:
+        assert upgraded.execute(
+            "select connection_id from raw_import_batches where batch_id='legacy-batch'"
+        ).fetchone() == (None,)
 
 
 def test_add_raw_object_updates_batch_count_and_status(tmp_path):

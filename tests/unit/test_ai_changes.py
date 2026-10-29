@@ -10,7 +10,7 @@ import pytest
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.ai import AiProviderWrite
 from steuerreport_v2.contracts.ai_changes import (
-    AiChangeApply, AiChangeDraft, AiChangeGenerate, AiChangePreview, AiDataQuery,
+    AiChangeApply, AiChangeDraft, AiChangeGenerate, AiChangePreview, AiChangeRebase, AiDataQuery, AiDataTargets,
 )
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.prices import PricePointCreate
@@ -168,6 +168,90 @@ def test_context_is_filtered_and_contains_hashes_not_raw_payload_or_settings(set
     assert row.provenance["raw_payload_sha256"]
     assert "payload_json" not in context.model_dump_json()
     assert "admin_settings" not in context.model_dump_json()
+
+
+def test_exact_target_context_does_not_substitute_a_similar_event(setup):
+    store, service = setup
+    similar = store.add_canonical_event(CanonicalEventCreate(
+        source="fixture-similar", event_time=datetime(2025, 1, 2, tzinfo=timezone.utc),
+        event_type="trade", asset="BTC", quantity=Decimal("-1"), quote_asset="EUR",
+        quote_quantity=Decimal("150"), account="fixture-account", tx_id="same-time-similar-event",
+    ))
+    target_id = "external:fixture:source"
+    with store.connect() as con:
+        con.execute("update canonical_events set event_id=? where event_id=?", [target_id, similar.event_id])
+    candidates = [row for row in service.context(AiDataQuery()).rows
+                  if row.values["event_time"].startswith("2025-01-02") and row.values["asset"] == "BTC"]
+    assert len(candidates) == 2
+    selected = next(row for row in candidates if row.target_id == target_id)
+    exact = service.context_targets(AiDataTargets(targets=[{"kind": "event", "target_id": selected.target_id}]))
+    assert [row.target_id for row in exact.rows] == [selected.target_id]
+    assert exact.missing_targets == []
+
+    missing_id = "deleted-fixture-target"
+    missing = service.context_targets(AiDataTargets(targets=[{"kind": "event", "target_id": missing_id}]))
+    assert missing.rows == []
+    assert [(target.kind, target.target_id) for target in missing.missing_targets] == [("event", missing_id)]
+
+
+def test_stale_target_rebase_is_explicit_linked_and_leaves_old_draft_immutable(setup):
+    store, service = setup
+    original = prepare(service)
+    with store.connect() as con:
+        old_json = con.execute("select data_json from ai_change_sets where change_set_id=?", [original.change_set_id]).fetchone()[0]
+    target_id = original.draft.changes[0].target_id
+    with store.connect() as con:
+        con.execute("update canonical_events set quote_quantity=175 where event_id=?", [target_id])
+    current = service.context_targets(AiDataTargets(targets=[{"kind": "event", "target_id": target_id}]))
+    current_row = current.rows[0]
+    assert current_row.revision != original.draft.changes[0].before_sha256
+
+    client = TestClient(create_app(store))
+    target_response = client.post("/api/v1/ai/data-context/targets", json={"targets": [{"kind": "event", "target_id": target_id}]})
+    assert target_response.status_code == 200 and target_response.json()["data"]["rows"][0]["target_id"] == target_id
+    path = f"/api/v1/ai/changes/{original.change_set_id}/rebase"
+    denied = client.post(path, json={"reviewed": False, "targets": [{"kind": "event", "target_id": target_id,
+        "current_sha256": current_row.revision}]})
+    assert denied.status_code == 422
+    response = client.post(path, json={"reviewed": True, "targets": [{"kind": "event", "target_id": target_id,
+        "current_sha256": current_row.revision}]})
+    assert response.status_code == 200
+    revised = response.json()["data"]
+    assert revised["parent_id"] == original.change_set_id
+    assert revised["status"] == "proposed" and revised["preview"] is None and revised["approval"] is None
+    assert revised["origin"] == "human_rebase"
+    assert revised["draft"]["changes"][0]["target_id"] == target_id
+    assert revised["draft"]["changes"][0]["before_sha256"] == current_row.revision
+    assert revised["draft"]["changes"][0]["patch"] == original.draft.changes[0].patch
+    with store.connect() as con:
+        assert con.execute("select data_json from ai_change_sets where change_set_id=?", [original.change_set_id]).fetchone()[0] == old_json
+    assert service.get(original.change_set_id).model_dump() == original.model_dump()
+    assert service.get(original.change_set_id).preview == original.preview
+
+
+def test_rebase_rejects_a_changed_or_deleted_exact_target_without_fallback(setup):
+    store, service = setup
+    original = service.create(make_draft(service))
+    target_id = original.draft.changes[0].target_id
+    with store.connect() as con:
+        con.execute("update canonical_events set quote_quantity=175 where event_id=?", [target_id])
+    inspected = service.context_targets(AiDataTargets(targets=[{"kind": "event", "target_id": target_id}])).rows[0]
+    with store.connect() as con:
+        con.execute("update canonical_events set quote_quantity=180 where event_id=?", [target_id])
+    stale = AiChangeRebase(reviewed=True, targets=[{"kind": "event", "target_id": target_id,
+        "current_sha256": inspected.revision}])
+    with pytest.raises(AiChangeError, match="ai_change_stale"):
+        service.rebase(original.change_set_id, stale)
+    assert service.list() == [original]
+
+    with store.connect() as con:
+        con.execute("delete from canonical_events where event_id=?", [target_id])
+    missing = service.context_targets(AiDataTargets(targets=[{"kind": "event", "target_id": target_id}]))
+    assert missing.rows == [] and missing.missing_targets[0].target_id == target_id
+    with pytest.raises(AiChangeError, match="ai_change_target_missing"):
+        service.rebase(original.change_set_id, AiChangeRebase(reviewed=True, targets=[{"kind": "event",
+            "target_id": target_id, "current_sha256": inspected.revision}]))
+    assert service.list() == [original]
 
 
 def test_reimport_preserves_approved_event_correction_and_raw_objects(setup):

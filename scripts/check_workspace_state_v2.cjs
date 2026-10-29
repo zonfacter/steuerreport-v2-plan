@@ -73,4 +73,9 @@ assert.equal(values.priceReference({ asset: "TEST", price_status: "old", priced_
 const context = route.parseView("#flows?tab=ledger&asset=EUR&account=a_aaaaaaaaaaaaaaaaaaaa&task=review_task_1234567890123456");
 assert.equal(context.account, "a_aaaaaaaaaaaaaaaaaaaa");
 assert.equal(route.parseView("#flows?account=alpha-account").account, "");
+const manualCorrection = route.parseView("#ai?tab=changes&target=external%3Afixture%3Asource&target_kind=event&year=2025&task=review_task_1234567890123456&source=s_aaaaaaaaaaaaaaaaaaaa&evidence_id=raw-000&return_to=review");
+assert.equal(manualCorrection.target, "external:fixture:source");
+assert.equal(manualCorrection.evidenceId, "raw-000");
+assert.equal(manualCorrection.returnTo, "review");
+assert.equal(route.parseView(route.viewHash(manualCorrection)).target, "external:fixture:source");
 console.log("Workspace state: URL normalization, roundtrip, history, shared year, privacy, exact decimal formatting/sorting passed.");

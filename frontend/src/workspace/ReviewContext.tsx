@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { clearViewSearch, navigateView } from "./view-state";
+import { clearViewSearch, navigateView, parseView } from "./view-state";
 import type { ReviewItem } from "./types";
 
 export function reviewTaskCount(source: { review_tasks_count?: number; ambiguous_review_tasks_count?: number }) {
@@ -21,6 +21,19 @@ export function openLedgerContext(item: ReviewItem) {
 
 export function openSourceContext(item: ReviewItem, ref = item.source_ref) {
   if (ref) navigateView("sources", { detail: ref, detailTab: "issues", task: item.task.task_id });
+}
+
+export function openManualCorrectionContext(context: {
+  targetId: string; kind?: "event" | "price"; year?: string; task?: string;
+  source?: string; account?: string; evidenceId?: string; returnTo: "review" | "flows" | "sources";
+}) {
+  const current = parseView();
+  navigateView("ai", {
+    tab: "changes", target: context.targetId, targetKind: context.kind || "event",
+    year: context.year || current.year, task: context.task || "", source: context.source || "",
+    account: context.account || "", evidenceId: context.evidenceId || "", returnTo: context.returnTo,
+    detail: "", detailTab: "overview", page: 1
+  });
 }
 
 export function ReviewReturn({ task }: { task: string }) {

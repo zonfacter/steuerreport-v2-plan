@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 
 
 class InstallationField(BaseModel):
@@ -50,3 +50,19 @@ class PrivateConfigDocument(BaseModel):
     filename: str
     content: str
     revision: str
+    exists: bool = True
+    valid: bool = True
+    validation_error: str | None = None
+
+
+class SolanaV1OwnershipScopeConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    outside_owned_wallet_scope_txids: list[StrictStr] = Field(default_factory=list)
+
+    @field_validator("outside_owned_wallet_scope_txids")
+    @classmethod
+    def validate_txids(cls, values: list[str]) -> list[str]:
+        if any(not value or value != value.strip() or len(value) > 512 for value in values):
+            raise ValueError("solana_ownership_txid_invalid")
+        return values

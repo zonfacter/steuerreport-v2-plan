@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { HelpTip } from "../Help";
 import { API_BASE } from "../api-base";
+import { ManualHistoricalPriceEvidence } from "./ManualHistoricalPriceEvidence";
 import { ApiReadError, readApi, timestamp } from "./resource";
 import { ExactQuantity } from "./Ui";
 import { listenView, useViewState } from "./view-state";
@@ -9,10 +10,10 @@ import { listenView, useViewState } from "./view-state";
 const base = "/api/v1/prices/historical";
 type HistoricalPriceQuery = { year: number | null; assets: string[]; provider: "defillama" | "coingecko"; max_requests: number; max_total_requests: number | null; strategy: "standard" | "automatic"; scope: "tax_required" | "all_observed" };
 type LookupAttempt = { provider_id?: string; search?: string | number | null; status?: string; reason?: string | null; evidence_sha256?: string | string[] | null };
-type Row = { asset: string; price_date: string; event_count: number; event_types?: string[]; event_year_counts?: Record<string, number>; identity_basis?: string; years?: number[]; mint?: string | null; mints?: string[]; provider_id?: string; resolved_provider_id?: string | null; lookup_attempts?: LookupAttempt[]; lookup_stage?: string; status: string; fetch_state?: string; reason?: string; price_eur?: string; priced_at?: string; fx_date?: string; source?: string; evidence_sha256?: string[] };
+type Row = { asset: string; price_date: string; event_count: number; event_types?: string[]; event_year_counts?: Record<string, number>; identity_basis?: string; asset_identity?: { network?: string; contract_address?: string }; years?: number[]; mint?: string | null; mints?: string[]; provider_id?: string; resolved_provider_id?: string | null; lookup_attempts?: LookupAttempt[]; lookup_stage?: string; status: string; fetch_state?: string; reason?: string; price_eur?: string; priced_at?: string; fx_date?: string; source?: string; evidence_sha256?: string[] };
 type YearSummary = { year: number; events_count: number; tokens_count: number; requirements_count: number; covered_count: number; fetchable_count: number; blocked_count: number; open_count?: number };
 type Plan = { plan_sha256: string; requirements_count: number; fetchable_count: number; events_count: number; max_requests: number; rows: Row[]; rows_truncated?: boolean; time_basis: string; page: number; page_size: number; year_summary: YearSummary[]; source_event_types: Record<string, number>; source_events_count: number; rows_total: number; row_offset: number; rows_limit: number; next_offset: number | null; inventory_count: number };
-type Preview = { id: string; preview_sha256: string; prices_count: number; requests_started: number; section_requests_started?: number; max_total_requests?: number | null; created_at: string; rows: Row[]; status: string; applied: boolean; pending_count?: number; open_count?: number; total_rows?: number; year_summary?: YearSummary[]; collection_complete?: boolean; parent_preview_id?: string; source_event_types?: Record<string, number>; query?: Partial<HistoricalPriceQuery>; remaining_requirements?: number; review_issues_open?: number; before_summary?: unknown; after_summary?: unknown; before_valuation_summary?: unknown; after_valuation_summary?: unknown; canonical_events_unchanged?: boolean; frozen_source_sha256?: string; tax_line_deltas?: unknown[] };
+type Preview = { id: string; preview_sha256: string; prices_count: number; requests_started: number; section_requests_started?: number; max_total_requests?: number | null; created_at: string; rows: Row[]; status: string; applied: boolean; manual?: boolean; block_reason?: string; pending_count?: number; open_count?: number; total_rows?: number; year_summary?: YearSummary[]; collection_complete?: boolean; parent_preview_id?: string; source_event_types?: Record<string, number>; query?: Partial<HistoricalPriceQuery>; remaining_requirements?: number; review_issues_open?: number; before_summary?: unknown; after_summary?: unknown; before_valuation_summary?: unknown; after_valuation_summary?: unknown; canonical_events_unchanged?: boolean; frozen_source_sha256?: string; tax_line_deltas?: unknown[] };
 type CollectionStatus = { status: "running" | "ready" | "interrupted" | "not_found"; rows_processed: number; total_rows: number; requests_started: number; section_requests_started?: number; phase: string; preview_id: string };
 type CollectionRun = { section: number; previousRequests?: number; budget?: number };
 type CollectionRequest = { id: string; path: string; body: Record<string, unknown>; label: string };
@@ -77,8 +78,33 @@ const reasons: Record<string, string> = {
   historical_price_demo_read_only: "Testumgebung: externe Abrufe und Übernahmen sind gesperrt.",
   historical_price_plan_too_large: "Mehr als 50.000 Tagespositionen. Bitte Jahr oder Asset eingrenzen.",
   historical_price_storage_insufficient: "Zu wenig freier Speicher für eine sichere Berechnungsvorschau. Installation prüfen.",
-  historical_price_request_conflict: "Die Vorgangs-ID gehört zu einer anderen Anfrage. Gespeicherten Status prüfen und neu planen."
+  historical_price_request_conflict: "Die Vorgangs-ID gehört zu einer anderen Anfrage. Gespeicherten Status prüfen und neu planen.",
+  historical_price_fx_evidence_required: "Ein FX-Originalbeleg und mindestens eine dokumentierte FX-Beobachtung fehlen. Die Vorschau bleibt blockiert.",
+  historical_price_fx_future: "Der FX-Referenztag liegt nach dem historischen Preisdatum. Keine Umrechnung möglich.",
+  historical_price_fx_stale: "Der belegte FX-Kurs ist älter als sieben Kalendertage. Keine Umrechnung möglich.",
+  historical_price_fx_conflict: "Widersprüchliche FX-Kurse am maßgeblichen Referenztag. Keine Umrechnung möglich.",
+  historical_price_fx_source_mismatch: "FX-Beobachtung und Originalbeleg nennen unterschiedliche Quellen.",
+  historical_price_fx_evidence_invalid: "FX-Beleg oder Währungspaar ist ungültig.",
+  historical_price_manual_evidence_blocked: "Manueller Nachweis ist blockiert. FX, Zeit, Identität und Originalbelege prüfen.",
+  historical_price_manual_identity_ambiguous: "Die Tokenidentität ist nicht eindeutig. Der Beleg kann nicht zugeordnet werden.",
+  historical_price_manual_evidence_conflict: "Für dieselbe offene Position und denselben Originalbeleg liegt ein abweichender Wert vor.",
+  historical_price_manual_evidence_invalid: "Originalbeleg ist ungültig oder beschädigt. Datei und Format prüfen.",
+  historical_price_manual_evidence_size_invalid: "Originalbeleg muss größer als 0 Byte und höchstens 2 MiB groß sein.",
+  historical_price_manual_source_time_future: "Der manuell angegebene Erfassungszeitpunkt liegt in der Zukunft.",
+  historical_price_manual_need_not_found: "Diese Planzeile ist nicht mehr vorhanden. Preisbedarf neu planen.",
+  historical_price_manual_need_not_open: "Dieser Preisbedarf ist nicht mehr offen. Preisbedarf neu planen.",
+  historical_price_manual_need_blocked: "Der Preisbedarf ist aus einem anderen fachlichen Grund blockiert. Identität oder Review zuerst klären.",
+  historical_price_request_invalid: "Eingaben oder Belegmetadaten sind ungültig. Felder prüfen und erneut versuchen.",
+  historical_price_manual_timestamp_invalid: "Der Preiszeitpunkt ist nicht derselbe UTC-Tag oder liegt in der Zukunft.",
+  historical_price_manual_timestamp_after_event: "Der Preiszeitpunkt liegt nach dem ersten betroffenen Ereignis.",
+  historical_price_manual_precision_exceeds_storage: "Der Betrag hat mehr Dezimalstellen als die gespeicherte Präzision zulässt."
 };
+function manualPriceEligible(row: Row) {
+  const identityClear = (row.mints?.length ?? 0) === 1
+    || ["original_mint", "native_sol_reference", "configured_mapping"].includes(row.identity_basis || "")
+    || !!(row.asset_identity?.network && row.asset_identity.contract_address);
+  return identityClear && (row.status === "planned" || (row.status === "blocked" && row.reason === "asset_not_configured"));
+}
 function message(error: unknown) { return error instanceof ApiReadError ? reasons[error.code || ""] || "Vorgang nicht abgeschlossen. Status prüfen und erneut versuchen." : "Vorgang nicht abgeschlossen. Gespeicherte Daten bleiben erhalten."; }
 function uuid() {
   const bytes = crypto.getRandomValues(new Uint8Array(16)); bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
@@ -93,6 +119,7 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
   const [totalLimit, setTotalLimit] = useState("200"), [autoContinue, setAutoContinue] = useState(true);
   const [scope, setScope] = useState<HistoricalPriceQuery["scope"]>("all_observed");
   const [plan, setPlan] = useState<Plan>(), [preview, setPreview] = useState<Preview>();
+  const [manualTarget, setManualTarget] = useState<Row>();
   const [planPage, setPlanPage] = useState(1);
   const [recent, setRecent] = useState<Preview[]>([]), [busy, setBusy] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [external, setExternal] = useState(false), [prices, setPrices] = useState(false), [recalculate, setRecalculate] = useState(false), [actor, setActor] = useState("");
@@ -116,12 +143,12 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
   const sectionRequests = progress ? requestCount(progress.section_requests_started ?? progress.requests_started) : undefined;
   const totalRequests = sectionRequests != null && collectionRun?.previousRequests != null ? collectionRun.previousRequests + sectionRequests : undefined;
   const refreshRecent = async () => { const result = await readApi<Preview[]>(base + "/previews"); if (mounted.current) setRecent(result); };
-  useEffect(() => { ++serial.current; setPlan(undefined); setPlanPage(1); setPreview(undefined); setExternal(false); setPrices(false); setRecalculate(false); setError(""); setNotice(""); }, [key]);
+  useEffect(() => { ++serial.current; setPlan(undefined); setPlanPage(1); setPreview(undefined); setManualTarget(undefined); setExternal(false); setPrices(false); setRecalculate(false); setError(""); setNotice(""); }, [key]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; ++serial.current; }; }, []);
   useEffect(() => {
     let hash = window.location.hash;
     const invalidate = () => {
-      ++serial.current; setPlan(undefined); setPreview(undefined); setExternal(false); setPrices(false); setRecalculate(false); setPollingId("");
+      ++serial.current; setPlan(undefined); setPreview(undefined); setManualTarget(undefined); setExternal(false); setPrices(false); setRecalculate(false); setPollingId("");
       if (active.current) setNotice("Ansicht oder Datenstand geändert. Es werden keine weiteren Preisabschnitte automatisch gestartet. Den laufenden Vorgang bei Bedarf über seine ID prüfen.");
     };
     const unlisten = listenView(() => { if (hash !== window.location.hash) { hash = window.location.hash; invalidate(); } });
@@ -159,7 +186,7 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
     try { await fn(); } catch (e) { if (mounted.current && version === serial.current) setError(message(e)); } finally { active.current = false; if (mounted.current) setBusy(""); }
   };
   const acceptPreview = (result: Preview) => {
-    setPreview(result); setPrices(false); setRecalculate(false); setExternal(false);
+    setPreview(result); setManualTarget(undefined); setPrices(false); setRecalculate(false); setExternal(false);
     setRecoveryId(""); setProgress(undefined); setCollectionRun(undefined); operation.current = undefined; rememberRequest(result.id);
   };
   const loadPreview = (id: string) => command("Vorschau laden", async () => {
@@ -173,7 +200,16 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
     const version = serial.current;
     const result = await readApi<Plan>(base + "/plan", undefined, { ...query, page, page_size: 25 });
     if (!mounted.current || version !== serial.current) return;
-    setPlan(result); setPlanPage(result.page ?? page); setPreview(undefined); setExternal(false); rememberRequest("");
+    setPlan(result); setPlanPage(result.page ?? page); setPreview(undefined); setManualTarget(undefined); setExternal(false); rememberRequest("");
+  });
+  const createManualPreview = (body: Record<string, unknown>) => command("Manuellen Preisbeleg prüfen", async () => {
+    const version = serial.current;
+    const result = await readApi<Preview>(base + "/manual-previews", undefined, body);
+    if (!mounted.current || version !== serial.current) return;
+    acceptPreview(result); setPlan(undefined);
+    try { await refreshRecent(); } catch { setNotice("Manuelle Vorschau gespeichert. Die Liste gespeicherter Vorschauen konnte nicht aktualisiert werden."); }
+    if (result.status === "blocked") setNotice("Der manuelle Nachweis wurde revisionsfähig gespeichert, bleibt aber blockiert. Es wurde kein Preis berechnet oder übernommen.");
+    else setNotice("Manuelle Preisvorschau erstellt. Es wurde kein Anbieter abgefragt und noch keine Finanzdatenbank geändert.");
   });
   const collect = (request: CollectionRequest) => command(request.label, async () => {
     const version = serial.current;
@@ -273,7 +309,16 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
       <p>{plan.source_events_count ?? plan.events_count} Quellereignisse · {plan.inventory_count ?? "Unbekannt viele"} Asset-Tageszeilen im Inventar. {eventTypeText(plan.source_event_types)}</p>
       <YearOverview summaries={plan.year_summary} selectedYear={year} />
       {!plan.requirements_count && <p>Kein offener Preisbedarf in den bereits importierten Ereignissen dieses Filters. Noch nicht freigegebene Historienvorschauen werden nicht mitgezählt. Das ist keine Vollständigkeits- oder Abgabefreigabe.</p>}
-      <PriceRows rows={plan.rows} />
+      <PriceRows rows={plan.rows} onManual={(row) => setManualTarget(row)} />
+      {manualTarget && <ManualHistoricalPriceEvidence
+        key={manualTarget.asset + ":" + manualTarget.price_date}
+        target={manualTarget}
+        query={query}
+        planSha256={plan.plan_sha256}
+        busy={!!busy}
+        onSubmit={createManualPreview}
+        onClose={() => setManualTarget(undefined)}
+      />}
       <nav className="wsPager" aria-label="Planseiten">
         <span>{plan.rows_total ? `${plan.row_offset + 1}–${Math.min(plan.row_offset + plan.rows.length, plan.rows_total)} von ${plan.rows_total}` : "Keine Zeilen"} · Seite {planPage}</span>
         <button type="button" title="Vorherige Planseite" aria-label="Vorherige Planseite" disabled={!!busy || !!recoveryId || planPage === 1} onClick={() => void loadPlan(planPage - 1)}><ChevronLeft size={16} /></button>
@@ -286,7 +331,9 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
       }}><Download size={16} /> Kurse abrufen und Vorschau berechnen</button>
     </>}
     {preview && <>
-      <h3>{preview.applied ? "Preisübernahme abgeschlossen" : "Gespeicherte Preisvorschau"}</h3>
+      <h3>{preview.applied ? "Preisübernahme abgeschlossen" : preview.manual ? "Manuelle Preisvorschau" : "Gespeicherte Preisvorschau"}</h3>
+      {preview.manual && <p>Manueller Originalbeleg · kein externer Anbieterabruf. Die Übernahme bleibt separat und benötigt Akteur sowie zwei Bestätigungen.</p>}
+      {preview.block_reason && <p role="alert" className="wsInlineWarning">Vorschau blockiert: {reasons[preview.block_reason] || preview.block_reason}. Es wurde kein Preis berechnet oder übernommen.</p>}
       <p>Gespeicherter Umfang: {preview.query?.year == null ? "Alle Jahre" : preview.query.year} · {preview.query?.scope === "all_observed" ? "Alle erkannten Token" : "Steuerlicher Preisbedarf"} · {preview.query?.assets?.join(", ") || "Alle Assets"}</p>
       <p>{preview.prices_count} {preview.prices_count === 1 ? "belegter EUR-Preis" : "belegte EUR-Preise"} · Gesamt-HTTP: {preview.requests_started}{savedBudget != null && <> / {savedBudget}</>} gestartet{preview.section_requests_started != null && <> · Letzter Abschnitt: {preview.section_requests_started} HTTP-Anfragen</>} · {timestamp(preview.created_at)}</p>
       <p>{preview.total_rows != null ? `${preview.total_rows} Zeilen insgesamt` : `${preview.rows.length} Zeilen in dieser gespeicherten Vorschau`} · {preview.pending_count != null ? `${pendingCount} noch nicht abgerufen` : "Ausstehende Abschnitte nicht ausgewiesen"} · {preview.open_count != null ? openCount : preview.rows.filter((row) => rowStatus(row) === "open").length} offene / fehlgeschlagene Abrufe. {preview.collection_complete === true ? "Sammlung abgeschlossen; offene und blockierte Zeilen bleiben gesondert zu prüfen." : preview.collection_complete === false ? "Sammlung noch nicht abgeschlossen." : "Sammlungsstand für diese ältere Vorschau nicht hinterlegt."} Keine steuerliche Jahresfreigabe.</p>
@@ -351,11 +398,11 @@ async function fetchMapping(body: unknown) {
   const response = await fetch(API_BASE + base + "/mappings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!response.ok) throw new Error("mapping_failed");
 }
-function PriceRows({ rows, previewId }: { rows: Row[]; previewId?: string }) {
+function PriceRows({ rows, previewId, onManual }: { rows: Row[]; previewId?: string; onManual?: (row: Row) => void }) {
   const identityLabels: Record<string, string> = { original_mint: "Mint aus Originaldaten", native_sol_reference: "Native SOL-Referenz", configured_mapping: "Konfigurierte Preiszuordnung" };
   return <div className="wsTableScroll"><table className="wsPriceRows">
     <caption>Historische EUR-Preisbedarfe und Belege</caption>
-    <thead><tr><th>Asset / Identität</th><th>Datum (UTC) / Jahre</th><th>Ereignisse</th><th>EUR je Token</th><th>Preiszeit / FX-Tag</th><th>Status</th></tr></thead>
+    <thead><tr><th>Asset / Identität</th><th>Datum (UTC) / Jahre</th><th>Ereignisse</th><th>EUR je Token</th><th>Preiszeit / FX-Tag</th><th>Status</th>{onManual && <th>Aktion</th>}</tr></thead>
     <tbody>{rows.map((row) => <tr key={row.asset + ":" + row.price_date}>
       <td>{row.asset}<small>{row.resolved_provider_id || row.provider_id || "Keine Preisquelle"}</small>
         {row.asset === "SOL" && row.resolved_provider_id === "coingecko:solana" && row.resolved_provider_id !== row.provider_id && row.price_eur != null && <small>Belegte native SOL-Preisreferenz als Alternative zur ursprünglich geplanten Quelle.</small>}
@@ -384,7 +431,8 @@ function PriceRows({ rows, previewId }: { rows: Row[]; previewId?: string }) {
         </details>}
         {previewId && !!row.evidence_sha256?.length && <details><summary>Originalbelege</summary>{row.evidence_sha256.map((sha, i) => <p key={sha}><a href={API_BASE + base + "/previews/" + encodeURIComponent(previewId) + "/evidence/" + encodeURIComponent(sha)} download>Originalantwort {i + 1}</a></p>)}</details>}
       </td>
-    </tr>)}{!rows.length && <tr><td colSpan={6}>Keine Preiszeilen für diese Auswahl. Keine Aussage zur Vollständigkeit der Historie.</td></tr>}</tbody>
+      {onManual && <td>{manualPriceEligible(row) ? <button type="button" onClick={() => onManual(row)}>Manuell belegen</button> : "Keine manuelle Zuordnung"}</td>}
+    </tr>)}{!rows.length && <tr><td colSpan={onManual ? 7 : 6}>Keine Preiszeilen für diese Auswahl. Keine Aussage zur Vollständigkeit der Historie.</td></tr>}</tbody>
   </table></div>;
 }
 

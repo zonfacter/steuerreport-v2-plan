@@ -91,6 +91,6 @@ def import_records(store: DuckDbStore, target: HistoryTarget, records: list[Hist
         content_hash = "sha256:" + hashlib.sha256(canonical_json(rows).encode()).hexdigest()
         batches.append(CsvRawImporter(store).import_rows(
             source=source, filename=f"automatic-history-{job_id}-{source}.json",
-            file_hash=content_hash, rows=rows,
+            file_hash=content_hash, rows=rows, connection_id=target.connection_id,
         ))
     return batches

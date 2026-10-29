@@ -1,4 +1,5 @@
 """Versionierter, geheimnisfreier Preisworkflow; keine Fachlogik im Router."""
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Request
@@ -7,7 +8,14 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 
 from steuerreport_v2.contracts.common import ApiResponse
-from steuerreport_v2.contracts.historical_prices import HistoricalPriceApply, HistoricalPriceContinue, HistoricalPriceFetch, HistoricalPriceQuery, PriceMapping
+from steuerreport_v2.contracts.historical_prices import (
+    HistoricalPriceApply,
+    HistoricalPriceContinue,
+    HistoricalPriceFetch,
+    HistoricalPriceQuery,
+    ManualHistoricalPricePreviewRequest,
+    PriceMapping,
+)
 from steuerreport_v2.domain.historical_prices import HistoricalPriceError, HistoricalPriceService
 
 
@@ -95,12 +103,28 @@ def build_historical_prices_router(store, on_apply):
 
     @router.get("/previews/{request_id}/evidence/{sha}")
     def evidence(request_id: UUID, sha: str) -> Response:
+        preview = service.get(request_id)
+        item = next((value for value in preview["evidence"] if value["sha256"] == sha), None)
+        if item is None:
+            raise HistoricalPriceError("historical_price_not_found")
         content = service.evidence(request_id, sha)
-        return Response(content=content, media_type="application/json", headers={"Content-Disposition": f'attachment; filename="historical-price-{sha}.json"'})
+        if str(item.get("kind", "")).startswith("manual_"):
+            filename = quote(item["filename"], safe="")
+            return Response(content=content, media_type=item.get("media_type") or "application/octet-stream", headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
+            })
+        return Response(content=content, media_type="application/json", headers={
+            "Content-Disposition": f'attachment; filename="historical-price-{sha}.json"',
+        })
 
     @router.post("/previews")
     def fetch(request: HistoricalPriceFetch) -> ApiResponse[dict]:
         return ApiResponse(data=service.fetch(request))
+
+    @router.post("/manual-previews")
+    def manual_preview(request: ManualHistoricalPricePreviewRequest) -> ApiResponse[dict]:
+        """Speichert manuelle EUR-/FX-Belege und berechnet eine isolierte Vorschau ohne Anbieterabruf."""
+        return ApiResponse(data=service.manual_preview(request))
 
     @router.post("/previews/{request_id}/apply")
     def apply(request_id: UUID, request: HistoricalPriceApply) -> ApiResponse[dict]:

@@ -26,6 +26,8 @@ class HistoryOptions:
     public_rpc_only: bool = False
     rpc_provider: str | None = None
     inventory_job_id: str | None = None
+    include_binance_earn: bool = False
+    max_records: int = 100000
 
 
 @dataclass(frozen=True)

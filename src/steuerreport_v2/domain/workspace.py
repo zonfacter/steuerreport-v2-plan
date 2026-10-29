@@ -412,6 +412,8 @@ class WorkspaceService:
                 rows = con.execute(f"select distinct e.account, e.wallet, e.source from canonical_events e where {scope.predicate}", scope.parameters).fetchall()
                 accounts[scope.item.ref] = {value for row in rows for value in row[:2] if value}
                 sources[scope.item.ref] = {row[2] for row in rows}
+                if scope.item.source_type == "import" and scope.predicate == "e.source=?" and len(scope.parameters) == 1:
+                    sources[scope.item.ref].add(scope.parameters[0])
                 if scope.registry:
                     for identifier in scope.registry.identifiers:
                         if identifier.kind == "canonical_source":
@@ -423,7 +425,7 @@ class WorkspaceService:
                 account_ids = {identity.removeprefix("account:").rsplit(":asset:", 1)[0] for identity in identities if identity.startswith("account:")}
                 account = next(iter(account_ids)) if len(account_ids) == 1 else None
                 candidates = [value.removeprefix("canonical:").removeprefix("event:") for value in identities]
-                event_rows = con.execute("select event_id, account, wallet, source from canonical_events where event_id in (select unnest(?)) or raw_object_id in (select unnest(?)) order by event_id", [candidates, candidates]).fetchall()
+                event_rows = con.execute("select event_id, account, wallet, source, raw_object_id from canonical_events where event_id in (select unnest(?)) or raw_object_id in (select unnest(?)) order by event_id", [candidates, candidates]).fetchall()
                 matches = set()
                 incomplete = False
                 if account_ids:
@@ -448,7 +450,9 @@ class WorkspaceService:
                 label = f"Konto {account}" if account else "Mehrere Konten" if len(account_ids) > 1 else next((scope.item.label for scope in scopes if scope.item.ref == resolved), "Fachliche Prüfung")
                 if task.asset:
                     label += f" · Asset {task.asset}"
-                items.append(WorkspaceReviewItem(task=task, event_ids=[row[0] for row in event_rows[:20]], source_ref=resolved,
+                linked_events = event_rows[:20]
+                items.append(WorkspaceReviewItem(task=task, event_ids=[row[0] for row in linked_events],
+                    raw_evidence_by_event={row[0]: row[4] for row in linked_events if row[4]}, source_ref=resolved,
                     candidate_source_refs=sorted(matches), account=account, account_ref=account_ref(account) if account else None,
                     context_status=status, context_label=label,
                     context_note="Über gespeicherte Konto-/Quellen- oder Ereignis-IDs zugeordnet." if resolved else
