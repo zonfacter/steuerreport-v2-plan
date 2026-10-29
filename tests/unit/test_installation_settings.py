@@ -1,4 +1,5 @@
 import json
+import builtins
 import os
 from pathlib import Path
 import subprocess
@@ -208,3 +209,108 @@ def test_container_state_normalizes_empty_optional_paths(tmp_path, monkeypatch):
     assert os.environ["STEUERREPORT_PRIVATE_PROFILE"] == ""
     assert os.environ["STEUERREPORT_V2_DB"] == str(state / "data/steuerreport_v2.duckdb")
     assert (state / "keys/vault.key").is_file()
+
+
+def _state_snapshot(root: Path) -> dict[str, tuple]:
+    snapshot = {}
+    if not root.exists():
+        return snapshot
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        info = path.lstat()
+        snapshot[relative] = (
+            info.st_mode,
+            info.st_size,
+            info.st_mtime_ns,
+            info.st_ctime_ns,
+            path.read_bytes() if path.is_file() and not path.is_symlink() else None,
+        )
+    return snapshot
+
+
+def test_wrong_but_well_formed_vault_key_blocks_before_writes_or_server_start(
+    tmp_path, monkeypatch, capsys
+):
+    import duckdb
+
+    from steuerreport_v2.container_entrypoint import initialize_state, main
+    from steuerreport_v2.domain.secret_vault import decode_secret_setting, is_encrypted_envelope
+
+    state = tmp_path / "wrong-key-state"
+    profile = state / "private_profile.json"
+    database = state / "data/steuerreport_v2.duckdb"
+    key_file = state / "keys/vault.key"
+    monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(state))
+    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", str(profile))
+    monkeypatch.setenv("STEUERREPORT_V2_DB", str(database))
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(key_file))
+    monkeypatch.setenv("STEUERREPORT_V2_REQUIRE_ENCRYPTED_SECRETS", "true")
+    monkeypatch.delenv("STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE", raising=False)
+    monkeypatch.delenv("STEUERREPORT_V2_ALLOW_INITIAL_VAULT_KEY_PROVISIONING", raising=False)
+
+    initialize_state()
+    original_key = key_file.read_bytes()
+    service = InstallationSettingsService(DuckDbStore(database))
+    service.save_provider("solscan", "synthetic-secret-value")
+    setting = next(row for row in service.store.list_admin_settings() if row.key == "secret.solscan.api_key")
+    assert is_encrypted_envelope(setting.value_json)
+
+    wrong_key = bytes(value ^ 0xFF for value in original_key)
+    assert len(wrong_key) == 32 and wrong_key != original_key
+    key_file.write_bytes(wrong_key)
+    before = _state_snapshot(state)
+    connection_modes = []
+    uvicorn_imports = []
+    original_connect = duckdb.connect
+    original_import = builtins.__import__
+
+    def track_connection_mode(*args, **kwargs):
+        connection_modes.append(kwargs.get("read_only", False))
+        return original_connect(*args, **kwargs)
+
+    def track_uvicorn_import(name, *args, **kwargs):
+        if name == "uvicorn":
+            uvicorn_imports.append(name)
+        return original_import(name, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(duckdb, "connect", track_connection_mode)
+        patch.setattr(builtins, "__import__", track_uvicorn_import)
+        with pytest.raises(RuntimeError, match="existing_secret_vault_key_incompatible") as error:
+            main()
+
+    assert "synthetic-secret-value" not in str(error.value)
+    assert connection_modes == [True]
+    assert uvicorn_imports == []
+    assert _state_snapshot(state) == before
+    assert key_file.read_bytes() == wrong_key
+    output = capsys.readouterr()
+    assert "synthetic-secret-value" not in output.out + output.err
+
+    key_file.write_bytes(original_key)
+    restored = next(row for row in DuckDbStore(database).list_admin_settings() if row.key == setting.key)
+    assert restored.value_json == setting.value_json
+    assert decode_secret_setting(restored.key, restored.value_json) == "synthetic-secret-value"
+
+
+def test_profile_only_state_needs_explicit_one_time_key_provisioning(tmp_path, monkeypatch):
+    from steuerreport_v2.container_entrypoint import initialize_state
+
+    state = tmp_path / "profile-only-state"
+    profile = state / "private_profile.json"
+    profile.parent.mkdir(parents=True)
+    profile.write_text('{"synthetic":"preserve"}\n', encoding="utf-8")
+    key_file = state / "keys/vault.key"
+    monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(state))
+    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", str(profile))
+    monkeypatch.setenv("STEUERREPORT_V2_DB", str(state / "data/steuerreport_v2.duckdb"))
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(key_file))
+    monkeypatch.setenv("STEUERREPORT_V2_ALLOW_INITIAL_VAULT_KEY_PROVISIONING", "true")
+    monkeypatch.delenv("STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE", raising=False)
+
+    initialize_state()
+
+    assert len(key_file.read_bytes()) == 32
+    assert json.loads(profile.read_text(encoding="utf-8")) == {"synthetic": "preserve"}
+    assert not (state / "data/steuerreport_v2.duckdb").exists()
+    assert not (state / "connector-setup.token").exists()

@@ -256,6 +256,38 @@ die verschluesselten Werte unlesbar; sichere den Zustand unveraendert und klaere
 das weitere Vorgehen administrativ. Keine Datenbankmigration oder automatische
 Secret-Neuanlage erfolgt.
 
+Auch ein formal gueltiger 32-Byte-Schluessel kann zum falschen Vault gehoeren.
+Wenn die bestehende Datenbank verschluesselte Secrets enthaelt, prueft der
+Startpfad diese mit einer read-only DuckDB-Verbindung. Bei einem inkompatiblen
+Schluessel startet der Dienst nicht, aendert weder Profil noch Datenbank und
+gibt keine Secretwerte aus. Stelle den Originalschluessel aus derselben
+konsistenten Sicherung wie die Datenbank wieder her. Ist nur ein vorab angelegtes
+Profil ohne Datenbank und ohne Vault-Datei vorhanden, darf die initiale
+Schluesselanlage nur nach administrativer Pruefung mit dem einmaligen
+`STEUERREPORT_V2_ALLOW_INITIAL_VAULT_KEY_PROVISIONING=true` aktiviert werden.
+Der Schalter darf nicht dauerhaft in Compose oder `.env` stehen und gilt nicht
+fuer Datenbank- oder Teilwiederherstellungen.
+
+Die einmalige Provisionierung kann bei gestopptem Dienst netzwerkisoliert und
+ohne Image-Pull erfolgen. Das Image muss lokal vorhanden sein; der Aufruf nutzt
+einen temporaeren Compose-Override ueber stdin und startet keinen API-Server:
+
+```sh
+docker compose -f compose.ghcr.yml -f - run --rm --no-deps --interactive=false -T \
+  --entrypoint python \
+  -e STEUERREPORT_V2_ALLOW_INITIAL_VAULT_KEY_PROVISIONING=true \
+  steuerreport -c 'from steuerreport_v2.container_entrypoint import initialize_state; initialize_state()' <<'YAML'
+services:
+  steuerreport:
+    network_mode: none
+    pull_policy: never
+YAML
+```
+
+Den Dienst danach normal starten und die persistenten `/state`-Dateien sichern.
+Diese Ausnahme erzeugt keinen Connector-Setup-Token und ersetzt keine
+Wiederherstellung eines bereits verwendeten Vault-Schluessels.
+
 ## Historische EUR-Preise Ohne Altinstallation
 
 Ab rc29 benoetigt der gefuehrte Preisablauf keinen V1-Wechselkurscache.

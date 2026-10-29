@@ -5,6 +5,10 @@
 - Ein vorhandener Installationszustand ohne Vault-Schluessel bricht jetzt vor
   der Initialisierung ab, statt einen nicht passenden Ersatzschluessel zu
   erzeugen. Die Inbetriebnahme dokumentiert die Wiederherstellung des Originals.
+- Ein formal gueltiger, aber nicht zu vorhandenen verschluesselten Secrets
+  passender 32-Byte-Schluessel wird vor Schreibzugriffen durch eine read-only
+  Entschluesselungspruefung erkannt. Eine Profil-Erstprovisionierung ist nur
+  ueber einen ausdruecklichen Einmal-Schalter moeglich.
 
 ## 0.2.0rc35 - 2026-10-28 (Releasekandidat)
 
