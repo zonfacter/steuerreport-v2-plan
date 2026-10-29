@@ -47348,6 +47348,22 @@
       },
       "PrivateConfigDocument": {
         "properties": {
+          "configuration_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unconfigured",
+                  "configured_empty",
+                  "configured"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configuration Status"
+          },
           "content": {
             "title": "Content",
             "type": "string"

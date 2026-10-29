@@ -101,6 +101,7 @@ def test_config_editor_is_external_revision_bound_and_does_not_run_pipeline(serv
 
 def test_solana_ownership_config_is_typed_and_preserves_existing_metadata(service):
     document = service.read_config("solana_v1_ownership_scope.json")
+    assert document.configuration_status == "unconfigured"
     content = json.dumps(
         {
             "outside_owned_wallet_scope_txids": ["synthetic-tx-1"],
@@ -112,6 +113,7 @@ def test_solana_ownership_config_is_typed_and_preserves_existing_metadata(servic
         PrivateConfigWrite(revision=document.revision, content=content),
     )
     assert saved.content == content
+    assert saved.configuration_status == "configured"
 
     for invalid in [
         {"outside_owned_wallet_scope_txids": "synthetic-tx-1"},
@@ -131,6 +133,15 @@ def test_solana_ownership_config_is_typed_and_preserves_existing_metadata(servic
             )
         assert service.read_config(document.filename).content == content
 
+    empty = service.write_config(
+        document.filename,
+        PrivateConfigWrite(
+            revision=saved.revision,
+            content='{"outside_owned_wallet_scope_txids": []}',
+        ),
+    )
+    assert empty.configuration_status == "configured_empty"
+
 
 def test_solana_ownership_config_api_rejects_invalid_values_without_writing(service):
     from steuerreport_v2.api.app import create_app
@@ -139,6 +150,7 @@ def test_solana_ownership_config_api_rejects_invalid_values_without_writing(serv
     document = client.get(
         "/api/v1/admin/installation/configs/solana_v1_ownership_scope.json"
     ).json()["data"]
+    assert document["configuration_status"] == "unconfigured"
     response = client.put(
         "/api/v1/admin/installation/configs/solana_v1_ownership_scope.json",
         json={

@@ -706,6 +706,9 @@ def test_solana_ownership_scope_loads_typed_ids_and_keeps_missing_file_optional(
     )
     assert RawNormalizer._load_solana_unowned_txids(config) == {"verified-unowned"}
 
+    config.write_text('{"outside_owned_wallet_scope_txids": []}', encoding="utf-8")
+    assert RawNormalizer._load_solana_unowned_txids(config) == set()
+
     config.write_text('{"outside_owned_wallet_scope_txids":"verified-unowned"}', encoding="utf-8")
     with pytest.raises(ValueError, match="solana_ownership_config_invalid"):
         RawNormalizer._load_solana_unowned_txids(config)

@@ -223,6 +223,7 @@ class InstallationSettingsService:
 
     def read_config(self, filename: str) -> PrivateConfigDocument:
         path = self._config_path(filename)
+        configuration_status = None
         try:
             if path.exists():
                 content = path.read_text(encoding="utf-8")
@@ -232,7 +233,19 @@ class InstallationSettingsService:
                 content = "{}\n"
         except (OSError, UnicodeDecodeError):
             raise InstallationSettingsError("config_unreadable") from None
-        return PrivateConfigDocument(filename=filename, content=content, revision=hashlib.sha256(content.encode()).hexdigest())
+        if filename == "solana_v1_ownership_scope.json":
+            try:
+                configuration_status = SolanaOwnershipScopeConfig.model_validate(
+                    json.loads(content)
+                ).configuration_status
+            except (ValueError, TypeError):
+                raise InstallationSettingsError("config_json_or_schema_invalid") from None
+        return PrivateConfigDocument(
+            filename=filename,
+            content=content,
+            revision=hashlib.sha256(content.encode()).hexdigest(),
+            configuration_status=configuration_status,
+        )
 
     def write_config(self, filename: str, payload: PrivateConfigWrite) -> PrivateConfigDocument:
         path = self._config_path(filename)

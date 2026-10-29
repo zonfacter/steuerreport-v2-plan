@@ -15,7 +15,10 @@ type Settings = {
   profile_issue?: string | null; server_time_utc?: string; demo_mode?: boolean;
   storage_checks?: Array<{ code: string; status: "ready" | "blocked"; label: string; detail: string; action: string }>;
 };
-type ConfigDocument = { filename: string; content: string; revision: string };
+type ConfigDocument = {
+  filename: string; content: string; revision: string;
+  configuration_status?: "unconfigured" | "configured_empty" | "configured" | null;
+};
 const CONFIGS = [
   "source_registry.json", "solana_v1_ownership_scope.json", "solana_service_swap_tax_mappings.json",
   "pionex_hnt_reconciliation.json", "fairspot_hnt_staking_reconciliation.json", "solana_staking_position_reconciliations.json",
@@ -158,6 +161,7 @@ export function InstallationSettings() {
       <p className="adminInlineHelp">Nur geprüfte Quellen-/Belegzuordnungen bearbeiten. Keine API-Keys oder sonstigen Secrets in JSON ablegen. Eine Änderung übernimmt keine fachliche Review-Entscheidung.</p>
       {documentLoading && <p role="status">Belegkonfiguration wird geladen.</p>}
       {documentError && <p role="alert" className="adminMessage error">{documentError} <button className="ghostButton" type="button" onClick={() => setDocumentAttempt((value) => value + 1)}>Erneut laden</button></p>}
+      {filename === "solana_v1_ownership_scope.json" && document?.configuration_status && <p className="adminInlineHelp" role="status">Ownership-Ausschlussliste: {{ unconfigured: "Nicht konfiguriert", configured_empty: "Bewusst leer", configured: "Explizite TXID-Einträge" }[document.configuration_status]}.</p>}
       <form onSubmit={(event) => { event.preventDefault(); if (!document || environment.locked || demo || busy) return; void act(async () => {
         const result = await request<ConfigDocument>(`/configs/${filename}`, "PUT", { revision: document.revision, content });
         setDocument(result); await load(true); setNotice("Private Belegkonfiguration gespeichert. Keine Berechnung wurde gestartet.");

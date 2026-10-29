@@ -50,3 +50,4 @@ class PrivateConfigDocument(BaseModel):
     filename: str
     content: str
     revision: str
+    configuration_status: Literal["unconfigured", "configured_empty", "configured"] | None = None
