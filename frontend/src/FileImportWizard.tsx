@@ -290,8 +290,8 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
     </select></label>}
     {source === "mexc" && <label>MEXC-Konto<input aria-label="MEXC-Konto" value={mexcAccount} maxLength={128} disabled={busy || imported.length > 0}
       onChange={(event) => { generation.current += 1; setMexcAccount(event.target.value); setApproved(false); setError(""); setItems((rows) => rows.map((row) => resetItem(row, source))); }} /></label>}
-    <input ref={fileInput} hidden type="file" multiple accept=".csv,.xlsx,.xls" aria-label="Importdateien auswaehlen" disabled={busy} onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.target.value = ""; }} />
-    <button type="button" disabled={busy || !source || (source === "binance" && (!connectionId || connectionState !== "ready")) || !items.some((item) => item.status !== "imported")} onClick={() => void checkFiles()}><ClipboardCheck size={16} /> Dateien pruefen</button></div>
+    <input ref={fileInput} hidden type="file" multiple accept={source === "mexc" ? ".csv,.xlsx" : ".csv,.xlsx,.xls"} aria-label="Importdateien auswaehlen" disabled={busy} onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.target.value = ""; }} />
+    <button type="button" disabled={busy || !source || (source === "binance" && (!connectionId || connectionState !== "ready")) || !items.some((item) => item.status !== "imported" && !fileProblem(item.file, source))} onClick={() => void checkFiles()}><ClipboardCheck size={16} /> Dateien pruefen</button></div>
     {source === "binance" && connectionState === "error" && <p role="alert" className="error">Verbindungsliste nicht verfuegbar. <button type="button" className="ghostButton" onClick={() => { setSource(""); window.setTimeout(() => setSource("binance"), 0); }}>Erneut laden</button></p>}
     {source === "binance" && connectionState === "ready" && !binanceConnections.length && <p role="note">Noch keine eigene Binance-Verbindung vorhanden. <a href="#admin">Unter Einrichtung eine Verbindung anlegen</a>. Es wurde kein Zugang getestet oder externer Abruf gestartet.</p>}
     {source === "binance" && selectedConnection && <p className="adminInlineHelp">Importbindung: {selectedConnection.label} · stabile ID <code>{selectedConnection.id}</code>. Die Verbindung wird nicht aus Dateiname, Anzeigename, Zugangsdaten oder Bestand abgeleitet.</p>}
@@ -306,20 +306,20 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
     {items.length > 0 && <div className="importFileList" aria-live="polite">{items.map((item) => <article className="importFile" key={item.id}>
       <div className="importFileHeading"><div><strong>{item.file.name}</strong><small>{(item.file.size / 1024).toFixed(1)} KB</small></div><span className={`statusPill ${item.status === "ready" || item.status === "imported" ? "ok" : item.status === "error" || item.status === "blocked" ? "blocked" : "pending"}`}>{["checking", "writing"].includes(item.status) && <LoaderCircle size={14} />}{LABELS[item.status]}</span>
         <button type="button" className="ghostButton" title="Datei aus Auswahl entfernen" aria-label={`Datei ${item.file.name} aus Auswahl entfernen`} disabled={busy || item.status === "imported"} onClick={() => { setItems((rows) => rows.filter((row) => row.id !== item.id)); setApproved(false); }}><Trash2 size={16} /></button></div>
+      {source === "mexc" && <div className="importSelection" style={{ marginTop: 12 }}>
+        <label>Exportart<select aria-label={`MEXC-Exportart fuer ${item.file.name}`} value={item.exportKind || ""} disabled={busy || item.status === "imported"}
+          onChange={(event) => configureItem(item.id, { exportKind: (event.target.value || undefined) as MexcKind | undefined })}>
+          <option value="">Exportart bestaetigen</option>{Object.entries(MEXC_KINDS).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
+        </select></label>
+        <label>Zeitbasis<select aria-label={`MEXC-Zeitbasis fuer ${item.file.name}`} value={item.timezone || ""} disabled={busy || item.status === "imported"}
+          onChange={(event) => configureItem(item.id, { timezone: (event.target.value || undefined) as MexcTimezone | undefined })}>
+          <option value="">Offen / expliziter Header-Offset</option><option value="UTC">UTC</option><option value="UTC+01:00">UTC+01:00 (fest)</option>
+          <option value="UTC+08:00">UTC+08:00 (fest)</option><option value="Europe/Berlin">Europe/Berlin (Sommer-/Winterzeit)</option>
+        </select></label>
+      </div>}
       {item.preview?.preview && <div className="importFileFacts"><span>{item.preview.preview.row_count} Zeilen</span><span>{item.preview.preview.profile_label}</span>
         {item.preview.preview.connection_id && <span>Gebunden an ID …{item.preview.preview.connection_id.slice(-8)}</span>}
-        {source === "mexc" && <div className="importSelection" style={{ marginTop: 12 }}>
-          <label>Exportart<select aria-label={`MEXC-Exportart fuer ${item.file.name}`} value={item.exportKind || ""} disabled={busy || item.status === "imported"}
-            onChange={(event) => configureItem(item.id, { exportKind: (event.target.value || undefined) as MexcKind | undefined })}>
-            <option value="">Exportart bestaetigen</option>{Object.entries(MEXC_KINDS).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
-          </select></label>
-          <label>Zeitbasis<select aria-label={`MEXC-Zeitbasis fuer ${item.file.name}`} value={item.timezone || ""} disabled={busy || item.status === "imported"}
-            onChange={(event) => configureItem(item.id, { timezone: (event.target.value || undefined) as MexcTimezone | undefined })}>
-            <option value="">Offen / expliziter Header-Offset</option><option value="UTC">UTC</option><option value="UTC+01:00">UTC+01:00 (fest)</option>
-            <option value="UTC+08:00">UTC+08:00 (fest)</option><option value="Europe/Berlin">Europe/Berlin (Sommer-/Winterzeit)</option>
-          </select></label>
-        </div>}
-        {item.preview.preview.sheet_names.length > 0 && <label>Tabellenblatt<select aria-label={`Tabellenblatt fuer ${item.file.name}`} value={item.sheet || ""} disabled={busy || item.status === "imported"} onChange={(event) => { update(item.id, { sheet: event.target.value, status: "pending", preview: undefined }); setApproved(false); }}>{item.preview.preview.sheet_names.map((name) => <option key={name}>{name}</option>)}</select></label>}
+        {item.preview.preview.sheet_names.length > 0 && <label>Tabellenblatt<select aria-label={`Tabellenblatt fuer ${item.file.name}`} value={item.sheet || ""} disabled={busy || item.status === "imported"} onChange={(event) => configureItem(item.id, { sheet: event.target.value })}>{item.preview.preview.sheet_names.map((name) => <option key={name}>{name}</option>)}</select></label>}
         <button type="button" className="ghostButton" disabled={busy} onClick={() => setDetails(details === item.id ? null : item.id)}><ArrowRight size={14} /> Vorschau</button></div>}
       {item.preview?.preview?.file_sha256 && <code className="importHash">{item.preview.preview.file_sha256}</code>}
       {item.error && <p role="alert" className="error">{item.error}</p>}
