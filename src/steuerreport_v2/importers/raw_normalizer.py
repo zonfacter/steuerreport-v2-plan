@@ -1642,15 +1642,19 @@ class RawNormalizer:
 
     @staticmethod
     def _load_solana_unowned_txids(path: Path) -> set[str]:
-        if not path.exists():
-            return set()
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError):
+            content = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return set()
+        except (OSError, UnicodeDecodeError):
+            raise ValueError("solana_ownership_config_unreadable") from None
+        try:
+            payload = json.loads(content)
+        except ValueError:
             raise ValueError("solana_ownership_config_unreadable") from None
         try:
             config = SolanaOwnershipScopeConfig.model_validate(payload)
-        except ValueError:
+        except (ValueError, TypeError):
             raise ValueError("solana_ownership_config_invalid") from None
         return set(config.outside_owned_wallet_scope_txids)
 

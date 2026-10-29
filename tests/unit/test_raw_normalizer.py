@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
+from pathlib import Path
 
 import pytest
 
@@ -713,7 +714,22 @@ def test_solana_ownership_scope_loads_typed_ids_and_keeps_missing_file_optional(
     with pytest.raises(ValueError, match="solana_ownership_config_invalid"):
         RawNormalizer._load_solana_unowned_txids(config)
 
+    config.write_text('{"outside_owned_wallet_scope_txids":null}', encoding="utf-8")
+    with pytest.raises(ValueError, match="solana_ownership_config_invalid"):
+        RawNormalizer._load_solana_unowned_txids(config)
+
     config.write_text("{broken json", encoding="utf-8")
+    with pytest.raises(ValueError, match="solana_ownership_config_unreadable"):
+        RawNormalizer._load_solana_unowned_txids(config)
+
+    read_text = Path.read_text
+
+    def fail_read(path, *args, **kwargs):
+        if path == config:
+            raise PermissionError("synthetic unreadable config")
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_read)
     with pytest.raises(ValueError, match="solana_ownership_config_unreadable"):
         RawNormalizer._load_solana_unowned_txids(config)
 
