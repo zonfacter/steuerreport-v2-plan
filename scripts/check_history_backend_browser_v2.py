@@ -67,9 +67,11 @@ def main():
                 STEUERREPORT_V2_ROOT=str(root), STEUERREPORT_STATE_DIR=str(state),
                 STEUERREPORT_PRIVATE_PROFILE=str(state / "profile.json"),
                 STEUERREPORT_V2_DB=str(state / "synthetic.duckdb"),
+                STEUERREPORT_V2_SECRET_VAULT_KEY_FILE=str(state / "vault.key"),
                 STEUERREPORT_PRIVATE_CONFIG_DIR=str(state / "configs"),
                 STEUERREPORT_USERTRANSFER_ROOT=str(state / "imports"),
             )
+            (state / "vault.key").write_bytes(bytes(range(32)))
             (state / "profile.json").write_text("{}\n", encoding="utf-8")
             original_connect = socket.socket.connect
             original_connect_ex = socket.socket.connect_ex
