@@ -45,9 +45,8 @@ fuer #20 verglichen werden. Der Docker-rc36-Stand ist kein Ersatz dafuer.
 - Bitget-CSV-/Datei-/Assistent-Paritaet nach #26: 52 Tests bestanden
   (`test_bitget_csv.py`, `test_file_raw_importer.py`,
   `test_guided_file_import.py`).
-- `scripts/check_mexc_import_browser_v2.py --scenario
-  explicit-multisheet-selection`: bestanden mit synthetischen API-Antworten;
-  keine echten Providerrequests.
+- `scripts/check_mexc_import_browser_v2.py`: alle 14 Browser-Szenarien
+  bestanden mit synthetischen API-Antworten; keine echten Providerrequests.
 - Frontend-Produktionsbuild, Python-Ruff auf geaenderten Python-Dateien und
   `git diff --check`: bestanden.
 - Kein vollstaendiger Projekttestlauf und keine vollstaendige Browsermatrix.

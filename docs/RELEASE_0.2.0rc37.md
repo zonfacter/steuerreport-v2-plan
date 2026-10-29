@@ -44,7 +44,8 @@ Ausgefuehrte gezielte Pruefungen:
   tests/unit/test_guided_file_import.py`: 52 bestanden.
 - `ruff check` auf den geaenderten Python-Dateien und `git diff --check`:
   bestanden.
-- Synthetischer MEXC-Browserablauf `explicit-multisheet-selection`: bestanden.
+- Synthetische MEXC-Browserpruefung: alle 14 Szenarien bestanden, darunter
+  Mehrblatt-Sperre und ausdrueckliche Blattwahl.
 - `npm run build`, Python-Ruff auf geaenderten Python-Dateien und
   `git diff --check`: bestanden. Der Frontendbundler meldet weiterhin einen
   grossen JavaScript-Chunk ueber 500 kB.

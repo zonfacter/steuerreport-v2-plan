@@ -86,7 +86,7 @@ class Fixture:
                  "asset": "DEMOCOIN", "quantity": "2.500000000000000001", "event_time": "2031-07-09T11:00:00Z", "candidates": []}
                 for index in range(count)]
         decisions = config.get("decisions", {})
-        if payload["source"] == "mexc" and (self.mode in {"candidate", "linked"} or (self.mode == "multi" and self.executed)):
+        if rows and payload["source"] == "mexc" and (self.mode in {"candidate", "linked"} or (self.mode == "multi" and self.executed)):
             rows[0].update(status="duplicate_candidate", reason="Weitere Ansicht derselben Buchung moeglich.", candidates=candidates)
             if "2" in decisions:
                 decision = decisions["2"]
@@ -99,15 +99,15 @@ class Fixture:
                 rows[0]["status"] = "linked" if decision["action"] == "link_existing" else "ready"
             else:
                 missing.append("Doppelbeleg in physischer Zeile 2 zuordnen.")
-        if self.mode == "candidate":
+        if rows and self.mode == "candidate":
             rows[1].update(status="review", reason="Synthetischer Vorgang fachlich zu pruefen.")
         disposition = "transactions"
         if self.mode == "empty":
             count, rows, disposition = 0, [], "empty"
-        elif detected_kind == "asset_snapshot":
+        elif rows and detected_kind == "asset_snapshot":
             disposition = "evidence_only"
             rows[0].update(status="evidence_only", reason="Bestandsnachweis, kein Erwerb.")
-        elif self.mode == "unsupported":
+        elif rows and self.mode == "unsupported":
             disposition = "unsupported"
             missing.append("Dieses Produkt ist fachlich noch nicht unterstuetzt.")
             rows[0].update(status="invalid", reason="Synthetische Richtung widerspruechlich.")
@@ -137,7 +137,7 @@ class Fixture:
                 "preview": {"row_count": count, "columns": ["Crypto", "Quantity"],
                             "sample_rows": [{"Crypto": "DEMOCOIN", "Quantity": "2.5"}] if count else [],
                             "sheet_name": selected_sheet if selected_sheet else None if self.multi_sheet else "Sheet1",
-                            "sheet_names": ["Spot", "Funding"] if self.multi_sheet else ["Sheet1", "Sheet2"],
+                            "sheet_names": ["Spot", "Funding"] if self.multi_sheet else ["Sheet1"],
                             "file_sha256": "a" * 64, "import_fingerprint": payload["filename"],
                             "missing_required_groups": [], "profile_label": "MEXC nativ",
                             **({"mexc": mexc} if payload["source"] == "mexc" else {})}}
@@ -395,7 +395,7 @@ def scenarios(output):
         check(page)
         for field, value in (("MEXC-Zeitbasis fuer synthetic.xlsx", "UTC+01:00"),
                              ("MEXC-Exportart fuer synthetic.xlsx", "funding_other"),
-                             ("Tabellenblatt fuer synthetic.xlsx", "Sheet2"), ("MEXC-Konto", "SYNTHETIC-SECOND")):
+                             ("MEXC-Konto", "SYNTHETIC-SECOND")):
             block = review(page)
             if block.locator("details").get_attribute("open") is None:
                 block.locator("summary").click()
