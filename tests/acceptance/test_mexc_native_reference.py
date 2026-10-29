@@ -12,7 +12,9 @@ from decimal import Decimal
 import hashlib
 from io import BytesIO, StringIO
 import json
+import os
 from pathlib import Path
+import re
 import socket
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile, ZIP_DEFLATED
@@ -196,7 +198,48 @@ def _request(content, options, *, filename="synthetic.xlsx", sheet="Sheet1"):
     }
 
 
-def _preview(case, content, options, **kwargs):
+def _bind_decisions(case, content, options, **kwargs):
+    if options is None:
+        return options
+    decisions = options.get("decisions", {}) if isinstance(options, dict) else options.decisions
+    missing = [
+        (number, decision) for number, decision in decisions.items()
+        if ("input_digest" not in decision if isinstance(decision, dict)
+            else "input_digest" not in decision.model_fields_set)
+    ]
+    if not missing:
+        return options
+    without_decisions = (
+        {key: value for key, value in options.items() if key != "decisions"}
+        if isinstance(options, dict) else options.model_copy(update={"decisions": {}})
+    )
+    preview = case[1].preview_base64(**_request(content, without_decisions, **kwargs))
+    rows = _native(preview)["rows"]
+    # Exakte Wiederholung wendet keine neue Entscheidung an und bleibt unveraendert.
+    if preview.duplicate_batch_id is not None and all(not row["input_digest"] and not row["candidates"] for row in rows):
+        return options
+    preview_rows = {str(row["row_number"]): row for row in rows}
+    for number, decision in missing:
+        if str(number) not in preview_rows:
+            continue
+        row = preview_rows[str(number)]
+        digest = row["input_digest"]
+        # Vorab ungueltige Zeilen besitzen noch keinen bindbaren Kandidatenstand.
+        if digest == "":
+            assert row["status"] in {"invalid", "review", "evidence_only"}
+            assert not row["candidates"]
+            continue
+        assert isinstance(digest, str) and re.fullmatch(r"[0-9a-fA-F]{64}", digest)
+        if isinstance(decision, dict):
+            decision["input_digest"] = digest
+        else:
+            decision.input_digest = digest
+    return options
+
+
+def _preview(case, content, options, *, bind_decisions=True, **kwargs):
+    if bind_decisions:
+        options = _bind_decisions(case, content, options, **kwargs)
     return case[1].preview_base64(**_request(content, options, **kwargs))
 
 
@@ -212,8 +255,10 @@ def _counts(native, **expected):
         assert native[name] == value, (name, native)
 
 
-def _import(case, content, options, **kwargs):
+def _import(case, content, options, *, bind_decisions=True, **kwargs):
     store, importer = case
+    if bind_decisions:
+        options = _bind_decisions(case, content, options, **kwargs)
     batch = importer.import_base64(**_request(content, options, **kwargs))
     events = RawNormalizer(store).normalize_batch(batch.batch_id)
     BalanceLedgerBuilder(store).rebuild()
@@ -245,7 +290,7 @@ def _state(case):
         )}
 
 
-def _reject_before_batch(case, monkeypatch, content, options, **kwargs):
+def _reject_before_batch(case, monkeypatch, content, options, *, bind_decisions=True, **kwargs):
     before = _state(case)
 
     def forbidden(*args, **kwargs):
@@ -256,6 +301,8 @@ def _reject_before_batch(case, monkeypatch, content, options, **kwargs):
         if hasattr(case[0], "create_import_batch_with_raw"):
             patch.setattr(case[0], "create_import_batch_with_raw", forbidden)
         with pytest.raises(ValueError):
+            if bind_decisions:
+                options = _bind_decisions(case, content, options, **kwargs)
             case[1].import_base64(**_request(content, options, **kwargs))
     assert _state(case) == before
 
@@ -832,7 +879,11 @@ def test_invalid_link_target_is_rejected_before_batch_creation(case, monkeypatch
         case[0].add_raw_objects(foreign.batch_id, [RawObjectCreate(row_number=2, payload_json=root.payload_json)])
         target = case[0].list_raw_objects(foreign.batch_id)[0].raw_object_id
     incoming = _options("funding_other", decisions={"2": _decision("link_existing", target)})
-    _reject_before_batch(case, monkeypatch, _csv([_funding()]), incoming, filename="synthetic.csv", sheet=None)
+    content = _csv([_funding()])
+    preview = _preview(case, content, incoming, filename="synthetic.csv", sheet=None)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["decision_stale"] is False
+    _reject_before_batch(case, monkeypatch, content, incoming, filename="synthetic.csv", sheet=None)
 
 
 def test_link_to_link_is_rejected_instead_of_chaining_or_cycling(case, monkeypatch):
@@ -841,7 +892,11 @@ def test_link_to_link_is_rejected_instead_of_chaining_or_cycling(case, monkeypat
     linked_batch, _ = _import(case, _xlsx([_funding()], "funding_other"), first_options)
     linked_raw, = _raw(case, linked_batch)
     options = _options(decisions={"2": _decision("link_existing", linked_raw.raw_object_id)})
-    _reject_before_batch(case, monkeypatch, _xlsx([_spot()], revision="third"), options)
+    content = _xlsx([_spot()], revision="third")
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["decision_stale"] is False
+    _reject_before_batch(case, monkeypatch, content, options)
 
 
 @pytest.mark.parametrize("kind", ["asset_snapshot", "futures_capital_flow"])
@@ -851,7 +906,11 @@ def test_snapshot_or_bonus_cannot_be_link_root(case, monkeypatch, kind):
     assert events == []
     target = _raw(case, batch)[0].raw_object_id
     options = _options(decisions={"2": _decision("link_existing", target)})
-    _reject_before_batch(case, monkeypatch, _xlsx([_spot()]), options)
+    content = _xlsx([_spot()])
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["decision_stale"] is False
+    _reject_before_batch(case, monkeypatch, content, options)
 
 
 def test_invalid_second_row_decision_leaves_no_partial_first_row_or_batch(case, monkeypatch):
@@ -986,6 +1045,7 @@ def test_assistant_preview_passes_native_options_and_trace_exposes_both_evidence
         root, = case[0].list_raw_objects(root_batch_id, limit=None)
         funding = _xlsx([_funding()], "funding_other")
         linked_options = _options("funding_other", decisions={"2": _decision("link_existing", root.raw_object_id)})
+        _bind_decisions(case, funding, linked_options)
         linked_request = {"import_mode": "file", **_request(funding, linked_options)}
         linked_response = client.post("/api/v1/import/assistant/execute", json=linked_request)
         assert linked_response.status_code == 200
@@ -1228,3 +1288,338 @@ def test_37_digit_running_balance_keeps_single_atto_unit_changes_and_replay(case
         assert actual == expected
         assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("1234567890123456789.123456789012345677")}
         assert [(raw.raw_object_id, raw.payload_json) for raw in _raw(case, batch)] == raw_before
+
+
+def test_binding_helper_reads_preview_without_decisions_and_keeps_existing_token(case, monkeypatch):
+    _seed(case)
+    content = _xlsx([_funding(), _funding()], "funding_other")
+    supplied = "0" * 64
+    options = _options("funding_other", decisions={
+        "2": {**_decision("separate"), "input_digest": supplied},
+        "3": _decision("separate"),
+    })
+    original_preview = case[1].preview_base64
+    calls = []
+
+    def observed_preview(**request):
+        calls.append(request["mexc"])
+        assert not request["mexc"].get("decisions")
+        return original_preview(**request)
+
+    before = _state(case)
+    monkeypatch.setattr(case[1], "preview_base64", observed_preview)
+    assert _bind_decisions(case, content, options) is options
+    assert len(calls) == 1
+    assert options["decisions"]["2"]["input_digest"] == supplied
+    assert re.fullmatch(r"[0-9a-fA-F]{64}", options["decisions"]["3"]["input_digest"])
+    assert _state(case) == before
+
+
+@pytest.mark.parametrize("supplied", [None, "", "0" * 64])
+def test_binding_helper_never_replaces_explicit_token_even_when_invalid(case, monkeypatch, supplied):
+    options = _options(decisions={"2": {**_decision("separate"), "input_digest": supplied}})
+
+    def forbidden(**request):
+        pytest.fail("Ein expliziter Token darf nicht durch erneute Vorschau ersetzt werden")
+
+    monkeypatch.setattr(case[1], "preview_base64", forbidden)
+    _bind_decisions(case, b"not read for already supplied token", options)
+    assert options["decisions"]["2"]["input_digest"] == supplied
+
+
+@pytest.mark.parametrize("action", ["link_existing", "separate"])
+@pytest.mark.parametrize("explicit_null", [False, True])
+def test_missing_decision_digest_blocks_direct_import_before_batch(case, monkeypatch, action, explicit_null):
+    _, root = _seed(case)
+    content = _xlsx([_funding()], "funding_other")
+    options = _options("funding_other", decisions={"2": _decision(action, root.raw_object_id if action == "link_existing" else None)})
+    if explicit_null:
+        options["decisions"]["2"]["input_digest"] = None
+    preview = _preview(case, content, options, bind_decisions=False)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["reason"]
+    _reject_before_batch(case, monkeypatch, content, options, bind_decisions=False)
+    if explicit_null:
+        assert options["decisions"]["2"]["input_digest"] is None
+    else:
+        assert "input_digest" not in options["decisions"]["2"]
+
+
+@pytest.mark.parametrize("action", ["link_existing", "separate"])
+def test_explicit_wrong_decision_digest_is_not_silently_rebound(case, monkeypatch, action):
+    _, root = _seed(case)
+    content = _xlsx([_funding()], "funding_other")
+    supplied = "0" * 64
+    options = _options("funding_other", decisions={"2": {
+        **_decision(action, root.raw_object_id if action == "link_existing" else None),
+        "input_digest": supplied,
+    }})
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["decision_stale"] is True
+    _reject_before_batch(case, monkeypatch, content, options)
+    assert options["decisions"]["2"]["input_digest"] == supplied
+
+
+@pytest.mark.parametrize("action", ["link_existing", "separate"])
+@pytest.mark.parametrize("scope", ["bytes", "sheet", "account", "timezone"])
+def test_bound_decision_rejects_changed_original_bytes_or_import_scope(case, monkeypatch, action, scope):
+    _, root = _seed(case)
+    content = _xlsx([_funding()], "funding_other", sheets=("Sheet1", "Sheet2"))
+    options = _options("funding_other", decisions={"2": _decision(action, root.raw_object_id if action == "link_existing" else None)})
+    _bind_decisions(case, content, options)
+    claimed = options["decisions"]["2"]["input_digest"]
+    changed = content
+    kwargs = {}
+    if scope == "bytes":
+        changed = _xlsx([_funding()], "funding_other", sheets=("Sheet1", "Sheet2"), revision="changed-original-bytes")
+        assert hashlib.sha256(changed).digest() != hashlib.sha256(content).digest()
+    elif scope == "sheet":
+        kwargs["sheet"] = "Sheet2"
+    elif scope == "account":
+        options["account"] = "synthetic-other-account"
+    else:
+        options["timezone"] = "UTC"
+    unclaimed = {key: value for key, value in options.items() if key != "decisions"}
+    fresh = _preview(case, changed, unclaimed, **kwargs)
+    assert _native(fresh)["rows"][0]["input_digest"] != claimed
+    preview = _preview(case, changed, options, **kwargs)
+    assert preview.can_import is False
+    stale = _native(preview)["rows"][0]["decision_stale"]
+    _reject_before_batch(case, monkeypatch, changed, options, **kwargs)
+    assert options["decisions"]["2"]["input_digest"] == claimed
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+    assert stale is True
+
+
+@pytest.mark.parametrize("action", ["link_existing", "separate"])
+def test_bound_decision_rejects_changed_candidate_roots(case, monkeypatch, action):
+    _, root = _seed(case)
+    content = _xlsx([_funding()], "funding_other")
+    options = _options("funding_other", decisions={"2": _decision(action, root.raw_object_id if action == "link_existing" else None)})
+    _bind_decisions(case, content, options)
+    claimed = options["decisions"]["2"]["input_digest"]
+    additional = _xlsx([_spot()], revision="another-legitimate-booking")
+    _import(case, additional, _options(decisions={"2": _decision("separate")}))
+    fresh = _preview(case, content, _options("funding_other"))
+    assert len(_native(fresh)["rows"][0]["candidates"]) == 2
+    assert _native(fresh)["rows"][0]["input_digest"] != claimed
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["decision_stale"] is True
+    _reject_before_batch(case, monkeypatch, content, options)
+    assert options["decisions"]["2"]["input_digest"] == claimed
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("5.0")}
+
+
+def test_decision_digest_cannot_be_moved_between_equal_physical_rows(case, monkeypatch):
+    _seed(case)
+    content = _xlsx([_funding(), _funding()], "funding_other")
+    unclaimed = _preview(case, content, _options("funding_other"))
+    rows = _native(unclaimed)["rows"]
+    assert [row["row_number"] for row in rows] == [2, 3]
+    assert rows[0]["input_digest"] != rows[1]["input_digest"]
+    options = _options("funding_other", decisions={
+        "2": _decision("separate"),
+        "3": {**_decision("separate"), "input_digest": rows[0]["input_digest"]},
+    })
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][1]["decision_stale"] is True
+    _reject_before_batch(case, monkeypatch, content, options)
+    assert options["decisions"]["3"]["input_digest"] == rows[0]["input_digest"]
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+@pytest.mark.parametrize("id_column", ["Transaction ID", "Record ID"])
+def test_same_provider_id_cannot_be_separate_even_with_fresh_digest(case, monkeypatch, id_column):
+    provider_id = "SYNTHETIC-UNIQUE-PROVIDER-ID"
+    first = _xlsx([_spot(**{id_column: provider_id})], extra_headers=(id_column,))
+    root_batch, _ = _import(case, first, _options())
+    root, = _raw(case, root_batch)
+    content = _xlsx([_funding(**{id_column: provider_id})], "funding_other", extra_headers=(id_column,))
+    options = _options("funding_other", decisions={"2": _decision("separate")})
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    native = _native(preview)
+    _counts(native, raw_rows=1, bookable_rows=0, linked_rows=0)
+    assert native["rows"][0]["decision_stale"] is False
+    _reject_before_batch(case, monkeypatch, content, options)
+    options["decisions"]["2"].update(action="link_existing", target_raw_object_id=root.raw_object_id)
+    batch, events = _import(case, content, options)
+    assert events == []
+    assert _metadata(_raw(case, batch)[0])[1]["role"] == "linked"
+    assert len(case[0].list_canonical_events()) == 1
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+@pytest.mark.parametrize("id_column", ["Transaction ID", "Record ID"])
+@pytest.mark.parametrize("action", [None, "separate", "link_existing"])
+def test_provider_id_introduced_by_linked_evidence_also_blocks_conflicts(case, monkeypatch, id_column, action):
+    _, root = _seed(case)
+    provider_id = "SYNTHETIC-ID-FROM-LINKED-EVIDENCE"
+    linked_content = _xlsx([_funding(**{id_column: provider_id})], "funding_other", extra_headers=(id_column,))
+    linked_options = _options("funding_other", decisions={"2": _decision("link_existing", root.raw_object_id)})
+    linked_batch, _ = _import(case, linked_content, linked_options)
+    assert _metadata(_raw(case, linked_batch)[0])[1]["provider_id"] == provider_id
+    conflict = _xlsx([_spot(**{id_column: provider_id, "Quantity": "3.5"})], extra_headers=(id_column,))
+    options = _options()
+    if action:
+        options["decisions"] = {"2": _decision(action, root.raw_object_id if action == "link_existing" else None)}
+    preview = _preview(case, conflict, options)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["decision_stale"] is False
+    _reject_before_batch(case, monkeypatch, conflict, options)
+    assert len(case[0].list_canonical_events()) == 1
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+@pytest.mark.parametrize("action", ["link_existing", "separate"])
+def test_linked_provider_evidence_changes_candidate_digest_even_when_root_id_stays(case, monkeypatch, action):
+    _, root = _seed(case)
+    provider_id = "SYNTHETIC-LATER-LINKED-PROVIDER-ID"
+    content = _xlsx([_funding(**{"Transaction ID": provider_id})], "funding_other", extra_headers=("Transaction ID",), revision="pending-decision")
+    options = _options("funding_other", decisions={"2": _decision(action, root.raw_object_id if action == "link_existing" else None)})
+    _bind_decisions(case, content, options)
+    claimed = options["decisions"]["2"]["input_digest"]
+    new_evidence = _xlsx([_funding(**{"Transaction ID": provider_id})], "funding_other", extra_headers=("Transaction ID",), revision="new-linked-evidence")
+    _import(case, new_evidence, _options("funding_other", decisions={"2": _decision("link_existing", root.raw_object_id)}))
+    unclaimed = _preview(case, content, _options("funding_other"))
+    row, = _native(unclaimed)["rows"]
+    assert root.raw_object_id in set(_string_leaves(row["candidates"]))
+    assert row["input_digest"] != claimed
+    preview = _preview(case, content, options)
+    assert preview.can_import is False
+    assert _native(preview)["rows"][0]["decision_stale"] is True
+    _reject_before_batch(case, monkeypatch, content, options)
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
+
+
+def test_typed_decision_model_gets_digest_only_when_field_was_not_explicit(case, monkeypatch):
+    from steuerreport_v2.contracts.mexc_import import MexcImportOptions
+
+    _seed(case)
+    content = _xlsx([_funding()], "funding_other")
+    missing = MexcImportOptions.model_validate(_options("funding_other", decisions={"2": _decision("separate")}))
+    assert "input_digest" not in missing.decisions["2"].model_fields_set
+    _bind_decisions(case, content, missing)
+    assert re.fullmatch(r"[0-9a-f]{64}", missing.decisions["2"].input_digest)
+    explicit = MexcImportOptions.model_validate(_options("funding_other", decisions={"2": {**_decision("separate"), "input_digest": None}}))
+    assert "input_digest" in explicit.decisions["2"].model_fields_set
+    _bind_decisions(case, content, explicit)
+    assert explicit.decisions["2"].input_digest is None
+    _reject_before_batch(case, monkeypatch, content, explicit)
+    _, events = _import(case, content, missing)
+    assert len(events) == 1
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("5.0")}
+
+
+def test_snapshot_only_has_specific_reconciliation_gate_without_fake_history(case):
+    from steuerreport_v2.domain.review import ReviewService
+
+    content = _xlsx([_snapshot_row()], "asset_snapshot")
+    batch, events = _import(case, content, _options("asset_snapshot"))
+    assert events == []
+    assert batch.batch_id not in case[0].unmapped_raw_object_counts()
+    before = _state(case)
+    gate = ReviewService(case[0]).gate()
+    assert gate.allow_export is False
+    assert any(i.code == "mexc_snapshot_reconciliation_required" and i.blocks_export for i in gate.issues)
+    assert not any(i.code == "mexc_original_integrity_failed" for i in gate.issues)
+    assert _state(case) == before
+    assert _positions(case) == {}
+
+
+@pytest.mark.parametrize("damage", ["missing", "hash", "same_size_mtime", "symlink"])
+def test_original_integrity_gate_detects_damage_and_recovers_only_after_exact_restore(case, damage):
+    from steuerreport_v2.domain.review import ReviewService
+
+    content = _xlsx([_snapshot_row()], "asset_snapshot")
+    batch, _ = _import(case, content, _options("asset_snapshot"))
+    raw, = _raw(case, batch)
+    original_payload = raw.payload_json
+    archive = case[0].path.parent / "mexc_originals" / (hashlib.sha256(content).hexdigest() + ".original")
+    assert archive.read_bytes() == content
+    baseline = ReviewService(case[0]).gate()
+    assert not any(i.code == "mexc_original_integrity_failed" for i in baseline.issues)
+    stamp = archive.stat()
+    if damage == "missing":
+        archive.unlink()
+    elif damage == "hash":
+        archive.write_bytes(b"SYNTHETIC CORRUPTED ORIGINAL")
+    elif damage == "same_size_mtime":
+        changed = bytearray(content)
+        changed[-1] ^= 1
+        archive.write_bytes(changed)
+        os.utime(archive, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        assert archive.stat().st_size == stamp.st_size
+        assert archive.stat().st_mtime_ns == stamp.st_mtime_ns
+    else:
+        target = archive.with_suffix(".synthetic-backup")
+        archive.rename(target)
+        archive.symlink_to(target.name)
+        assert archive.read_bytes() == content
+    damaged = ReviewService(case[0]).gate()
+    assert damaged.allow_export is False
+    assert any(i.code == "mexc_original_integrity_failed" and i.blocks_export for i in damaged.issues)
+    assert _raw(case, batch)[0].payload_json == original_payload
+    if archive.is_symlink():
+        archive.unlink()
+    archive.write_bytes(content)
+    restored = ReviewService(case[0]).gate()
+    assert not any(i.code == "mexc_original_integrity_failed" for i in restored.issues)
+    assert restored.allow_export is False
+    assert any(i.code == "mexc_snapshot_reconciliation_required" and i.blocks_export for i in restored.issues)
+    assert _positions(case) == {}
+    assert case[0].list_canonical_events() == []
+
+
+def _replace_metadata(case, raw, meta):
+    payload = json.loads(raw.payload_json)
+    payload["_mexc"] = json.dumps(meta, sort_keys=True)
+    with case[0].connect() as con:
+        con.execute("update raw_objects set payload_json=? where raw_object_id=?", [json.dumps(payload, sort_keys=True), raw.raw_object_id])
+
+
+@pytest.mark.parametrize("forged_role", ["book", "linked", "bonus", "review", "not-a-native-role"])
+def test_snapshot_cannot_escape_binding_gate_by_changing_metadata_role(case, forged_role):
+    from steuerreport_v2.domain.review import ReviewService
+
+    batch, _ = _import(case, _xlsx([_snapshot_row()], "asset_snapshot"), _options("asset_snapshot"))
+    raw, = _raw(case, batch)
+    _, meta = _metadata(raw)
+    meta["role"] = forged_role
+    _replace_metadata(case, raw, meta)
+    assert RawNormalizer(case[0]).normalize_batch(batch.batch_id) == []
+    BalanceLedgerBuilder(case[0]).rebuild()
+    gate = ReviewService(case[0]).gate()
+    assert gate.allow_export is False
+    assert any(i.code == "mexc_native_binding_invalid" and i.blocks_export for i in gate.issues)
+    assert _positions(case) == {}
+
+
+@pytest.mark.parametrize("action", ["link_existing", "separate"])
+def test_persisted_decision_digest_and_evidence_are_verified_not_tax_release(case, action):
+    from steuerreport_v2.domain.review import ReviewService
+
+    _, root = _seed(case)
+    content = _xlsx([_funding()], "funding_other")
+    options = _options("funding_other", decisions={"2": _decision(action, root.raw_object_id if action == "link_existing" else None)})
+    batch, events = _import(case, content, options)
+    assert len(events) == (0 if action == "link_existing" else 1)
+    raw, = _raw(case, batch)
+    _, meta = _metadata(raw)
+    assert meta["decision_input_digest"] == options["decisions"]["2"]["input_digest"]
+    assert root.raw_object_id in set(_string_leaves(meta["decision_evidence"]))
+    gate = ReviewService(case[0]).gate()
+    assert gate.allow_export is False
+    assert any(i.code == "mexc_classification_required" and i.blocks_export for i in gate.issues)
+    assert not any(i.code == "mexc_native_binding_invalid" for i in gate.issues)
+    meta["decision_input_digest"] = "0" * 64
+    _replace_metadata(case, raw, meta)
+    assert RawNormalizer(case[0]).normalize_batch(batch.batch_id) == []
+    BalanceLedgerBuilder(case[0]).rebuild()
+    invalid = ReviewService(case[0]).gate()
+    assert invalid.allow_export is False
+    assert any(i.code == "mexc_native_binding_invalid" and i.blocks_export for i in invalid.issues)
+    assert _positions(case) == {(LEDGER_ACCOUNT, "DEMOCOIN"): D("2.5")}
