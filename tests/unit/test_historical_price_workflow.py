@@ -1045,7 +1045,9 @@ def test_manual_preview_blocks_changed_evidence_or_database_before_apply(workflo
     request = manual_price_request(workflow)
     preview = data(workflow.client.post(BASE + "/manual-previews", json=request))
     sha = preview["evidence"][0]["sha256"]
-    (workflow.service.root / "evidence" / f"{sha}.body").write_bytes(b"tampered original")
+    evidence_path = workflow.service.root / "evidence" / f"{sha}.body"
+    evidence_path.chmod(0o600)
+    evidence_path.write_bytes(b"tampered original")
     error(workflow.client.post(
         BASE + f"/previews/{preview['id']}/apply", json=approval(preview),
     ), "historical_price_evidence_changed")

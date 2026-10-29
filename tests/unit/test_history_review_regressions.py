@@ -171,7 +171,7 @@ def test_expired_worker_cannot_restart_after_cancellation(history_store, monkeyp
     launches, controls = [], []
     monkeypatch.setattr(service, "_launch", launches.append)
     monkeypatch.setattr(service, "_target", lambda _ref: target)
-    monkeypatch.setattr(service, "_binding", lambda _target: "synthetic-binding")
+    monkeypatch.setattr(service, "_binding", lambda _target, **_kwargs: "synthetic-binding")
 
     class Collector:
         def fetch_page(self, cursor, check):
