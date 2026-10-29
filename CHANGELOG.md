@@ -1,5 +1,11 @@
 # Changelog
 
+## Unveroeffentlicht
+
+- GitHub #22: Die CSV-Vorschau toleriert zusaetzliche leere Endfelder, behaelt
+  die geparste Raw-Zeile bei und blockiert nichtleere Felder hinter der
+  erkannten Kopfzeile, statt sie still zu verwerfen.
+
 ## 0.2.0rc35 - 2026-10-28 (Releasekandidat)
 
 - Der reale GitHub-Releasekatalog enthaelt nach Entpacken etwa 606 KB inklusive

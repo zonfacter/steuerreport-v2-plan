@@ -124,20 +124,37 @@ class FileRawImporter:
 
     def _csv_frame_with_detected_header(self, text: str) -> pd.DataFrame | None:
         dialect = CsvRawImporter._dialect_for_text(text)
-        raw = pd.read_csv(
-            StringIO(text),
-            header=None,
-            dtype=object,
-            sep=dialect.delimiter,
-            skipinitialspace=True,
-            engine="python",
+        raw_rows = list(
+            csv.reader(
+                StringIO(text),
+                dialect=dialect,
+                skipinitialspace=True,
+            )
         )
-        header_index = self._detected_header_index(raw)
+        header_index = next(
+            (
+                index
+                for index, row in enumerate(raw_rows)
+                if self._looks_like_header({value.strip() for value in row if value.strip()})
+            ),
+            None,
+        )
         if header_index is None:
             return None
-        header = [str(value).strip() if pd.notna(value) else "" for value in raw.iloc[header_index].tolist()]
-        data = raw.iloc[header_index + 1 :].copy()
-        data.columns = header
+        header = [value.strip() for value in raw_rows[header_index]]
+        data_rows: list[list[str]] = []
+        for row_number, row in enumerate(raw_rows[header_index + 1 :], start=header_index + 2):
+            if not any(value.strip() for value in row):
+                continue
+            if len(row) > len(header):
+                extra_values = row[len(header) :]
+                if any(value.strip() for value in extra_values):
+                    raise ValueError(
+                        f"CSV-Zeile {row_number} enthaelt nichtleere Felder hinter der Kopfzeile."
+                    )
+                row = row[: len(header)]
+            data_rows.append(row + [""] * (len(header) - len(row)))
+        data = pd.DataFrame(data_rows, columns=header)
         data = data[[column for column in data.columns if column]]
         data = data.dropna(how="all")
         return data
@@ -197,13 +214,6 @@ class FileRawImporter:
         data = data[[column for column in data.columns if column]]
         data = data.dropna(how="all")
         return data
-
-    def _detected_header_index(self, raw: pd.DataFrame) -> int | None:
-        for index, row in raw.iterrows():
-            values = {str(value).strip() for value in row.tolist() if pd.notna(value)}
-            if self._looks_like_header(values):
-                return int(index)
-        return None
 
     def _looks_like_header(self, values: set[str]) -> bool:
         strong_headers = {
