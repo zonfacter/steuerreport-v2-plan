@@ -23,6 +23,9 @@ IMAGE_INPUTS = (
     "configs/private_profile.example.json",
     "configs/provider_request_references.json",
 )
+IMPORT_TEMPLATE_SOURCES = (
+    "manual-csv", "binance", "bitget", "pionex", "coinbase", "mexc", "helium", "solana_rpc",
+)
 TAG = re.compile(r"v(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)\Z")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
@@ -146,7 +149,8 @@ assert urllib.request.urlopen("http://127.0.0.1:8010/importformate.pdf").read(5)
 from io import BytesIO
 from openpyxl import load_workbook
 book=load_workbook(BytesIO(urllib.request.urlopen("http://127.0.0.1:8010/import-vorlagen/import-vorlagen.xlsx").read()))
-assert book.sheetnames == ["manual-csv","binance","bitget","pionex","coinbase","helium","solana_rpc"]
+expected_sources = __IMPORT_TEMPLATE_SOURCES__
+assert book.sheetnames == expected_sources
 for source in book.sheetnames:
     assert book[source].max_row == 1
     assert urllib.request.urlopen("http://127.0.0.1:8010/import-vorlagen/"+source+".csv").read().count(b"\\n") == 1
@@ -155,6 +159,7 @@ key=Path("/state/keys/vault.key")
 assert key.stat().st_size == 32 and stat.S_IMODE(key.stat().st_mode) == 0o600
 print(json.dumps({"version":health["app_version"],"database_type":health["database_type"],"configured_accounts":0,"provider_keys":0,"empty_profile":True,"encrypted_vault_ready":True,"frontend_http_status":200,"legacy_service_required":False}))
 '''
+    code = code.replace("__IMPORT_TEMPLATE_SOURCES__", json.dumps(list(IMPORT_TEMPLATE_SOURCES)))
     result = subprocess.run(["docker", "exec", container, "python", "-c", code], capture_output=True, text=True)
     if result.returncode:
         raise RuntimeError("test_container_private_defaults_or_frontend_check_failed")

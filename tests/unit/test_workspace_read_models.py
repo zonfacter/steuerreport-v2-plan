@@ -11,6 +11,7 @@ import pytest
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
+from steuerreport_v2.contracts.review import ReviewTask
 from steuerreport_v2.contracts.workspace import WorkspaceReviewQuery
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.workspace import ActivityService, WorkspaceService
@@ -205,6 +206,19 @@ def test_review_pagination_keeps_rules_and_only_links_existing_events(workspace)
         assert set(task["event_ids"]) <= known
     assert client.post("/api/v1/workspace/review/query", json={"task_id": "non-existing"}).json()["data"]["total"] == 0
     assert fingerprint(store) == before
+
+
+def test_review_context_binds_raw_evidence_to_the_exact_event(workspace):
+    store, _client, events = workspace
+    event = events[0]
+    task = ReviewTask(task_id="synthetic-raw-link", priority="high", category="evidence", title="Beleg pruefen",
+                      detail="Synthetische Pruefung", source="synthetic", scope=event.raw_object_id,
+                      action_label="Pruefen", evidence_refs=[event.raw_object_id])
+    service = WorkspaceService(store)
+    items = service._review_items([task], service.source_scopes())
+    assert len(items) == 1
+    assert items[0].event_ids == [event.event_id]
+    assert items[0].raw_evidence_by_event == {event.event_id: event.raw_object_id}
 
 
 def test_sync_duplicate_guard_releases_after_provider_failure(workspace, monkeypatch):

@@ -1,10 +1,10 @@
-# KI: Einsatz und Grenzen (0.2.0rc35)
+# KI: Einsatz und Grenzen (0.2.0rc36)
 
 ## Kurz Gesagt
 
 Der KI-Bereich bietet Textaufgaben und Datenkorrekturen. Textaufgaben erklaeren und strukturieren bereitgestellte Informationen. Datenkorrekturen verbinden ausgewaehlte Datenbankzeilen mit einem kontrollierten Vorschlags-, Berechnungs- und Freigabeverfahren. Der Assistent ist kein autonomer Steuerpruefer und keine zweite Berechnungsinstanz.
 
-Bei Textaufgaben sieht das Modell nur den eingegebenen Text und eine feste Systemanweisung. Im Modus Datenkorrekturen kommen ausschliesslich die zuvor angezeigten und ausgewaehlten Transaktions- oder Preiszeilen hinzu. Kein unbeschraenkter Datenbankzugriff: Dateien, Wallets, andere Steuerjahre und eingegebene URLs werden nicht automatisch gelesen.
+Bei Textaufgaben sieht das Modell nur den eingegebenen Text und eine feste Systemanweisung. Fuer einen KI-Vorschlag im Modus Datenkorrekturen kommen ausschliesslich die zuvor angezeigten und ausgewaehlten Transaktions- oder Preiszeilen hinzu. Der manuelle Korrekturpfad benoetigt keine Modell- oder Anbieter-Einrichtung. Kein unbeschraenkter Datenbankzugriff: Dateien, Wallets, andere Steuerjahre und eingegebene URLs werden nicht automatisch gelesen.
 
 Jede Aufgabe steht fuer sich. Fruehere Aufgaben und Antworten werden nicht automatisch als Chatverlauf uebermittelt. Fuer eine Folgefrage muessen die benoetigten Angaben erneut im Aufgabentext stehen.
 
@@ -207,15 +207,19 @@ Diese Aufgabentypen sind derzeit nur organisatorische Kennzeichnungen im Verlauf
 
 1. Ziel klein und konkret waehlen. Den benoetigten Bericht, Hinweis oder Beleg zuerst selbst in der Anwendung oeffnen und einen geeigneten Ausschnitt bestimmen.
 
-2. Angaben datensparsam vorbereiten: relevante Ueberschriften, Einheiten, Kontext und eigene Belegkennungen beibehalten. Namen, Konten und Transaktionskennungen gegebenenfalls konsistent ersetzen; die Originalzuordnung lokal aufbewahren.
+2. Eine manuelle Datenkorrektur kann direkt aus einer Review-Aufgabe oder einem Transaktionsdetail gestartet werden. Die Anwendung uebernimmt die exakte Ziel-ID sowie verfuegbare Jahres-, Aufgaben-, Quellen-, Konto- und Rohbelegreferenzen; ohne angeschlossenes Modell bleibt der begrenzte Vorschlags-, Vorschau- und Freigabepfad nutzbar.
 
-3. Im KI-Assistenten einen Aufgabentyp und eine konkrete Anweisung zusammen mit dem benoetigten Text eingeben. Maximal 32000 Zeichen je Aufgabentext. Platzhalter in den Vorlagen muessen durch geeignete eigene Angaben ersetzt werden.
+3. Angaben datensparsam vorbereiten: relevante Ueberschriften, Einheiten, Kontext und eigene Belegkennungen beibehalten. Namen, Konten und Transaktionskennungen gegebenenfalls konsistent ersetzen; die Originalzuordnung lokal aufbewahren.
 
-4. Vor Cloud-Versand den gesamten Text selbst pruefen. Erst danach die ausdrueckliche Freigabe fuer diesen Text setzen und die Aufgabe ausfuehren. Eine Modell- oder Texteinstellung ist keine automatische Freigabe aller Daten.
+4. Im KI-Assistenten einen Aufgabentyp und eine konkrete Anweisung zusammen mit dem benoetigten Text eingeben. Maximal 32000 Zeichen je Aufgabentext. Platzhalter in den Vorlagen muessen durch geeignete eigene Angaben ersetzt werden.
 
-5. Die Antwort im Aufgabenverlauf lesen. Jede verwendete Aussage und Zahl an den eigenen Belegen oder den deterministischen Anwendungsergebnissen pruefen. Hypothesen als Hypothesen belassen.
+5. Vor Cloud-Versand den gesamten Text selbst pruefen. Erst danach die ausdrueckliche Freigabe fuer diesen Text setzen und die Aufgabe ausfuehren. Eine Modell- oder Texteinstellung ist keine automatische Freigabe aller Daten.
 
-6. Nur selbst gepruefte Inhalte in eine eigene Notiz uebernehmen. Fuer eine Folgefrage den notwendigen Kontext erneut angeben; es gibt keinen automatisch uebermittelten Chatverlauf.
+6. Die Antwort im Aufgabenverlauf lesen. Jede verwendete Aussage und Zahl an den eigenen Belegen oder den deterministischen Anwendungsergebnissen pruefen. Hypothesen als Hypothesen belassen.
+
+7. Wenn sich ein Korrekturziel seit dem Entwurf geaendert hat, bleiben der alte Entwurf und seine Freigabedaten unveraendert. Alten Wert, aktuellen Wert, Vorschlag und Belegbezug pruefen. Nur nach ausdruecklicher Bestaetigung entsteht ein neuer verknuepfter Entwurf mit aktuellem Zielhash; Vorschau und menschliche Freigabe muessen erneut erfolgen. Geloeschte Ziele werden nicht ersetzt.
+
+8. Nur selbst gepruefte Inhalte in eine eigene Notiz uebernehmen. Fuer eine Folgefrage den notwendigen Kontext erneut angeben; es gibt keinen automatisch uebermittelten Chatverlauf.
 
 ## Daten, Modellwahl und Kosten
 

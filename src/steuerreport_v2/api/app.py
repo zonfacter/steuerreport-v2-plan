@@ -69,8 +69,8 @@ from steuerreport_v2.contracts.ai import (
     LocalAiYearPackageQaStatus,
 )
 from steuerreport_v2.contracts.ai_changes import (
-    AiChangeApply, AiChangeDraft, AiChangeGenerate, AiChangePreview,
-    AiChangeRevert, AiChangeSet, AiDataContext, AiDataQuery,
+    AiChangeApply, AiChangeDraft, AiChangeGenerate, AiChangePreview, AiChangeRebase,
+    AiChangeRevert, AiChangeSet, AiDataContext, AiDataQuery, AiDataTargetContext, AiDataTargets,
 )
 from steuerreport_v2.domain.ai_changes import AiChangeError, AiChangeService
 from steuerreport_v2.db.ai_corrections import CorrectionConflict
@@ -206,6 +206,10 @@ from steuerreport_v2.contracts.exports import (
     ExportReadiness,
     ExportResult,
     PdfExportRequest,
+)
+from steuerreport_v2.contracts.tax_year_pdf_reports import (
+    TaxYearPdfReportArtifact,
+    TaxYearPdfReportList,
 )
 from steuerreport_v2.contracts.flows import FlowEntry, NetFlowSummary
 from steuerreport_v2.contracts.imports import (
@@ -352,6 +356,8 @@ from steuerreport_v2.contracts.tax_methodology import (
     TaxBmfFinalizationMatrix,
     TaxBmfFilingReadinessReport,
     TaxBmfFilingReadinessSnapshot,
+    TaxBmfFilingReadinessSnapshotRefreshRequest,
+    TaxBmfFilingReadinessSnapshotRefreshResult,
     TaxBmfPriorFilingComparison,
     TaxBmfPriorFilingDeclaredAmounts,
     TaxBmfPriorFilingDeclaredAmountsWrite,
@@ -527,6 +533,10 @@ from steuerreport_v2.domain.divorce_inheritance import (
 )
 from steuerreport_v2.domain.valuation_runs import DivorceValuationRunService
 from steuerreport_v2.domain.exports import ExportService
+from steuerreport_v2.domain.tax_year_pdf_reports import (
+    TaxYearPdfReportError,
+    TaxYearPdfReportService,
+)
 from steuerreport_v2.domain.fairspot_staking import (
     FairspotStakingReconciliationService,
 )
@@ -535,7 +545,11 @@ from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfill
 from steuerreport_v2.domain.flows import FlowService
 from steuerreport_v2.domain.import_coverage import ImportCoverageService
 from steuerreport_v2.domain.import_policy import ImportPolicyService
-from steuerreport_v2.domain.import_assistant import ImportAssistantService
+from steuerreport_v2.domain.import_assistant import (
+    ImportAssistantService,
+    binance_file_requires_connection,
+    validate_import_connection_binding,
+)
 from steuerreport_v2.domain.jup_perps import JupPerpsPreviewService
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.parity import V1ParityService
@@ -660,6 +674,11 @@ def _import_preview_warnings(
     preview: CsvImportPreview, content_field: str
 ) -> list[dict[str, str]]:
     warnings = []
+    if preview.mexc:
+        warnings.extend({"code": "mexc_import_blocked", "message": reason, "field": "mexc"}
+                        for reason in preview.mexc.blocking_reasons)
+        warnings.extend({"code": "mexc_import_review", "message": reason, "field": "mexc"}
+                        for reason in preview.mexc.warnings)
     if preview.missing_required_groups:
         warnings.append(
             {
@@ -699,8 +718,55 @@ def _import_preview_errors(
     return [
         warning
         for warning in _import_preview_warnings(preview, content_field)
-        if warning["code"] in {"missing_required_columns", "empty_import_file"}
+        if warning["code"] in {"missing_required_columns", "empty_import_file", "mexc_import_blocked"}
     ]
+
+
+_IMPORT_BINDING_ERROR_MESSAGES = {
+    "connection_id_invalid": "Die Verbindungs-ID ist ungueltig. Verbindungsliste neu laden.",
+    "connection_not_found": "Die ausgewaehlte Verbindung existiert nicht mehr. Verbindungsliste neu laden.",
+    "connection_provider_mismatch": "Die ausgewaehlte Verbindung gehoert nicht zum Anbieter Binance.",
+    "connection_binding_file_mode_required": "Eine Verbindungsbindung ist nur fuer einen Dateiimport zulaessig.",
+    "connection_binding_provider_unsupported": "Die explizite Datei-Verbindungsbindung ist in diesem Schritt nur fuer Binance verfuegbar.",
+    "connection_binding_required": "Diese Binance-Datei hat keine Konto-/Wallet-Spalte. Vor dem Import muss eine konkrete Binance-Verbindung ausgewaehlt werden.",
+}
+
+
+def _import_binding_error(code: str) -> ApiMessage | None:
+    message = _IMPORT_BINDING_ERROR_MESSAGES.get(code)
+    if message is None:
+        return None
+    return ApiMessage(code=code, message=message, field="connection_id")
+
+
+def _direct_file_connection_id(
+    db: DuckDbStore,
+    source: str,
+    value: object,
+) -> tuple[str | None, list[ApiMessage]]:
+    try:
+        connection_id = validate_import_connection_binding(
+            db,
+            source=source,
+            import_mode="file",
+            connection_id=str(value) if value is not None else None,
+        )
+    except ValueError as exc:
+        message = _import_binding_error(str(exc)) or ApiMessage(
+            code="connection_binding_invalid",
+            message="Die Verbindungsbindung konnte nicht geprueft werden.",
+            field="connection_id",
+        )
+        return None, [message]
+    return connection_id, []
+
+
+def _connection_binding_warning() -> dict[str, str]:
+    return {
+        "code": "connection_binding_required",
+        "message": _IMPORT_BINDING_ERROR_MESSAGES["connection_binding_required"],
+        "field": "connection_id",
+    }
 
 
 def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
@@ -744,6 +810,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     app.include_router(build_historical_prices_router(db, lambda: clear_response_cache()))
     app.include_router(build_request_limits_router())
     workspace_operation_lock = Lock()
+    filing_readiness_snapshot_refresh_lock = Lock()
     installation = InstallationSettingsService(db)
 
     @app.get("/api/v1/admin/installation")
@@ -1736,10 +1803,14 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 for item in db.list_raw_objects(batch_id=batch_id, limit=None)
             ],
             "canonical_events": [
-                item.model_dump(mode="json")
+                (item.model_copy(update={"event_time": item.event_time.replace(tzinfo=timezone.utc)})
+                 if item.source == "mexc" and item.event_time.tzinfo is None else item).model_dump(mode="json")
                 for item in db.list_canonical_events(batch_id=batch_id)
             ],
         }
+        if batch is not None and batch.source == "mexc":
+            from steuerreport_v2.importers.mexc_native import evidence_for_batch
+            payload["mexc_evidence"] = evidence_for_batch(db, batch_id)
         return Response(
             content=json.dumps(payload, indent=2, ensure_ascii=False),
             media_type="application/json",
@@ -1748,21 +1819,54 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             },
         )
 
+    @app.get("/api/v1/import/batches/{batch_id}/original")
+    def download_mexc_original(batch_id: str) -> Response:
+        from steuerreport_v2.importers.mexc_native import MexcNativeImporter, metadata
+        batch = db.get_import_batch(batch_id)
+        if batch is None or batch.source != "mexc":
+            raise HTTPException(status_code=404, detail="original_not_available")
+        raw = db.list_raw_objects(batch_id, limit=1)
+        meta = metadata(json.loads(raw[0].payload_json)) if raw else {}
+        digest = str(meta.get("file_sha256", "")).removeprefix("sha256:")
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise HTTPException(status_code=409, detail="original_integrity_failed")
+        original = MexcNativeImporter(db).archive / (digest + ".original")
+        if not original.is_file() or original.is_symlink() or original.stat().st_size > 25 * 1024 * 1024:
+            raise HTTPException(status_code=409, detail="original_integrity_failed")
+        content = original.read_bytes()
+        if hashlib.sha256(content).hexdigest() != digest:
+            raise HTTPException(status_code=409, detail="original_integrity_failed")
+        suffix = "xlsx" if meta.get("file_format") == "xlsx" else "csv"
+        return Response(content=content, media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="mexc-{batch_id}.{suffix}"'})
+
     @app.post("/api/v1/import/csv/raw")
     def import_csv_raw(payload: dict) -> ApiResponse[ImportBatch]:
+        source = str(payload["source"])
+        connection_id, binding_errors = _direct_file_connection_id(
+            db, source, payload.get("connection_id"),
+        )
+        if binding_errors:
+            return ApiResponse(status="error", errors=binding_errors)
         importer = CsvRawImporter(db)
         preview = importer.preview_text(
-            source=str(payload["source"]),
+            source=source,
             filename=str(payload["filename"]),
             content=str(payload["content"]),
+            connection_id=connection_id,
+            mexc=payload.get("mexc"),
         )
+        if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
+            return ApiResponse(status="error", errors=[_connection_binding_warning()])
         errors = _import_preview_errors(preview, "content")
         if errors:
             return ApiResponse(status="error", errors=errors)
         batch = importer.import_text(
-            source=str(payload["source"]),
+            source=source,
             filename=str(payload["filename"]),
             content=str(payload["content"]),
+            connection_id=connection_id,
+            mexc=payload.get("mexc"),
         )
         warnings = _import_preview_warnings(preview, "content")
         return ApiResponse(
@@ -1773,12 +1877,22 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
 
     @app.post("/api/v1/import/csv/preview")
     def preview_csv_import(payload: dict) -> ApiResponse[CsvImportPreview]:
+        source = str(payload["source"])
+        connection_id, binding_errors = _direct_file_connection_id(
+            db, source, payload.get("connection_id"),
+        )
+        if binding_errors:
+            return ApiResponse(status="error", errors=binding_errors)
         preview = CsvRawImporter(db).preview_text(
-            source=str(payload["source"]),
+            source=source,
             filename=str(payload["filename"]),
             content=str(payload["content"]),
+            connection_id=connection_id,
+            mexc=payload.get("mexc"),
         )
         warnings = _import_preview_warnings(preview, "content")
+        if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
+            warnings.append(_connection_binding_warning())
         return ApiResponse(
             status="warning" if warnings else "ok",
             data=preview,
@@ -1787,13 +1901,23 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
 
     @app.post("/api/v1/import/file/preview")
     def preview_file_import(payload: dict) -> ApiResponse[CsvImportPreview]:
+        source = str(payload["source"])
+        connection_id, binding_errors = _direct_file_connection_id(
+            db, source, payload.get("connection_id"),
+        )
+        if binding_errors:
+            return ApiResponse(status="error", errors=binding_errors)
         preview = FileRawImporter(CsvRawImporter(db)).preview_base64(
-            source=str(payload["source"]),
+            source=source,
             filename=str(payload["filename"]),
             content_base64=str(payload["content_base64"]),
             sheet_name=payload.get("sheet_name"),
+            connection_id=connection_id,
+            mexc=payload.get("mexc"),
         )
         warnings = _import_preview_warnings(preview, "content_base64")
+        if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
+            warnings.append(_connection_binding_warning())
         return ApiResponse(
             status="warning" if warnings else "ok",
             data=preview,
@@ -1802,21 +1926,33 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
 
     @app.post("/api/v1/import/file/raw")
     def import_file_raw(payload: dict) -> ApiResponse[ImportBatch]:
+        source = str(payload["source"])
+        connection_id, binding_errors = _direct_file_connection_id(
+            db, source, payload.get("connection_id"),
+        )
+        if binding_errors:
+            return ApiResponse(status="error", errors=binding_errors)
         importer = FileRawImporter(CsvRawImporter(db))
         preview = importer.preview_base64(
-            source=str(payload["source"]),
+            source=source,
             filename=str(payload["filename"]),
             content_base64=str(payload["content_base64"]),
             sheet_name=payload.get("sheet_name"),
+            connection_id=connection_id,
+            mexc=payload.get("mexc"),
         )
+        if binance_file_requires_connection(source, preview.matched_columns) and connection_id is None:
+            return ApiResponse(status="error", errors=[_connection_binding_warning()])
         errors = _import_preview_errors(preview, "content_base64")
         if errors:
             return ApiResponse(status="error", errors=errors)
         batch = importer.import_base64(
-            source=str(payload["source"]),
+            source=source,
             filename=str(payload["filename"]),
             content_base64=str(payload["content_base64"]),
             sheet_name=payload.get("sheet_name"),
+            connection_id=connection_id,
+            mexc=payload.get("mexc"),
         )
         warnings = _import_preview_warnings(preview, "content_base64")
         return ApiResponse(
@@ -1831,7 +1967,10 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     ) -> ApiResponse[ImportAssistantPreview]:
         try:
             preview = ImportAssistantService(db).preview(payload)
-        except ValueError:
+        except ValueError as exc:
+            binding_error = _import_binding_error(str(exc))
+            if binding_error is not None:
+                return ApiResponse(status="error", errors=[binding_error])
             return ApiResponse(status="error", errors=[ApiMessage(
                 code="import_assistant_invalid_file",
                 message="Datei nicht lesbar. CSV-Zeichensatz, Excel-Format und Tabellenblatt pruefen.",
@@ -1857,6 +1996,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         try:
             return ApiResponse(data=ImportAssistantService(db).execute(payload))
         except ValueError as exc:
+            binding_error = _import_binding_error(str(exc))
+            if binding_error is not None:
+                return ApiResponse(status="error", errors=[binding_error])
             return ApiResponse(
                 status="error",
                 errors=[
@@ -4770,7 +4912,11 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         service = TaxMethodologyService(db)
         if year is None:
             snapshot = service.bmf_filing_readiness_snapshot()
-            if snapshot.status == "available" and snapshot.report is not None:
+            if (
+                snapshot.status == "available"
+                and snapshot.binding_status == "current"
+                and snapshot.report is not None
+            ):
                 return ApiResponse(data=snapshot.report)
         return ApiResponse(data=service.bmf_filing_readiness(year=year))
 
@@ -4781,6 +4927,103 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         return ApiResponse(
             data=TaxMethodologyService(db).bmf_filing_readiness_snapshot()
         )
+
+    @app.post(
+        "/api/v1/tax-methodology/bmf-filing-readiness-snapshot",
+        response_model=ApiResponse[TaxBmfFilingReadinessSnapshotRefreshResult],
+        summary="Gebundenen BMF-Methoden-Pruefstand ausdruecklich erzeugen",
+    )
+    def tax_methodology_bmf_filing_readiness_snapshot_refresh(
+        payload: TaxBmfFilingReadinessSnapshotRefreshRequest,
+    ) -> ApiResponse[TaxBmfFilingReadinessSnapshotRefreshResult] | JSONResponse:
+        def action_error(code: str, message: str, status_code: int) -> JSONResponse:
+            envelope = ApiResponse[TaxBmfFilingReadinessSnapshotRefreshResult](
+                status="warning",
+                errors=[ApiMessage(code=code, message=message)],
+            )
+            return JSONResponse(
+                status_code=status_code,
+                content=envelope.model_dump(mode="json"),
+            )
+
+        if not filing_readiness_snapshot_refresh_lock.acquire(blocking=False):
+            return action_error(
+                "filing_readiness_snapshot_refresh_running",
+                "Eine Erzeugung des BMF-Methoden-Pruefstands laeuft bereits.",
+                409,
+            )
+
+        started_at = datetime.now(timezone.utc)
+        expected_binding = (
+            payload.expected_input_binding_sha256,
+            payload.expected_latest_tax_run_id,
+        )
+        try:
+            with db.exclusive_access():
+                from steuerreport_v2.domain.filing_binding import current_filing_binding
+
+                if current_filing_binding(db) != expected_binding:
+                    return action_error(
+                        "filing_readiness_inputs_changed",
+                        "Die Eingaben haben sich seit dem gelesenen Pruefstand geaendert. Status neu laden und erneut starten.",
+                        409,
+                    )
+                service = TaxMethodologyService(db)
+                try:
+                    service.write_bmf_filing_readiness_snapshot(
+                        expected_binding=expected_binding
+                    )
+                except ValueError as exc:
+                    if str(exc) == "filing_readiness_inputs_changed":
+                        return action_error(
+                            "filing_readiness_inputs_changed",
+                            "Die Eingaben haben sich waehrend der Erzeugung geaendert. Der Pruefstand wurde nicht als aktuell bestaetigt.",
+                            409,
+                        )
+                    raise
+                except OSError:
+                    return action_error(
+                        "filing_readiness_snapshot_write_failed",
+                        "Der Pruefstand konnte im persistenten Anwendungsdatenbereich nicht gespeichert werden. Schreibbarkeit und Speicherplatz pruefen.",
+                        503,
+                    )
+
+                clear_response_cache()
+                snapshot = service.bmf_filing_readiness_snapshot()
+                if snapshot.status != "available" or snapshot.report is None:
+                    return action_error(
+                        "filing_readiness_snapshot_invalid_after_write",
+                        "Der erzeugte Pruefstand konnte anschliessend nicht validiert werden.",
+                        500,
+                    )
+                final_binding = current_filing_binding(db)
+                report_binding = (
+                    snapshot.report.input_binding_sha256,
+                    snapshot.report.latest_tax_run_id,
+                )
+                binding_status = (
+                    "current"
+                    if final_binding == expected_binding
+                    and report_binding == expected_binding
+                    and snapshot.binding_status == "current"
+                    else "stale"
+                )
+                completed_at = datetime.now(timezone.utc)
+                result = TaxBmfFilingReadinessSnapshotRefreshResult(
+                    operation_id=str(uuid4()),
+                    scope=payload.scope,
+                    status="completed" if binding_status == "current" else "stale",
+                    started_at=started_at,
+                    completed_at=completed_at,
+                    binding_status=binding_status,
+                    report=snapshot.report,
+                )
+                return ApiResponse(
+                    status="ok" if binding_status == "current" else "warning",
+                    data=result,
+                )
+        finally:
+            filing_readiness_snapshot_refresh_lock.release()
 
     @app.get("/api/v1/tax-methodology/bmf-finalization-matrix")
     def tax_methodology_bmf_finalization_matrix(
@@ -5006,6 +5249,58 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         return Response(
             content=render_tax_year_filing_summary_html(summary),
             media_type="text/html; charset=utf-8",
+        )
+
+    @app.post("/api/v1/tax-years/{year}/reports/pdf")
+    def create_tax_year_pdf_report(year: int) -> ApiResponse[TaxYearPdfReportArtifact]:
+        try:
+            artifact = TaxYearPdfReportService(db).create(year)
+        except TaxYearPdfReportError as exc:
+            raise HTTPException(status_code=409, detail=exc.code) from exc
+        return ApiResponse(data=artifact)
+
+    @app.get("/api/v1/tax-years/{year}/reports/pdf")
+    def list_tax_year_pdf_reports(year: int) -> ApiResponse[TaxYearPdfReportList]:
+        try:
+            result = TaxYearPdfReportService(db).list(year)
+        except TaxYearPdfReportError as exc:
+            raise HTTPException(status_code=422, detail=exc.code) from exc
+        return ApiResponse(data=result)
+
+    @app.get("/api/v1/tax-years/{year}/reports/pdf/{artifact_id}/manifest.json")
+    def download_tax_year_pdf_manifest(year: int, artifact_id: str) -> Response:
+        try:
+            result = TaxYearPdfReportService(db).get_manifest_bytes(year, artifact_id)
+        except TaxYearPdfReportError as exc:
+            raise HTTPException(status_code=409, detail=exc.code) from exc
+        if result is None:
+            raise HTTPException(status_code=404, detail="tax_year_pdf_report_not_found")
+        filename, content = result
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/api/v1/tax-years/{year}/reports/pdf/{artifact_id}/files/{file_index}")
+    def download_tax_year_pdf_file(year: int, artifact_id: str, file_index: int) -> Response:
+        try:
+            result = TaxYearPdfReportService(db).get_pdf_bytes(
+                year, artifact_id, file_index
+            )
+        except TaxYearPdfReportError as exc:
+            raise HTTPException(status_code=409, detail=exc.code) from exc
+        if result is None:
+            raise HTTPException(status_code=404, detail="tax_year_pdf_file_not_found")
+        file_model, content = result
+        return Response(
+            content=content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{file_model.filename}"',
+                "X-Report-Page-Count": str(file_model.page_count),
+                "X-Report-SHA256": file_model.sha256,
+            },
         )
 
     def render_tax_year_evidence_html(report: TaxYearEvidenceReport) -> str:
@@ -9690,7 +9985,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     @app.exception_handler(AiChangeError)
     async def safe_ai_change_error(_request: Request, exc: AiChangeError):
         code = str(exc)
-        status = 404 if code == "ai_change_not_found" else 409 if code in {
+        status = 404 if code in {"ai_change_not_found", "ai_change_target_missing"} else 409 if code in {
             "ai_change_stale", "ai_change_context_stale", "ai_change_state_conflict",
             "ai_change_preview_required", "ai_change_prepared_mismatch",
         } else 400
@@ -9716,6 +10011,10 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     def ai_data_context(payload: AiDataQuery) -> ApiResponse[AiDataContext]:
         return ApiResponse(data=AiChangeService(db).context(payload))
 
+    @app.post("/api/v1/ai/data-context/targets")
+    def ai_data_target_context(payload: AiDataTargets) -> ApiResponse[AiDataTargetContext]:
+        return ApiResponse(data=AiChangeService(db).context_targets(payload))
+
     @app.get("/api/v1/ai/changes")
     def ai_change_sets() -> ApiResponse[list[AiChangeSet]]:
         return ApiResponse(data=AiChangeService(db).list())
@@ -9735,6 +10034,10 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     @app.post("/api/v1/ai/changes/{identifier}/revise")
     def revise_ai_change_set(identifier: str, payload: AiChangeDraft) -> ApiResponse[AiChangeSet]:
         return ApiResponse(data=AiChangeService(db).revise(identifier, payload))
+
+    @app.post("/api/v1/ai/changes/{identifier}/rebase")
+    def rebase_ai_change_set(identifier: str, payload: AiChangeRebase) -> ApiResponse[AiChangeSet]:
+        return ApiResponse(data=AiChangeService(db).rebase(identifier, payload))
 
     @app.post("/api/v1/ai/changes/{identifier}/preview")
     def preview_ai_change_set(identifier: str, payload: AiChangePreview) -> ApiResponse[AiChangeSet]:

@@ -187,6 +187,19 @@ def _markdown_bytes(preview, budget):
     output.write("## Steuerzeilendifferenzen\n\n")
     deltas = preview.get("tax_line_deltas") or []
     _table(output, deltas, _fields(deltas, ("key", "before", "after")))
+    manual = preview.get("manual_submission")
+    if isinstance(manual, Mapping):
+        output.write("## Manuelle Preis- und FX-Belege\n\n")
+        observations = []
+        price = manual.get("price")
+        if isinstance(price, Mapping):
+            observations.append({"Art": "Tokenpreis", **price})
+        fx = manual.get("fx")
+        if isinstance(fx, Mapping):
+            observations.append({"Art": "FX", **fx})
+        _table(output, observations, _fields(observations, ("Art", "raw_value", "raw_currency", "unit", "priced_at_original", "priced_at_utc", "source_name", "source_reference", "source_observed_at", "date", "base", "quote", "raw_rate", "rate_eur_per_usd", "policy_id", "evidence_filename", "evidence_sha256")))
+        if manual.get("fx_block_reason"):
+            output.write(f"FX-Status: {_cell(manual['fx_block_reason'])}; die Vorschau bleibt blockiert.\n\n")
     output.write("## Quellenhashes (SHA-256)\n\n")
     _table(output, ({"SHA-256": sha} for sha in _evidence_ids(preview)), ("SHA-256",))
     return output.content()
@@ -270,6 +283,11 @@ def report_zip(preview: dict, evidence_loader: Callable[[str], bytes]) -> bytes:
         files[directory + "/preise.csv"] = _csv_bytes(items, fields, budget)
     if "tax_line_deltas" in preview:
         files["tax_line_deltas.json"] = _json_bytes(preview["tax_line_deltas"], budget)
+    evidence_metadata = {
+        item["sha256"]: item
+        for item in preview.get("evidence", [])
+        if isinstance(item, Mapping) and isinstance(item.get("sha256"), str)
+    }
     for sha in evidence_ids:
         body = evidence_loader(sha)
         if not isinstance(body, bytes):
@@ -278,7 +296,9 @@ def report_zip(preview: dict, evidence_loader: Callable[[str], bytes]) -> bytes:
         if hashlib.sha256(body).hexdigest() != sha:
             raise ValueError("historical_price_report_evidence_mismatch")
         budget.consume(len(body))
-        files[f"evidence/{sha}.json"] = body
+        item = evidence_metadata.get(sha, {})
+        suffix = ".original" if str(item.get("kind", "")).startswith("manual_") else ".json"
+        files[f"evidence/{sha}{suffix}"] = body
     files["manifest.json"] = _json_bytes({"report_version": 1, "files": [
         {"filename": name, "sha256": hashlib.sha256(body).hexdigest()}
         for name, body in sorted(files.items())

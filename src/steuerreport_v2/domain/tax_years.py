@@ -1602,6 +1602,8 @@ class TaxYearService:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return None
+        if not self._readiness_snapshot_binding_is_current_or_legacy(payload):
+            return None
         years_payload = payload.get("years")
         if not isinstance(years_payload, list):
             return None
@@ -2038,6 +2040,8 @@ class TaxYearService:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return None
+        if not self._readiness_snapshot_binding_is_current_or_legacy(payload):
+            return None
         years_payload = payload.get("years")
         if not isinstance(years_payload, list):
             return None
@@ -2229,6 +2233,22 @@ class TaxYearService:
             if candidate.exists():
                 return candidate
         return None
+
+    def _readiness_snapshot_binding_is_current_or_legacy(
+        self, payload: dict[str, object]
+    ) -> bool:
+        if "input_binding_sha256" not in payload and "binding_version" not in payload:
+            return True
+        try:
+            from steuerreport_v2.contracts.tax_methodology import (
+                TaxBmfFilingReadinessReport,
+            )
+            from steuerreport_v2.domain.filing_binding import snapshot_binding_status
+
+            report = TaxBmfFilingReadinessReport.model_validate(payload)
+            return snapshot_binding_status(self.store, report) == "current"
+        except Exception:
+            return False
 
     @staticmethod
     def _filing_matrix_action_status(

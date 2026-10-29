@@ -8,7 +8,7 @@ on:
       release_tag:
         description: "Vorhandener Release-Tag (z.B. v0.2.0rc3)"
         required: true
-        default: v0.2.0rc35
+        default: v0.2.0rc36
         type: string
 
 permissions:
@@ -101,9 +101,11 @@ jobs:
       - name: Leeren Container vor Veroeffentlichung starten
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
+          SOURCE_SHA: ${{ steps.resolve.outputs.source_sha }}
         run: |
           docker run --detach --name "$CHECK_CONTAINER" --read-only --network none --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:size=256m,mode=1777 --mount type=volume,destination=/state "$LOCAL_IMAGE"
           python automation/scripts/container_release_v2.py smoke --container "$CHECK_CONTAINER" --version "$VERSION" --output "$RUNNER_TEMP/build-smoke.json"
+          python automation/scripts/check_container_user_path_v2.py --container "$CHECK_CONTAINER" --version "$VERSION" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/build-user-path.json"
       - name: Neue Version und Commit-Tag veroeffentlichen
         if: steps.lookup.outputs.existing_digest == ''
         env:
@@ -140,6 +142,7 @@ jobs:
             ${{ runner.temp }}/publication.json
             ${{ runner.temp }}/secrets.reviewed.json
             ${{ runner.temp }}/build-smoke.json
+            ${{ runner.temp }}/build-user-path.json
           if-no-files-found: error
           retention-days: 30
       - name: Testcontainer entfernen
@@ -180,6 +183,7 @@ jobs:
           python scripts/container_release_v2.py verify --inspect "$RUNNER_TEMP/pulled.inspect.json" --image "$IMAGE" --version "$VERSION" --sha "$SOURCE_SHA" --repository "$GITHUB_REPOSITORY" --output "$RUNNER_TEMP/pull-metadata.json"
           docker run --detach --name "$CHECK_CONTAINER" --read-only --network none --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:size=256m,mode=1777 --mount type=volume,destination=/state "$IMAGE@$DIGEST"
           python scripts/container_release_v2.py smoke --container "$CHECK_CONTAINER" --version "$VERSION" --output "$RUNNER_TEMP/pull-smoke.json"
+          python scripts/check_container_user_path_v2.py --container "$CHECK_CONTAINER" --version "$VERSION" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/pull-user-path.json"
       - name: Pull-Pruefung archivieren
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -187,6 +191,7 @@ jobs:
           path: |
             ${{ runner.temp }}/pull-metadata.json
             ${{ runner.temp }}/pull-smoke.json
+            ${{ runner.temp }}/pull-user-path.json
           if-no-files-found: error
           retention-days: 30
       - name: Testcontainer entfernen

@@ -1,5 +1,67 @@
 # Changelog
 
+## Unreleased
+
+## 0.2.0rc36 - 2026-10-29 (Releasekandidat)
+
+- GitHub #12: Solana-Ownership-Konfiguration wird beim Speichern und Laden
+  strikt typisiert. Fehlende optionale Datei, ungueltiger vorhandener Inhalt
+  und nicht lesbarer Bestand sind getrennt; ungueltige Datei blockiert die
+  Normalisierung statt unowned TxIDs still zu verwerfen. Audit-Metadaten bleiben
+  erhalten, ungueltige Speicherversuche schreiben weder Datei noch Revision.
+- GitHub #10: Der Docker-Entrypoint blockiert vor Schreibzugriffen und Uvicorn,
+  wenn der Vault-Schluessel fehlt oder vorhandene verschluesselte Secrets damit
+  nicht entschluesselt werden koennen. Eine Profil-Erstprovisionierung braucht
+  einen ausdruecklichen Einmalschalter; vorhandene Schluessel werden nie ersetzt.
+- GitHub #13 (Teilumfang): Binance-Spot-Dateiimporte koennen an eine explizit
+  ausgewaehlte Verbindung gebunden werden; die Bindung bleibt am Importbatch.
+  Alte ungebundene Batches werden nicht still migriert. Quellenuebergreifender
+  CSV/API-Identitaetsabgleich und eine dauerhafte Matchentscheidung sind offen.
+- GitHub #14 (Teilumfang): Binance-Earn-Historienservice kann Zugangsdaten einer
+  konkreten Verbindung nutzen und faellt in diesem Modus nicht auf globale
+  Legacy-Secrets zurueck. Vollstaendige HistoryJob-/Importintegration und
+  ausgewiesene Kontenabgrenzung bleiben offen.
+- GitHub #15: Manueller, hashgebundener Einzelbelegpfad fuer offene historische
+  EUR-Preisbedarfe. EUR direkt oder USD nur mit Original-FX-Beleg und
+  bestehender Sieben-Tage-Referenzpolicy; Vorschau isoliert, Apply mit Akteur
+  und zwei bestaetigten Schritten. Kein Provider-/KI-Aufruf, kein Default-FX,
+  keine Aenderung des bestehenden EUR-CSV-Imports.
+- BMF-Methoden-Pruefstaende koennen in der Steuerjahresansicht ausdruecklich
+  fuer den Gesamtumfang 2021-2025 erzeugt oder erneuert werden. API und UI
+  zeigen Eingangsbindung, Laufstatus und Konflikte; veraltete Eingaben werden
+  nicht als aktueller Pruefstand dargestellt. Keine Steuerdatenkorrektur oder
+  finale Freigabe.
+- GitHub #17: Review-Aufgaben und Ereignisdetails fuehren mit stabiler Ziel-ID,
+  Jahres-, Quellen-, Aufgaben- und Rohbelegreferenz in den manuellen
+  Korrekturablauf. Veraltete Zielrevisionen werden exakt verglichen und nur
+  nach ausdruecklicher Pruefung als neue, verknuepfte Entwuerfe angelegt;
+  alte Entwuerfe und Freigaben bleiben unveraendert.
+- Der manuelle Modus benoetigt keine Anbieter-/Agentenkonfiguration und startet
+  keine Modell- oder externen KI-Aufrufe. Bestehende Patchfelder, Vorschau,
+  Belegpruefung und menschliche Freigabegates bleiben unveraendert.
+- GitHub #18: Steuerjahresbezogene PDF-Vorschauen koennen ausdruecklich erzeugt,
+  im append-only Archiv aufgelistet und samt Manifest/Hashes heruntergeladen
+  werden. PDF, Manifest und Jahreszahlen sind an denselben Lauf gebunden; jedes
+  Artefakt bleibt als Vorschau ohne finale Abgabefreigabe gekennzeichnet.
+
+- GitHub #4: MEXC Spot Statement und Funding Other koennen nach ausdruecklicher
+  Konto-, Exportart- und Zeitbasiszuordnung als beleggebundene XLSX-/CSV-Dateien
+  geprueft und importiert werden. Snapshot-/BONUS- und andere Produktbelege
+  erzeugen keine erfundenen Erwerbe oder Gewinne; Airdrop bleibt fachlich offen.
+  Dublettenkandidaten erfordern eine begruendete Zuordnung.
+- Nichtleere Funding-Statuswerte bleiben ohne belegte Anbietersemantik reine
+  Rohbelege/Review statt scheinbar abgeschlossener Bestandsbuchungen.
+- Der MEXC-Importassistent verwendet eine einzige, korrekt geschlossene
+  Auswahlstruktur fuer Konto, Datei und Pruefung; doppelte Dateieingaben wurden
+  entfernt.
+- GitHub #9: Der Container-Publish prueft vor und nach dem Push einen
+  synthetischen Dateiimport bis zum Jahresbericht und Abgabepaket sowie die
+  Persistenz ueber einen Containerneustart. Der Ablauf verwendet ein frisches,
+  netzwerkisoliertes Testvolume und keine KI-/Provider-Endpunkte.
+- GitHub #22: Die CSV-Vorschau toleriert zusaetzliche leere Endfelder, behaelt
+  die geparste Raw-Zeile bei und blockiert nichtleere Felder hinter der
+  erkannten Kopfzeile, statt sie still zu verwerfen.
+
 ## 0.2.0rc35 - 2026-10-28 (Releasekandidat)
 
 - Der reale GitHub-Releasekatalog enthaelt nach Entpacken etwa 606 KB inklusive

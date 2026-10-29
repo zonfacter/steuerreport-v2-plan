@@ -11,7 +11,12 @@ ExportStatus = Literal["created", "blocked"]
 
 class PdfExportRequest(BaseModel):
     label: str = Field(default="steuerreport")
-    estimated_pages: int = Field(ge=0)
+    estimated_pages: int | None = Field(
+        default=None,
+        ge=0,
+        deprecated=True,
+        description="Legacy-Eingabe; wird ignoriert. Dieses PDF ist ein einseitiges technisches Statuspaket.",
+    )
 
 
 class ExportPackage(BaseModel):
@@ -26,6 +31,7 @@ class ExportPackage(BaseModel):
     filing_status: Literal["unbound", "preview"] = "unbound"
     input_binding_sha256: str | None = None
     calculation_run_id: str | None = None
+    report_type: Literal["technical_status"] = "technical_status"
 
 
 class ExportResult(BaseModel):

@@ -1,12 +1,16 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Download, Pencil, Play, RefreshCw, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Download, Pencil, Play, RefreshCw, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { API_BASE } from "./api-base";
 import { HelpTip } from "./Help";
+import { navigateView, useViewState } from "./workspace/view-state";
 
 type Kind = "event" | "price";
 type Query = { kind: Kind; year: number; asset: string; source: string; offset: number; limit: number };
 type Row = { kind: Kind; target_id: string; revision: string; values: Record<string, string | null>; provenance: Record<string, string | number | null> };
 type Context = { context_sha256: string; total: number; rows: Row[] };
+type TargetRef = { kind: Kind; target_id: string };
+type TargetContext = { context_sha256: string; rows: Row[]; missing_targets: TargetRef[] };
+type StaleConflict = { change_set_id: string; context: TargetContext; changed: boolean; deleted: boolean };
 type Change = { kind: Kind; target_id: string; before_sha256: string; patch: Record<string, string | null>; reason: string; evidence_ref: string };
 type Draft = { summary: string; changes: Change[] };
 type Preview = { preview_sha256: string; selected_indices: number[]; before_summary: Record<string, unknown>; after_summary: Record<string, unknown>; tax_line_deltas: unknown[]; reconciliation_status: string; pipeline: { allow_export: boolean; review_issues_open: number; tax_lines: number } };
@@ -34,6 +38,7 @@ const ERRORS: Record<string, string> = {
   ai_change_no_difference: "Mindestens eine echte Aenderung je Position ist erforderlich.",
   ai_change_selection_invalid: "Auswahl ist ungueltig oder nicht mehr im freigegebenen Datenkontext.",
   ai_change_target_missing: "Betroffene Datenzeile fehlt.", ai_change_duplicate_target: "Jede Datenzeile darf nur einmal vorkommen.",
+  ai_change_review_required: "Zieländerungen müssen vor dem Anlegen einer neuen Entwurfsrevision ausdrücklich geprüft werden.",
   ai_change_context_too_large: "Datenkontext zu gross. Weniger Zeilen auswaehlen.",
   ai_change_invalid_model_output: "Das Modell lieferte keinen gueltigen Aenderungsvorschlag. Es wurde nichts uebernommen.",
   ai_change_model_truncated: "Modellantwort unvollstaendig. Antwortlimit erhoehen oder weniger Zeilen auswaehlen.",
@@ -46,6 +51,10 @@ const ERRORS: Record<string, string> = {
   ai_timeout: "Zeitlimit erreicht. Vor erneutem Auftrag Verlauf aktualisieren.", ai_connection_failed: "KI-Anbieter nicht erreichbar.",
   reconciliation_failed: "Einzelpositionen und Summen stimmen nicht ueberein. Keine Uebernahme.",
 };
+
+class ApiFailure extends Error {
+  constructor(readonly code: string, message: string) { super(message); }
+}
 
 function eur(value: unknown): string {
   const raw = String(value ?? "0");
@@ -72,13 +81,18 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}/api/v1/ai${path}`, { method: body === undefined ? "GET" : "POST",
     headers: body === undefined ? undefined : { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const value = await response.json();
-  if (!response.ok || value.status === "error") throw new Error(ERRORS[value.detail] || "Aenderungsauftrag fehlgeschlagen. Verlauf pruefen.");
+  if (!response.ok || value.status === "error") throw new ApiFailure(value.detail || "unknown", ERRORS[value.detail] || "Aenderungsauftrag fehlgeschlagen. Verlauf pruefen.");
   return value.data as T;
 }
 
-export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud, agentId, agentRevision }: { providerRevision: string; connectionAllowed: boolean; cloud: boolean; agentId: string; agentRevision?: string }) {
-  const [query, setQuery] = useState<Query>({ kind: "event", year: 2025, asset: "", source: "", offset: 0, limit: 20 });
+export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud, agentId, agentRevision, manualOnly = false }: { providerRevision: string; connectionAllowed: boolean; cloud: boolean; agentId: string; agentRevision?: string; manualOnly?: boolean }) {
+  const { view, set: setView } = useViewState("ai");
+  const [query, setQuery] = useState<Query>({ kind: view.targetKind === "price" ? "price" : "event", year: view.year === "all" ? 2025 : Number(view.year), asset: "", source: "", offset: 0, limit: 20 });
   const [context, setContext] = useState<Context | null>(null);
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [targetError, setTargetError] = useState("");
+  const [conflict, setConflict] = useState<StaleConflict | null>(null);
+  const [reviewedConflict, setReviewedConflict] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [instruction, setInstruction] = useState("");
   const [external, setExternal] = useState(false);
@@ -96,33 +110,101 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud,
   const gate = useRef(false);
   useEffect(() => { let live = true; void api<ChangeSet[]>("/changes").then((rows) => { if (live) setHistory(rows); }).catch(() => { if (live) setError("Aenderungsverlauf konnte nicht geladen werden."); }); return () => { live = false; }; }, []);
   useEffect(() => { setExternal(false); }, [providerRevision, agentId, agentRevision]);
-  const choose = (item: ChangeSet) => { setActive(item); setIndices(item.preview?.selected_indices || item.draft.changes.map((_, index) => index)); setEditing(null); setChecked(false); setConfirmed(false); };
+  const choose = (item: ChangeSet) => { setActive(item); setIndices(item.preview?.selected_indices || item.draft.changes.map((_, index) => index)); setEditing(null); setChecked(false); setConfirmed(false); setActor(""); setRationale(""); setConflict(null); setReviewedConflict(false); };
   async function act(action: () => Promise<void>) {
     if (gate.current) return;
     gate.current = true; setBusy(true); setError(""); setNotice("");
-    try { await action(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Aenderungsauftrag fehlgeschlagen."); }
+    try { await action(); } catch (caught) {
+      if (caught instanceof ApiFailure && caught.code === "ai_change_stale" && active) {
+        setError("Der Datenstand hat sich geändert. Der alte Entwurf und seine Prüfdaten bleiben unverändert.");
+        try { await inspectCurrentTargets(active); } catch { setError("Der aktuelle Zielstand konnte nicht gelesen werden. Der alte Entwurf bleibt unverändert."); }
+      } else setError(caught instanceof Error ? caught.message : "Aenderungsauftrag fehlgeschlagen.");
+    }
     finally { gate.current = false; setBusy(false); }
   }
   async function refresh() { setHistory(await api<ChangeSet[]>("/changes")); }
   async function load(next = query) { const value = await api<Context>("/data-context", next); setQuery(next); setContext(value); setSelected([]); setExternal(false); }
-  function queryField(patch: Partial<Query>) { setQuery({ ...query, ...patch, offset: 0 }); setContext(null); setSelected([]); setExternal(false); }
+  async function inspectCurrentTargets(item: ChangeSet) {
+    const value = await api<TargetContext>("/data-context/targets", { targets: item.draft.changes.map(({ kind, target_id }) => ({ kind, target_id })) });
+    const rowByKey = new Map(value.rows.map((row) => [`${row.kind}:${row.target_id}`, row]));
+    const changed = item.draft.changes.some((change) => rowByKey.get(`${change.kind}:${change.target_id}`)?.revision !== change.before_sha256);
+    setConflict({ change_set_id: item.change_set_id, context: value, changed, deleted: value.missing_targets.length > 0 });
+    setReviewedConflict(false);
+  }
+  function queryField(patch: Partial<Query>) {
+    setQuery({ ...query, ...patch, offset: 0 }); setContext(null); setSelected([]); setExternal(false); setTargetError(""); setConflict(null);
+    if (view.target) setView({ target: "", targetKind: "", evidenceId: "", returnTo: "" });
+  }
   const rows = context?.rows.filter((row) => selected.includes(row.target_id)) || [];
-  const editable = !!active && ["proposed", "previewed"].includes(active.status);
+  const targetConflict = !!active && conflict?.change_set_id === active.change_set_id && conflict.changed;
+  const changeable = !!active && ["proposed", "previewed"].includes(active.status);
+  const editable = changeable && !targetConflict;
   const previewMatches = !!active?.preview && JSON.stringify([...indices].sort((a, b) => a - b)) === JSON.stringify(active.preview.selected_indices);
   function editChange(index: number, patch: Partial<Change>) { if (editing) setEditing({ ...editing, changes: editing.changes.map((change, at) => at === index ? { ...change, ...patch } : change) }); }
   function manual() {
     setActive(null); setChecked(false); setConfirmed(false);
+    setActor(""); setRationale(""); setConflict(null); setReviewedConflict(false);
     setEditing({ summary: "Manuelle Datenkorrektur", changes: rows.map((row) => ({ kind: row.kind, target_id: row.target_id, before_sha256: row.revision,
       patch: { [row.kind === "event" ? "event_type" : "price_eur"]: row.values[row.kind === "event" ? "event_type" : "price_eur"] }, reason: "", evidence_ref: row.values.raw_object_id ? "raw:" + row.values.raw_object_id : "" })) });
   }
+  function returnFromCorrection() {
+    if (view.returnTo === "review" && view.task) navigateView("review", { detail: view.task, source: view.source, year: view.year });
+    else if (view.returnTo === "flows" && view.target) navigateView("flows", { tab: "transactions", detail: view.target, task: view.task, source: view.source, account: view.account, year: view.year });
+    else if (view.returnTo === "sources" && view.source) navigateView("sources", { detail: view.source, detailTab: "issues", task: view.task });
+    else window.history.back();
+  }
+  async function rebaseAfterReview() {
+    if (!active || !conflict || conflict.change_set_id !== active.change_set_id || !reviewedConflict || conflict.deleted || editing) return;
+    const rows = new Map(conflict.context.rows.map((row) => [`${row.kind}:${row.target_id}`, row]));
+    await act(async () => {
+      const targets = active.draft.changes.map((change) => {
+        const row = rows.get(`${change.kind}:${change.target_id}`);
+        if (!row) throw new Error("Ein exaktes Zieldatum fehlt. Es wird kein Ersatz verwendet.");
+        return { kind: change.kind, target_id: change.target_id, current_sha256: row.revision };
+      });
+      const next = await api<ChangeSet>(`/changes/${active.change_set_id}/rebase`, { reviewed: true, targets });
+      choose(next); await refresh(); setNotice("Neue verknüpfte Entwurfsrevision erstellt. Vorschau, Belegprüfung und menschliche Freigabe sind erneut erforderlich.");
+    });
+  }
 
-  return <section className="aiChanges" aria-label="KI-Datenkorrekturen">
+  useEffect(() => {
+    if (!view.target || !view.targetKind) return;
+    let current = true;
+    setTargetLoading(true); setTargetError(""); setContext(null); setSelected([]); setConflict(null);
+    void api<TargetContext>("/data-context/targets", { targets: [{ kind: view.targetKind as Kind, target_id: view.target }] })
+      .then((value) => {
+        if (!current) return;
+        const exact = value.rows.find((row) => row.kind === view.targetKind && row.target_id === view.target);
+        setContext({ context_sha256: value.context_sha256, total: exact ? 1 : 0, rows: exact ? [exact] : [] });
+        setSelected(exact ? [exact.target_id] : []);
+        setQuery((previous) => ({ ...previous, kind: view.targetKind === "price" ? "price" : "event", year: view.year === "all" ? previous.year : Number(view.year), asset: exact?.values.asset || "", source: "", offset: 0 }));
+        if (!exact) setTargetError("Diese exakte Ziel-ID ist nicht mehr vorhanden. Es wird kein ähnliches Ereignis eingesetzt.");
+      })
+      .catch((caught) => { if (current) setTargetError(caught instanceof Error ? caught.message : "Zielkontext konnte nicht gelesen werden."); })
+      .finally(() => { if (current) setTargetLoading(false); });
+    return () => { current = false; };
+  }, [view.target, view.targetKind, view.year]);
+
+  const exactTarget = view.target ? context?.rows.find((row) => row.kind === view.targetKind && row.target_id === view.target) : undefined;
+  return <section className="aiChanges" aria-label={manualOnly ? "Manuelle Datenkorrekturen" : "Datenkorrekturen"}>
     <div className="pageTitle"><h3>Datenkorrekturen</h3><HelpTip label="Korrektur und Freigabe">Lade und waehle zuerst Datenzeilen. Vorschlag und Berechnungsvorschau aendern die Finanzdaten noch nicht. Erst die ausdrueckliche menschliche Freigabe uebernimmt die geprueften Positionen. Eine Ruecknahme benoetigt erneut Vorschau und Freigabe.</HelpTip></div>
     {error && <p role="alert" className="error">{error}</p>}
     {notice && <p role="status">{notice}</p>}
     {busy && <p role="status">Auftrag wird verarbeitet.</p>}
+    {view.target && <section className="aiTargetContext" aria-label="Exakter Korrekturzielkontext">
+      <div className="panelToolbar"><h3>Exakt ausgewähltes Korrekturziel</h3>{(view.returnTo || view.task) && <button type="button" onClick={returnFromCorrection}><ChevronLeft size={16} /> {view.returnTo === "review" ? "Zur Review-Aufgabe zurück" : view.returnTo === "flows" ? "Zum Ereignis zurück" : "Zurück"}</button>}</div>
+      <dl className="wsFacts"><div><dt>Ziel-ID</dt><dd><code>{view.target}</code> · {view.targetKind === "price" ? "Preisdatensatz" : "Ereignis"}</dd></div><div><dt>Steuerjahr-Kontext</dt><dd>{view.year === "all" ? "Gesamte Historie" : view.year}</dd></div>
+        {view.task && <div><dt>Review-Aufgabe</dt><dd><code>{view.task}</code></dd></div>}{view.source && <div><dt>Quelle</dt><dd><code>{view.source}</code></dd></div>}{view.account && <div><dt>Konto</dt><dd><code>{view.account}</code></dd></div>}
+        {view.evidenceId && <div><dt>Beim Öffnen zugeordneter Rohbeleg</dt><dd><code>{view.evidenceId}</code></dd></div>}
+        {exactTarget && <><div><dt>Aktueller Rohbeleg</dt><dd>{exactTarget.values.raw_object_id ? <code>{exactTarget.values.raw_object_id}</code> : "Kein Rohbeleg zugeordnet"}</dd></div><div><dt>Importfundstelle</dt><dd>{exactTarget.provenance.filename || "Datei nicht hinterlegt"} · Zeile {exactTarget.provenance.row_number ?? "unbekannt"} · SHA-256 {exactTarget.provenance.file_sha256 || "nicht hinterlegt"}</dd></div></>}
+      </dl>
+      {targetLoading && <p role="status">Die exakte Ziel-ID wird geladen. Es wird nicht nach ähnlichen Ereignissen gesucht.</p>}
+      {targetError && <p role="alert" className="error">{targetError}</p>}
+      {view.evidenceId && exactTarget && view.evidenceId !== exactTarget.values.raw_object_id && <p role="status">Der aktuelle Datensatz verweist auf einen anderen Rohbeleg als der beim Öffnen übergebene Beleg. Beide Referenzen bleiben getrennt; bitte die Änderung prüfen.</p>}
+      {exactTarget && view.targetKind === "event" && <button type="button" onClick={() => navigateView("flows", { tab: "transactions", detail: view.target, detailTab: "original", task: view.task, source: view.source, account: view.account, year: view.year })}><ArrowRight size={16} /> Zugeordneten Originalbeleg öffnen</button>}
+    </section>}
     <form onSubmit={(event) => { event.preventDefault(); void act(() => load()); }}>
-      <fieldset disabled={busy}><legend>Datenauswahl <HelpTip label="Auswahl und Filter">Das Jahr bezieht sich auf Europe/Berlin. Asset und Quelle filtern exakt; lasse sie fuer alle Werte leer. Es werden nur ausgewaehlte Zeilen an die KI gesendet, hoechstens 25 pro Vorschlag.</HelpTip></legend><div className="formGrid">
+      <fieldset disabled={busy}><legend>Datenauswahl <HelpTip label="Auswahl und Filter">{`Das Jahr bezieht sich auf Europe/Berlin. Asset und Quelle filtern exakt; lasse sie für alle Werte leer. ${manualOnly ? "Manuelle Korrekturen verwenden nur die ausgewählten Datenzeilen und lösen keine Modellanfrage aus." : "An eine KI werden nur ausdrücklich ausgewählte Zeilen gesendet, höchstens 25 pro Vorschlag."}`}</HelpTip></legend><div className="formGrid">
         <label>Datenart<select aria-label="Korrektur-Datenart" value={query.kind} onChange={(event) => queryField({ kind: event.target.value as Kind })}><option value="event">Transaktionen</option><option value="price">Preise</option></select></label>
         <label>Jahr<input aria-label="Korrektur-Jahr" type="number" min={2000} max={2100} value={query.year} onChange={(event) => queryField({ year: Number(event.target.value) })} /></label>
         <label>Asset<input aria-label="Korrektur-Asset" value={query.asset} onChange={(event) => queryField({ asset: event.target.value })} /></label>
@@ -137,7 +219,8 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud,
         <tbody>{context.rows.map((row) => <tr key={row.target_id}><td><input type="checkbox" aria-label={`Datenzeile ${row.target_id} auswaehlen`} checked={selected.includes(row.target_id)} disabled={busy} onChange={(event) => { setSelected(event.target.checked ? [...selected, row.target_id] : selected.filter((id) => id !== row.target_id)); setExternal(false); }} /></td>
           <td>{row.values.event_time || row.values.priced_at}<br /><strong>{row.values.asset}</strong><br />{row.values.event_type}</td><td>{row.values.quantity || row.values.price_eur}{row.kind === "price" ? " EUR" : ""}</td><td>{row.values.source}<br />{row.provenance.filename}<details><summary>Datensatz</summary><pre>{JSON.stringify(row, null, 2)}</pre></details></td></tr>)}</tbody></table></div>
       {!context.rows.length && <p role="status">Keine passenden Datenzeilen.</p>}
-      <form onSubmit={(event) => { event.preventDefault(); if (context) void act(async () => {
+      {manualOnly && <button type="button" disabled={busy || !selected.length || selected.length > 25} onClick={manual}><Pencil size={16} /> Manuell vorbereiten</button>}
+      {!manualOnly && <form onSubmit={(event) => { event.preventDefault(); if (context) void act(async () => {
         const item = await api<ChangeSet>("/changes/generate", { request_id: crypto.randomUUID().replaceAll("-", ""), query, selected_ids: selected, context_sha256: context.context_sha256,
           instruction, confirm_external: cloud && external, provider_revision: providerRevision, agent_id: agentId, agent_revision: agentRevision }); choose(item); setExternal(false); await refresh(); setNotice("KI-Vorschlaege erstellt.");
       }); }}>
@@ -147,11 +230,11 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud,
         <p className="actionRequirement" role="status">{busy ? "Auftrag wird verarbeitet." : !selected.length ? "Mindestens eine Datenzeile auswaehlen." : selected.length > 25 ? "Hoechstens 25 Datenzeilen auswaehlen." : !connectionAllowed ? "Fuer KI-Vorschlaege zuerst Verbindung und Fachagent einrichten; manuelles Vorbereiten ist weiterhin moeglich." : instruction.trim().length < 10 ? "Korrekturauftrag mit mindestens zehn Zeichen ergaenzen." : cloud && !external ? "Datenkontext pruefen und die Cloud-Uebermittlung freigeben." : "Auswahl bereit fuer einen Korrekturvorschlag."}</p>
         <div className="buttonRow"><button type="submit" disabled={busy || !connectionAllowed || !selected.length || selected.length > 25 || instruction.trim().length < 10 || (cloud && !external)}><Play size={16} /> KI-Vorschlaege erstellen</button>
           <button type="button" disabled={busy || !selected.length || selected.length > 25} onClick={manual}><Pencil size={16} /> Manuell vorbereiten</button></div>
-      </form>
+      </form>}
     </>}
     <div className="panelToolbar"><h3>Aenderungsverlauf</h3><button type="button" title="Aenderungsverlauf aktualisieren" aria-label="Aenderungsverlauf aktualisieren" disabled={busy} onClick={() => void act(refresh)}><RefreshCw size={16} /></button></div>
-    <label>Vorschlag<select aria-label="Aenderungsvorschlag" value={active?.change_set_id || ""} disabled={busy} onChange={(event) => { const id = event.target.value; if (id) void act(async () => choose(await api<ChangeSet>(`/changes/${encodeURIComponent(id)}`))); else setActive(null); }}>
-      <option value="">Vorschlag auswaehlen</option>{history.map((item) => <option key={item.change_set_id} value={item.change_set_id}>{new Date(item.created_at).toLocaleString("de-DE")} / {item.status} / {item.draft.summary}</option>)}
+    <label>Vorschlag<select aria-label="Aenderungsvorschlag" value={active?.change_set_id || ""} disabled={busy} onChange={(event) => { const id = event.target.value; if (id) void act(async () => choose(await api<ChangeSet>(`/changes/${encodeURIComponent(id)}`))); else { setActive(null); setConflict(null); } }}>
+      <option value="">Vorschlag auswaehlen</option>{history.map((item) => <option key={item.change_set_id} value={item.change_set_id}>{new Date(item.created_at).toLocaleString("de-DE")} / {item.status} / {item.origin}{item.parent_id ? " · verknüpft" : ""} / {item.draft.summary}</option>)}
     </select></label>
     {active && <>
       <div className="panelToolbar"><strong>{active.draft.summary}</strong><span>{({ proposed: "Vorgeschlagen", previewed: "Vorschau bereit", applied: "Uebernommen", rejected: "Abgelehnt" } as Record<string, string>)[active.status]}</span></div>
@@ -161,9 +244,32 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud,
         return <tr key={change.target_id}><td><input type="checkbox" aria-label={`Aenderung ${index + 1} auswaehlen`} checked={indices.includes(index)} disabled={busy || !editable} onChange={(event) => { setIndices(event.target.checked ? [...indices, index] : indices.filter((value) => value !== index)); setChecked(false); setConfirmed(false); }} /><br /><small>{change.target_id}</small></td>
           <td>{Object.keys(change.patch).map((field) => <div key={field}><strong>{field}</strong><br />{before?.values[field] ?? "null"}</div>)}</td><td>{Object.entries(change.patch).map(([field, value]) => <div key={field}><strong>{field}</strong><br />{value ?? "null"}</div>)}</td><td>{change.reason}<br /><code>{change.evidence_ref}</code></td></tr>;
       })}</tbody></table></div>
+      {conflict?.change_set_id === active.change_set_id && <section className="aiConflict" aria-label="Zielrevision vergleichen">
+        <h3>Veralteter Korrekturstand</h3>
+        {conflict.changed ? <><p>Die Zielrevision weicht vom gespeicherten Entwurf ab. Der alte Entwurf bleibt unverändert und kann nicht übernommen werden.</p>
+          {active.draft.changes.filter((change) => {
+            const current = conflict.context.rows.find((row) => row.kind === change.kind && row.target_id === change.target_id);
+            return !current || current.revision !== change.before_sha256;
+          }).map((change) => {
+            const old = active.before.find((row) => row.kind === change.kind && row.target_id === change.target_id);
+            const current = conflict.context.rows.find((row) => row.kind === change.kind && row.target_id === change.target_id);
+            return <div className="aiConflictTarget" key={`${change.kind}:${change.target_id}`}><strong>{change.kind === "event" ? "Ereignis" : "Preis"} · <code>{change.target_id}</code></strong>
+              {!current ? <p role="alert">Exaktes Ziel nicht mehr vorhanden. Es wird kein ähnlicher oder ersatzweise passender Datensatz verwendet.</p> : <>
+                <p>Alter Rohbeleg: {old?.values.raw_object_id || "nicht zugeordnet"} · Aktueller Rohbeleg: {current.values.raw_object_id || "nicht zugeordnet"}</p>
+                <div className="aiChangesTable"><table><thead><tr><th>Feld</th><th>Alter Entwurf</th><th>Aktueller Wert</th><th>Vorgeschlagener Wert</th></tr></thead><tbody>{Object.entries(change.patch).map(([field, proposed]) => <tr key={field}><th>{field}</th><td>{old?.values[field] ?? "null"}</td><td>{current.values[field] ?? "null"}</td><td>{proposed ?? "null"}</td></tr>)}</tbody></table></div>
+              </>}
+            </div>;
+          })}
+          {conflict.deleted && <p role="alert">Mindestens ein exaktes Ziel wurde gelöscht. Für diesen Entwurf ist keine automatische oder ähnliche Ersetzung möglich.</p>}
+          <label className="checkboxLabel"><input type="checkbox" checked={reviewedConflict} disabled={busy || conflict.deleted || active.status === "applied"} onChange={(event) => setReviewedConflict(event.target.checked)} /> Ich habe alten Wert, aktuellen Wert, Vorschlag und Belegbezug für jedes Ziel geprüft.</label>
+          {editing && <p role="status">Nicht gespeicherte Formularänderungen sind kein Teil des alten Entwurfs. Bearbeitung verwerfen, bevor die gespeicherte Fassung neu verknüpft wird.</p>}
+          <button type="button" disabled={busy || !reviewedConflict || conflict.deleted || active.status === "applied" || !!editing} onClick={() => void rebaseAfterReview()}><Pencil size={16} /> Neue verknüpfte Entwurfsrevision anlegen</button>
+        </> : <p role="status">Die Zielrevisionen stimmen noch. Geändert hat sich ein anderer Daten- oder Methodenstand; eine neue Vorschau ist erforderlich. Die Zielhashes werden nicht ausgetauscht.</p>}
+      </section>}
       <div className="buttonRow"><a href={`${API_BASE}/api/v1/ai/changes/${encodeURIComponent(active.change_set_id)}/audit.json`} download><Download size={16} /> Audit-JSON</a>
-        {editable && <><button type="button" disabled={busy} onClick={() => setEditing(structuredClone(active.draft))}><Pencil size={16} /> Vorschlag bearbeiten</button>
-          <button type="button" disabled={busy || !indices.length || !!editing} onClick={() => void act(async () => { choose(await api<ChangeSet>(`/changes/${active.change_set_id}/preview`, { selected_indices: indices })); await refresh(); })}><Check size={16} /> Vorschau berechnen</button>
+        {changeable && <><button type="button" disabled={busy} onClick={() => void act(() => inspectCurrentTargets(active))}><RefreshCw size={16} /> Zielrevision prüfen</button>
+          <button type="button" disabled={busy || !editable} onClick={() => setEditing(structuredClone(active.draft))}><Pencil size={16} /> Vorschlag bearbeiten</button>
+          <button type="button" disabled={busy || !editable || !indices.length || !!editing} onClick={() => void act(async () => { choose(await api<ChangeSet>(`/changes/${active.change_set_id}/preview`, { selected_indices: indices })); await refresh(); })}><Check size={16} /> Vorschau berechnen</button>
           <button type="button" disabled={busy} onClick={() => { if (window.confirm("Diesen Vorschlag ablehnen?")) void act(async () => { choose(await api<ChangeSet>(`/changes/${active.change_set_id}/reject`, {})); await refresh(); }); }}><X size={16} /> Ablehnen</button></>}
       </div>
       {active.preview && <><h3>Berechnete Auswirkungen</h3><span role="status">{previewMatches ? "Vorschau passend zur Auswahl" : "Vorschau veraltet"} / {active.preview.reconciliation_status} / {active.preview.pipeline.review_issues_open} offene Pruefpunkte / Export {active.preview.pipeline.allow_export ? "freigegeben" : "blockiert"}</span>
@@ -183,7 +289,7 @@ export function AiChangesWorkspace({ providerRevision, connectionAllowed, cloud,
       </fieldset>)}
       <div className="buttonRow"><button type="submit" disabled={busy}><Save size={16} /> Neue Vorschlagsrevision speichern</button><button type="button" disabled={busy} title="Bearbeitung verwerfen" aria-label="Bearbeitung verwerfen" onClick={() => setEditing(null)}><X size={16} /></button></div>
     </form>}
-    {active && (editable || active.status === "applied") && <form onSubmit={(event) => { event.preventDefault(); if (editable && active.preview) void act(async () => {
+    {active && !targetConflict && (editable || active.status === "applied") && <form onSubmit={(event) => { event.preventDefault(); if (editable && active.preview) void act(async () => {
       choose(await api<ChangeSet>(`/changes/${active.change_set_id}/apply`, { preview_sha256: active.preview!.preview_sha256, actor, rationale, confirm: confirmed, evidence_checked: checked })); await refresh(); setNotice("Datenbank und Auswertungen aktualisiert.");
     }); }}><h3>{active.status === "applied" ? "Ruecknahme" : "Menschliche Freigabe"}</h3>
       {editable && <label>Freigebende Person<input aria-label="Freigebende Person" required minLength={2} maxLength={128} value={actor} disabled={busy} onChange={(event) => setActor(event.target.value)} /></label>}

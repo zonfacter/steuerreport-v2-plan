@@ -1396,8 +1396,16 @@ class BmfComplianceMatrixService:
         if not self._is_default_store():
             return result
         snapshot = TaxMethodologyService(self.store).bmf_filing_readiness_snapshot()
-        result["snapshot_status"] = snapshot.status
-        if snapshot.status != "available" or snapshot.report is None:
+        result["snapshot_status"] = (
+            snapshot.binding_status
+            if snapshot.status == "available"
+            else snapshot.status
+        )
+        if (
+            snapshot.status != "available"
+            or snapshot.binding_status != "current"
+            or snapshot.report is None
+        ):
             return result
         report = snapshot.report
         covered = set(report.available_years)

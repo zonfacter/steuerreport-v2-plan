@@ -105,6 +105,48 @@ def test_csv_overlap_requires_review_for_selected_account_only(history_store, pr
     assert store.list_canonical_events() == before
 
 
+def test_connection_bound_accountless_binance_csv_still_hits_legacy_api_overlap_guard(history_store):
+    store = history_store
+    connection_id = str(uuid4())
+    account = "connection:" + connection_id
+    content = (
+        "utc time,coin,change,operation,quote_asset,quote_quantity,id\n"
+        "2025-01-01T12:00:00Z,BTC,1,buy,EUR,100,synthetic-fill-42\n"
+    )
+    batch = CsvRawImporter(store).import_text(
+        "binance", "synthetic-spot.csv", content, connection_id=connection_id,
+    )
+    events = RawNormalizer(store).normalize_batch(batch.batch_id)
+    assert len(events) == 1
+    assert events[0].account == account
+    assert str(batch.connection_id) == connection_id
+
+    target = HistoryTarget(
+        source_ref(account), "Synthetic Binance", "binance", account,
+        connection_id=connection_id,
+    )
+    record = HistoryRecord(
+        "cex:synthetic-fill-42", "binance", [{
+            "utc time": "2025-01-01T12:00:00Z", "coin": "BTC", "change": "1",
+            "operation": "buy", "quote_asset": "EUR", "quote_quantity": "100",
+            "account": account, "id": "synthetic-fill-42",
+        }],
+        {"payload": {"id": "synthetic-fill-42", "qty": "1"}},
+    )
+    storage = HistoryStorage(store)
+    job_id = str(uuid4())
+    job = {
+        "id": job_id,
+        "_options": {
+            "start": "2025-01-01T00:00:00+00:00",
+            "end": "2025-01-02T23:59:59.999000+00:00",
+        },
+        "_records": {record.identity: storage.write_record(job_id, record)},
+    }
+    with pytest.raises(HistoryFetchError, match="history_legacy_account_assignment_required"):
+        HistoryPreview(store).prepare(job, target)
+
+
 @pytest.mark.parametrize("cancellation", ["control_expired_worker", "terminal_checkpoint"])
 def test_expired_worker_cannot_restart_after_cancellation(history_store, monkeypatch, cancellation):
     service = HistoryService(history_store)

@@ -206,6 +206,51 @@ eine eigene menschliche Aktion. Archivierte Abgabesnapshots bleiben erhalten.
 
 ## API
 
+### Manueller Einzelbeleg
+
+Der additive Endpunkt `POST /api/v1/prices/historical/manual-previews` startet
+bei genau einer offenen Planzeile. Der Request bindet Asset/Identitaet,
+UTC-Preistag, Planhash, Wert, Einheit, Belegquelle und den SHA-256 des
+unveraenderten Originaldokuments. PDF, CSV, Bild- oder Textbelege werden als
+Originalbytes in den privaten SHA-adressierten Belegspeicher uebernommen; die
+Vorschau enthaelt Dateiname, Medientyp, Dateigroesse (je Datei maximal 2 MiB),
+Erfassungszeitpunkt mit eingereichtem Zeitzonen-Offset und UTC-Normalisierung,
+Fundstelle und Hash. Die Erfassungszeit ist eine manuell angegebene
+Metainformation und kein bestaetigter Zeitstempel des Anbieters.
+
+- EUR wird ausschliesslich direkt als positiver EUR-Wert je Asset eingegeben.
+  Der bestehende EUR-CSV-Import und dessen Vertrag bleiben unveraendert.
+- USD benoetigt im selben Request einen separaten FX-Originalbeleg und eine
+  explizite FX-Beobachtung mit Referenztag, Quellwaehrung, Zielwaehrung, Rate
+  und Quelle. Es werden nur USD/EUR und EUR/USD akzeptiert. Die bestehende
+  `fx_reference_on_or_before_max_7_calendar_days_v1`-Policy waehlt den
+  juengsten belegten Kurs am oder vor dem Preisdatum, maximal sieben
+  Kalendertage zurueck; inverse Kurse werden mit Decimal umgerechnet.
+- Es gibt keinen Defaultkurs und keinen EUR/USD-Paritaets-Fallback. Fehlende,
+  ausschliesslich zukuenftige, veraltete oder widerspruechliche FX-Belege,
+  mehrdeutige Tokenidentitaet, spaeter geaenderte Daten und geaenderte
+  SHA-Dateien bleiben blockiert. Ein korrigierter Nachweis braucht eine neue
+  Vorschau mit neu gebundenem Belegsatz.
+- Eine manuelle Vorschau speichert private Beleg-/Vorschauartefakte und rechnet
+  nur in der isolierten Datenbankkopie. Sie startet keinen Provider-, FX-,
+  Exchange- oder KI-Aufruf und schreibt keine produktiven Preise oder
+  abgeleiteten Finanzdaten.
+- Die Uebernahme verwendet den vorhandenen Apply-Endpunkt. Akteur,
+  Preisbestaetigung, Neuberechnungsbestaetigung sowie aktueller Vorschauhash
+  sind erforderlich. Vor Apply prueft der Dienst erneut Datenrevision,
+  Vorschau, Originalhashes und vorbereitete Berechnung; Apply ruft keine
+  externen Anbieter auf. Identischer Antrag ist idempotent; abweichender Wert
+  bei identischem Preis- und FX-Belegsatz ist ein Konflikt.
+- JSON und Markdown weisen Quelle, Rohwert, Waehrung/Einheit, Preiszeit,
+  Erfassungszeit, angewandte FX-Policy und Originalhashes aus. ZIP enthaelt die
+  unveraenderten Originalbytes samt Manifest. Die Belegdownload-Route liefert
+  manuelle Originale als Binaerdatei; Anbieterantworten behalten ihr bisheriges
+  JSON-Verhalten.
+
+- `POST /api/v1/prices/historical/manual-previews`: isolierte manuelle
+  EUR- oder USD/FX-Vorschau fuer genau einen offenen Bedarf; keine externe
+  Anfrage oder produktive Finanzdatenbank-Aenderung.
+
 - `POST /api/v1/prices/historical/plan`: rein lokaler Bedarf mit Plan-SHA256.
 - Additive Queryfelder: `scope=tax_required|all_observed`, `page` und
   `page_size` (1 bis 100). API-Default bleibt `tax_required`, UI-Default ist

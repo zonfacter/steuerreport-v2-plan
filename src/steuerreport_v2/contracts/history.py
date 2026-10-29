@@ -63,6 +63,7 @@ class HistoryCapability(BaseModel):
     ready: bool = False
     blocked_reason: str | None = None
     requires_symbols: bool = False
+    supports_binance_earn: bool = False
     coverage_notes: list[str] = Field(default_factory=list)
     default_start: date = date(2020, 1, 1)
     rpc_options: list[HistoryRpcOption] = Field(default_factory=list)
@@ -75,6 +76,7 @@ class HistoryStart(BaseModel):
     start: date = date(2020, 1, 1)
     end: date | None = None
     symbols: list[str] = Field(default_factory=list, max_length=200)
+    include_binance_earn: StrictBool = False
     public_rpc_only: StrictBool = True
     rpc_provider: Literal["public", "helius", "alchemy", "custom"] | None = None
     max_records: int = Field(default=100000, ge=1, le=1000000)
@@ -157,6 +159,9 @@ class HistoryJob(BaseModel):
     duplicate_records: int = 0
     imported_events: int = 0
     requests: int = 0
+    includes_binance_earn: bool = False
+    provider_requests_reserved: int = Field(default=0, ge=0)
+    provider_request_limit: int = Field(default=10000, ge=1)
     max_records: int = 100000
     preview_sha256: str | None = None
     sample_rows: list[dict[str, object]] = Field(default_factory=list)

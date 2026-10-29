@@ -8,7 +8,7 @@ BINDING_VERSION = "filing_state_binding_v1"
 EXPORT_BINDING_PREFIX = "export.package.binding."
 ARCHIVE_TABLES = (
     "export_packages", "tax_filing_snapshots", "tax_filing_snapshot_files",
-    "tax_filing_snapshot_events",
+    "tax_filing_snapshot_events", "tax_year_report_pdf_artifacts",
 )
 
 

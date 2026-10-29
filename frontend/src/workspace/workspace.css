@@ -183,9 +183,44 @@
 .wsPriceWorkspace .wsPriceRows { min-width: 760px; }
 .wsPriceWorkspace .wsPriceRows td { min-width: 110px; }
 .wsPriceWorkspace .wsPriceRows td:first-child { min-width: 155px; }
+.wsPriceWorkspace .wsPriceRows td:last-child { min-width: 125px; }
 .wsPriceWorkspace .wsPager button { width: 38px; height: 38px; padding: 0; flex: 0 0 38px; }
 .wsPriceWorkspace .wsPriceRecovery { border-left: 3px solid #448a9b; padding: 12px; background: #eaf3f6; }
 .wsPriceWorkspace code { overflow-wrap: anywhere; }
+.wsManualPrice { min-width: 0; padding: 16px; border: 1px solid #b8cec0; border-left: 4px solid #448a9b; background: #f5faf7; }
+.wsManualPrice > header { display: flex; justify-content: space-between; align-items: start; gap: 14px; }
+.wsManualPrice > header > div { min-width: 0; }
+.wsManualPrice > header p { margin: 6px 0; font-size: 13px; }
+.wsManualPrice form { min-width: 0; }
+.wsManualPrice fieldset { border-top: 1px solid #c9d8ce !important; padding: 12px 0 !important; margin-top: 10px !important; }
+.wsManualPrice label { max-width: 520px; }
+.wsManualFxRows { display: grid; gap: 10px; }
+.wsManualFxRows fieldset { padding: 10px 12px !important; border: 1px solid #d0ddd4 !important; }
+.wsManualFxRows fieldset > button { margin-top: 8px; }
+.wsYearPdf { min-width: 0; border-top: 1px solid #cbd9d0; padding-top: 16px; }
+.wsYearPdfHeading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; }
+.wsYearPdfHeading > div { min-width: 0; flex: 1 1 300px; }
+.wsYearPdfHeading > button { flex: 0 1 auto; }
+.wsYearPdfList { display: grid; gap: 0; margin-top: 12px; }
+.wsYearPdfItem { display: grid; gap: 12px; min-width: 0; padding: 16px 0; border-top: 1px solid #d5dfd8; }
+.wsYearPdfMeta { display: grid; gap: 5px; min-width: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.wsYearPdfMeta > span:nth-child(2) { justify-self: start; padding: 2px 7px; border: 1px solid #ddc797; border-radius: 4px; background: #fff8e9; color: #795719; font-size: 11px; }
+.wsYearPdfWarning { color: #7e3024; }
+.wsYearPdfFiles { display: flex; flex-wrap: wrap; gap: 8px; }
+.wsYearPdfItem details { min-width: 0; }
+.wsYearPdfItem details > summary { cursor: pointer; color: #175d45; font-size: 13px; }
+.wsYearPdfItem dl { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(0, 2fr); gap: 6px 14px; margin: 10px 0 0; font-size: 12px; }
+.wsYearPdfItem dl > div { display: contents; }
+.wsYearPdfItem dt { color: #52675d; overflow-wrap: anywhere; }
+.wsYearPdfItem dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.wsYearPdfItem code { font-size: 11px; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .wsManualPrice { padding: 12px; }
+  .wsYearPdfHeading > button { flex-basis: 100%; }
+  .wsYearPdfFiles > a { flex: 1 1 100%; }
+  .wsYearPdfItem dl { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .wsYearPdfItem dd { margin-bottom: 8px; }
+}
 .lotOriginDetails { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px 16px; }
 .lotOriginDetails dt { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .lotOriginDetails dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }

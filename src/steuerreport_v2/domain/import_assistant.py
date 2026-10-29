@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from steuerreport_v2.contracts.imports import (
     ImportAssistantExecuteResult,
@@ -13,11 +14,36 @@ from steuerreport_v2.contracts.imports import (
     ImportAssistantTaxImpact,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.connections import ConnectionError, ConnectionService
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.domain.tax import TaxService
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.importers.file_raw_importer import FileRawImporter
+
+
+def validate_import_connection_binding(
+    store: DuckDbStore,
+    *,
+    source: str,
+    import_mode: str,
+    connection_id: str | UUID | None,
+) -> str | None:
+    if connection_id is None:
+        return None
+    provider = source.strip().lower()
+    if import_mode != "file":
+        raise ValueError("connection_binding_file_mode_required")
+    if provider != "binance":
+        raise ValueError("connection_binding_provider_unsupported")
+    try:
+        return ConnectionService(store).validate_import_binding(connection_id, provider)
+    except ConnectionError as exc:
+        raise ValueError(exc.code) from None
+
+
+def binance_file_requires_connection(source: str, matched_columns: dict[str, str | None]) -> bool:
+    return source.strip().lower() == "binance" and matched_columns.get("account") is None
 
 
 class ImportAssistantService:
@@ -29,6 +55,12 @@ class ImportAssistantService:
     def preview(self, request: ImportAssistantRequest) -> ImportAssistantPreview:
         warnings: list[str] = []
         current_state = self._current_state()
+        connection_id = validate_import_connection_binding(
+            self.store,
+            source=request.source,
+            import_mode=request.import_mode,
+            connection_id=request.connection_id,
+        )
         if request.import_mode != "file":
             linked_preflights = self._linked_preflights(request)
             return ImportAssistantPreview(
@@ -57,9 +89,17 @@ class ImportAssistantService:
             )
 
         preview = self._file_preview(request)
+        if preview.mexc:
+            warnings.extend(preview.mexc.warnings)
+            warnings.extend(preview.mexc.blocking_reasons)
         assets, years = self._detect_assets_and_years(preview.sample_rows)
+        if preview.mexc:
+            from steuerreport_v2.domain.tax_time import reporting_tax_year
+            assets = sorted({row.asset for row in preview.mexc.rows if row.asset})
+            years = sorted({reporting_tax_year(datetime.fromisoformat(row.event_time))
+                            for row in preview.mexc.rows if row.event_time})
         price_needs = self._price_needs(assets, years)
-        estimated_normalizable_rows = preview.row_count if preview.can_import else 0
+        estimated_normalizable_rows = (preview.mexc.bookable_rows if preview.mexc else preview.row_count) if preview.can_import else 0
         expected_issues = []
         if preview.missing_required_groups:
             expected_issues.append("missing_required_columns")
@@ -74,12 +114,36 @@ class ImportAssistantService:
             warnings.append(
                 "Fehlende Pflichtfelder: " + ", ".join(preview.missing_required_groups)
             )
-        can_execute = preview.can_import and preview.duplicate_batch_id is None
+        binding_required = binance_file_requires_connection(
+            request.source, preview.matched_columns,
+        )
+        if binding_required and connection_id is None:
+            warnings.append(
+                "Diese Binance-Datei hat keine Konto-/Wallet-Spalte. Vor dem Import muss "
+                "eine konkrete Binance-Verbindung ausgewaehlt werden."
+            )
+        mexc_blocked = bool(
+            preview.mexc
+            and (preview.mexc.blocking_reasons or preview.mexc.disposition in {"empty", "unsupported"})
+        )
+        can_execute = (
+            preview.can_import
+            and preview.duplicate_batch_id is None
+            and not (binding_required and connection_id is None)
+            and not mexc_blocked
+        )
         return ImportAssistantPreview(
             source=request.source,
             import_mode=request.import_mode,
             can_execute=can_execute,
-            blocked_reason=self._blocked_reason(preview),
+            blocked_reason=(
+                "Fuer eine Binance-Datei ohne Konto-/Wallet-Spalte ist eine ausdrueckliche "
+                "Bindung an eine bestehende Binance-Verbindung erforderlich."
+                if binding_required and connection_id is None
+                else "; ".join(preview.mexc.blocking_reasons)
+                if preview.mexc and preview.mexc.blocking_reasons
+                else self._blocked_reason(preview)
+            ),
             preview=preview,
             price_needs=price_needs,
             tax_impact=ImportAssistantTaxImpact(
@@ -113,34 +177,44 @@ class ImportAssistantService:
         preview = self.preview(request)
         if not preview.can_execute:
             raise ValueError(preview.blocked_reason or "Import-Assistent ist blockiert.")
+        connection_id = str(request.connection_id) if request.connection_id else None
         if request.content_base64:
             batch = FileRawImporter(CsvRawImporter(self.store)).import_base64(
                 source=request.source,
                 filename=request.filename or "import.xlsx",
                 content_base64=request.content_base64,
                 sheet_name=request.sheet_name,
+                connection_id=str(connection_id) if connection_id else None,
+                mexc=request.mexc,
             )
         else:
             batch = CsvRawImporter(self.store).import_text(
                 source=request.source,
                 filename=request.filename or "import.csv",
                 content=request.content or "",
+                connection_id=str(connection_id) if connection_id else None,
+                mexc=request.mexc,
             )
         run = PipelineService(self.store).rebuild_after_import(batch.batch_id)
         return ImportAssistantExecuteResult(preview=preview, batch=batch, run=run)
 
     def _file_preview(self, request: ImportAssistantRequest):
+        connection_id = str(request.connection_id) if request.connection_id else None
         if request.content_base64:
             return FileRawImporter(CsvRawImporter(self.store)).preview_base64(
                 source=request.source,
                 filename=request.filename or "import.xlsx",
                 content_base64=request.content_base64,
                 sheet_name=request.sheet_name,
+                connection_id=connection_id,
+                mexc=request.mexc,
             )
         return CsvRawImporter(self.store).preview_text(
             source=request.source,
             filename=request.filename or "import.csv",
             content=request.content or "",
+                connection_id=connection_id,
+            mexc=request.mexc,
         )
 
     def _price_needs(self, assets: list[str], years: list[int]) -> list[ImportAssistantPriceNeed]:
@@ -160,7 +234,7 @@ class ImportAssistantService:
         years: set[int] = set()
         for row in rows:
             normalized = {key.lower().strip(): value for key, value in row.items()}
-            for key in ("asset", "coin", "currency", "base asset"):
+            for key in ("asset", "coin", "currency", "base asset", "crypto"):
                 value = normalized.get(key)
                 if value:
                     assets.add(value.strip().upper())

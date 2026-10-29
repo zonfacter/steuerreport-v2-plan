@@ -4,6 +4,7 @@ import { API_BASE } from "./api-base";
 import { AiChangesWorkspace } from "./AiChangesWorkspace";
 import { AiAgentProfiles, loadAgents, type Agents } from "./AiAgentProfiles";
 import { HelpTip } from "./Help";
+import { useViewState } from "./workspace/view-state";
 
 type Config = { provider: "local" | "openrouter" | "cloud"; base_url: string; model: string; max_tokens: number; probe_max_tokens: number; timeout_seconds: number; token_parameter: "max_tokens" | "max_completion_tokens"; thinking: "server_default" | "llamacpp_off" | "ollama_off" };
 type Settings = { config: Config; revision: string; local_enabled: boolean; external_enabled: boolean; api_key_present: boolean; api_key_readable: boolean; encrypted_secrets_available: boolean; configured: boolean; source: string };
@@ -73,6 +74,8 @@ function tokenPrice(value?: string | null): string {
 }
 
 export function AiWorkspace({ configurationOnly = false }: { configurationOnly?: boolean }) {
+  const { view, set } = useViewState("ai");
+  const manualOnly = !configurationOnly && view.tab === "changes";
   const [saved, setSaved] = useState<Settings | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [localEnabled, setLocalEnabled] = useState(true);
@@ -87,7 +90,6 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
   const [tasks, setTasks] = useState<Task[]>([]);
   const [prompt, setPrompt] = useState("");
   const [taskType, setTaskType] = useState("review");
-  const [workMode, setWorkMode] = useState("text");
   const [agents, setAgents] = useState<Agents | null>(null);
   const [agentId, setAgentId] = useState("coordinator");
   const [agentsDirty, setAgentsDirty] = useState(false);
@@ -100,18 +102,25 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
   const setSettings = (value: Settings) => { setSaved(value); setConfig(value.config); setLocalEnabled(value.local_enabled); setExternalEnabled(value.external_enabled); setKey(""); setClearKey(false); setProbe(null); setConfirmed(false); };
   useEffect(() => {
     let active = true;
+    if (manualOnly) {
+      setSaved(null); setConfig(null); setTasks([]); setAgents(null); setError("");
+      return () => { active = false; };
+    }
     void Promise.all([api<Settings>("/provider"), configurationOnly ? Promise.resolve([]) : api<Task[]>("/tasks")])
       .then(([settings, rows]) => { if (active) { setSettings(settings); setTasks(rows); } })
       .catch(() => { if (active) setError("KI-Einstellungen konnten nicht geladen werden."); });
     return () => { active = false; };
-  }, [configurationOnly]);
+  }, [configurationOnly, manualOnly]);
   useEffect(() => { setFreeOnly(config?.provider === "openrouter"); setModelSearch(""); }, [config?.provider]);
-  useEffect(() => { void loadAgents().then(setAgents).catch(() => setError("Agentenprofile konnten nicht geladen werden.")); }, []);
   useEffect(() => {
-    if (!tasks.some((task) => task.status === "running")) return;
+    if (manualOnly) { setAgents(null); return; }
+    void loadAgents().then(setAgents).catch(() => setError("Agentenprofile konnten nicht geladen werden."));
+  }, [manualOnly]);
+  useEffect(() => {
+    if (manualOnly || !tasks.some((task) => task.status === "running")) return;
     const timer = window.setInterval(() => { void api<Task[]>("/tasks").then(setTasks).catch(() => {}); }, 3000);
     return () => window.clearInterval(timer);
-  }, [tasks]);
+  }, [tasks, manualOnly]);
 
   const dirty = !!saved && (JSON.stringify(config) !== JSON.stringify(saved.config) || localEnabled !== saved.local_enabled || externalEnabled !== saved.external_enabled || !!key || clearKey);
   const cloud = config?.provider !== "local";
@@ -145,8 +154,14 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
     </div></div>
     {error && <p role="alert" className="error">{error}</p>}
     {notice && <p role="status">{notice}</p>}
-    {!config && !error && <p role="status">KI-Einstellungen werden geladen.</p>}
-    {config && saved && <>
+    {!configurationOnly && <div className="buttonRow" role="tablist" aria-label="KI-Arbeitsmodus">
+      <button type="button" role="tab" aria-selected={view.tab === "text"} onClick={() => set({ tab: "text" })}><Bot size={16} /> Textaufgaben</button>
+      <button type="button" role="tab" aria-selected={view.tab === "changes"} onClick={() => set({ tab: "changes" })}><Check size={16} /> Datenkorrekturen</button>
+    </div>}
+    {manualOnly && <><p role="status">Manueller Modus: Keine Modellanfrage und kein externer KI-Aufruf. Die Korrektur läuft ausschließlich über den begrenzten Prüf-, Vorschau- und Freigabeablauf.</p>
+      <AiChangesWorkspace providerRevision="" connectionAllowed={false} cloud={false} agentId="" manualOnly /></>}
+    {!manualOnly && !config && !error && <p role="status">KI-Einstellungen werden geladen.</p>}
+    {!manualOnly && config && saved && <>
       <details className="aiConnectionSettings" key={saved.configured ? "configured" : "setup"} open={configurationOnly || !saved.configured ? true : undefined}>
       <summary>Verbindung und Modelle{saved.configured ? `: ${config.provider === "openrouter" ? "OpenRouter" : config.provider === "local" ? "Lokal" : "Cloud"} / ${saved.config.model}` : ": Einrichtung erforderlich"}</summary>
       <form onSubmit={(event) => { event.preventDefault(); void act(async () => {
@@ -197,11 +212,7 @@ export function AiWorkspace({ configurationOnly = false }: { configurationOnly?:
         {agents.profiles.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.name}{agent.enabled ? "" : " (deaktiviert)"}</option>)}
       </select></label><HelpTip label="Fachagent und Modell">Ein Fachagent ist ein Aufgabenprofil, kein zusaetzlich trainiertes Modell. Ohne eigene Modell-ID erbt er das Modell der aktiven Verbindung. Keine automatische Team-Ausfuehrung und kein automatischer Wechsel auf kostenpflichtige Modelle.</HelpTip><AiAgentProfiles value={agents} activeId={agentId} provider={config.provider} models={filteredModels} onSaved={(value) => { setAgents(value); setConfirmed(false); }} onDirty={setAgentsDirty} /></>}
       {!configurationOnly && <>
-        <div className="buttonRow" role="tablist" aria-label="KI-Arbeitsmodus">
-          <button type="button" role="tab" aria-selected={workMode === "text"} onClick={() => setWorkMode("text")}><Bot size={16} /> Textaufgaben</button>
-          <button type="button" role="tab" aria-selected={workMode === "changes"} onClick={() => setWorkMode("changes")}><Check size={16} /> Datenkorrekturen</button>
-        </div>
-        {workMode === "changes" ? <AiChangesWorkspace providerRevision={saved.revision} connectionAllowed={connectionAllowed && saved.configured && !agentsDirty && !!agents?.profiles.find((agent) => agent.agent_id === agentId)?.enabled} cloud={cloud} agentId={agentId} agentRevision={agents?.revision} /> : <>
+        {view.tab === "changes" ? <AiChangesWorkspace providerRevision={saved.revision} connectionAllowed={connectionAllowed && saved.configured && !agentsDirty && !!agents?.profiles.find((agent) => agent.agent_id === agentId)?.enabled} cloud={cloud} agentId={agentId} agentRevision={agents?.revision} /> : <>
         <form className="aiTaskComposer" onSubmit={(event) => { event.preventDefault(); void act(async () => {
           const task = await api<Task>("/tasks", "POST", { task_type: taskType, prompt, allow_external: cloud && confirmed, agent_id: agentId, agent_revision: agents?.revision });
           setTasks(await api<Task[]>("/tasks")); await execute(task, cloud && confirmed);

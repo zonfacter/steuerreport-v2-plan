@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 STAMP = "2026-10-26T10:00:00Z"
 SOURCE = "s_" + "a" * 20
 OTHER = "s_" + "b" * 20
+ACCOUNT = "a_" + "b" * 20
 
 
 class WorkspaceFixture:
@@ -48,7 +49,7 @@ class WorkspaceFixture:
 
     def review_item(self):
         task = dict(task_id="review-demo", title="Originalbeleg prüfen", priority="high", category="evidence", detail="Der Quellennachweis muss geprüft werden.", source="synthetic", source_group=None, scope="evt-000", asset="SOL", blocks_export=True, tax_year=2025, action_label="Beleg prüfen", action_path=None, evidence_refs=["raw-000"], decision_status=None)
-        return dict(task=task, event_ids=["evt-000"], source_ref=SOURCE, candidate_source_refs=[SOURCE], account=None, account_ref=None, context_status="matched", context_label="Demo-Börse · Asset SOL", context_note="Über die gespeicherte Ereignis-ID zugeordnet.")
+        return dict(task=task, event_ids=["evt-000"], raw_evidence_by_event={"evt-000": "raw-000"}, source_ref=SOURCE, candidate_source_refs=[SOURCE], account="synthetic-account", account_ref=ACCOUNT, context_status="matched", context_label="Demo-Börse · Asset SOL", context_note="Über die gespeicherte Ereignis-ID zugeordnet.")
 
     def status(self, year):
         return dict(generated_at=STAMP, year=year, events_count=0 if self.fresh else 45, year_events_count=0 if self.fresh else 45,

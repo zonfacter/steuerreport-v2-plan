@@ -829,6 +829,31 @@
         "title": "AiChangePreview",
         "type": "object"
       },
+      "AiChangeRebase": {
+        "additionalProperties": false,
+        "properties": {
+          "reviewed": {
+            "const": true,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/AiChangeTargetRevision"
+            },
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reviewed",
+          "targets"
+        ],
+        "title": "AiChangeRebase",
+        "type": "object"
+      },
       "AiChangeRevert": {
         "additionalProperties": false,
         "properties": {
@@ -959,6 +984,38 @@
           "created_at"
         ],
         "title": "AiChangeSet",
+        "type": "object"
+      },
+      "AiChangeTargetRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "current_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Current Sha256",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "event",
+              "price"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:/-]+$",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target_id",
+          "current_sha256"
+        ],
+        "title": "AiChangeTargetRevision",
         "type": "object"
       },
       "AiDataContext": {
@@ -1094,6 +1151,80 @@
           "provenance"
         ],
         "title": "AiDataRow",
+        "type": "object"
+      },
+      "AiDataTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "event",
+              "price"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:/-]+$",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target_id"
+        ],
+        "title": "AiDataTarget",
+        "type": "object"
+      },
+      "AiDataTargetContext": {
+        "properties": {
+          "context_sha256": {
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "missing_targets": {
+            "items": {
+              "$ref": "#/components/schemas/AiDataTarget"
+            },
+            "title": "Missing Targets",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AiDataRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "context_sha256",
+          "rows",
+          "missing_targets"
+        ],
+        "title": "AiDataTargetContext",
+        "type": "object"
+      },
+      "AiDataTargets": {
+        "additionalProperties": false,
+        "properties": {
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/AiDataTarget"
+            },
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "AiDataTargets",
         "type": "object"
       },
       "AiModel": {
@@ -2108,6 +2239,50 @@
           }
         },
         "title": "ApiResponse[AiDataContext]",
+        "type": "object"
+      },
+      "ApiResponse_AiDataTargetContext_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiDataTargetContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[AiDataTargetContext]",
         "type": "object"
       },
       "ApiResponse_AiProbeResult_": {
@@ -9282,6 +9457,50 @@
         "title": "ApiResponse[TaxBmfFilingReadinessReport]",
         "type": "object"
       },
+      "ApiResponse_TaxBmfFilingReadinessSnapshotRefreshResult_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxBmfFilingReadinessSnapshotRefreshResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[TaxBmfFilingReadinessSnapshotRefreshResult]",
+        "type": "object"
+      },
       "ApiResponse_TaxBmfFilingReadinessSnapshot_": {
         "properties": {
           "data": {
@@ -11216,6 +11435,94 @@
           }
         },
         "title": "ApiResponse[TaxYearGainLossRealityCheck]",
+        "type": "object"
+      },
+      "ApiResponse_TaxYearPdfReportArtifact_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxYearPdfReportArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[TaxYearPdfReportArtifact]",
+        "type": "object"
+      },
+      "ApiResponse_TaxYearPdfReportList_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxYearPdfReportList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[TaxYearPdfReportList]",
         "type": "object"
       },
       "ApiResponse_TaxYearTurnoverAudit_": {
@@ -28436,6 +28743,30 @@
             "title": "Columns",
             "type": "array"
           },
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "duplicate_batch_connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Batch Connection Id"
+          },
           "duplicate_batch_id": {
             "anyOf": [
               {
@@ -28491,6 +28822,16 @@
             },
             "title": "Matched Columns",
             "type": "object"
+          },
+          "mexc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MexcImportPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "missing_required_groups": {
             "items": {
@@ -32375,6 +32716,12 @@
             "title": "Page Count",
             "type": "integer"
           },
+          "report_type": {
+            "const": "technical_status",
+            "default": "technical_status",
+            "title": "Report Type",
+            "type": "string"
+          },
           "status": {
             "enum": [
               "created",
@@ -33479,6 +33826,11 @@
             "default": false,
             "title": "Supported",
             "type": "boolean"
+          },
+          "supports_binance_earn": {
+            "default": false,
+            "title": "Supports Binance Earn",
+            "type": "boolean"
           }
         },
         "required": [
@@ -33579,6 +33931,11 @@
             "title": "Imported Events",
             "type": "integer"
           },
+          "includes_binance_earn": {
+            "default": false,
+            "title": "Includes Binance Earn",
+            "type": "boolean"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -33626,6 +33983,18 @@
           "provider": {
             "title": "Provider",
             "type": "string"
+          },
+          "provider_request_limit": {
+            "default": 10000,
+            "minimum": 1.0,
+            "title": "Provider Request Limit",
+            "type": "integer"
+          },
+          "provider_requests_reserved": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Provider Requests Reserved",
+            "type": "integer"
           },
           "records_fetched": {
             "default": 0,
@@ -34159,6 +34528,11 @@
               }
             ],
             "title": "End"
+          },
+          "include_binance_earn": {
+            "default": false,
+            "title": "Include Binance Earn",
+            "type": "boolean"
           },
           "max_records": {
             "default": 100000,
@@ -35302,6 +35676,18 @@
       },
       "ImportAssistantRequest": {
         "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
           "content": {
             "anyOf": [
               {
@@ -35345,6 +35731,16 @@
             ],
             "title": "Import Mode",
             "type": "string"
+          },
+          "mexc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MexcImportOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sheet_name": {
             "anyOf": [
@@ -35423,6 +35819,18 @@
             "title": "Batch Id",
             "type": "string"
           },
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -35481,6 +35889,18 @@
       },
       "ImportBatchCreate": {
         "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
           "file_hash": {
             "anyOf": [
               {
@@ -39027,6 +39447,530 @@
         "title": "LocalAiYearPackageQaYear",
         "type": "object"
       },
+      "ManualFxObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "base": {
+            "enum": [
+              "USD",
+              "EUR"
+            ],
+            "title": "Base",
+            "type": "string"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "quote": {
+            "enum": [
+              "USD",
+              "EUR"
+            ],
+            "title": "Quote",
+            "type": "string"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Rate"
+          },
+          "source": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "base",
+          "quote",
+          "rate",
+          "source"
+        ],
+        "title": "ManualFxObservation",
+        "type": "object"
+      },
+      "ManualHistoricalPricePreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_:./-]+$",
+            "title": "Asset",
+            "type": "string"
+          },
+          "fx_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManualPriceEvidenceFile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fx_observations": {
+            "items": {
+              "$ref": "#/components/schemas/ManualFxObservation"
+            },
+            "maxItems": 50,
+            "title": "Fx Observations",
+            "type": "array"
+          },
+          "plan_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Plan Sha256",
+            "type": "string"
+          },
+          "price_currency": {
+            "enum": [
+              "EUR",
+              "USD"
+            ],
+            "title": "Price Currency",
+            "type": "string"
+          },
+          "price_date": {
+            "format": "date",
+            "title": "Price Date",
+            "type": "string"
+          },
+          "price_evidence": {
+            "$ref": "#/components/schemas/ManualPriceEvidenceFile"
+          },
+          "price_unit": {
+            "const": "currency_per_asset",
+            "default": "currency_per_asset",
+            "title": "Price Unit",
+            "type": "string"
+          },
+          "price_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Price Value"
+          },
+          "priced_at": {
+            "format": "date-time",
+            "title": "Priced At",
+            "type": "string"
+          },
+          "query": {
+            "$ref": "#/components/schemas/HistoricalPriceQuery"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "query",
+          "plan_sha256",
+          "asset",
+          "price_date",
+          "price_value",
+          "price_currency",
+          "priced_at",
+          "price_evidence"
+        ],
+        "title": "ManualHistoricalPricePreviewRequest",
+        "type": "object"
+      },
+      "ManualPriceEvidenceFile": {
+        "additionalProperties": false,
+        "properties": {
+          "content_base64": {
+            "maxLength": 2800000,
+            "minLength": 4,
+            "title": "Content Base64",
+            "type": "string"
+          },
+          "filename": {
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "media_type": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Media Type",
+            "type": "string"
+          },
+          "source_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_observed_at": {
+            "format": "date-time",
+            "title": "Source Observed At",
+            "type": "string"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          }
+        },
+        "required": [
+          "filename",
+          "media_type",
+          "source_name",
+          "source_observed_at",
+          "content_base64"
+        ],
+        "title": "ManualPriceEvidenceFile",
+        "type": "object"
+      },
+      "MexcCandidate": {
+        "properties": {
+          "export_kind": {
+            "title": "Export Kind",
+            "type": "string"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          },
+          "raw_object_id": {
+            "title": "Raw Object Id",
+            "type": "string"
+          },
+          "row_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Number"
+          }
+        },
+        "required": [
+          "raw_object_id",
+          "export_kind"
+        ],
+        "title": "MexcCandidate",
+        "type": "object"
+      },
+      "MexcImportOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Account",
+            "type": "string"
+          },
+          "decisions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MexcRowDecision"
+            },
+            "maxProperties": 10000,
+            "title": "Decisions",
+            "type": "object"
+          },
+          "export_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "spot_statement",
+                  "funding_other",
+                  "asset_snapshot",
+                  "futures_capital_flow",
+                  "futures_statement",
+                  "earn_fixed",
+                  "earn_flexible",
+                  "send_history"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Kind"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "enum": [
+                  "UTC",
+                  "UTC+01:00",
+                  "UTC+08:00",
+                  "Europe/Berlin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "MexcImportOptions",
+        "type": "object"
+      },
+      "MexcImportPreview": {
+        "properties": {
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Reasons",
+            "type": "array"
+          },
+          "bonus_rows": {
+            "default": 0,
+            "title": "Bonus Rows",
+            "type": "integer"
+          },
+          "bookable_rows": {
+            "default": 0,
+            "title": "Bookable Rows",
+            "type": "integer"
+          },
+          "detected_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Kind"
+          },
+          "disposition": {
+            "enum": [
+              "transactions",
+              "evidence_only",
+              "empty",
+              "unsupported"
+            ],
+            "title": "Disposition",
+            "type": "string"
+          },
+          "linked_rows": {
+            "default": 0,
+            "title": "Linked Rows",
+            "type": "integer"
+          },
+          "raw_rows": {
+            "title": "Raw Rows",
+            "type": "integer"
+          },
+          "review_rows": {
+            "default": 0,
+            "title": "Review Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MexcRowPreview"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "snapshot_rows": {
+            "default": 0,
+            "title": "Snapshot Rows",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "disposition",
+          "raw_rows"
+        ],
+        "title": "MexcImportPreview",
+        "type": "object"
+      },
+      "MexcRowDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "link_existing",
+              "separate"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "input_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Digest"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 10,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_raw_object_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Raw Object Id"
+          }
+        },
+        "required": [
+          "action",
+          "reason"
+        ],
+        "title": "MexcRowDecision",
+        "type": "object"
+      },
+      "MexcRowPreview": {
+        "properties": {
+          "asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MexcCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "decision_stale": {
+            "default": false,
+            "title": "Decision Stale",
+            "type": "boolean"
+          },
+          "event_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Time"
+          },
+          "input_digest": {
+            "default": "",
+            "title": "Input Digest",
+            "type": "string"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "row_number": {
+            "title": "Row Number",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "review",
+              "duplicate_candidate",
+              "linked",
+              "evidence_only",
+              "invalid"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "row_number",
+          "status",
+          "reason"
+        ],
+        "title": "MexcRowPreview",
+        "type": "object"
+      },
       "MissingPriceCoverageItem": {
         "properties": {
           "asset": {
@@ -40875,9 +41819,18 @@
       "PdfExportRequest": {
         "properties": {
           "estimated_pages": {
-            "minimum": 0.0,
-            "title": "Estimated Pages",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "deprecated": true,
+            "description": "Legacy-Eingabe; wird ignoriert. Dieses PDF ist ein einseitiges technisches Statuspaket.",
+            "title": "Estimated Pages"
           },
           "label": {
             "default": "steuerreport",
@@ -40885,9 +41838,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "estimated_pages"
-        ],
         "title": "PdfExportRequest",
         "type": "object"
       },
@@ -47352,6 +48302,11 @@
             "title": "Content",
             "type": "string"
           },
+          "exists": {
+            "default": true,
+            "title": "Exists",
+            "type": "boolean"
+          },
           "filename": {
             "title": "Filename",
             "type": "string"
@@ -47359,6 +48314,22 @@
           "revision": {
             "title": "Revision",
             "type": "string"
+          },
+          "valid": {
+            "default": true,
+            "title": "Valid",
+            "type": "boolean"
+          },
+          "validation_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Error"
           }
         },
         "required": [
@@ -56643,6 +57614,23 @@
             "title": "Available Years",
             "type": "array"
           },
+          "binding_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current",
+                  "stale",
+                  "unbound",
+                  "missing"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Status"
+          },
           "blocked_years": {
             "items": {
               "type": "integer"
@@ -56723,6 +57711,111 @@
           "note"
         ],
         "title": "TaxBmfFilingReadinessSnapshot",
+        "type": "object"
+      },
+      "TaxBmfFilingReadinessSnapshotRefreshRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_input_binding_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Input Binding Sha256",
+            "type": "string"
+          },
+          "expected_latest_tax_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Latest Tax Run Id"
+          },
+          "scope": {
+            "const": "years_2021_2025",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "expected_input_binding_sha256",
+          "expected_latest_tax_run_id"
+        ],
+        "title": "TaxBmfFilingReadinessSnapshotRefreshRequest",
+        "type": "object"
+      },
+      "TaxBmfFilingReadinessSnapshotRefreshResult": {
+        "properties": {
+          "binding_status": {
+            "enum": [
+              "current",
+              "stale",
+              "unbound"
+            ],
+            "title": "Binding Status",
+            "type": "string"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "external_provider_calls_made": {
+            "const": false,
+            "default": false,
+            "title": "External Provider Calls Made",
+            "type": "boolean"
+          },
+          "final_approval_granted": {
+            "const": false,
+            "default": false,
+            "title": "Final Approval Granted",
+            "type": "boolean"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/components/schemas/TaxBmfFilingReadinessReport"
+          },
+          "scope": {
+            "const": "years_2021_2025",
+            "title": "Scope",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tax_data_changed": {
+            "const": false,
+            "default": false,
+            "title": "Tax Data Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "operation_id",
+          "scope",
+          "status",
+          "started_at",
+          "completed_at",
+          "binding_status",
+          "report"
+        ],
+        "title": "TaxBmfFilingReadinessSnapshotRefreshResult",
         "type": "object"
       },
       "TaxBmfFilingReadinessYear": {
@@ -67813,6 +68906,368 @@
           "message"
         ],
         "title": "TaxYearIssue",
+        "type": "object"
+      },
+      "TaxYearPdfReportArtifact": {
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/TaxYearPdfReportManifest"
+          },
+          "manifest_endpoint": {
+            "title": "Manifest Endpoint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifest",
+          "manifest_endpoint"
+        ],
+        "title": "TaxYearPdfReportArtifact",
+        "type": "object"
+      },
+      "TaxYearPdfReportFile": {
+        "properties": {
+          "download_endpoint": {
+            "title": "Download Endpoint",
+            "type": "string"
+          },
+          "file_index": {
+            "minimum": 1.0,
+            "title": "File Index",
+            "type": "integer"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "page_count": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 1.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_index",
+          "filename",
+          "page_count",
+          "size_bytes",
+          "sha256",
+          "download_endpoint"
+        ],
+        "title": "TaxYearPdfReportFile",
+        "type": "object"
+      },
+      "TaxYearPdfReportList": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/TaxYearPdfReportArtifact"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "year": {
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "year"
+        ],
+        "title": "TaxYearPdfReportList",
+        "type": "object"
+      },
+      "TaxYearPdfReportManifest": {
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "calculation_run_id": {
+            "title": "Calculation Run Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "derivative_line_count": {
+            "minimum": 0.0,
+            "title": "Derivative Line Count",
+            "type": "integer"
+          },
+          "derivative_missing_price_count": {
+            "minimum": 0.0,
+            "title": "Derivative Missing Price Count",
+            "type": "integer"
+          },
+          "derivative_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derivative Run Id"
+          },
+          "fifo_method": {
+            "title": "Fifo Method",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/TaxYearPdfReportFile"
+            },
+            "minItems": 1,
+            "title": "Files",
+            "type": "array"
+          },
+          "filing_summary_export_ready": {
+            "title": "Filing Summary Export Ready",
+            "type": "boolean"
+          },
+          "filing_summary_status": {
+            "title": "Filing Summary Status",
+            "type": "string"
+          },
+          "final_filing_allowed": {
+            "const": false,
+            "default": false,
+            "title": "Final Filing Allowed",
+            "type": "boolean"
+          },
+          "input_binding_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input Binding Sha256",
+            "type": "string"
+          },
+          "manifest_schema": {
+            "const": "tax_year_pdf_report_manifest_v1",
+            "default": "tax_year_pdf_report_manifest_v1",
+            "title": "Manifest Schema",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "methodology": {
+            "title": "Methodology",
+            "type": "string"
+          },
+          "missing_price_groups": {
+            "minimum": 0.0,
+            "title": "Missing Price Groups",
+            "type": "integer"
+          },
+          "report_status": {
+            "const": "preview",
+            "default": "preview",
+            "title": "Report Status",
+            "type": "string"
+          },
+          "reward_asset_row_count": {
+            "minimum": 0.0,
+            "title": "Reward Asset Row Count",
+            "type": "integer"
+          },
+          "reward_missing_value_count": {
+            "minimum": 0.0,
+            "title": "Reward Missing Value Count",
+            "type": "integer"
+          },
+          "sections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "source_read_models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Read Models",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/TaxYearPdfReportSummary"
+          },
+          "tax_line_count": {
+            "minimum": 0.0,
+            "title": "Tax Line Count",
+            "type": "integer"
+          },
+          "technical_status": {
+            "$ref": "#/components/schemas/TaxYearPdfTechnicalStatus"
+          },
+          "unmatched_disposals": {
+            "minimum": 0.0,
+            "title": "Unmatched Disposals",
+            "type": "integer"
+          },
+          "year": {
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "year",
+          "created_at",
+          "calculation_run_id",
+          "fifo_method",
+          "input_binding_sha256",
+          "filing_summary_status",
+          "filing_summary_export_ready",
+          "summary",
+          "technical_status",
+          "tax_line_count",
+          "reward_asset_row_count",
+          "reward_missing_value_count",
+          "derivative_line_count",
+          "derivative_missing_price_count",
+          "unmatched_disposals",
+          "missing_price_groups",
+          "sections",
+          "source_read_models",
+          "methodology",
+          "files",
+          "manifest_sha256"
+        ],
+        "title": "TaxYearPdfReportManifest",
+        "type": "object"
+      },
+      "TaxYearPdfReportSummary": {
+        "properties": {
+          "acquisition_cost_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Acquisition Cost Eur",
+            "type": "string"
+          },
+          "derivative_pnl_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Derivative Pnl Eur",
+            "type": "string"
+          },
+          "rewards_mining_staking_income_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Rewards Mining Staking Income Eur",
+            "type": "string"
+          },
+          "tax_free_lines_count": {
+            "title": "Tax Free Lines Count",
+            "type": "integer"
+          },
+          "tax_free_private_disposals_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tax Free Private Disposals Eur",
+            "type": "string"
+          },
+          "taxable_disposal_proceeds_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Taxable Disposal Proceeds Eur",
+            "type": "string"
+          },
+          "taxable_private_disposals_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Taxable Private Disposals Eur",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taxable_private_disposals_eur",
+          "taxable_disposal_proceeds_eur",
+          "acquisition_cost_eur",
+          "rewards_mining_staking_income_eur",
+          "derivative_pnl_eur",
+          "tax_free_private_disposals_eur",
+          "tax_free_lines_count"
+        ],
+        "title": "TaxYearPdfReportSummary",
+        "type": "object"
+      },
+      "TaxYearPdfTechnicalStatus": {
+        "properties": {
+          "final_filing_allowed": {
+            "const": false,
+            "default": false,
+            "title": "Final Filing Allowed",
+            "type": "boolean"
+          },
+          "parity_blocking_groups": {
+            "title": "Parity Blocking Groups",
+            "type": "integer"
+          },
+          "parity_release_ready": {
+            "title": "Parity Release Ready",
+            "type": "boolean"
+          },
+          "parity_unresolved_groups": {
+            "title": "Parity Unresolved Groups",
+            "type": "integer"
+          },
+          "review_blocking_issues_open": {
+            "title": "Review Blocking Issues Open",
+            "type": "integer"
+          },
+          "review_issues_current_open": {
+            "title": "Review Issues Current Open",
+            "type": "integer"
+          },
+          "review_issues_historical_open": {
+            "title": "Review Issues Historical Open",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "technical_only",
+              "blocked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "technical_export_allowed": {
+            "title": "Technical Export Allowed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "technical_export_allowed",
+          "review_issues_current_open",
+          "review_issues_historical_open",
+          "review_blocking_issues_open",
+          "parity_release_ready",
+          "parity_unresolved_groups",
+          "parity_blocking_groups"
+        ],
+        "title": "TaxYearPdfTechnicalStatus",
         "type": "object"
       },
       "TaxYearReviewDecisionSummary": {
@@ -81757,6 +83212,13 @@
             "title": "Event Ids",
             "type": "array"
           },
+          "raw_evidence_by_event": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Raw Evidence By Event",
+            "type": "object"
+          },
           "source_ref": {
             "anyOf": [
               {
@@ -82405,7 +83867,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc35"
+    "version": "0.2.0rc36"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -84166,6 +85628,62 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/ai/changes/{identifier}/rebase": {
+      "post": {
+        "description": "Rebase ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "rebase_ai_change_set_api_v1_ai_changes__identifier__rebase_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "title": "Identifier",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChangeRebase"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiChangeSet_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rebase Ai Change Set",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/ai/changes/{identifier}/reject": {
       "post": {
         "description": "Reject ai change set. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -84361,6 +85879,51 @@
           }
         },
         "summary": "Ai Data Context",
+        "tags": [
+          "AI"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/ai/data-context/targets": {
+      "post": {
+        "description": "Ai data target context. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "ai_data_target_context_api_v1_ai_data_context_targets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiDataTargets"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AiDataTargetContext_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Data Target Context",
         "tags": [
           "AI"
         ],
@@ -89662,6 +91225,50 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/import/batches/{batch_id}/original": {
+      "get": {
+        "description": "Download mexc original. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "download_mexc_original_api_v1_import_batches__batch_id__original_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Mexc Original",
+        "tags": [
+          "Import"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/import/batches/{batch_id}/run": {
       "post": {
         "description": "Run import pipeline. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -92223,6 +93830,51 @@
           }
         },
         "summary": "Add Price Gap Decision",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/manual-previews": {
+      "post": {
+        "description": "Speichert manuelle EUR-/FX-Belege und berechnet eine isolierte Vorschau ohne Anbieterabruf.",
+        "operationId": "manual_preview_api_v1_prices_historical_manual_previews_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualHistoricalPricePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Manual Preview",
         "tags": [
           "Prices"
         ],
@@ -95878,6 +97530,49 @@
         "x-data-effect": "read-only",
         "x-long-running": true,
         "x-mobile-surface": "expert-or-internal"
+      },
+      "post": {
+        "description": "Tax methodology bmf filing readiness snapshot refresh. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "tax_methodology_bmf_filing_readiness_snapshot_refresh_api_v1_tax_methodology_bmf_filing_readiness_snapshot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxBmfFilingReadinessSnapshotRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxBmfFilingReadinessSnapshotRefreshResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Gebundenen BMF-Methoden-Pruefstand ausdruecklich erzeugen",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": true,
+        "x-mobile-surface": "expert-or-internal"
       }
     },
     "/api/v1/tax-methodology/bmf-finalization-matrix": {
@@ -99111,6 +100806,211 @@
           }
         },
         "summary": "Private Disposal Threshold Assessment",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/reports/pdf": {
+      "get": {
+        "description": "List tax year pdf reports. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "list_tax_year_pdf_reports_api_v1_tax_years__year__reports_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxYearPdfReportList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tax Year Pdf Reports",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      },
+      "post": {
+        "description": "Create tax year pdf report. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "create_tax_year_pdf_report_api_v1_tax_years__year__reports_pdf_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TaxYearPdfReportArtifact_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Tax Year Pdf Report",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/reports/pdf/{artifact_id}/files/{file_index}": {
+      "get": {
+        "description": "Download tax year pdf file. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "download_tax_year_pdf_file_api_v1_tax_years__year__reports_pdf__artifact_id__files__file_index__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "file_index",
+            "required": true,
+            "schema": {
+              "title": "File Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Tax Year Pdf File",
+        "tags": [
+          "Tax"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/tax-years/{year}/reports/pdf/{artifact_id}/manifest.json": {
+      "get": {
+        "description": "Download tax year pdf manifest. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. Die Antwort kann eine Datei oder HTML enthalten; Content-Type und Content-Disposition auswerten.",
+        "operationId": "download_tax_year_pdf_manifest_api_v1_tax_years__year__reports_pdf__artifact_id__manifest_json_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Tax Year Pdf Manifest",
         "tags": [
           "Tax"
         ],

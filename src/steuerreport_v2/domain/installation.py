@@ -10,7 +10,14 @@ import tempfile
 from threading import RLock
 from urllib.parse import urlsplit
 
-from steuerreport_v2.contracts.installation import InstallationField, InstallationSettings, InstallationSettingsWrite, PrivateConfigDocument, PrivateConfigWrite
+from steuerreport_v2.contracts.installation import (
+    InstallationField,
+    InstallationSettings,
+    InstallationSettingsWrite,
+    PrivateConfigDocument,
+    PrivateConfigWrite,
+    SolanaV1OwnershipScopeConfig,
+)
 from steuerreport_v2.contracts.source_registry import SourceRegistryConfig
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.secret_vault import load_vault_key
@@ -73,7 +80,7 @@ class InstallationSettingsService:
         self.path = private_profile_path()
         self.active = {key: private_value(key) for key in FIELD_KEYS}
         self.config_dir = Path(os.environ.get("STEUERREPORT_PRIVATE_CONFIG_DIR", private_state_root() / "configs")).expanduser()
-        self.active_configs = {name: self.read_config(name).revision for name in CONFIG_FILES}
+        self.active_configs = {name: self._config_revision(name) for name in CONFIG_FILES}
 
     def _read(self) -> tuple[dict[str, str], str]:
         if self.path is None or not self.path.exists():
@@ -134,7 +141,7 @@ class InstallationSettingsService:
         return InstallationSettings(
             fields=fields, revision=revision,
             restart_required=(any(field.value != self.active[field.key] for field in fields)
-                              or any(self.read_config(name).revision != revision for name, revision in self.active_configs.items())),
+                              or any(self._config_revision(name) != revision for name, revision in self.active_configs.items())),
             profile_writable=self._writable(), encrypted_secrets_available=load_vault_key() is not None,
             providers=providers,
             profile_issue=self._profile_issue(), server_time_utc=datetime.now(timezone.utc),
@@ -220,18 +227,40 @@ class InstallationSettingsService:
             raise InstallationSettingsError("config_location_not_writable")
         return path
 
-    def read_config(self, filename: str) -> PrivateConfigDocument:
+    def _read_config_content(self, filename: str) -> tuple[str, bool]:
         path = self._config_path(filename)
         try:
-            if path.exists():
-                content = path.read_text(encoding="utf-8")
-            elif filename == "source_registry.json":
-                content = '{"registry_version":"unconfigured","entries":[],"ledger_adjustments":[],"transfer_evidence":[]}\n'
-            else:
-                content = "{}\n"
+            return path.read_text(encoding="utf-8"), True
+        except FileNotFoundError:
+            if filename == "source_registry.json":
+                return '{"registry_version":"unconfigured","entries":[],"ledger_adjustments":[],"transfer_evidence":[]}\n', False
+            return "{}\n", False
         except (OSError, UnicodeDecodeError):
             raise InstallationSettingsError("config_unreadable") from None
-        return PrivateConfigDocument(filename=filename, content=content, revision=hashlib.sha256(content.encode()).hexdigest())
+
+    def _config_revision(self, filename: str) -> str:
+        try:
+            content, _ = self._read_config_content(filename)
+        except InstallationSettingsError as error:
+            return f"error:{error}"
+        return hashlib.sha256(content.encode()).hexdigest()
+
+    def read_config(self, filename: str) -> PrivateConfigDocument:
+        content, exists = self._read_config_content(filename)
+        validation_error = None
+        if filename == "solana_v1_ownership_scope.json":
+            try:
+                SolanaV1OwnershipScopeConfig.model_validate(json.loads(content))
+            except (ValueError, TypeError):
+                validation_error = "solana_ownership_scope_invalid"
+        return PrivateConfigDocument(
+            filename=filename,
+            content=content,
+            revision=hashlib.sha256(content.encode()).hexdigest(),
+            exists=exists,
+            valid=validation_error is None,
+            validation_error=validation_error,
+        )
 
     def write_config(self, filename: str, payload: PrivateConfigWrite) -> PrivateConfigDocument:
         path = self._config_path(filename)
@@ -241,13 +270,18 @@ class InstallationSettingsService:
                 raise ValueError()
             if filename == "source_registry.json":
                 SourceRegistryConfig.model_validate(value)
+            elif filename == "solana_v1_ownership_scope.json":
+                SolanaV1OwnershipScopeConfig.model_validate(value)
             elif filename == "token_conversion_mappings.json":
                 from steuerreport_v2.contracts.token_conversion import TokenConversionConfig
                 TokenConversionConfig.model_validate(value)
         except (ValueError, TypeError):
             raise InstallationSettingsError("config_json_or_schema_invalid") from None
         with _WRITE_LOCK:
-            if self.read_config(filename).revision != payload.revision:
+            current_revision = self._config_revision(filename)
+            if current_revision.startswith("error:"):
+                raise InstallationSettingsError(current_revision.removeprefix("error:"))
+            if current_revision != payload.revision:
                 raise InstallationSettingsError("config_revision_conflict")
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             temporary = None

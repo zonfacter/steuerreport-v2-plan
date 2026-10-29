@@ -24,7 +24,13 @@ class CsvRawImporter:
     def __init__(self, store: DuckDbStore) -> None:
         self.store = store
 
-    def import_text(self, source: str, filename: str, content: str) -> ImportBatch:
+    def import_text(
+        self, source: str, filename: str, content: str,
+        connection_id: str | None = None, mexc=None,
+    ) -> ImportBatch:
+        if source.strip().lower() == "mexc":
+            from steuerreport_v2.importers.mexc_native import MexcNativeImporter
+            return MexcNativeImporter(self.store).import_file(filename, content.encode("utf-8"), mexc=mexc)
         file_hash = self.hash_text(content)
         reader = self._dict_reader(content)
         return self.import_rows(
@@ -32,6 +38,7 @@ class CsvRawImporter:
             filename=filename,
             file_hash=file_hash,
             rows=reader,
+            connection_id=connection_id,
         )
 
     def import_rows(
@@ -40,13 +47,19 @@ class CsvRawImporter:
         filename: str,
         file_hash: str,
         rows: Iterable[dict[str, object]],
+        connection_id: str | None = None,
     ) -> ImportBatch:
-        existing = self.store.get_import_batch_by_file_hash(source, file_hash)
+        existing = self.store.get_import_batch_by_file_hash(source, file_hash, connection_id)
+        if source.strip().lower() == "mexc":
+            raise ValueError("MEXC benoetigt den nativen Dateiimport mit Konto-/Exportartzuordnung.")
         if existing is not None:
             return existing
 
         batch = self.store.create_import_batch(
-            ImportBatchCreate(source=source, filename=filename, file_hash=file_hash)
+            ImportBatchCreate(
+                source=source, filename=filename, file_hash=file_hash,
+                connection_id=connection_id,
+            )
         )
 
         payloads = [
@@ -73,13 +86,18 @@ class CsvRawImporter:
         filename: str,
         content: str,
         sample_limit: int = 5,
+        connection_id: str | None = None,
+        mexc=None,
     ) -> CsvImportPreview:
+        if source.strip().lower() == "mexc":
+            from steuerreport_v2.importers.mexc_native import MexcNativeImporter
+            return MexcNativeImporter(self.store).prepare(filename, content.encode("utf-8"), mexc=mexc)[0]
         reader = self._dict_reader(content)
         columns = list(reader.fieldnames or [])
         profile = profile_for_source(source)
         matched, missing = inspect_profile_columns(profile, columns)
         file_hash = self.hash_text(content)
-        duplicate = self.store.get_import_batch_by_file_hash(source, file_hash)
+        duplicate = self.store.get_import_batch_by_file_hash(source, file_hash, connection_id)
         sample_rows: list[dict[str, str | None]] = []
         row_count = 0
         for row in reader:
@@ -100,6 +118,8 @@ class CsvRawImporter:
             sample_rows=sample_rows,
             can_import=len(missing) == 0 and row_count > 0,
             duplicate_batch_id=duplicate.batch_id if duplicate is not None else None,
+            duplicate_batch_connection_id=duplicate.connection_id if duplicate is not None else None,
+            connection_id=connection_id,
             file_sha256=file_hash,
             import_fingerprint=file_hash,
         )

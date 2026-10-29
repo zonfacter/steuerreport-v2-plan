@@ -78,8 +78,14 @@ def test_openapi_documents_every_operation_for_generated_clients(tmp_path):
         "/api/v1/connectors/mobile/documents"
     ]["get"]
     wallet_challenge = schema["paths"]["/api/v1/connectors/wallet/challenges"]["post"]
+    filing_readiness_refresh = schema["paths"][
+        "/api/v1/tax-methodology/bmf-filing-readiness-snapshot"
+    ]["post"]
     filing_usage_confirmation = schema["paths"][
         "/api/v1/tax-filing-snapshots/{snapshot_id}/usage-confirmation"
+    ]["post"]
+    manual_price_preview = schema["paths"][
+        "/api/v1/prices/historical/manual-previews"
     ]["post"]
     assert cockpit["x-mobile-surface"] == "recommended-read"
     assert cockpit["x-data-effect"] == "read-only"
@@ -98,12 +104,17 @@ def test_openapi_documents_every_operation_for_generated_clients(tmp_path):
         {"ConnectorSetupBearer": []},
         {"MobileConnectorBearer": []},
     ]
+    assert "anbieterabruf" in manual_price_preview["description"].lower()
+    assert manual_price_preview["x-data-effect"] == "write"
     assert mobile_document_inventory["x-mobile-surface"] == "expert-or-internal"
     assert mobile_document_inventory["security"] == [{"ConnectorSetupBearer": []}]
     assert wallet_challenge["security"] == [
         {"ConnectorSetupBearer": []},
         {"MobileConnectorBearer": []},
     ]
+    assert filing_readiness_refresh["x-data-effect"] == "write"
+    assert filing_readiness_refresh["x-long-running"] is True
+    assert filing_readiness_refresh["requestBody"]["required"] is True
     assert filing_usage_confirmation["x-data-effect"] == "write"
     assert filing_usage_confirmation["tags"] == ["Tax"]
     security_schemes = schema["components"]["securitySchemes"]

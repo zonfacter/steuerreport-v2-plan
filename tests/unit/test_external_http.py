@@ -9,7 +9,7 @@ import pytest
 
 from steuerreport_v2.contracts.request_limits import RequestLimitsConfig, RequestLimitProfile
 from steuerreport_v2.domain.external_http import managed_client, outbound_scope, request_signer, retry_after, endpoint_for, request_cost
-from steuerreport_v2.domain.request_limits import RequestLimiter, RequestCancelled, RequestDeadlineExceeded
+from steuerreport_v2.domain.request_limits import RequestLimiter, RequestCancelled, RequestDeadlineExceeded, RequestLimitError
 
 
 class Clock:
@@ -57,6 +57,23 @@ def test_each_retry_reserves_and_resigns_after_retry_after(setup, caplog):
     assert "synthetic-sensitive-query" not in caplog.text
     assert "signature" not in str(response.request.url)
     assert all(row.requests_last_minute == 2 for row in limiter.status().groups)
+
+
+def test_scoped_request_reservation_covers_each_retry_and_budget_stops_next_send(setup):
+    calls, reservations = [], []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(429, json={"ok": False}, headers={"Retry-After": "0"})
+    clock, limiter = setup
+    with outbound_scope(provider="binance", max_requests=2,
+                        reserve_request=lambda: reservations.append(len(reservations) + 1),
+                        deadline=clock.now + 30, clock=clock, monotonic=clock), \
+            managed_client(transport=httpx.MockTransport(handler), limiter=limiter,
+                           provider="binance", clock=clock, monotonic=clock) as client:
+        with pytest.raises(RequestLimitError, match="^request_budget_exhausted$"):
+            client.get("https://api.binance.com/sapi/v1/simple-earn/flexible/history/subscriptionRecord")
+    assert len(calls) == len(reservations) == 2
+    assert reservations == [1, 2]
 
 
 @pytest.mark.parametrize("method,body,expected", [

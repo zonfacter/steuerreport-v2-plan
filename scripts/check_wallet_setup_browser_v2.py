@@ -44,7 +44,9 @@ def main():
         os.environ.clear()
         os.environ.update(retained, STEUERREPORT_V2_ROOT=str(root), STEUERREPORT_STATE_DIR=str(state),
                           STEUERREPORT_PRIVATE_PROFILE=str(state / "profile.json"), STEUERREPORT_V2_DB=str(state / "synthetic.duckdb"),
+                          STEUERREPORT_V2_SECRET_VAULT_KEY_FILE=str(state / "vault.key"),
                           STEUERREPORT_PRIVATE_CONFIG_DIR=str(state / "configs"), STEUERREPORT_USERTRANSFER_ROOT=str(state / "imports"))
+        (state / "vault.key").write_bytes(bytes(range(32)))
         (state / "profile.json").write_text("{}")
         from fastapi.testclient import TestClient
         from steuerreport_v2.container_entrypoint import initialize_state

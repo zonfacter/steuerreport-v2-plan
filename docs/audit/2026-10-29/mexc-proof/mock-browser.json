@@ -1,0 +1,1929 @@
+{
+  "passed": true,
+  "synthetic_only": true,
+  "all_api_intercepted": true,
+  "actual_backend_tested": false,
+  "complete_suite": true,
+  "scenarios": {
+    "source-missing-config": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "MEXC Spot Statement filename-is-not-proof.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s="
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "MEXC Spot Statement filename-is-not-proof.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1"
+          }
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "timebasis-safe-errors": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+08:00",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "Europe/Berlin",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "Europe/Berlin",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "Europe/Berlin",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "Europe/Berlin",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "Europe/Berlin",
+              "decisions": {}
+            }
+          }
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "candidate-pager-confirm": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-B",
+                  "reason": "Synthetischer Zweitbeleg aus gleichem Konto.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Synthetischer Zweitbeleg aus gleichem Konto.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Synthetischer Zweitbeleg aus gleichem Konto.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Synthetischer Zweitbeleg aus gleichem Konto.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Synthetischer Zweitbeleg aus gleichem Konto.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches/synthetic-batch/original",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches/synthetic-batch/trace.json",
+          "body": null
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "config-reset-manual-regression": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Zwei echte synthetische Buchungen.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Zwei echte synthetische Buchungen.",
+                  "input_digest": "71b7a101c94ecdab79ab42bddec8162c481f3d922b2ede51d8d4e4cd42b0ead2"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Zwei echte synthetische Buchungen.",
+                  "input_digest": "7ece3c8c271580e2c4b3e7ebfedac4c1555d2aa32fba1ae9ff9c01cd977fa0c4"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet2",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet2",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Zwei echte synthetische Buchungen.",
+                  "input_digest": "dfd18bc68e1d14efe20dae238c186a3905a00838be4ce9012d7b255b7af4ed91"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet2",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-SECOND",
+              "timezone": "UTC+01:00",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "manual-csv",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet2"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "manual-csv",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet2"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "empty-evidence-unsupported": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "asset_snapshot",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "futures_capital_flow",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "futures_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "earn_fixed",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "earn_flexible",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "send_history",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "sequential-import-revalidation": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic-second.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic-second.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic-second.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "funding_other",
+              "account": "SYNTHETIC-ACCOUNT",
+              "timezone": "UTC+01:00",
+              "decisions": {}
+            }
+          }
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "invalid-files-disabled": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "source-specific-formats": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "manual-csv",
+            "import_mode": "file",
+            "filename": "synthetic.xls",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s="
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.csv",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.XLSX",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "approval-import-effect": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "asset_snapshot",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "asset_snapshot",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "source-specific-outcomes": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "asset_snapshot",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "asset_snapshot",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Synthetischer Zweitbeleg, keine eigene Ereignisbuchung.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Synthetischer Zweitbeleg, keine eigene Ereignisbuchung.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "manual-csv",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s="
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "manual-csv",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "decision-digest-binding": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Synthetischer Zweitbeleg mit belegtem Ursprung.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVJFUExBQ0VELU9SSUdJTkFMLUJZVEVT",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Synthetischer Zweitbeleg mit belegtem Ursprung.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVJFUExBQ0VELU9SSUdJTkFMLUJZVEVT",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Begruendung geprueft; Belegstand noch nicht neu bestaetigt.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVJFUExBQ0VELU9SSUdJTkFMLUJZVEVT",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Begruendung geprueft; Belegstand noch nicht neu bestaetigt.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVJFUExBQ0VELU9SSUdJTkFMLUJZVEVT",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Begruendung geprueft; Belegstand noch nicht neu bestaetigt.",
+                  "input_digest": "cf8c7af2b9a047b684ddbaac72b39ff1cc827bd6e5b9d6cf7b986bdc38452767"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVJFUExBQ0VELU9SSUdJTkFMLUJZVEVT",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Begruendung geprueft; Belegstand noch nicht neu bestaetigt.",
+                  "input_digest": "cf8c7af2b9a047b684ddbaac72b39ff1cc827bd6e5b9d6cf7b986bdc38452767"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Synthetischer Zweitbeleg mit belegtem Ursprung.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Synthetischer Zweitbeleg mit belegtem Ursprung.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Begruendung geprueft; Belegstand noch nicht neu bestaetigt.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Begruendung geprueft; Belegstand noch nicht neu bestaetigt.",
+                  "input_digest": "4921bd624fb5908c3aa8cbf67b313c5eaf74de240f0f2a81eab98b1383a91e0a"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Begruendung geprueft; Belegstand noch nicht neu bestaetigt.",
+                  "input_digest": "649fc6532e1d84458d5045b4a931c66f37281d38085de383ca20d5d2021f9a86"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/execute",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Begruendung geprueft; Belegstand noch nicht neu bestaetigt.",
+                  "input_digest": "649fc6532e1d84458d5045b4a931c66f37281d38085de383ca20d5d2021f9a86"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "provider-id-requires-link": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "separate",
+                  "reason": "Eigenstaendigkeit zur serverseitigen Pruefung vorgelegt.",
+                  "input_digest": "43715e121a73567ebbd0a88aff823c916f1a63127316f688c9ebca7a4e235816"
+                }
+              }
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "sheet_name": "Sheet1",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {
+                "2": {
+                  "action": "link_existing",
+                  "target_raw_object_id": "synthetic-raw-A",
+                  "reason": "Eigenstaendigkeit zur serverseitigen Pruefung vorgelegt.",
+                  "input_digest": "43715e121a73567ebbd0a88aff823c916f1a63127316f688c9ebca7a4e235816"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    },
+    "mobile-form-accessibility": {
+      "passed": true,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/v1/workspace/environment",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/updates",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/profiles",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/health",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/import/batches",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/import/assistant/preview",
+          "body": {
+            "source": "mexc",
+            "import_mode": "file",
+            "filename": "synthetic.xlsx",
+            "content_base64": "U1lOVEhFVElDLVVJLU9OTFk7IG5vdCBhIHJlYWwgd29ya2Jvb2s=",
+            "mexc": {
+              "export_kind": "spot_statement",
+              "account": "SYNTHETIC-ACCOUNT",
+              "decisions": {}
+            }
+          }
+        }
+      ],
+      "unexpected_api": [],
+      "external_requests": [],
+      "javascript_errors": []
+    }
+  },
+  "limitations": [
+    "Keine Backend-, XLSX-, Persistenz- oder Steuerpruefung.",
+    "Chromium, kein echter Touch-/Screenreader-Test.",
+    "Downloadattribute und Linkziele mit abgefangenen Fetches; native Downloadoberflaeche nicht getestet."
+  ]
+}

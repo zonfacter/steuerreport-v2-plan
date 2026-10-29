@@ -28,6 +28,7 @@ class ScopeBudget:
     lock: Lock = field(default_factory=Lock)
     max_requests: int | None = None
     requests_started: int = 0
+    reserve_request: Callable[[], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -81,11 +82,13 @@ HTTP_ENDPOINTS = {
 
 
 @contextmanager
-def outbound_scope(*, provider=None, connection_id=None, groups=(), cancel=None, deadline=None, max_requests=None, clock=time.time, monotonic=time.monotonic):
+def outbound_scope(*, provider=None, connection_id=None, groups=(), cancel=None, deadline=None,
+                   max_requests=None, reserve_request=None, clock=time.time, monotonic=time.monotonic):
     if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
         raise ValueError("request_budget_invalid")
     started = monotonic()
-    budget = ScopeBudget(started, started + max(0, deadline - clock()) if deadline is not None else None, max_requests=max_requests)
+    budget = ScopeBudget(started, started + max(0, deadline - clock()) if deadline is not None else None,
+                         max_requests=max_requests, reserve_request=reserve_request)
     token = _scope.set(OutboundScope(provider, str(connection_id) if connection_id else None, tuple(groups), cancel, deadline, budget))
     try:
         yield _scope.get()
@@ -239,10 +242,12 @@ class LimitedTransport(httpx.BaseTransport):
             if self.monotonic() >= deadline:
                 raise RequestDeadlineExceeded("request_deadline_exceeded")
             response = None
+            request_reserved = False
             with limiter.acquire(provider, cost=cost, groups=groups, cancel=scope.cancel, deadline=deadline, endpoint=endpoint, batch=batch) as lease:
                 # Sign only after waiting. Every retry obtains a fresh timestamp/signature.
                 signer = _signer.get()
                 def prepare():
+                    nonlocal request_reserved
                     refresh = getattr(scope.cancel, "refresh", None)
                     if refresh is not None:
                         refresh()
@@ -252,7 +257,11 @@ class LimitedTransport(httpx.BaseTransport):
                         with scope.budget.lock:
                             if scope.budget.max_requests is not None and scope.budget.requests_started >= scope.budget.max_requests:
                                 raise RequestLimitError("request_budget_exhausted")
-                            scope.budget.requests_started += 1
+                            if not request_reserved:
+                                if scope.budget.reserve_request is not None:
+                                    scope.budget.reserve_request()
+                                scope.budget.requests_started += 1
+                                request_reserved = True
                     if signer is not None:
                         signer(request)
                 lease.start(prepare=prepare)

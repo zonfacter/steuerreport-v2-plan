@@ -26,7 +26,7 @@ from steuerreport_v2.contracts.prices import PricePoint, PricePointCreate
 from steuerreport_v2.contracts.review import ReviewDecision, ReviewDecisionCreate
 from steuerreport_v2.paths import PROJECT_ROOT
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class _LockedDuckDbConnection:
@@ -205,12 +205,12 @@ class DuckDbStore:
             )
             """
         )
-        con.execute(
-            """
-            insert or replace into schema_meta values ('schema_version', ?)
-            """,
-            [str(SCHEMA_VERSION)],
-        )
+        schema_row = con.execute(
+            "select value from schema_meta where key = 'schema_version'"
+        ).fetchone()
+        schema_version = int(schema_row[0]) if schema_row is not None else 0
+        if schema_version > SCHEMA_VERSION:
+            raise RuntimeError("database_schema_newer_than_application")
         con.execute(
             """
             create table if not exists raw_import_batches (
@@ -219,10 +219,16 @@ class DuckDbStore:
                 filename varchar,
                 file_hash varchar,
                 status varchar not null,
-                created_at timestamp not null
+                created_at timestamp not null,
+                connection_id varchar
             )
             """
         )
+        if schema_version < 2:
+            # Version 2 records only new explicit bindings. Existing imports stay NULL.
+            con.execute(
+                "alter table raw_import_batches add column if not exists connection_id varchar"
+            )
         con.execute(
             """
             create table if not exists raw_objects (
@@ -310,6 +316,20 @@ class DuckDbStore:
                 status varchar not null,
                 block_reason varchar,
                 created_at timestamp not null
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists tax_year_report_pdf_artifacts (
+                artifact_id varchar primary key,
+                year integer not null,
+                created_at timestamp not null,
+                calculation_run_id varchar not null,
+                input_binding_sha256 varchar not null,
+                manifest_sha256 varchar not null,
+                archive_relative_path varchar not null,
+                manifest_json varchar not null
             )
             """
         )
@@ -690,6 +710,10 @@ class DuckDbStore:
                 )
                 """
             )
+        con.execute(
+            "insert or replace into schema_meta values ('schema_version', ?)",
+            [str(SCHEMA_VERSION)],
+        )
 
     def _drop_table_if_missing_columns(
         self,
@@ -731,8 +755,8 @@ class DuckDbStore:
             con.execute(
                 """
                 insert into raw_import_batches
-                    (batch_id, source, filename, file_hash, status, created_at)
-                values (?, ?, ?, ?, ?, ?)
+                    (batch_id, source, filename, file_hash, status, created_at, connection_id)
+                values (?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     batch_id,
@@ -741,12 +765,37 @@ class DuckDbStore:
                     payload.file_hash,
                     "created",
                     created_at,
+                    str(payload.connection_id) if payload.connection_id else None,
                 ],
             )
         batch = self.get_import_batch(batch_id)
         if batch is None:
             raise RuntimeError("created import batch could not be read back")
         return batch
+
+    def create_import_batch_with_raw(self, payload: ImportBatchCreate, payloads: list[RawObjectCreate]) -> ImportBatch:
+        """Persist a fully validated native file in one transaction."""
+        batch_id, created_at = str(uuid4()), datetime.now(timezone.utc)
+        rows = [(str(uuid4()), batch_id, p.row_number, p.payload_json, created_at) for p in payloads]
+        with self.connect() as con:
+            con.execute("begin transaction")
+            try:
+                con.execute("""insert into raw_import_batches
+                    (batch_id,source,filename,file_hash,status,created_at) values (?,?,?,?,?,?)""",
+                    [batch_id, payload.source, payload.filename, payload.file_hash, "loaded", created_at])
+                if rows:
+                    frame = pd.DataFrame(rows, columns=["raw_object_id", "batch_id", "row_number", "payload_json", "created_at"])
+                    con.register("native_raw_rows", frame)
+                    try:
+                        con.execute("""insert into raw_objects (raw_object_id,batch_id,row_number,payload_json,created_at)
+                            select raw_object_id,batch_id,row_number,payload_json,created_at from native_raw_rows""")
+                    finally:
+                        con.unregister("native_raw_rows")
+                con.execute("commit")
+            except Exception:
+                con.execute("rollback")
+                raise
+        return self.get_import_batch(batch_id)
 
     def get_import_batch(self, batch_id: str) -> ImportBatch | None:
         with self.connect() as con:
@@ -757,6 +806,7 @@ class DuckDbStore:
                     b.source,
                     b.filename,
                     b.file_hash,
+                    b.connection_id,
                     b.status,
                     b.created_at,
                     count(o.raw_object_id) as raw_object_count
@@ -765,7 +815,7 @@ class DuckDbStore:
                 where b.batch_id = ?
                 group by
                     b.batch_id, b.source, b.filename, b.file_hash,
-                    b.status, b.created_at
+                    b.connection_id, b.status, b.created_at
                 """,
                 [batch_id],
             ).fetchone()
@@ -776,27 +826,42 @@ class DuckDbStore:
             source=row[1],
             filename=row[2],
             file_hash=row[3],
-            status=row[4],
-            created_at=row[5],
-            raw_object_count=row[6],
+            connection_id=row[4],
+            status=row[5],
+            created_at=row[6],
+            raw_object_count=row[7],
         )
 
     def get_import_batch_by_file_hash(
         self,
         source: str,
         file_hash: str,
+        connection_id: str | None = None,
     ) -> ImportBatch | None:
         with self.connect() as con:
-            row = con.execute(
-                """
-                select batch_id
-                from raw_import_batches
-                where source = ? and file_hash = ?
-                order by created_at
-                limit 1
-                """,
-                [source, file_hash],
-            ).fetchone()
+            if connection_id is None:
+                row = con.execute(
+                    """
+                    select batch_id
+                    from raw_import_batches
+                    where source = ? and file_hash = ?
+                    order by created_at
+                    limit 1
+                    """,
+                    [source, file_hash],
+                ).fetchone()
+            else:
+                row = con.execute(
+                    """
+                    select batch_id
+                    from raw_import_batches
+                    where source = ? and file_hash = ?
+                      and (connection_id = ? or connection_id is null)
+                    order by case when connection_id = ? then 0 else 1 end, created_at
+                    limit 1
+                    """,
+                    [source, file_hash, connection_id, connection_id],
+                ).fetchone()
         if row is None:
             return None
         return self.get_import_batch(row[0])
@@ -810,6 +875,7 @@ class DuckDbStore:
                     b.source,
                     b.filename,
                     b.file_hash,
+                    b.connection_id,
                     b.status,
                     b.created_at,
                     count(o.raw_object_id) as raw_object_count
@@ -817,7 +883,7 @@ class DuckDbStore:
                 left join raw_objects o on o.batch_id = b.batch_id
                 group by
                     b.batch_id, b.source, b.filename, b.file_hash,
-                    b.status, b.created_at
+                    b.connection_id, b.status, b.created_at
                 order by b.created_at desc
                 """
             ).fetchall()
@@ -827,9 +893,10 @@ class DuckDbStore:
                 source=row[1],
                 filename=row[2],
                 file_hash=row[3],
-                status=row[4],
-                created_at=row[5],
-                raw_object_count=row[6],
+                connection_id=row[4],
+                status=row[5],
+                created_at=row[6],
+                raw_object_count=row[7],
             )
             for row in rows
         ]
@@ -1738,10 +1805,13 @@ class DuckDbStore:
                 """
                 select r.batch_id, count(*) as unmapped_count
                 from raw_objects r
+                join raw_import_batches b on b.batch_id = r.batch_id
                 left join canonical_events e on e.raw_object_id = r.raw_object_id
                 where e.event_id is null
-                  and lower(r.payload_json) not like '%bitget_withdrawal_evidence%'
-                  and coalesce(json_extract_string(r.payload_json, '$.history_evidence_only'), '') <> '1'
+                  and (b.source = 'mexc' or lower(r.payload_json) not like '%bitget_withdrawal_evidence%')
+                  and (b.source = 'mexc' or coalesce(json_extract_string(r.payload_json, '$.history_evidence_only'), '') <> '1')
+                  and not (b.source = 'mexc' and coalesce(json_extract_string(
+                    try_cast(json_extract_string(r.payload_json, '$._mexc') as json), '$.role'), '') in ('snapshot', 'linked'))
                 group by r.batch_id
                 order by r.batch_id
                 """

@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 TaxMethodologyStatus = Literal["ok", "review", "blocked", "empty"]
 TaxMethodologySeverity = Literal["info", "warning", "blocker"]
@@ -262,6 +262,14 @@ class TaxBmfFilingReadinessReport(BaseModel):
     methodology: str
 
 
+class TaxBmfFilingReadinessSnapshotRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["years_2021_2025"]
+    expected_input_binding_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_latest_tax_run_id: str | None
+
+
 class TaxBmfFilingReadinessSnapshot(BaseModel):
     generated_at: str
     snapshot_exists: bool = False
@@ -274,8 +282,22 @@ class TaxBmfFilingReadinessSnapshot(BaseModel):
     review_years: list[int] = Field(default_factory=list)
     blocked_years: list[int] = Field(default_factory=list)
     empty_years: list[int] = Field(default_factory=list)
+    binding_status: Literal["current", "stale", "unbound", "missing"] | None = None
     status: Literal["available", "missing", "invalid"] = "missing"
     note: str
+
+
+class TaxBmfFilingReadinessSnapshotRefreshResult(BaseModel):
+    operation_id: str
+    scope: Literal["years_2021_2025"]
+    status: Literal["completed", "stale"]
+    started_at: datetime
+    completed_at: datetime
+    binding_status: Literal["current", "stale", "unbound"]
+    report: TaxBmfFilingReadinessReport
+    final_approval_granted: Literal[False] = False
+    tax_data_changed: Literal[False] = False
+    external_provider_calls_made: Literal[False] = False
 
 
 class TaxBmfFinalizationRequirement(BaseModel):

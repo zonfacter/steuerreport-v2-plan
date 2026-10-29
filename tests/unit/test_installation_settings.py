@@ -1,4 +1,5 @@
 import json
+import builtins
 import os
 from pathlib import Path
 import subprocess
@@ -99,6 +100,77 @@ def test_config_editor_is_external_revision_bound_and_does_not_run_pipeline(serv
         service.write_config(before.filename, PrivateConfigWrite(revision=result.revision, content='{"entries":"wrong"}'))
 
 
+@pytest.mark.parametrize("content", [
+    '{"outside_owned_wallet_scope_txids":"signature"}',
+    '{"outside_owned_wallet_scope_txids":null}',
+    '{"outside_owned_wallet_scope_txids":[123]}',
+    '{"outside_owned_wallet_scope_txids":[""]}',
+])
+def test_solana_ownership_config_rejects_invalid_values_without_writing(service, content):
+    before = service.read_config("solana_v1_ownership_scope.json")
+    assert not before.exists and before.valid
+    with pytest.raises(InstallationSettingsError, match="config_json_or_schema_invalid"):
+        service.write_config(
+            before.filename,
+            PrivateConfigWrite(revision=before.revision, content=content),
+        )
+    assert not (service.config_dir / before.filename).exists()
+    after = service.read_config(before.filename)
+    assert after.revision == before.revision
+    assert not after.exists and after.valid
+
+
+def test_solana_ownership_config_preserves_audit_metadata_and_reports_corrupt_existing_file(service):
+    filename = "solana_v1_ownership_scope.json"
+    before = service.read_config(filename)
+    audit = {
+        "generated_at": "2026-10-29T12:00:00+00:00",
+        "wallet": "synthetic-wallet",
+        "provider": "synthetic-provider",
+        "outside_owned_wallet_scope_txids": ["synthetic-signature"],
+    }
+    result = service.write_config(
+        filename,
+        PrivateConfigWrite(revision=before.revision, content=json.dumps(audit)),
+    )
+    assert result.valid and result.exists
+    assert json.loads(result.content) == audit
+
+    path = service.config_dir / filename
+    path.write_text('{"outside_owned_wallet_scope_txids": "broken"}\n')
+    corrupt = service.read_config(filename)
+    assert corrupt.exists and not corrupt.valid
+    assert corrupt.validation_error == "solana_ownership_scope_invalid"
+    assert corrupt.content == path.read_text()
+
+
+def test_unreadable_optional_config_does_not_block_installation_page(service, monkeypatch):
+    from steuerreport_v2.api.app import create_app
+
+    filename = "solana_v1_ownership_scope.json"
+    path = service.config_dir / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"outside_owned_wallet_scope_txids":[]}\n')
+    original_read_text = Path.read_text
+
+    def deny_config_read(candidate, *args, **kwargs):
+        if candidate == path:
+            raise PermissionError("synthetic unreadable config")
+        return original_read_text(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", deny_config_read)
+    isolated = InstallationSettingsService(service.store)
+    assert isolated.read().fields
+    with pytest.raises(InstallationSettingsError, match="config_unreadable"):
+        isolated.read_config(filename)
+
+    client = TestClient(create_app(service.store))
+    assert client.get("/api/v1/admin/installation").status_code == 200
+    response = client.get(f"/api/v1/admin/installation/configs/{filename}")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "config_unreadable"
+
+
 def test_provider_secret_requires_encryption_and_is_never_returned(service, tmp_path, monkeypatch):
     monkeypatch.delenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", raising=False)
     with pytest.raises(InstallationSettingsError, match="encrypted_secret_vault_required"):
@@ -139,6 +211,14 @@ def test_settings_endpoints_do_not_return_secrets(service, monkeypatch, tmp_path
     assert "fixture-only-token" not in result.text
     assert "fixture-only-token" not in client.get("/api/v1/admin/installation").text
     assert client.delete("/api/v1/admin/installation/providers/unknown").status_code == 400
+    missing_scope = client.get("/api/v1/admin/installation/configs/solana_v1_ownership_scope.json").json()["data"]
+    assert missing_scope["exists"] is False and missing_scope["valid"] is True
+    invalid_scope = client.put(
+        "/api/v1/admin/installation/configs/solana_v1_ownership_scope.json",
+        json={"revision": missing_scope["revision"], "content": '{"outside_owned_wallet_scope_txids":null}'},
+    )
+    assert invalid_scope.status_code == 400
+    assert not (service.config_dir / "solana_v1_ownership_scope.json").exists()
     assert client.get("/api/v1/admin/installation", headers={"Origin": "https://untrusted.invalid"}).status_code == 403
     assert client.get("/api/v1/admin/installation", headers={"Host": "untrusted.invalid"}).status_code == 400
 
@@ -163,3 +243,153 @@ def test_container_state_initialization_never_replaces_profile_or_key(tmp_path, 
         assert json.loads((tmp_path / "profile.json").read_text())["primary_solana_wallet"] == "fixture-only"
     finally:
         os.umask(previous_umask)
+
+
+def test_container_state_with_missing_vault_key_fails_before_generating_replacement(tmp_path, monkeypatch):
+    from steuerreport_v2.container_entrypoint import initialize_state
+    from steuerreport_v2.domain.secret_vault import decode_secret_setting, encrypt_secret_setting
+
+    state = tmp_path / "state"
+    profile = tmp_path / "profile/private_profile.json"
+    database = tmp_path / "database/steuerreport_v2.duckdb"
+    key_file = tmp_path / "vault/vault.key"
+    monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(state))
+    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", str(profile))
+    monkeypatch.setenv("STEUERREPORT_V2_DB", str(database))
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(key_file))
+    monkeypatch.setenv("STEUERREPORT_V2_REQUIRE_ENCRYPTED_SECRETS", "true")
+
+    initialize_state()
+    original_key = key_file.read_bytes()
+    envelope = encrypt_secret_setting("secret.fixture", "fixture-secret", original_key)
+    key_file.unlink()
+
+    with pytest.raises(RuntimeError, match="secret_vault_key_missing"):
+        initialize_state()
+
+    assert not key_file.exists()
+    key_file.write_bytes(original_key)
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(key_file))
+    assert decode_secret_setting("secret.fixture", envelope) == "fixture-secret"
+
+
+def test_container_state_normalizes_empty_optional_paths(tmp_path, monkeypatch):
+    from steuerreport_v2.container_entrypoint import initialize_state
+
+    state = tmp_path / "private-state"
+    monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(state))
+    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", "")
+    monkeypatch.setenv("STEUERREPORT_V2_DB", "")
+    monkeypatch.delenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", raising=False)
+
+    initialize_state()
+
+    assert not (state / "private_profile.json").exists()
+    assert os.environ["STEUERREPORT_PRIVATE_PROFILE"] == ""
+    assert os.environ["STEUERREPORT_V2_DB"] == str(state / "data/steuerreport_v2.duckdb")
+    assert (state / "keys/vault.key").is_file()
+
+
+def _state_snapshot(root: Path) -> dict[str, tuple]:
+    snapshot = {}
+    if not root.exists():
+        return snapshot
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        info = path.lstat()
+        snapshot[relative] = (
+            info.st_mode,
+            info.st_size,
+            info.st_mtime_ns,
+            info.st_ctime_ns,
+            path.read_bytes() if path.is_file() and not path.is_symlink() else None,
+        )
+    return snapshot
+
+
+def test_wrong_but_well_formed_vault_key_blocks_before_writes_or_server_start(
+    tmp_path, monkeypatch, capsys
+):
+    import duckdb
+
+    from steuerreport_v2.container_entrypoint import initialize_state, main
+    from steuerreport_v2.domain.secret_vault import decode_secret_setting, is_encrypted_envelope
+
+    state = tmp_path / "wrong-key-state"
+    profile = state / "private_profile.json"
+    database = state / "data/steuerreport_v2.duckdb"
+    key_file = state / "keys/vault.key"
+    monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(state))
+    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", str(profile))
+    monkeypatch.setenv("STEUERREPORT_V2_DB", str(database))
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(key_file))
+    monkeypatch.setenv("STEUERREPORT_V2_REQUIRE_ENCRYPTED_SECRETS", "true")
+    monkeypatch.delenv("STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE", raising=False)
+    monkeypatch.delenv("STEUERREPORT_V2_ALLOW_INITIAL_VAULT_KEY_PROVISIONING", raising=False)
+
+    initialize_state()
+    original_key = key_file.read_bytes()
+    service = InstallationSettingsService(DuckDbStore(database))
+    service.save_provider("solscan", "synthetic-secret-value")
+    setting = next(row for row in service.store.list_admin_settings() if row.key == "secret.solscan.api_key")
+    assert is_encrypted_envelope(setting.value_json)
+
+    wrong_key = bytes(value ^ 0xFF for value in original_key)
+    assert len(wrong_key) == 32 and wrong_key != original_key
+    key_file.write_bytes(wrong_key)
+    before = _state_snapshot(state)
+    connection_modes = []
+    uvicorn_imports = []
+    original_connect = duckdb.connect
+    original_import = builtins.__import__
+
+    def track_connection_mode(*args, **kwargs):
+        connection_modes.append(kwargs.get("read_only", False))
+        return original_connect(*args, **kwargs)
+
+    def track_uvicorn_import(name, *args, **kwargs):
+        if name == "uvicorn":
+            uvicorn_imports.append(name)
+        return original_import(name, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(duckdb, "connect", track_connection_mode)
+        patch.setattr(builtins, "__import__", track_uvicorn_import)
+        with pytest.raises(RuntimeError, match="existing_secret_vault_key_incompatible") as error:
+            main()
+
+    assert "synthetic-secret-value" not in str(error.value)
+    assert connection_modes == [True]
+    assert uvicorn_imports == []
+    assert _state_snapshot(state) == before
+    assert key_file.read_bytes() == wrong_key
+    output = capsys.readouterr()
+    assert "synthetic-secret-value" not in output.out + output.err
+
+    key_file.write_bytes(original_key)
+    restored = next(row for row in DuckDbStore(database).list_admin_settings() if row.key == setting.key)
+    assert restored.value_json == setting.value_json
+    assert decode_secret_setting(restored.key, restored.value_json) == "synthetic-secret-value"
+
+
+def test_profile_only_state_needs_explicit_one_time_key_provisioning(tmp_path, monkeypatch):
+    from steuerreport_v2.container_entrypoint import initialize_state
+
+    state = tmp_path / "profile-only-state"
+    profile = state / "private_profile.json"
+    profile.parent.mkdir(parents=True)
+    profile.write_text('{"synthetic":"preserve"}\n', encoding="utf-8")
+    key_file = state / "keys/vault.key"
+    monkeypatch.setenv("STEUERREPORT_STATE_DIR", str(state))
+    monkeypatch.setenv("STEUERREPORT_PRIVATE_PROFILE", str(profile))
+    monkeypatch.setenv("STEUERREPORT_V2_DB", str(state / "data/steuerreport_v2.duckdb"))
+    monkeypatch.setenv("STEUERREPORT_V2_SECRET_VAULT_KEY_FILE", str(key_file))
+    monkeypatch.setenv("STEUERREPORT_V2_ALLOW_INITIAL_VAULT_KEY_PROVISIONING", "true")
+    monkeypatch.delenv("STEUERREPORT_V2_CONNECTOR_SETUP_TOKEN_FILE", raising=False)
+
+    initialize_state()
+
+    assert len(key_file.read_bytes()) == 32
+    assert json.loads(profile.read_text(encoding="utf-8")) == {"synthetic": "preserve"}
+    assert not (state / "data/steuerreport_v2.duckdb").exists()
+    assert not (state / "connector-setup.token").exists()

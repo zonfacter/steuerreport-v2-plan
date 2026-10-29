@@ -10,7 +10,7 @@ def test_health_payload_reports_duckdb(tmp_path):
     payload = build_health_payload(DuckDbStore(tmp_path / "steuerreport_v2.duckdb"))
 
     assert payload["database_type"] == "duckdb"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
 
 
 def test_health_route_is_registered(tmp_path):
@@ -83,6 +83,7 @@ def test_vertical_slice_routes_are_registered(tmp_path):
     assert "/api/v1/prices" in paths
     assert "/api/v1/prices/import/csv/preview" in paths
     assert "/api/v1/prices/import/csv" in paths
+    assert "/api/v1/prices/historical/manual-previews" in paths
     assert "/api/v1/prices/import/v1-fx-cache/preview" in paths
     assert "/api/v1/prices/import/v1-fx-cache" in paths
     assert "/api/v1/prices/backfill/external" in paths

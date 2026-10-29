@@ -1,8 +1,10 @@
 import base64
+import json
 from decimal import Decimal
 from io import BytesIO
 
 import pandas as pd
+import pytest
 
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
@@ -100,6 +102,42 @@ def test_csv_preview_detects_bitget_header_below_title_row(tmp_path):
     assert preview.row_count == 1
     assert preview.matched_columns["time"] == "Timestamp UTC+8 (Completion)"
     assert preview.matched_columns["quantity"] == "Quantity"
+
+
+def test_bitget_csv_preview_accepts_empty_surplus_fields_and_preserves_raw_row(tmp_path):
+    store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
+    importer = FileRawImporter(CsvRawImporter(store))
+    content = (
+        "Date,Coin,Type,Amount,Fee,Fee asset\n"
+        "2025-01-02 12:00:00,DEMOCOIN,trade,4,0,BGB,,\n"
+    )
+    encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+
+    preview = importer.preview_base64("bitget", "synthetic.csv", encoded)
+    batch = importer.import_base64("bitget", "synthetic.csv", encoded)
+
+    assert preview.can_import is True
+    assert preview.row_count == 1
+    assert batch.raw_object_count == 1
+    raw = store.list_raw_objects(batch.batch_id)
+    assert len(raw) == 1
+    assert json.loads(raw[0].payload_json) == {
+        "Amount": "4",
+        "Coin": "DEMOCOIN",
+        "Date": "2025-01-02 12:00:00",
+        "Fee": "0",
+        "Fee asset": "BGB",
+        "Type": "trade",
+    }
+
+
+def test_bitget_csv_preview_rejects_nonempty_fields_beyond_header(tmp_path):
+    importer = FileRawImporter(CsvRawImporter(DuckDbStore(tmp_path / "steuerreport_v2.duckdb")))
+    content = "Date,Coin,Type,Amount\n2025-01-02 12:00:00,DEMOCOIN,trade,4,UNMAPPED\n"
+    encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+
+    with pytest.raises(ValueError, match="Datei konnte nicht gelesen werden"):
+        importer.preview_base64("bitget", "synthetic.csv", encoded)
 
 
 def test_solana_rpc_normalizer_preserves_swap_and_transfer_direction(tmp_path):

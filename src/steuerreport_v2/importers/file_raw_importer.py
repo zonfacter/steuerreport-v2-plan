@@ -27,8 +27,13 @@ class FileRawImporter:
         filename: str,
         content_base64: str,
         sheet_name: str | None = None,
+        connection_id: str | None = None,
+        mexc=None,
     ) -> CsvImportPreview:
         content = self._decode(content_base64)
+        if source.strip().lower() == "mexc":
+            from steuerreport_v2.importers.mexc_native import MexcNativeImporter
+            return MexcNativeImporter(self.csv_importer.store).prepare(filename, content, sheet_name, mexc)[0]
         rows, columns, file_format, selected_sheet, sheet_names = self._rows_from_bytes(
             filename,
             content,
@@ -38,6 +43,7 @@ class FileRawImporter:
         duplicate = self.csv_importer.store.get_import_batch_by_file_hash(
             source,
             file_hash,
+            connection_id,
         )
         profile = profile_for_source(source)
         matched, missing = inspect_profile_columns(profile, columns)
@@ -56,6 +62,8 @@ class FileRawImporter:
             sample_rows=sample_rows,
             can_import=len(missing) == 0 and len(rows) > 0,
             duplicate_batch_id=duplicate.batch_id if duplicate is not None else None,
+            duplicate_batch_connection_id=duplicate.connection_id if duplicate is not None else None,
+            connection_id=connection_id,
             file_sha256=self._file_hash(content, None),
             import_fingerprint=file_hash,
         )
@@ -66,8 +74,13 @@ class FileRawImporter:
         filename: str,
         content_base64: str,
         sheet_name: str | None = None,
+        connection_id: str | None = None,
+        mexc=None,
     ) -> ImportBatch:
         content = self._decode(content_base64)
+        if source.strip().lower() == "mexc":
+            from steuerreport_v2.importers.mexc_native import MexcNativeImporter
+            return MexcNativeImporter(self.csv_importer.store).import_file(filename, content, sheet_name, mexc)
         rows, _, _, selected_sheet, _ = self._rows_from_bytes(filename, content, sheet_name)
         file_hash = self._file_hash(content, selected_sheet)
         return self.csv_importer.import_rows(
@@ -75,6 +88,7 @@ class FileRawImporter:
             filename=filename,
             file_hash=file_hash,
             rows=rows,
+            connection_id=connection_id,
         )
 
     def _decode(self, content_base64: str) -> bytes:
@@ -124,20 +138,37 @@ class FileRawImporter:
 
     def _csv_frame_with_detected_header(self, text: str) -> pd.DataFrame | None:
         dialect = CsvRawImporter._dialect_for_text(text)
-        raw = pd.read_csv(
-            StringIO(text),
-            header=None,
-            dtype=object,
-            sep=dialect.delimiter,
-            skipinitialspace=True,
-            engine="python",
+        raw_rows = list(
+            csv.reader(
+                StringIO(text),
+                dialect=dialect,
+                skipinitialspace=True,
+            )
         )
-        header_index = self._detected_header_index(raw)
+        header_index = next(
+            (
+                index
+                for index, row in enumerate(raw_rows)
+                if self._looks_like_header({value.strip() for value in row if value.strip()})
+            ),
+            None,
+        )
         if header_index is None:
             return None
-        header = [str(value).strip() if pd.notna(value) else "" for value in raw.iloc[header_index].tolist()]
-        data = raw.iloc[header_index + 1 :].copy()
-        data.columns = header
+        header = [value.strip() for value in raw_rows[header_index]]
+        data_rows: list[list[str]] = []
+        for row_number, row in enumerate(raw_rows[header_index + 1 :], start=header_index + 2):
+            if not any(value.strip() for value in row):
+                continue
+            if len(row) > len(header):
+                extra_values = row[len(header) :]
+                if any(value.strip() for value in extra_values):
+                    raise ValueError(
+                        f"CSV-Zeile {row_number} enthaelt nichtleere Felder hinter der Kopfzeile."
+                    )
+                row = row[: len(header)]
+            data_rows.append(row + [""] * (len(header) - len(row)))
+        data = pd.DataFrame(data_rows, columns=header)
         data = data[[column for column in data.columns if column]]
         data = data.dropna(how="all")
         return data
@@ -197,13 +228,6 @@ class FileRawImporter:
         data = data[[column for column in data.columns if column]]
         data = data.dropna(how="all")
         return data
-
-    def _detected_header_index(self, raw: pd.DataFrame) -> int | None:
-        for index, row in raw.iterrows():
-            values = {str(value).strip() for value in row.tolist() if pd.notna(value)}
-            if self._looks_like_header(values):
-                return int(index)
-        return None
 
     def _looks_like_header(self, values: set[str]) -> bool:
         strong_headers = {

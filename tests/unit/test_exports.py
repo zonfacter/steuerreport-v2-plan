@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from io import BytesIO
+
+from pypdf import PdfReader
 
 from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.contracts.exports import PdfExportRequest
@@ -33,7 +36,7 @@ def _clean_store(tmp_path):
     return store
 
 
-def test_pdf_export_splits_at_100_pages(tmp_path):
+def test_legacy_status_pdf_ignores_estimated_page_input(tmp_path):
     store = _clean_store(tmp_path)
 
     result = ExportService(store).create_pdf_packages(
@@ -41,9 +44,9 @@ def test_pdf_export_splits_at_100_pages(tmp_path):
     )
 
     assert result.blocked is False
-    assert [package.page_count for package in result.packages] == [100, 100, 30]
-    assert all(package.page_count <= 100 for package in result.packages)
-    assert [package.file_index for package in result.packages] == [1, 2, 3]
+    assert len(result.packages) == 1
+    assert result.packages[0].page_count == 1
+    assert result.packages[0].report_type == "technical_status"
 
 
 def test_pdf_export_blocks_when_review_gate_blocks(tmp_path):
@@ -72,7 +75,7 @@ def test_export_packages_are_listed(tmp_path):
 
     packages = service.list_packages()
 
-    assert len(packages) == 2
+    assert len(packages) == 1
     assert {package.label for package in packages} == {"test"}
 
 
@@ -87,7 +90,8 @@ def test_export_package_pdf_can_be_rendered(tmp_path):
     package, content = rendered
     assert package.package_id == result.packages[0].package_id
     assert content.startswith(b"%PDF-1.4")
-    assert b"Steuerreport V2 Exportpaket" in content
+    assert len(PdfReader(BytesIO(content), strict=True).pages) == package.page_count == 1
+    assert b"Technisches Statuspaket" in content
     assert b"Export-Freigabe" in content
     assert b"Review aktuell offen: 0" in content
     assert b"Review historisch offen: 0" in content

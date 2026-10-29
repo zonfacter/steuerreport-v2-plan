@@ -16,8 +16,8 @@ from pydantic import ValidationError
 
 from steuerreport_v2 import __version__
 from steuerreport_v2.contracts.ai_changes import (
-    AiChangeApply, AiChangeDraft, AiChangeGenerate, AiChangePreview,
-    AiChangeSet, AiDataContext, AiDataQuery, AiDataRow,
+    AiChangeApply, AiChangeDraft, AiChangeGenerate, AiChangePreview, AiChangeRebase,
+    AiChangeSet, AiDataContext, AiDataQuery, AiDataRow, AiDataTargetContext, AiDataTargets,
 )
 from steuerreport_v2.contracts.events import CanonicalEvent
 from steuerreport_v2.contracts.prices import PricePoint
@@ -154,6 +154,18 @@ class AiChangeService:
             ids = con.execute(f"select {key} from {table} where {condition} order by {time_column}, {key} limit ? offset ?", [*params, query.limit, query.offset]).fetchall()
             rows = [self._row(con, query.kind, row[0]) for row in ids]
         return AiDataContext(context_sha256=digest({"query": query.model_dump(), "total": total, "rows": [row.model_dump() for row in rows]}), total=total, rows=rows)
+
+    def context_targets(self, request: AiDataTargets):
+        rows, missing = [], []
+        with self.store.exclusive_access(), self.store.connect() as con:
+            for target in request.targets:
+                if record(con, target.kind, target.target_id) is None:
+                    missing.append(target)
+                else:
+                    rows.append(self._row(con, target.kind, target.target_id))
+        binding = {"targets": request.model_dump(), "rows": [row.model_dump() for row in rows],
+                   "missing_targets": [target.model_dump() for target in missing]}
+        return AiDataTargetContext(context_sha256=digest(binding), rows=rows, missing_targets=missing)
 
     def _validated_patch(self, before: AiDataRow, patch):
         if not patch or not set(patch) <= FIELDS[before.kind]:
@@ -323,6 +335,27 @@ class AiChangeService:
         if parent.status not in {"proposed", "previewed"}:
             fail("ai_change_state_conflict")
         return self.create(draft, origin="human_revision", parent_id=identifier)
+
+    def rebase(self, identifier, request: AiChangeRebase):
+        parent = self.get(identifier)
+        if parent.status not in {"proposed", "previewed"}:
+            fail("ai_change_state_conflict")
+        expected = {(target.kind, target.target_id): target.current_sha256 for target in request.targets}
+        change_keys = {(change.kind, change.target_id) for change in parent.draft.changes}
+        if len(expected) != len(request.targets) or expected.keys() != change_keys:
+            fail("ai_change_selection_invalid")
+
+        draft = parent.draft.model_copy(deep=True)
+        with self.store.exclusive_access(), self.store.connect() as con:
+            current_rows = {}
+            for change in draft.changes:
+                row = self._row(con, change.kind, change.target_id)
+                if row.revision != expected[(change.kind, change.target_id)]:
+                    fail("ai_change_stale")
+                current_rows[(change.kind, change.target_id)] = row
+        for change in draft.changes:
+            change.before_sha256 = current_rows[(change.kind, change.target_id)].revision
+        return self.create(draft, origin="human_rebase", parent_id=identifier)
 
     def _root(self):
         root = self.store.path.parent / "ai_change_previews"

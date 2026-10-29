@@ -28,6 +28,7 @@ from steuerreport_v2.importers.source_history_importer import canonical_json, re
 RUN_SECONDS = 240
 MAX_ACTIVE = 2
 MAX_JOBS = 100
+MAX_PROVIDER_REQUESTS = 10000
 ACTIVE = {"queued", "running", "importing"}
 
 
@@ -107,7 +108,7 @@ class HistoryService:
             return HistoryTarget(ref, source.label, provider, provider, legacy_credentials=True)
         raise HistoryFetchError("history_provider_not_supported", resumable=False)
 
-    def _binding(self, target: HistoryTarget, *, software_version=None):
+    def _binding(self, target: HistoryTarget, *, software_version=None, include_binance_earn=False):
         keys = []
         if target.provider != "solana":
             if target.connection_id:
@@ -124,6 +125,20 @@ class HistoryService:
             connection = next(c for c in self.connections.list().connections if str(c.id) == target.connection_id)
             binding["account_name"] = connection.account
             binding["subaccount"] = connection.subaccount
+        if include_binance_earn:
+            if target.provider != "binance" or not target.connection_id:
+                raise HistoryFetchError("history_binance_earn_connection_required", resumable=False)
+            from steuerreport_v2.domain.binance_earn import BinanceEarnHistoryService
+            products = BinanceEarnHistoryService(
+                self.store, connection_id=target.connection_id,
+            ).history_products_for_connection()
+            binding["binance_earn_product_basis_sha256"] = hashlib.sha256(
+                canonical_json(products).encode(),
+            ).hexdigest()
+            snapshot = self.connections.snapshots(target.connection_id).model_dump(mode="json")
+            binding["binance_earn_snapshot_sha256"] = hashlib.sha256(
+                canonical_json(snapshot).encode(),
+            ).hexdigest()
         return hashlib.sha256(canonical_json([software_version or __version__, binding, sorted(keys)]).encode()).hexdigest()
 
     def capability(self, ref):
@@ -136,6 +151,7 @@ class HistoryService:
             target = self._target(ref)
             capability.provider = target.provider
             capability.supported = True
+            capability.supports_binance_earn = target.provider == "binance" and target.connection_id is not None
             if target.provider != "solana":
                 from steuerreport_v2.domain.history_cex import requires_symbols
                 capability.requires_symbols = requires_symbols(target.provider)
@@ -161,6 +177,11 @@ class HistoryService:
         elif capability.provider:
             from steuerreport_v2.domain.history_cex import coverage_notes
             capability.coverage_notes.extend(coverage_notes(capability.provider))
+            if capability.supports_binance_earn:
+                capability.coverage_notes.extend((
+                    "Simple Earn kann ausdruecklich in denselben Historienauftrag aufgenommen werden.",
+                    "Earn-Produktanker stammen nur aus dem gespeicherten Snapshot dieser Verbindung und ihren kontogebundenen Earn-Belegen; API-Retention und Vollstaendigkeit bleiben unbewiesen.",
+                ))
         if capability.provider != "solana":
             from datetime import date
             capability.default_start = date(2009, 1, 1)
@@ -222,6 +243,8 @@ class HistoryService:
             raise HistoryFetchError(capability.blocked_reason or "history_provider_not_supported", resumable=False)
         if capability.requires_symbols and not request.symbols:
             raise HistoryFetchError("history_symbols_required", resumable=False)
+        if request.include_binance_earn and not capability.supports_binance_earn:
+            raise HistoryFetchError("history_binance_earn_connection_required", resumable=False)
         if capability.provider == "solana" and request.symbols:
             raise HistoryFetchError("solana_asset_filter_not_supported", resumable=False)
         target = self._target(ref)
@@ -242,12 +265,21 @@ class HistoryService:
         if end < request.start or request.start > datetime.now(timezone.utc).date():
             raise HistoryFetchError("history_date_range_invalid", resumable=False)
         options = HistoryOptions(
-            datetime.combine(request.start, day_time.min, timezone.utc),
-            min(datetime.combine(end, day_time.max, timezone.utc), datetime.now(timezone.utc)), tuple(request.symbols), request.public_rpc_only,
-            request.rpc_provider, job_id if request.rpc_provider is not None else None,
+            start=datetime.combine(request.start, day_time.min, timezone.utc),
+            end=min(datetime.combine(end, day_time.max, timezone.utc), datetime.now(timezone.utc)),
+            symbols=tuple(request.symbols), public_rpc_only=request.public_rpc_only,
+            rpc_provider=request.rpc_provider,
+            inventory_job_id=job_id if request.rpc_provider is not None else None,
+            include_binance_earn=request.include_binance_earn,
+            max_records=request.max_records,
         )
         if target.provider != "solana":
-            options = HistoryOptions(options.start, options.end.replace(microsecond=options.end.microsecond // 1000 * 1000), options.symbols, options.public_rpc_only)
+            options = HistoryOptions(
+                start=options.start, end=options.end.replace(microsecond=options.end.microsecond // 1000 * 1000),
+                symbols=options.symbols, public_rpc_only=options.public_rpc_only,
+                include_binance_earn=options.include_binance_earn,
+                max_records=options.max_records,
+            )
         values = request.model_dump(mode="json")
         with self.connections._mutation():
             jobs = self.storage.jobs()
@@ -269,9 +301,13 @@ class HistoryService:
                 "status": "queued", "phase": "Abruf wartet", "created_at": now(), "updated_at": now(),
                 "start": request.start.isoformat(), "end": end.isoformat(), "max_records": request.max_records,
                 "records_fetched": 0, "pages_fetched": 0, "requests": 0,
+                "includes_binance_earn": request.include_binance_earn,
+                "provider_requests_reserved": 0,
+                "provider_request_limit": MAX_PROVIDER_REQUESTS,
                 "coverage_notes": capability.coverage_notes, "complete_history_proven": False,
                 "_target": asdict(target), "_options": {**asdict(options), "start": options.start.isoformat(), "end": options.end.isoformat()},
-                "_binding": self._binding(target), "_request": values, "_cursor": {}, "_records": {},
+                "_binding": self._binding(target, include_binance_earn=request.include_binance_earn),
+                "_request": values, "_cursor": {}, "_records": {},
                 "_pid": os.getpid(), "_run_id": str(uuid4()),
                 "_until": (datetime.now(timezone.utc) + timedelta(seconds=RUN_SECONDS)).isoformat(),
             }
@@ -306,7 +342,7 @@ class HistoryService:
             if action != "resume" or request is None or status not in {"paused", "failed"} or job.get("_resumable") is False:
                 raise HistoryFetchError("history_job_state_conflict")
             target = self._target(ref)
-            if self._binding(target) != job["_binding"]:
+            if self._binding(target, include_binance_earn=bool(job.get("includes_binance_earn"))) != job["_binding"]:
                 raise HistoryFetchError("history_source_changed", resumable=False)
             self._check_rpc_binding(job)
             if sum(self._effective(other)["status"] in ACTIVE for other in self.storage.jobs() if other["id"] != job["id"]) >= MAX_ACTIVE:
@@ -328,8 +364,30 @@ class HistoryService:
         if target.provider == "solana":
             from steuerreport_v2.domain.history_solana import SolanaHistoryCollector
             return SolanaHistoryCollector(self.store, target, options)
+        if options.include_binance_earn:
+            from steuerreport_v2.domain.history_binance import BinanceHistoryCollector
+            return BinanceHistoryCollector(self.store, target, options)
         from steuerreport_v2.domain.history_cex import CexHistoryCollector
         return CexHistoryCollector(self.store, target, options)
+
+    def _reserve_provider_request(self, job_id, run_id):
+        with self.connections._mutation():
+            job = self.storage.load(job_id)
+            if job.get("_run_id") != run_id:
+                raise HistoryFetchError("history_worker_superseded", resumable=False)
+            if job.get("_cancel_requested"):
+                raise HistoryFetchError("history_cancelled", resumable=False)
+            if job.get("_pause_requested"):
+                raise HistoryFetchError("history_paused", resumable=True)
+            target = self._target(job["source_ref"])
+            if self._binding(target, include_binance_earn=bool(job.get("includes_binance_earn"))) != job["_binding"]:
+                raise HistoryFetchError("history_source_changed", resumable=False)
+            used = int(job.get("provider_requests_reserved", 0))
+            limit = int(job.get("provider_request_limit", MAX_PROVIDER_REQUESTS))
+            if used >= limit:
+                raise HistoryFetchError("history_provider_request_budget_exhausted", resumable=False)
+            job["provider_requests_reserved"] = used + 1
+            self.storage.save(job)
 
     def _run(self, job_id):
         run_id = None
@@ -343,15 +401,29 @@ class HistoryService:
                     job.update(status="running", phase="Anbieter und Kontingent abfragen")
                     self.storage.save(job)
                 target = HistoryTarget(**{**job["_target"], "budget_groups": tuple(job["_target"]["budget_groups"])})
-                options = HistoryOptions(**{**job["_options"], "start": datetime.fromisoformat(job["_options"]["start"]), "end": datetime.fromisoformat(job["_options"]["end"]), "symbols": tuple(job["_options"]["symbols"])})
-                if self._binding(self._target(job["source_ref"])) != job["_binding"]:
+                options = HistoryOptions(**{
+                    **job["_options"],
+                    "start": datetime.fromisoformat(job["_options"]["start"]),
+                    "end": datetime.fromisoformat(job["_options"]["end"]),
+                    "symbols": tuple(job["_options"]["symbols"]),
+                    "max_records": max(1, int(job["max_records"]) - len(job["_records"])),
+                })
+                if self._binding(self._target(job["source_ref"]), include_binance_earn=bool(job.get("includes_binance_earn"))) != job["_binding"]:
                     raise HistoryFetchError("history_source_changed", resumable=False)
                 self._check_rpc_binding(job)
                 signal = _Signal(self, job_id, run_id, time.monotonic() + RUN_SECONDS)
                 collector = self._collector(target, options)
+                provider_request_used = int(job.get("provider_requests_reserved", 0))
+                provider_request_limit = int(job.get("provider_request_limit", MAX_PROVIDER_REQUESTS))
+                if options.include_binance_earn and provider_request_used >= provider_request_limit:
+                    raise HistoryFetchError("history_provider_request_budget_exhausted", resumable=False)
                 with outbound_scope(provider=None if target.provider == "solana" else target.provider,
                                     connection_id=target.connection_id, groups=tuple(sorted({"ip:global", *target.budget_groups})),
-                                    cancel=signal, deadline=time.time() + RUN_SECONDS):
+                                    cancel=signal, deadline=time.time() + RUN_SECONDS,
+                                    max_requests=(provider_request_limit - provider_request_used)
+                                    if options.include_binance_earn else None,
+                                    reserve_request=(lambda: self._reserve_provider_request(job_id, run_id))
+                                    if options.include_binance_earn else None):
                     while not job.get("_done"):
                         signal.check()
                         if len(job["_records"]) >= job["max_records"]:
@@ -389,6 +461,9 @@ class HistoryService:
                                        requests=job["requests"] + page.requests, phase=page.phase,
                                        coverage_notes=list(dict.fromkeys([*job["coverage_notes"], *page.notes])),
                                        _pause_requested=current.get("_pause_requested", False), _cancel_requested=current.get("_cancel_requested", False))
+                            job["provider_requests_reserved"] = current.get(
+                                "provider_requests_reserved", job.get("provider_requests_reserved", 0),
+                            )
                             if not job.get("sample_rows"):
                                 job["sample_rows"] = [{key: row.get(key) for key in ("timestamp_utc", "event_type", "asset", "quantity", "side", "quote_asset", "quote_quantity")} for record in page.records for row in record.rows][:10]
                             self.storage.save(job)
@@ -445,7 +520,8 @@ class HistoryService:
             job = self.storage.load(job_id)
             if job["source_ref"] != ref:
                 raise HistoryFetchError("history_job_not_found", resumable=False)
-            if self._binding(self._target(ref)) != job["_binding"]:
+            if job.get("status") != "succeeded" and self._binding(
+                    self._target(ref), include_binance_earn=bool(job.get("includes_binance_earn"))) != job["_binding"]:
                 raise HistoryFetchError("history_source_changed", resumable=False)
             self._check_rpc_binding(job)
             return self._public(HistoryPreview(self.store).apply(job, request))
@@ -457,7 +533,9 @@ class HistoryService:
                 raise HistoryFetchError("history_preview_required", resumable=False)
             old = job["_preview"]
             version = old.get("software_version")
-            if not version or self._binding(self._target(ref), software_version=version) != job["_binding"]:
+            if not version or self._binding(
+                    self._target(ref), software_version=version,
+                    include_binance_earn=bool(job.get("includes_binance_earn"))) != job["_binding"]:
                 raise HistoryFetchError("history_source_changed", resumable=False)
             self._check_rpc_binding(job)
             self.storage.records(job)
@@ -474,7 +552,9 @@ class HistoryService:
             if len(previous) >= 20:
                 raise HistoryFetchError("history_job_storage_limit", resumable=False)
             job.update(_previous_previews=[*previous, {"sha256": digest, "software_version": version, "preview_sha256": job["preview_sha256"]}],
-                       _binding=self._binding(self._target(ref)), status="queued", phase="Gespeicherte Originalbelege lokal neu pruefen",
+                       _binding=self._binding(
+                           self._target(ref), include_binance_earn=bool(job.get("includes_binance_earn")),
+                       ), status="queued", phase="Gespeicherte Originalbelege lokal neu pruefen",
                        _run_id=str(uuid4()), _until=(datetime.now(timezone.utc) + timedelta(seconds=RUN_SECONDS)).isoformat(),
                        _pid=os.getpid(), _pause_requested=False, _cancel_requested=False, error_code=None)
             self.storage.save(job)
