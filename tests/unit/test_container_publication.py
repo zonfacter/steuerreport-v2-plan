@@ -35,6 +35,33 @@ def test_release_versions_match_runtime_package_frontend_and_container_defaults(
     assert "default: v" + published in (root / ".github/workflows/publish-image.yml").read_text()
 
 
+def test_release_smoke_template_sources_match_generated_workbook():
+    root = Path(__file__).resolve().parents[2]
+    docs_spec = importlib.util.spec_from_file_location(
+        "import_format_docs", root / "scripts/generate_import_format_docs_v2.py"
+    )
+    docs = importlib.util.module_from_spec(docs_spec)
+    docs_spec.loader.exec_module(docs)
+    release = load_script("container_release_v2")
+    assert release.IMPORT_TEMPLATE_SOURCES == docs.SOURCES
+
+
+def test_release_smoke_embeds_all_template_sources_without_docker(monkeypatch):
+    script = load_script("container_release_v2")
+    captured = {}
+    monkeypatch.setattr(script.subprocess, "check_output", lambda *args, **kwargs: "running healthy")
+
+    def capture_exec(args, **kwargs):
+        captured["code"] = args[-1]
+        return subprocess.CompletedProcess(args, 1, "", "synthetic stop")
+
+    monkeypatch.setattr(script.subprocess, "run", capture_exec)
+    with pytest.raises(RuntimeError, match="private_defaults_or_frontend"):
+        script.smoke_container("synthetic-container", "0.2.0rc3")
+    assert 'expected_sources = ["manual-csv", "binance", "bitget", "pionex", "coinbase", "mexc", "helium", "solana_rpc"]' in captured["code"]
+    assert "__IMPORT_TEMPLATE_SOURCES__" not in captured["code"]
+
+
 @pytest.fixture
 def release_repo(tmp_path):
     def git(*args):
