@@ -187,9 +187,9 @@ def main() -> None:
 
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.goto(args.base_url + "/#dashboard", wait_until="networkidle")
-        page.get_by_role("button", name="Hilfe: Live und berechnet sind getrennte Größen", exact=True).focus()
+        page.get_by_role("button", name="Hilfe: Gespeicherte Live-Anker", exact=True).focus()
         expect(page.get_by_role("tooltip")).to_have_count(1)
-        expect(page.get_by_role("tooltip")).to_contain_text("nicht zum Ledgerwert addiert")
+        expect(page.get_by_role("tooltip")).to_contain_text("kein bestätigtes Gesamtvermögen")
         page.keyboard.press("Escape")
         for width in (1440, 390, 320):
             page.set_viewport_size({"width": width, "height": 1000 if width == 1440 else 844})
