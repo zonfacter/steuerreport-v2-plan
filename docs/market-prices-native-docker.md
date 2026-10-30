@@ -21,9 +21,10 @@ Die native Solana-Bestandsansicht versucht ferner Jupiter-Preise und fuer SOL
 einen CoinGecko-Fallback; daraus folgt kein allgemeiner taeglicher Kursjob.
 
 Der aeltere direkte V2-Backfill und die neuere Preisvorschau unterscheiden
-sich bei Evidenz und CoinGecko-Datumsformat. Die offizielle Dokumentation
-nennt `YYYY-MM-DD`; der direkte Altpfad sendet `DD-MM-YYYY`. Ein Live-Test
-des alten Formats wurde nicht durchgefuehrt. Die Abweichung wird in
+sich bei der Evidenz. In rc40 sendet der direkte Altpfad das Datum als
+`DD-MM-YYYY`, obwohl die offizielle Dokumentation `YYYY-MM-DD` nennt.
+Der Entwicklungsstand korrigiert das Datumsformat mit Mock-Test; ein Live-Test
+des alten oder neuen Formats wurde nicht durchgefuehrt. Das Gesamtproblem wird in
 [Issue #39](https://github.com/zonfacter/steuerreport-v2-plan/issues/39)
 verfolgt. Der direkte Altpfad darf nicht als gleichwertige beweisgebundene
 Vorschau dargestellt werden.
