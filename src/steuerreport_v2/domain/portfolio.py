@@ -36,6 +36,7 @@ from steuerreport_v2.contracts.portfolio import (
     PortfolioSeparationReport,
     PortfolioSeparationLot,
     PortfolioPosition,
+    PortfolioPriceSelectionDiagnostic,
     PortfolioSnapshot,
     PortfolioSourceAccount,
     PortfolioSourceAsset,
@@ -64,6 +65,7 @@ from steuerreport_v2.domain.account_aliases import (
     unresolved_truncated_account_labels,
 )
 from steuerreport_v2.domain.cex_balances import CexBalanceService
+from steuerreport_v2.domain.current_portfolio_prices import CurrentPortfolioPrices, select_current_portfolio_prices
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup, fiat_price_point
 from steuerreport_v2.domain.pipeline import PipelineService
@@ -167,6 +169,7 @@ class PortfolioService:
         self._tax_lots_cache: list[object] | None = None
         self._tax_lines_cache: list[object] | None = None
         self._latest_prices_cache: dict[str, object] | None = None
+        self._current_portfolio_prices_cache: CurrentPortfolioPrices | None = None
         self._connector_errors: dict[str, str] = {}
         self._price_lookup_cache: HistoricalPriceLookup | None = None
         self._separation_lots_cache: dict[datetime, list[tuple[object, object]]] = {}
@@ -198,7 +201,8 @@ class PortfolioService:
         )
         self._apply_expected_zero_live_anchors(grouped_balances)
         self._apply_binance_live_product_anchor(grouped_balances)
-        prices = self._latest_prices()
+        selection = self._current_portfolio_prices()
+        prices = selection.selected
         positions: list[PortfolioPosition] = []
         excluded_positions: list[PortfolioPosition] = []
         total = Decimal("0")
@@ -252,7 +256,22 @@ class PortfolioService:
             excluded_value_eur=excluded_total,
             excluded_value_semantics=self.EXCLUDED_VALUE_SEMANTICS,
             missing_price_assets=sorted(missing),
-            separation_virtual_wallet=self.separation_virtual_wallet(),
+            valuation_coverage_status=(
+                "empty" if not positions else
+                "partial" if any(position.value_eur is None for position in positions) else "complete"
+            ),
+            total_value_semantics=(
+                "Summe der bewerteten Portfolio-Positionen ohne ausgeschlossene Konten; "
+                "bei fehlenden Preisen nur ein Teilwert."
+            ),
+            price_selection_diagnostics=[
+                selection.diagnostics.get(asset, PortfolioPriceSelectionDiagnostic(asset=asset))
+                for asset in sorted({
+                    position.asset for position in positions + excluded_positions
+                    if position.asset.upper() != "EUR"
+                })
+            ],
+            separation_virtual_wallet=self.separation_virtual_wallet(current_prices=prices),
             resolved_account_aliases=[
                 PortfolioAccountAlias(alias=alias, canonical_account=canonical)
                 for alias, canonical in sorted(account_aliases.items())
@@ -486,7 +505,7 @@ class PortfolioService:
 
     def valuation_audit(self) -> PortfolioValuationAuditReport:
         snapshot = self.snapshot()
-        previous_prices = self._previous_prices_by_asset()
+        previous_prices = self._current_portfolio_prices().previous
         rows: list[PortfolioValuationAuditRow] = []
         previous_total = Decimal("0")
         has_previous = False
@@ -496,7 +515,9 @@ class PortfolioService:
             price_delta_pct = None
             value_delta = None
             if previous is not None:
-                _priced_at, previous_price_eur, previous_source = previous
+                _priced_at = previous.priced_at
+                previous_price_eur = previous.price_eur
+                previous_source = previous.source
                 previous_value = asset.quantity * previous_price_eur
                 previous_total += previous_value
                 has_previous = True
@@ -529,11 +550,17 @@ class PortfolioService:
                     note=self._valuation_audit_note(asset, previous is not None, value_delta),
                 )
             )
+        complete_comparison = (
+            has_previous and snapshot.valuation_coverage_status == "complete"
+            and all(row.previous_price_eur is not None for row in rows)
+        )
         return PortfolioValuationAuditReport(
             generated_at=datetime.now(timezone.utc),
             total_value_eur=snapshot.total_value_eur,
-            previous_total_value_eur=previous_total if has_previous else None,
-            value_delta_eur=(snapshot.total_value_eur - previous_total) if has_previous else None,
+            valuation_coverage_status=snapshot.valuation_coverage_status,
+            total_value_semantics=snapshot.total_value_semantics,
+            previous_total_value_eur=previous_total if complete_comparison else None,
+            value_delta_eur=(snapshot.total_value_eur - previous_total) if complete_comparison else None,
             rows=sorted(rows, key=lambda item: abs(item.value_delta_eur or item.current_value_eur), reverse=True),
             methodology=(
                 "Read-only Bewertungsanalyse aus aktuellem Portfolio-Snapshot und "
@@ -2505,36 +2532,9 @@ class PortfolioService:
 
     @staticmethod
     def _current_price_from_summary(asset: PortfolioAssetSummary) -> Decimal | None:
-        if asset.quantity == 0:
+        if asset.quantity == 0 or asset.price_status == "missing":
             return None
         return asset.value_eur / asset.quantity
-
-    def _previous_prices_by_asset(self) -> dict[str, tuple[datetime, Decimal, str]]:
-        with self.store.connect() as con:
-            rows = con.execute(
-                """
-                with ranked as (
-                    select
-                        upper(asset) as asset,
-                        priced_at,
-                        price_eur,
-                        source,
-                        row_number() over (
-                            partition by upper(asset)
-                            order by priced_at desc, created_at desc, price_id desc
-                        ) as rn
-                    from price_ledger
-                    where price_eur > 0
-                )
-                select asset, priced_at, price_eur, source
-                from ranked
-                where rn = 2
-                """
-            ).fetchall()
-        return {
-            str(asset).upper(): (priced_at, price_eur, source)
-            for asset, priced_at, price_eur, source in rows
-        }
 
     @staticmethod
     def _valuation_audit_note(
@@ -2563,11 +2563,14 @@ class PortfolioService:
                 {
                     "value_eur": Decimal("0"),
                     "position_count": 0,
+                    "unpriced_position_count": 0,
                     "assets": set(),
                 },
             )
             item["value_eur"] = item["value_eur"] + (position.value_eur or Decimal("0"))  # type: ignore[operator]
             item["position_count"] = int(item["position_count"]) + 1
+            if position.value_eur is None:
+                item["unpriced_position_count"] = int(item["unpriced_position_count"]) + 1
             item["assets"].add(position.asset)  # type: ignore[union-attr]
         return [
             PortfolioAccountSummary(
@@ -2575,6 +2578,7 @@ class PortfolioService:
                 value_eur=item["value_eur"],  # type: ignore[arg-type]
                 position_count=int(item["position_count"]),
                 assets=len(item["assets"]),  # type: ignore[arg-type]
+                unpriced_position_count=int(item["unpriced_position_count"]),
             )
             for account, item in sorted(
                 grouped.items(),
@@ -2619,15 +2623,17 @@ class PortfolioService:
     def separation_virtual_wallet(
         self,
         cutoff: datetime | None = None,
+        *,
+        current_prices: dict[str, object] | None = None,
     ) -> PortfolioVirtualWallet:
         cutoff = self._normalize_cutoff(cutoff)
-        cached = self._virtual_wallet_cache.get(cutoff)
+        cached = self._virtual_wallet_cache.get(cutoff) if current_prices is None else None
         if cached is not None:
             return cached
         lot_quantities: dict[str, Decimal] = {}
         for lot, _event in self._separation_fiat_purchase_lots(cutoff):
             lot_quantities[lot.asset] = lot_quantities.get(lot.asset, Decimal("0")) + lot.quantity_remaining
-        prices = self._latest_prices()
+        prices = current_prices if current_prices is not None else self._latest_prices()
         positions: list[PortfolioPosition] = []
         total = Decimal("0")
         missing: set[str] = set()
@@ -2679,7 +2685,8 @@ class PortfolioService:
                 "als Investment-Neubestand gefuehrt."
             ),
         )
-        self._virtual_wallet_cache[cutoff] = virtual_wallet
+        if current_prices is None:
+            self._virtual_wallet_cache[cutoff] = virtual_wallet
         return virtual_wallet
 
     def separation_report(
@@ -3237,6 +3244,13 @@ class PortfolioService:
         if self._latest_prices_cache is None:
             self._latest_prices_cache = self.store.latest_price_points()
         return self._latest_prices_cache
+
+    def _current_portfolio_prices(self) -> CurrentPortfolioPrices:
+        if self._current_portfolio_prices_cache is None:
+            self._current_portfolio_prices_cache = select_current_portfolio_prices(
+                self.store, datetime.now(timezone.utc)
+            )
+        return self._current_portfolio_prices_cache
 
     def _price_lookup(self) -> HistoricalPriceLookup:
         if self._price_lookup_cache is None:

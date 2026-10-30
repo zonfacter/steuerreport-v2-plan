@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,7 +31,13 @@ class PortfolioAssetSummary(BaseModel):
     price_sources: list[str] = Field(default_factory=list)
     priced_at_latest: datetime | None = None
     price_age_days: int | None = None
-    price_status: str = "missing"
+    price_status: str = Field(
+        default="missing",
+        description=(
+            "Alter anhand des gespeicherten Preiszeitpunkts; dieser kann eine Abrufzeit sein. "
+            "Kein Nachweis der Anbieter-Kursfrische."
+        ),
+    )
     token_name: str | None = None
     token_symbol: str | None = None
     token_mint: str | None = None
@@ -43,6 +50,7 @@ class PortfolioAccountSummary(BaseModel):
     value_eur: Decimal
     position_count: int
     assets: int
+    unpriced_position_count: int = 0
 
 
 class PortfolioExcludedAccountSummary(PortfolioAccountSummary):
@@ -175,6 +183,16 @@ class PortfolioFiatDepositReport(BaseModel):
     methodology: str
 
 
+class PortfolioPriceSelectionDiagnostic(BaseModel):
+    asset: str
+    candidate_count: int = 0
+    # A candidate can contribute to more than one rejection count.
+    future_count: int = 0
+    nonpositive_count: int = 0
+    event_quote_count: int = 0
+    eligible_price_found: bool = False
+
+
 class PortfolioSnapshot(BaseModel):
     positions: list[PortfolioPosition]
     total_value_eur: Decimal
@@ -184,6 +202,15 @@ class PortfolioSnapshot(BaseModel):
     excluded_value_eur: Decimal = Decimal("0")
     excluded_value_semantics: str
     missing_price_assets: list[str]
+    valuation_coverage_status: Literal["complete", "partial", "empty"] = Field(
+        default="empty",
+        description=(
+            "Abdeckung der enthaltenen Positionen mit technisch nicht ausgeschlossenen Preiszeilen, "
+            "keine Aussage ueber Frische oder Marktwertfreigabe."
+        ),
+    )
+    total_value_semantics: str = ""
+    price_selection_diagnostics: list[PortfolioPriceSelectionDiagnostic] = Field(default_factory=list)
     separation_virtual_wallet: PortfolioVirtualWallet | None = None
     resolved_account_aliases: list[PortfolioAccountAlias] = Field(default_factory=list)
     unresolved_truncated_accounts: list[str] = Field(default_factory=list)
@@ -196,7 +223,9 @@ class PortfolioValuationAuditRow(BaseModel):
     current_value_eur: Decimal
     current_price_source: str | None = None
     current_priced_at: datetime | None = None
-    current_price_status: str
+    current_price_status: str = Field(
+        description="Alter des gespeicherten Zeitpunkts, nicht verifizierte Anbieter-Kursfrische.",
+    )
     previous_price_eur: Decimal | None = None
     previous_value_eur: Decimal | None = None
     previous_price_source: str | None = None
@@ -211,6 +240,11 @@ class PortfolioValuationAuditRow(BaseModel):
 class PortfolioValuationAuditReport(BaseModel):
     generated_at: datetime
     total_value_eur: Decimal
+    valuation_coverage_status: Literal["complete", "partial", "empty"] = Field(
+        default="empty",
+        description="Nur Preisabdeckung der enthaltenen Positionen, keine Frische- oder Marktwertfreigabe.",
+    )
+    total_value_semantics: str = ""
     previous_total_value_eur: Decimal | None = None
     value_delta_eur: Decimal | None = None
     rows: list[PortfolioValuationAuditRow] = Field(default_factory=list)

@@ -42880,6 +42880,11 @@
             "title": "Position Count",
             "type": "integer"
           },
+          "unpriced_position_count": {
+            "default": 0,
+            "title": "Unpriced Position Count",
+            "type": "integer"
+          },
           "value_eur": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Value Eur",
@@ -43031,6 +43036,7 @@
           },
           "price_status": {
             "default": "missing",
+            "description": "Alter anhand des gespeicherten Preiszeitpunkts; dieser kann eine Abrufzeit sein. Kein Nachweis der Anbieter-Kursfrische.",
             "title": "Price Status",
             "type": "string"
           },
@@ -43147,6 +43153,11 @@
           },
           "position_count": {
             "title": "Position Count",
+            "type": "integer"
+          },
+          "unpriced_position_count": {
+            "default": 0,
+            "title": "Unpriced Position Count",
             "type": "integer"
           },
           "value_eur": {
@@ -43703,6 +43714,44 @@
           "status"
         ],
         "title": "PortfolioPriceQuality",
+        "type": "object"
+      },
+      "PortfolioPriceSelectionDiagnostic": {
+        "properties": {
+          "asset": {
+            "title": "Asset",
+            "type": "string"
+          },
+          "candidate_count": {
+            "default": 0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "eligible_price_found": {
+            "default": false,
+            "title": "Eligible Price Found",
+            "type": "boolean"
+          },
+          "event_quote_count": {
+            "default": 0,
+            "title": "Event Quote Count",
+            "type": "integer"
+          },
+          "future_count": {
+            "default": 0,
+            "title": "Future Count",
+            "type": "integer"
+          },
+          "nonpositive_count": {
+            "default": 0,
+            "title": "Nonpositive Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset"
+        ],
+        "title": "PortfolioPriceSelectionDiagnostic",
         "type": "object"
       },
       "PortfolioReconciliationRefreshConnectorResult": {
@@ -44317,6 +44366,13 @@
             "title": "Positions",
             "type": "array"
           },
+          "price_selection_diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/PortfolioPriceSelectionDiagnostic"
+            },
+            "title": "Price Selection Diagnostics",
+            "type": "array"
+          },
           "resolved_account_aliases": {
             "items": {
               "$ref": "#/components/schemas/PortfolioAccountAlias"
@@ -44339,12 +44395,28 @@
             "title": "Total Value Eur",
             "type": "string"
           },
+          "total_value_semantics": {
+            "default": "",
+            "title": "Total Value Semantics",
+            "type": "string"
+          },
           "unresolved_truncated_accounts": {
             "items": {
               "type": "string"
             },
             "title": "Unresolved Truncated Accounts",
             "type": "array"
+          },
+          "valuation_coverage_status": {
+            "default": "empty",
+            "description": "Abdeckung der enthaltenen Positionen mit technisch nicht ausgeschlossenen Preiszeilen, keine Aussage ueber Frische oder Marktwertfreigabe.",
+            "enum": [
+              "complete",
+              "partial",
+              "empty"
+            ],
+            "title": "Valuation Coverage Status",
+            "type": "string"
           }
         },
         "required": [
@@ -44849,6 +44921,22 @@
             "title": "Total Value Eur",
             "type": "string"
           },
+          "total_value_semantics": {
+            "default": "",
+            "title": "Total Value Semantics",
+            "type": "string"
+          },
+          "valuation_coverage_status": {
+            "default": "empty",
+            "description": "Nur Preisabdeckung der enthaltenen Positionen, keine Frische- oder Marktwertfreigabe.",
+            "enum": [
+              "complete",
+              "partial",
+              "empty"
+            ],
+            "title": "Valuation Coverage Status",
+            "type": "string"
+          },
           "value_delta_eur": {
             "anyOf": [
               {
@@ -44905,6 +44993,7 @@
             "title": "Current Price Source"
           },
           "current_price_status": {
+            "description": "Alter des gespeicherten Zeitpunkts, nicht verifizierte Anbieter-Kursfrische.",
             "title": "Current Price Status",
             "type": "string"
           },
