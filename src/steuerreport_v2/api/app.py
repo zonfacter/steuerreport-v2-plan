@@ -286,6 +286,8 @@ from steuerreport_v2.contracts.prices import (
     V1FxCacheImportPreview,
     V1FxCacheImportRequest,
     V1FxCacheImportResult,
+    V1_FX_CACHE_BLOCK_CODE,
+    V1_FX_CACHE_BLOCK_MESSAGE,
 )
 from steuerreport_v2.contracts.pipeline import (
     DemoSeedResult,
@@ -2209,38 +2211,23 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     ) -> ApiResponse[V1FxCacheImportPreview]:
         preview = V1FxCacheImporter(db).preview(payload.db_path)
         return ApiResponse(
-            status="ok" if preview.importable_count else "warning",
+            status="warning",
             data=preview,
+            warnings=[ApiMessage(code=V1_FX_CACHE_BLOCK_CODE, message=V1_FX_CACHE_BLOCK_MESSAGE)],
         )
 
-    @app.post("/api/v1/prices/import/v1-fx-cache")
+    @app.post("/api/v1/prices/import/v1-fx-cache", responses={
+        409: {"model": ApiResponse[V1FxCacheImportResult], "description": "V1-Cache-Uebernahme ohne geprueften Vertrag gesperrt"},
+    })
     def import_v1_fx_cache(
         payload: V1FxCacheImportRequest,
     ) -> ApiResponse[V1FxCacheImportResult]:
-        preview, prices = V1FxCacheImporter(db).to_price_points(
-            payload.db_path,
-            payload.confidence,
-        )
-        if not prices:
-            return ApiResponse(
-                status="warning",
-                data=V1FxCacheImportResult(imported_prices=0, preview=preview),
-                warnings=[
-                    {
-                        "code": "no_v1_fx_cache_matches",
-                        "message": "Keine passenden V1-FX-Cache-Preise fuer offene V2-Preisbedarfe gefunden.",
-                        "field": "db_path",
-                    }
-                ],
-            )
-        db.add_price_points(prices)
-        pipeline = PipelineService(db).rebuild_all()
-        return ApiResponse(
-            data=V1FxCacheImportResult(
-                imported_prices=len(prices),
-                preview=preview,
-                pipeline=pipeline,
-            )
+        return JSONResponse(
+            status_code=409,
+            content=ApiResponse[V1FxCacheImportResult](
+                status="error",
+                errors=[ApiMessage(code=V1_FX_CACHE_BLOCK_CODE, message=V1_FX_CACHE_BLOCK_MESSAGE)],
+            ).model_dump(mode="json"),
         )
 
     @app.post("/api/v1/prices/backfill/external")

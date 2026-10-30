@@ -264,15 +264,25 @@ class HistoricalPriceService:
         if query.provider == "coingecko":
             data = self._request(client, "coingecko", "https://api.coingecko.com/api/v3/coins/" + provider_id + "/history",
                                  {"date": day.isoformat(), "localization": "false"}, evidence)
+            if not isinstance(data, dict):
+                fail("historical_price_response_invalid")
             if data.get("id") != provider_id:
                 fail("historical_price_identity_mismatch")
-            eur = positive(data.get("market_data", {}).get("current_price", {}).get("eur"))
+            market_data = data.get("market_data")
+            current_price = market_data.get("current_price") if isinstance(market_data, dict) else None
+            if not isinstance(current_price, dict):
+                fail("historical_price_response_invalid")
+            eur = positive(current_price.get("eur"))
             return eur, midnight, None
         first_event = datetime.fromisoformat(row["first_event_at"])
         target = max(midnight, first_event - timedelta(minutes=30))
         data = self._request(client, "defillama", f"https://coins.llama.fi/prices/historical/{int(target.timestamp())}/{provider_id}",
                              {"searchWidth": "1h"}, evidence)
-        coin = data.get("coins", {}).get(provider_id, {})
+        if not isinstance(data, dict) or not isinstance(data.get("coins"), dict):
+            fail("historical_price_response_invalid")
+        coin = data["coins"].get(provider_id, {})
+        if not isinstance(coin, dict):
+            fail("historical_price_response_invalid")
         instant = coin.get("timestamp")
         if type(instant) is not int or not int(midnight.timestamp()) <= instant <= int(first_event.timestamp()) or abs(instant - int(target.timestamp())) > 3600:
             # Keine spaeteren oder still zurueckdatierten Quotes in historische Ereignisse schreiben.

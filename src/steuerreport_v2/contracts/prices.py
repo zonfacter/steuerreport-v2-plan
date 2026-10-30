@@ -86,6 +86,13 @@ class PriceCsvImportResult(BaseModel):
     pipeline: PipelineResult | None = None
 
 
+V1_FX_CACHE_BLOCK_CODE = "v1_fx_cache_import_blocked_unverified"
+V1_FX_CACHE_BLOCK_MESSAGE = (
+    "V1-Cache-Uebernahme gesperrt: Beleg, Kurszeit, Identitaet und "
+    "unveraenderlicher Snapshot sind nicht geprueft. Die Vorschau zeigt nur Kandidaten."
+)
+
+
 class V1FxCacheImportRequest(BaseModel):
     db_path: str = str(configured_import_path("v1_fx_db_file", "reference/legacy-prices.db"))
     confidence: Decimal = Decimal("1.0")
@@ -104,11 +111,15 @@ class V1FxCacheImportRow(BaseModel):
 
 class V1FxCacheImportPreview(BaseModel):
     db_path: str
+    candidate_only: Literal[True] = True
+    import_allowed: Literal[False] = False
+    block_code: Literal["v1_fx_cache_import_blocked_unverified"] = V1_FX_CACHE_BLOCK_CODE
+    block_reason: str = V1_FX_CACHE_BLOCK_MESSAGE
     requirements_count: int
-    importable_count: int
+    importable_count: int = Field(description="Anzahl unverbindlicher rechnerischer Kandidaten; keine Importfreigabe")
     missing_asset_usd_count: int
     missing_usd_eur_count: int
-    importable: list[V1FxCacheImportRow]
+    importable: list[V1FxCacheImportRow] = Field(description="Unverbindliche Kandidaten; Beleg, Zeit, Identitaet und Snapshot sind nicht geprueft")
     missing: list[dict[str, str]]
 
 

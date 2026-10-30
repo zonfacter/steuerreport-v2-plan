@@ -46,7 +46,7 @@ def test_load_coin_ids_maps_symbols_aliases_and_store_keys(tmp_path):
 
 
 def test_group_status_requires_zero_failures_and_importable_days():
-    assert MODULE.group_status({"failure_count": 0, "importable_price_days": 2}) == "ready_for_execute"
+    assert MODULE.group_status({"failure_count": 0, "importable_price_days": 2}) == "candidate_review_required"
     assert (
         MODULE.group_status({"failure_count": 1, "importable_price_days": 2})
         == "provider_or_fx_review_required"

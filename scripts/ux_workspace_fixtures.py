@@ -161,6 +161,8 @@ class WorkspaceFixture:
             data = dict(items=items, total=len(items), unfiltered_total=0 if self.fresh else 1, blocking_total=0 if self.fresh else 1, page=1, pages=1, page_size=body.get("page_size", 25), generated_at=STAMP)
         elif path == "/api/v1/portfolio/snapshot":
             data = dict(total_value_eur="0" if self.zero or self.fresh else "1200", positions=[] if self.fresh else [{}], asset_summary=[] if self.fresh else [{"asset": "SOL", "quantity": "10", "value_eur": "0" if self.zero else "1200", "price_status": "available", "priced_at_latest": STAMP, "price_sources": ["synthetic"]}], missing_price_assets=[])
+        elif route.request.method == "GET" and path in {"/api/v1/prices", "/api/v1/prices/latest"}:
+            data = []
         elif path == "/api/v1/cockpit/summary":
             data = dict(generated_at=STAMP, portfolio_performance={"live_value_eur": None, "calculated_value_eur": "0" if self.zero else "1200"}, price_coverage={"total_assets": 0 if self.fresh else 1, "priced_assets": 0 if self.fresh else 1}, live_reconciliation={"latest_live_snapshot_at": None}, tasks=[], top_assets=[], top_sources=[], open_tasks=0, export_allowed=False)
         elif path == "/api/v1/import/profiles":

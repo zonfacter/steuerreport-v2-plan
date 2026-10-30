@@ -97,6 +97,8 @@ class ImportAssistantService:
                 can_execute=False,
                 import_context=import_context,
                 blocked_reason=(
+                    "Die direkte V1-Cache-Uebernahme ist gesperrt; die Vorschau liefert nur Kandidaten."
+                    if request.import_mode == "v1_cache" else
                     "Dieser Assistent fuehrt diese Importart nicht direkt aus. "
                     "Nutze zuerst die verlinkten Preflight-Endpunkte; ein spaeterer "
                     "Execute muss ueber den spezialisierten, belegbaren Pfad laufen."
@@ -442,11 +444,14 @@ class ImportAssistantService:
         if request.import_mode == "v1_cache":
             return [
                 ImportAssistantLinkedPreflight(
-                    label="V1 FX Cache Preis-Preview",
+                    label="V1 FX Cache Kandidatenvorschau",
                     endpoint="/api/v1/prices/import/v1-fx-cache/preview",
                     method="POST",
-                    purpose="Prueft belegbare historische V1-Preise ohne Persistenz.",
-                    next_step="Nur nach positiver Preview V1-FX-Cache-Import ausfuehren.",
+                    writes_database=True,
+                    purpose=("Zeigt unverbindliche rechnerische Kandidaten; keine Beleg-, "
+                             "Zeit-, Identitaets- oder Snapshot-Pruefung. Bei kaltem Store kann Schema initialisiert werden."),
+                    next_step=("Direkte Uebernahme gesperrt. Fehlende Originalbelege und Identitaet klaeren; "
+                               "historische EUR-Preise gegebenenfalls manuell belegen."),
                 )
             ]
         return []

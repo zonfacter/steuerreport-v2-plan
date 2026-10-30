@@ -67,7 +67,7 @@ export const HELP_TOPICS = [
     "Öffne EUR-Preise ermitteln und wähle Alle erkannten Token sowie ein Jahr oder Alle Jahre. Preisbedarf planen erfasst auch Token aus Transfers, ohne sie als Rewards oder Trades anzuerkennen. Vorhandene, fehlende und blockierte Tagespreise bleiben getrennt.",
     "Bestätige den externen Abruf. Weitere Abschnitte ergänzen dieselbe kombinierte Vorschau; fehlgeschlagene Zeilen werden nur nach ausdrücklichem erneutem Versuch abgefragt. Lade Jahresdateien und Originalbelege als ZIP oder die Auswertung als JSON/Markdown herunter. Dafür ist keine KI erforderlich.",
     "Prüfe Preise und Berechnungsänderungen. Erst freigebende Person und getrennte Bestätigungen für Preise und Neuberechnung erlauben die Übernahme. Rohbelege und Ereignisklassifikationen bleiben unverändert; offene Einordnungen und Jahresfreigaben bleiben offen.",
-    "Ordne unbekannte Token einer exakten Preisquelle zu. Historische EUR-Preise benoetigen keine V1-Installation. Heutige Portfolio-Marktpreise bleiben ein eigener Abruf und ersetzen keine historischen Ereignispreise.",
+    "Ordne unbekannte Token einer exakten Preisquelle zu. Historische EUR-Preise benoetigen keine V1-Installation. Der manuelle Portfolio-Kursabruf speichert Preise im gemeinsamen Ledger und startet eine Neuberechnung. Sein Anbieter-Kurszeitpunkt wird nicht geprueft.",
     "Untersuche Bestandsabweichungen im Quellenabgleich. Fehlende Anschaffungsbelege nicht durch geschaetzte Kaeufe ersetzen."
   ], caution: "Aktueller Marktwert, steuerlicher Gewinn und tatsaechlicher Geldzufluss sind verschiedene Groessen." },
   { id: "stichtage", title: "Historische Stichtagswerte", keywords: "datum bewertung kurs historisch", steps: [

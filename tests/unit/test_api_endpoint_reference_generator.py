@@ -41,3 +41,17 @@ def test_endpoint_reference_check_preserves_documented_date(tmp_path, monkeypatc
 
     assert generator.main() == 0
     assert generator.existing_reference_date(output) == "2000-01-01"
+
+
+def test_v1_cache_guard_overrides_stale_endpoint_metadata():
+    routes = generator.parse_routes(generator.APP_PATH)
+    metadata = {
+        ("POST", "/api/v1/prices/import/v1-fx-cache"): ("Alter Import", "schreibt Preise"),
+        ("POST", "/api/v1/prices/import/v1-fx-cache/preview"): ("Alte Vorschau", "schreibt"),
+    }
+    rendered = generator.render(routes, metadata, "2000-01-01")
+    assert "Blockiert direkte V1-Cache-Uebernahme ohne geprueften Vertrag" in rendered
+    assert "HTTP 409; kein Preisimport und keine Pipeline-Neuberechnung" in rendered
+    assert "Zeigt unverbindliche V1-Cache-Kandidaten ohne Uebernahmefreigabe" in rendered
+    assert "Kandidaten ohne Finanzimport; kalter Store kann Schema initialisieren oder migrieren" in rendered
+    assert "Alter Import" not in rendered and "Alte Vorschau" not in rendered

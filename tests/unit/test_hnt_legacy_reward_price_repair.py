@@ -154,7 +154,8 @@ def test_build_report_shows_delta_and_importability():
     assert report["summary"]["repaired_income_eur"] == "462.81157370810194839750"
     assert report["summary"]["delta_eur"] == "452.81157370810194839750"
     assert report["summary"]["importable_price_days"] == 1
-    assert report["rows"][0]["will_import"] is True
+    assert report["rows"][0]["will_import"] is False
+    assert report["execute_allowed"] is False
 
 
 def test_fetch_cached_eur_price_uses_asset_usd_and_usd_eur_fx_cache(tmp_path):
