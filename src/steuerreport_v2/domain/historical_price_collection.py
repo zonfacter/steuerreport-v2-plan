@@ -42,15 +42,18 @@ def fallback_candidates(row):
 def historical_quote(payload, row, positive, fail):
     if not isinstance(payload, dict) or not isinstance(payload.get("coins"), dict):
         fail("historical_price_response_invalid")
-    coin = payload["coins"].get(row["provider_id"], {})
-    if not isinstance(coin, dict) or not isinstance(coin.get("prices"), list):
+    if row["provider_id"] not in payload["coins"]:
         fail("historical_price_quote_missing")
+    coin = payload["coins"][row["provider_id"]]
+    if not isinstance(coin, dict) or not isinstance(coin.get("prices"), list):
+        fail("historical_price_response_invalid")
     target = int(quote_target(row).timestamp())
     first = datetime.fromisoformat(row["first_event_at"])
     candidates = []
+    invalid_value = False
     for item in coin["prices"]:
         if not isinstance(item, dict) or type(item.get("timestamp")) is not int:
-            continue
+            fail("historical_price_response_invalid")
         if abs(item["timestamp"] - target) > 3600:
             continue
         try:
@@ -59,12 +62,18 @@ def historical_quote(payload, row, positive, fail):
             continue
         if instant.date().isoformat() != row["price_date"] or instant > first:
             continue
-        value = positive(item.get("price"))
-        confidence = item.get("confidence")
-        if confidence is not None and not Decimal("0.95") <= positive(confidence) <= 1:
+        try:
+            value = positive(item.get("price"))
+            confidence = item.get("confidence")
+            if confidence is not None and not Decimal("0.95") <= positive(confidence) <= 1:
+                continue
+        except ValueError:
+            invalid_value = True
             continue
         candidates.append((abs(item["timestamp"] - target), -item["timestamp"], value))
     if not candidates:
+        if invalid_value:
+            fail("historical_price_value_invalid")
         fail("historical_price_timestamp_mismatch")
     candidates.sort()
     selected = candidates[0]
@@ -162,6 +171,7 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
                 return True
             except Exception as error:
                 mark_open(row, error)
+                row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), row["_fx"][2]]))
                 attempt.update(status="open", reason=row["reason"])
                 return False
 
@@ -223,7 +233,7 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
                     except Exception as error:
                         for row in primary:
                             mark_open(row, error)
-                            row["evidence_sha256"] = [item["sha256"] for item in evidence[before:]]
+                            row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *(item["sha256"] for item in evidence[before:]), row["_fx"][2]]))
                 alternatives = [row for row in ready if row["status"] == "pending" and row.get("lookup_stage") == "fallback"]
                 if alternatives and scope.budget.requests_started < query.max_requests:
                     before = len(evidence)
@@ -242,7 +252,7 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
                     except Exception as error:
                         for row in alternatives:
                             mark_open(row, error)
-                            row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *(item["sha256"] for item in evidence[before:])]))
+                            row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *(item["sha256"] for item in evidence[before:]), row["_fx"][2]]))
                             row["lookup_stage"] = "exhausted"
                 checkpoint("Kurse abrufen")
         for row in rows:
