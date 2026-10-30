@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "vite";
@@ -11,9 +11,10 @@ test("dashboard history URL survives reload and browser navigation without chang
     throw new Error("Set PLAYWRIGHT_CORE and CHROMIUM_EXECUTABLE to local installations");
   }
   const { chromium } = await import(process.env.PLAYWRIGHT_CORE);
+  const cacheDir = mkdtempSync(join(tmpdir(), "steuerreport-vite-test-"));
   const server = await createServer({
     configFile: false, envFile: false, root: process.cwd(), plugins: [react()],
-    cacheDir: mkdtempSync(join(tmpdir(), "steuerreport-vite-test-")),
+    cacheDir,
     define: { "import.meta.env.VITE_API_BASE": JSON.stringify("http://fixture.invalid") },
     server: { host: "127.0.0.1", port: 0 }
   });
@@ -94,5 +95,6 @@ test("dashboard history URL survives reload and browser navigation without chang
   } finally {
     if (browser) await browser.close();
     await server.close();
+    rmSync(cacheDir, { recursive: true, force: true });
   }
 });
