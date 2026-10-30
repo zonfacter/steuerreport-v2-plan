@@ -16,9 +16,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     STEUERREPORT_V2_SECRET_VAULT_KEY_FILE=/state/keys/vault.key \
     STEUERREPORT_V2_REQUIRE_ENCRYPTED_SECRETS=true
 WORKDIR /app
-COPY pyproject.toml requirements-runtime.lock README.md ./
+COPY requirements-runtime.lock ./
+RUN pip install --no-cache-dir -r requirements-runtime.lock
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir -c requirements-runtime.lock . \
+RUN pip install --no-cache-dir --no-deps . \
+    && pip check \
     && groupadd --gid 10001 steuerreport \
     && useradd --uid 10001 --gid 10001 --no-create-home steuerreport \
     && mkdir -p /state/data /state/var /state/keys /state/imports /state/configs \
