@@ -40,7 +40,9 @@ def fallback_candidates(row):
 
 
 def historical_quote(payload, row, positive, fail):
-    coin = payload.get("coins", {}).get(row["provider_id"], {})
+    if not isinstance(payload, dict) or not isinstance(payload.get("coins"), dict):
+        fail("historical_price_response_invalid")
+    coin = payload["coins"].get(row["provider_id"], {})
     if not isinstance(coin, dict) or not isinstance(coin.get("prices"), list):
         fail("historical_price_quote_missing")
     target = int(quote_target(row).timestamp())
@@ -49,8 +51,13 @@ def historical_quote(payload, row, positive, fail):
     for item in coin["prices"]:
         if not isinstance(item, dict) or type(item.get("timestamp")) is not int:
             continue
-        instant = datetime.fromtimestamp(item["timestamp"], UTC)
-        if instant.date().isoformat() != row["price_date"] or instant > first or abs(item["timestamp"] - target) > 3600:
+        if abs(item["timestamp"] - target) > 3600:
+            continue
+        try:
+            instant = datetime.fromtimestamp(item["timestamp"], UTC)
+        except (OverflowError, OSError, ValueError):
+            continue
+        if instant.date().isoformat() != row["price_date"] or instant > first:
             continue
         value = positive(item.get("price"))
         confidence = item.get("confidence")
@@ -111,9 +118,12 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
             day = date.fromisoformat(row["price_date"])
             key = str(day.year)
             if key in fx_errors:
-                raise fx_errors[key]
+                error, hashes = fx_errors[key]
+                row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *hashes]))
+                raise error
             if key not in fx_series:
                 days = [date.fromisoformat(item["price_date"]) for item in rows if item["price_date"].startswith(key) and item["status"] in {"pending", "fetched"}]
+                before = len(evidence)
                 try:
                     payload, linked = request("fx", "https://api.frankfurter.dev/v2/providers/ecb/rates",
                                               {"base": "USD", "quotes": "EUR", "from": (min(days) - timedelta(days=7)).isoformat(), "to": max(days).isoformat()})
@@ -122,13 +132,19 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
                 except RequestLimitError:
                     raise
                 except Exception as error:
-                    fx_errors[key] = error
+                    hashes = [item["sha256"] for item in evidence[before:]]
+                    row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *hashes]))
+                    fx_errors[key] = (error, hashes)
                     raise
                 fx_series[key] = linked[-1]
             entry = fx_series[key]
             content = service._path("evidence", entry["sha256"] + ".body").read_bytes()
             payload = json.loads(content, parse_float=Decimal)
-            rate, fx_day = historical_fx(payload, day, positive, fail)
+            try:
+                rate, fx_day = historical_fx(payload, day, positive, fail)
+            except Exception:
+                row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), entry["sha256"]]))
+                raise
             return rate, fx_day, entry["sha256"]
 
         def resolve(row, payload, provider_id, search, linked):
@@ -187,7 +203,7 @@ def collect_section(service, query, rows, previous, progress, positive, fail, *,
                         break
                     except Exception as error:
                         mark_open(row, error)
-                        row["evidence_sha256"] = [item["sha256"] for item in evidence[before:]]
+                        row["evidence_sha256"] = list(dict.fromkeys([*row.get("evidence_sha256", []), *(item["sha256"] for item in evidence[before:])]))
                 if scope.budget.requests_started >= query.max_requests:
                     checkpoint("Abrufabschnitt beendet")
                     break
