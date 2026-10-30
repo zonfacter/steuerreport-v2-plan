@@ -346,8 +346,10 @@ class PortfolioService:
             ),
             methodology=(
                 "Summiert Balance-Ledger-Deltas bis einschliesslich Stichtag und "
-                "bewertet jede Asset-Position mit dem letzten unabhaengig belegten "
-                "EUR-Preis am oder vor dem Stichtag. Aus Transaktions-Quotes "
+                "bewertet jede Asset-Position mit einem unabhaengig belegten "
+                "EUR-Preis am selben UTC-Kalendertag bis zum Stichtag; EUR hat "
+                "einen festen Referenzwert. Positionen ohne zulaessigen Preis "
+                "fehlen im ausgewiesenen Teilwert. Aus Transaktions-Quotes "
                 "abgeleitete Preise werden nicht als Besitzwert verwendet und "
                 "bleiben bis zum Preisnachweis als fehlend markiert. Datum ohne Uhrzeit wird als "
                 "23:59:59.999999 UTC interpretiert. Transfer- und Bridge-"
@@ -369,10 +371,11 @@ class PortfolioService:
         interval: str = "month",
         max_points: int = 72,
     ) -> PortfolioValueHistoryReport:
-        ledger_start, ledger_end = self._ledger_date_bounds()
-        requested_to = self._normalize_as_of(to_date).date() if to_date else (ledger_end or datetime.now(timezone.utc).date())
+        ledger_start, _ = self._ledger_date_bounds()
+        current_time = None if to_date else datetime.now(timezone.utc)
+        requested_to = self._normalize_as_of(to_date).date() if to_date else current_time.date()
         default_from = max(
-            ledger_start or requested_to,
+            min(ledger_start or requested_to, requested_to),
             requested_to - timedelta(days=730),
         )
         requested_from = (
@@ -381,7 +384,10 @@ class PortfolioService:
             else default_from
         )
         if requested_from > requested_to:
-            requested_from, requested_to = requested_to, requested_from
+            if current_time is not None:
+                requested_from = requested_to
+            else:
+                requested_from, requested_to = requested_to, requested_from
 
         normalized_interval = self._normalize_history_interval(interval, requested_from, requested_to)
         safe_max_points = min(max(int(max_points), 2), 366)
@@ -392,7 +398,8 @@ class PortfolioService:
             max_points=safe_max_points,
         )
         points: list[PortfolioValueHistoryPoint] = []
-        ledger_rows = self._ledger_rows_until(datetime.combine(requested_to, time.max, tzinfo=timezone.utc))
+        end_at = current_time or datetime.combine(requested_to, time.max, tzinfo=timezone.utc)
+        ledger_rows = self._ledger_rows_until(end_at)
         account_aliases = build_account_alias_map_for_store(
             self.store,
             [str(row.account) for row in ledger_rows],
@@ -402,6 +409,8 @@ class PortfolioService:
         row_index = 0
         for marker in markers:
             marker_at = datetime.combine(marker, time.max, tzinfo=timezone.utc)
+            if current_time is not None and marker == requested_to:
+                marker_at = current_time
             while row_index < len(ledger_rows) and self._normalize_as_of(ledger_rows[row_index].event_time) <= marker_at:
                 row = ledger_rows[row_index]
                 account = canonical_account_label(str(row.account), account_aliases)
@@ -464,8 +473,11 @@ class PortfolioService:
             max_total_value_eur=max(values) if values else None,
             methodology=(
                 "V2-Portfolio-Historie aus derselben Methodik wie /api/v1/portfolio/as-of: "
-                "Balance-Ledger bis Stichtag, unabhaengig belegte historische EUR-Preise "
-                "am oder vor dem Stichtag, Transfer-/Bridge-Gegenparteien aus dem "
+                "Balance-Ledger bis Stichtag, unabhaengig belegte EUR-Preise am selben "
+                "UTC-Kalendertag bis zum Stichtag; EUR als fester Referenzwert. "
+                "Positionen ohne zulaessigen Preis fehlen im ausgewiesenen Teilwert. "
+                "Ohne ausdrueckliches Enddatum endet der aktuelle Punkt zum Abfragezeitpunkt. "
+                "Transfer-/Bridge-Gegenparteien aus dem "
                 "Besitzwert ausgeklammert. Event-Quotes werden nicht als Portfolio-"
                 "Stichtagspreise verwendet. "
                 "Dieser Verlauf ersetzt den alten Legacy-Roh-Event-Chart."
