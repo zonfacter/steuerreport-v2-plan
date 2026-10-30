@@ -10,9 +10,7 @@ from typing import Any
 
 import requests
 
-from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.pipeline import PipelineService
 
 COINGECKO_SOURCE = "coingecko:coins-history"
 COINGECKO_CURRENT_SOURCE = "coingecko:simple-price"
@@ -55,7 +53,7 @@ def main() -> None:
         targets = [target for target in targets if target["asset"] in requested]
 
     results: list[dict[str, Any]] = []
-    price_points: list[PricePointCreate] = []
+    candidates = 0
     for index, target in enumerate(targets):
         asset = target["asset"]
         coin_id = ASSET_IDS.get(asset)
@@ -82,7 +80,7 @@ def main() -> None:
             result["status"] = "missing_eur_price"
             results.append(result)
             continue
-        result["status"] = "ready"
+        result["status"] = "candidate_unverified"
         result["price_eur"] = str(price_eur)
         result["price_source"] = source
         result["price_at"] = priced_at
@@ -92,29 +90,17 @@ def main() -> None:
             "durch archivierte Providerbelege nachgewiesen."
         )
         results.append(result)
-        price_points.append(
-            PricePointCreate(
-                asset=asset,
-                price_eur=price_eur,
-                priced_at=priced_at,
-                source=source,
-                confidence=Decimal("0.90"),
-            )
-        )
-
-    pipeline = None
-    if args.execute and price_points:
-        store.add_price_points(price_points)
-        pipeline = PipelineService(store).rebuild_all().model_dump(mode="json")
+        candidates += 1
 
     print(
         json.dumps(
             {
-                "mode": "execute" if args.execute else "dry-run",
+                "mode": "dry-run",
                 "targets": _json_ready(results),
-                "created": len(price_points) if args.execute else 0,
-                "ready": len(price_points),
-                "pipeline": pipeline,
+                "created": 0,
+                "ready": 0,
+                "candidates_unverified": candidates,
+                "pipeline": None,
             },
             indent=2,
         )

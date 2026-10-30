@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -67,3 +68,23 @@ def test_history_error_does_not_silently_use_current_price(monkeypatch):
             coin_id="example", event_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
             timeout=5, allow_current_fallback=False,
         )
+
+
+def test_dry_run_identifies_candidate_as_unverified(monkeypatch, capsys):
+    timestamp = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr("sys.argv", ["backfill"])
+    monkeypatch.setattr(legacy, "DuckDbStore", lambda *args: object())
+    monkeypatch.setattr(legacy, "_missing_portfolio_targets", lambda *args: [
+        {"asset": "LINK", "priced_at": timestamp}
+    ])
+    monkeypatch.setattr(legacy, "_fetch_price_eur", lambda **kwargs: (
+        Decimal("1.25"), timestamp, legacy.COINGECKO_SOURCE
+    ))
+    legacy.main()
+    output = json.loads(capsys.readouterr().out)
+    assert output["mode"] == "dry-run"
+    assert output["targets"][0]["status"] == "candidate_unverified"
+    assert output["targets"][0]["price_at_is_verified"] is False
+    assert output["ready"] == output["created"] == 0
+    assert output["candidates_unverified"] == 1
+    assert output["pipeline"] is None
