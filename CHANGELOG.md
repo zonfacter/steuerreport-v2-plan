@@ -32,7 +32,8 @@
   Rohimportpfade ohne Produktscope.
 - Schema 3 setzt fuer migrierte und neue Importbatches dieselbe NOT-NULL-Regel.
   Neuere Datenbankschemata werden vor Schemaoperationen abgewiesen. Fuer den
-  Rueckweg zu einem aelteren Image bleibt ein Schema-2-Backup erforderlich.
+  Rueckweg zu einem aelteren Image bleibt ein Schema-2-Backup erforderlich; ein
+  separater lesender Vergleichshelfer prueft isolierte Datenbankkopien.
 - Die Aenderungen nehmen keine automatische Datenmigration aus dem nativen
   Bestand, keinen Historienimport und keine Methodenaktivierung vor. Eine
   Containeraktualisierung ist getrennt abzusichern und nachzuweisen.

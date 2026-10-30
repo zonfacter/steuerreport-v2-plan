@@ -10,7 +10,7 @@ def test_health_payload_reports_duckdb(tmp_path):
     payload = build_health_payload(DuckDbStore(tmp_path / "steuerreport_v2.duckdb"))
 
     assert payload["database_type"] == "duckdb"
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
 
 
 def test_health_route_is_registered(tmp_path):

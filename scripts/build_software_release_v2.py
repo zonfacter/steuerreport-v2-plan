@@ -31,6 +31,7 @@ PUBLIC_DOCUMENTS = {
 DOCUMENTS = {
     "docs/MEXC_IMPORT.md",
     "docs/RELEASE_0.2.0rc38.md",
+    "docs/RELEASE_0.2.0rc37.md",
     "docs/RELEASE_0.2.0rc36.md",
     "docs/RELEASE_0.2.0rc35.md",
     "docs/RELEASE_0.2.0rc34.md",

@@ -18,6 +18,10 @@ Abnahme und bestaetigt keine vollstaendige Migration aus der nativen Anwendung.
   verifizierten Legacy-Kontext. Neue und migrierte Kontexte sind gleichermassen
   NOT NULL. Neuere Schemata werden vor Schemaoperationen abgewiesen. Vor
   Aktualisierung Sicherung und Restore samt vorherigem Image und Schema pruefen.
+- Ein lesender Vergleichshelfer fuer isolierte Schema-2-/Schema-3-Kopien prueft
+  Tabellen, Zeilen und die dokumentierten Legacy-Kontexte. Er erstellt keine
+  Sicherung und ersetzt weder den Dateiabgleich von `/state` noch eine fachliche
+  Migration aus der nativen Anwendung.
 
 ## Grenzen
 
@@ -37,3 +41,18 @@ Vor einem produktiven Containerwechsel muessen ein konsistenter Backupstand
 des gesamten `/state`, ein Restore in ein separates Volume und ein Rueckweg
 mit dem vorherigen Image nachgewiesen sein. Ein aelteres Image darf nicht
 ungeprueft auf ein mit Schema 3 migriertes Volume zugreifen.
+
+Der Vergleichshelfer akzeptiert nur getrennte Offline-Kopien unter dem
+Temp-Verzeichnis:
+
+```sh
+python scripts/compare_schema2_to3_v2.py --before /tmp/schema2.duckdb --after /tmp/schema3.duckdb
+```
+
+Ein `passed` bestaetigt ausschliesslich den geprueften Datenbankuebergang. Der
+Erhalt von Profil, Schluesseln, Rohdateien und anderen Dateien ist separat
+nachzuweisen; sensible Kopien und Ergebnisse mit Datenbank-Hashes sind privat zu
+behandeln. Nichtsystemische Views, zusaetzliche Schemas, Sequenzen, Makros,
+benutzerdefinierte Typen und persistente Datenbank-Secrets werden derzeit nicht
+verglichen, sondern fuehren zu einer ausdruecklichen Ablehnung. Das gilt auch
+fuer Tabellen mit expliziter Collation.
