@@ -550,6 +550,7 @@ from steuerreport_v2.domain.import_assistant import (
     binance_file_requires_connection,
     validate_import_connection_binding,
 )
+from steuerreport_v2.domain.binance_spot_matches import BinanceSpotHistoryMatchService
 from steuerreport_v2.domain.jup_perps import JupPerpsPreviewService
 from steuerreport_v2.domain.jupiter import JupiterTokenService
 from steuerreport_v2.domain.parity import V1ParityService
@@ -680,6 +681,16 @@ def _import_preview_warnings(
                         for reason in preview.mexc.blocking_reasons)
         warnings.extend({"code": "mexc_import_review", "message": reason, "field": "mexc"}
                         for reason in preview.mexc.warnings)
+    if preview.source.strip().lower() == "bitget" and preview.blocking_reasons:
+        warnings.extend({"code": "import_preview_blocked", "message": reason, "field": content_field}
+                        for reason in preview.blocking_reasons)
+    if (preview.source.strip().lower() == "bitget"
+            and preview.import_context.get("timezone_basis") == "legacy_default_unverified"):
+        warnings.append({
+            "code": "bitget_legacy_timezone_unverified",
+            "message": "Der UTC+08-Fallback ist nicht verifiziert. Die Datei muss im gefuehrten Import mit ausdruecklicher Exportzeitzone geprueft werden.",
+            "field": content_field,
+        })
     if preview.missing_required_groups:
         warnings.append(
             {
@@ -719,7 +730,7 @@ def _import_preview_errors(
     return [
         warning
         for warning in _import_preview_warnings(preview, content_field)
-        if warning["code"] in {"missing_required_columns", "empty_import_file", "mexc_import_blocked"}
+        if warning["code"] in {"missing_required_columns", "empty_import_file", "mexc_import_blocked", "import_preview_blocked"}
     ]
 
 
@@ -728,7 +739,7 @@ _IMPORT_BINDING_ERROR_MESSAGES = {
     "connection_not_found": "Die ausgewaehlte Verbindung existiert nicht mehr. Verbindungsliste neu laden.",
     "connection_provider_mismatch": "Die ausgewaehlte Verbindung gehoert nicht zum Anbieter Binance.",
     "connection_binding_file_mode_required": "Eine Verbindungsbindung ist nur fuer einen Dateiimport zulaessig.",
-    "connection_binding_provider_unsupported": "Die explizite Datei-Verbindungsbindung ist in diesem Schritt nur fuer Binance verfuegbar.",
+    "connection_binding_provider_unsupported": "Die explizite Datei-Verbindungsbindung ist in diesem Schritt nur fuer Binance und Bitget verfuegbar.",
     "connection_binding_required": "Diese Binance-Datei hat keine Konto-/Wallet-Spalte. Vor dem Import muss eine konkrete Binance-Verbindung ausgewaehlt werden.",
 }
 
@@ -1860,6 +1871,13 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         )
         if binding_errors:
             return ApiResponse(status="error", errors=binding_errors)
+        if (source.strip().lower() == "binance" and connection_id
+                and BinanceSpotHistoryMatchService(db).has_stored_spot_history(connection_id)):
+            return ApiResponse(status="error", errors=[{
+                "code": "history_binance_spot_match_requires_guided_import",
+                "message": "Für dieses Binance-Konto liegt API-Spot-Historie vor. Dateiimporte müssen über den geführten Import mit explizitem CSV/API-Abgleich erfolgen.",
+                "field": "source",
+            }])
         importer = CsvRawImporter(db)
         try:
             preview = importer.preview_text(
@@ -1876,13 +1894,22 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         errors = _import_preview_errors(preview, "content")
         if errors:
             return ApiResponse(status="error", errors=errors)
-        batch = importer.import_text(
-            source=source,
-            filename=str(payload["filename"]),
-            content=str(payload["content"]),
-            connection_id=connection_id,
-            mexc=payload.get("mexc"),
-        )
+        try:
+            batch = importer.import_text(
+                source=source,
+                filename=str(payload["filename"]),
+                content=str(payload["content"]),
+                connection_id=connection_id,
+                mexc=payload.get("mexc"),
+            )
+        except ValueError as exc:
+            if str(exc) != "binance_spot_history_requires_guided_import":
+                raise
+            return ApiResponse(status="error", errors=[{
+                "code": str(exc),
+                "message": "Für dieses Binance-Konto liegt API-Spot-Historie vor. Dateiimporte müssen über den geführten Import mit explizitem CSV/API-Abgleich erfolgen.",
+                "field": "source",
+            }])
         warnings = _import_preview_warnings(preview, "content")
         return ApiResponse(
             status="warning" if warnings else "ok",
@@ -1953,6 +1980,13 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         )
         if binding_errors:
             return ApiResponse(status="error", errors=binding_errors)
+        if (source.strip().lower() == "binance" and connection_id
+                and BinanceSpotHistoryMatchService(db).has_stored_spot_history(connection_id)):
+            return ApiResponse(status="error", errors=[{
+                "code": "history_binance_spot_match_requires_guided_import",
+                "message": "Für dieses Binance-Konto liegt API-Spot-Historie vor. Dateiimporte müssen über den geführten Import mit explizitem CSV/API-Abgleich erfolgen.",
+                "field": "source",
+            }])
         importer = FileRawImporter(CsvRawImporter(db))
         try:
             preview = importer.preview_base64(
@@ -1970,14 +2004,23 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         errors = _import_preview_errors(preview, "content_base64")
         if errors:
             return ApiResponse(status="error", errors=errors)
-        batch = importer.import_base64(
-            source=source,
-            filename=str(payload["filename"]),
-            content_base64=str(payload["content_base64"]),
-            sheet_name=payload.get("sheet_name"),
-            connection_id=connection_id,
-            mexc=payload.get("mexc"),
-        )
+        try:
+            batch = importer.import_base64(
+                source=source,
+                filename=str(payload["filename"]),
+                content_base64=str(payload["content_base64"]),
+                sheet_name=payload.get("sheet_name"),
+                connection_id=connection_id,
+                mexc=payload.get("mexc"),
+            )
+        except ValueError as exc:
+            if str(exc) != "binance_spot_history_requires_guided_import":
+                raise
+            return ApiResponse(status="error", errors=[{
+                "code": str(exc),
+                "message": "Für dieses Binance-Konto liegt API-Spot-Historie vor. Dateiimporte müssen über den geführten Import mit explizitem CSV/API-Abgleich erfolgen.",
+                "field": "source",
+            }])
         warnings = _import_preview_warnings(preview, "content_base64")
         return ApiResponse(
             status="warning" if warnings else "ok",
@@ -2021,6 +2064,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         payload: ImportAssistantRequest,
     ) -> ApiResponse[ImportAssistantExecuteResult]:
         try:
+            matched_import = BinanceSpotHistoryMatchService(db).import_csv_if_needed(payload)
+            if matched_import is not None:
+                return ApiResponse(data=matched_import)
             return ApiResponse(data=ImportAssistantService(db).execute(payload))
         except BitgetCsvStructureError as exc:
             content_field = "content_base64" if payload.content_base64 else "content"

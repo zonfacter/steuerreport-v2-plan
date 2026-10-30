@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from steuerreport_v2.contracts.pipeline import ImportRunResult
 from steuerreport_v2.contracts.mexc_import import MexcImportOptions, MexcImportPreview
@@ -17,6 +17,7 @@ class ImportBatchCreate(BaseModel):
     filename: str | None = None
     file_hash: str | None = None
     connection_id: UUID | None = None
+    import_context: dict[str, str] = Field(default_factory=dict)
 
 
 class ImportBatch(BaseModel):
@@ -25,6 +26,7 @@ class ImportBatch(BaseModel):
     filename: str | None = None
     file_hash: str | None = None
     connection_id: UUID | None = None
+    import_context: dict[str, str] = Field(default_factory=dict)
     status: ImportStatus
     created_at: datetime
     raw_object_count: int = 0
@@ -54,11 +56,14 @@ class CsvImportPreview(BaseModel):
     columns: list[str]
     matched_columns: dict[str, str | None]
     missing_required_groups: list[str]
+    blocking_reasons: list[str] = Field(default_factory=list)
     sample_rows: list[dict[str, str | None]]
     can_import: bool
     duplicate_batch_id: str | None = None
     duplicate_batch_connection_id: UUID | None = None
     connection_id: UUID | None = None
+    import_context: dict[str, str] = Field(default_factory=dict)
+    duplicate_batch_import_context: dict[str, str] | None = None
     file_sha256: str | None = None
     import_fingerprint: str | None = None
     mexc: MexcImportPreview | None = None
@@ -76,6 +81,16 @@ class ImportAssistantRequest(BaseModel):
     sheet_name: str | None = None
     connection_id: UUID | None = None
     mexc: MexcImportOptions | None = None
+    export_timezone: str | None = None
+    bitget_product_scope: Literal["spot", "usdt_futures", "isolated_margin"] | None = None
+    bitget_margin_pair: str | None = None
+
+    @field_validator("source")
+    @classmethod
+    def canonicalize_bitget_source(cls, value: str) -> str:
+        if value.strip().lower() == "bitget":
+            return "bitget"
+        return value
 
 
 class ImportAssistantPriceNeed(BaseModel):
@@ -86,7 +101,7 @@ class ImportAssistantPriceNeed(BaseModel):
 
 class ImportAssistantTaxImpact(BaseModel):
     estimated_new_rows: int = 0
-    estimated_normalizable_rows: int = 0
+    estimated_normalizable_rows: int | None = None
     detected_assets: list[str] = Field(default_factory=list)
     detected_years: list[int] = Field(default_factory=list)
     duplicate_batch_id: str | None = None
@@ -128,6 +143,7 @@ class ImportAssistantLinkedPreflight(BaseModel):
 class ImportAssistantPreview(BaseModel):
     source: str
     import_mode: ImportAssistantMode
+    import_context: dict[str, str] = Field(default_factory=dict)
     can_execute: bool
     blocked_reason: str | None = None
     preview: CsvImportPreview | None = None

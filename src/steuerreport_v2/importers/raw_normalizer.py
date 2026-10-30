@@ -7,15 +7,17 @@ import json
 import calendar
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from steuerreport_v2.contracts.events import CanonicalEvent, CanonicalEventCreate
 from steuerreport_v2.contracts.installation import SolanaV1OwnershipScopeConfig
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.derivative_cash import BITGET_NEUTRAL_ACTIONS, bitget_financial_row
+from steuerreport_v2.domain.import_context import timezone_from_name
 from steuerreport_v2.importers.source_profiles import (
     SourceProfile,
     normalize_column_name,
@@ -100,10 +102,20 @@ class RawNormalizer:
         events: list[CanonicalEvent] = []
         event_payloads: list[CanonicalEventCreate] = []
         raw_objects = self.store.list_raw_objects(batch_id, limit=None)
-        batch_timezone = self._timezone_from_text(batch.filename) if batch.source == "binance" else None
+        if batch.source == "binance":
+            batch_timezone = self._timezone_from_text(batch.filename)
+        elif batch.source == "bitget":
+            timezone_name = batch.import_context.get("export_timezone")
+            batch_timezone = (
+                timezone_from_name(timezone_name)
+                if timezone_name
+                else timezone(timedelta(hours=8))
+            )
+        else:
+            batch_timezone = None
         bound_account = (
             f"connection:{batch.connection_id}"
-            if batch.source == "binance" and batch.connection_id is not None
+            if batch.source in {"binance", "bitget"} and batch.connection_id is not None
             else None
         )
         skipped = 0
@@ -476,7 +488,7 @@ class RawNormalizer:
         raw_object_id: str,
         row: dict[str, str | None],
         *,
-        default_timezone: timezone | None = None,
+        default_timezone: tzinfo | None = None,
         bound_account: str | None = None,
     ) -> CanonicalEventCreate | None:
         if source.strip().lower() == "mexc":
@@ -2132,7 +2144,7 @@ class RawNormalizer:
         value: str,
         profile: SourceProfile,
         *,
-        default_timezone: timezone | None = None,
+        default_timezone: tzinfo | None = None,
     ) -> datetime:
         if default_timezone is not None:
             return self._parse_datetime(value, default_timezone=default_timezone)
@@ -2146,9 +2158,9 @@ class RawNormalizer:
         profile: SourceProfile,
         row: dict[str, str | None],
         *,
-        default_timezone: timezone | None = None,
+        default_timezone: tzinfo | None = None,
     ) -> datetime:
-        row_timezone = default_timezone or self._timezone_from_column_names(row)
+        row_timezone = self._timezone_from_column_names(row) or default_timezone
         parsed = self._parse_event_datetime(
             value,
             profile,
@@ -2215,7 +2227,7 @@ class RawNormalizer:
             return None
         return parts[0], parts[1]
 
-    def _parse_datetime(self, value: str, default_timezone: timezone = timezone.utc) -> datetime:
+    def _parse_datetime(self, value: str, default_timezone: tzinfo = timezone.utc) -> datetime:
         normalized = value.strip().replace("\xa0", " ").replace("Z", "+00:00")
         normalized = normalized.replace(" at ", " ")
         for suffix in (" UTC", " GMT"):
@@ -2243,6 +2255,15 @@ class RawNormalizer:
             else:
                 raise
         if parsed.tzinfo is None:
+            if isinstance(default_timezone, ZoneInfo):
+                first = parsed.replace(tzinfo=default_timezone, fold=0)
+                second = parsed.replace(tzinfo=default_timezone, fold=1)
+                first_valid = first.astimezone(timezone.utc).astimezone(default_timezone).replace(tzinfo=None) == parsed
+                second_valid = second.astimezone(timezone.utc).astimezone(default_timezone).replace(tzinfo=None) == parsed
+                if not first_valid and not second_valid:
+                    raise ValueError("bitget_local_time_does_not_exist_in_selected_timezone")
+                if first_valid and second_valid and first.utcoffset() != second.utcoffset():
+                    raise ValueError("bitget_local_time_is_ambiguous_in_selected_timezone")
             return parsed.replace(tzinfo=default_timezone).astimezone(timezone.utc)
         return parsed.astimezone(timezone.utc)
 

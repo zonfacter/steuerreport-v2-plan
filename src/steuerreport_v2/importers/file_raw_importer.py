@@ -30,7 +30,10 @@ class FileRawImporter:
         sheet_name: str | None = None,
         connection_id: str | None = None,
         mexc=None,
+        import_context: dict[str, str] | None = None,
+        allow_legacy_bitget_context: bool = True,
     ) -> CsvImportPreview:
+        source = self.csv_importer.canonical_source(source)
         content = self._decode(content_base64)
         if source.strip().lower() == "mexc":
             from steuerreport_v2.importers.mexc_native import MexcNativeImporter
@@ -47,9 +50,22 @@ class FileRawImporter:
             file_hash,
             connection_id,
         )
+        import_context = dict(import_context or {})
+        if source.strip().lower() == "bitget" and not import_context and allow_legacy_bitget_context:
+            from steuerreport_v2.domain.import_context import bitget_import_context
+            import_context = bitget_import_context(
+                export_timezone=None, product_scope=None, margin_pair=None,
+                allow_legacy_defaults=True,
+            )
         profile = profile_for_source(source)
         matched, missing = inspect_profile_columns(profile, columns)
         sample_rows = rows[:5]
+        validate_row = self.csv_importer._bitget_row_validator(source, import_context)
+        blocking_reasons = [
+            reason
+            for index, row in enumerate(rows, start=1)
+            for reason in (validate_row(row, index) if validate_row is not None else [])
+        ]
         return CsvImportPreview(
             source=source,
             filename=filename,
@@ -61,11 +77,16 @@ class FileRawImporter:
             columns=columns,
             matched_columns=matched,
             missing_required_groups=missing,
+            blocking_reasons=blocking_reasons,
             sample_rows=sample_rows,
-            can_import=len(missing) == 0 and len(rows) > 0,
+            can_import=len(missing) == 0 and len(rows) > 0 and not blocking_reasons,
             duplicate_batch_id=duplicate.batch_id if duplicate is not None else None,
             duplicate_batch_connection_id=duplicate.connection_id if duplicate is not None else None,
             connection_id=connection_id,
+            import_context=import_context,
+            duplicate_batch_import_context=(
+                duplicate.import_context if duplicate is not None else None
+            ),
             file_sha256=self._file_hash(content, None),
             import_fingerprint=file_hash,
         )
@@ -78,6 +99,7 @@ class FileRawImporter:
         sheet_name: str | None = None,
         connection_id: str | None = None,
         mexc=None,
+        import_context: dict[str, str] | None = None,
     ) -> ImportBatch:
         content = self._decode(content_base64)
         if source.strip().lower() == "mexc":
@@ -91,6 +113,7 @@ class FileRawImporter:
             file_hash=file_hash,
             rows=rows,
             connection_id=connection_id,
+            import_context=import_context,
         )
 
     def _decode(self, content_base64: str) -> bytes:

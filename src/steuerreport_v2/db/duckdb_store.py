@@ -26,7 +26,7 @@ from steuerreport_v2.contracts.prices import PricePoint, PricePointCreate
 from steuerreport_v2.contracts.review import ReviewDecision, ReviewDecisionCreate
 from steuerreport_v2.paths import PROJECT_ROOT
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class _LockedDuckDbConnection:
@@ -72,6 +72,7 @@ class DuckDbStore:
 
     def connect(self) -> _LockedDuckDbConnection:
         self._connection_lock.acquire()
+        con = None
         try:
             con = duckdb.connect(str(self.path))
             if not self._schema_ready:
@@ -81,7 +82,11 @@ class DuckDbStore:
                         self._schema_ready = True
             return _LockedDuckDbConnection(con, self._connection_lock)
         except Exception:
-            self._connection_lock.release()
+            try:
+                if con is not None:
+                    con.close()
+            finally:
+                self._connection_lock.release()
             raise
 
     @contextmanager
@@ -93,6 +98,16 @@ class DuckDbStore:
             self._connection_lock.release()
 
     def ensure_schema(self, con: duckdb.DuckDBPyConnection) -> None:
+        has_schema_meta = con.execute(
+            "select count(*) from information_schema.tables "
+            "where table_schema='main' and table_name='schema_meta'"
+        ).fetchone()[0]
+        if has_schema_meta:
+            existing_version = con.execute(
+                "select value from schema_meta where key='schema_version'"
+            ).fetchone()
+            if existing_version is not None and int(existing_version[0]) > SCHEMA_VERSION:
+                raise RuntimeError("database_schema_newer_than_application")
         con.execute("""create table if not exists ai_change_sets (
             change_set_id varchar primary key, status varchar not null,
             data_json varchar not null, created_at timestamp not null
@@ -220,7 +235,8 @@ class DuckDbStore:
                 file_hash varchar,
                 status varchar not null,
                 created_at timestamp not null,
-                connection_id varchar
+                connection_id varchar,
+                import_context_json varchar not null default '{}'
             )
             """
         )
@@ -229,6 +245,28 @@ class DuckDbStore:
             con.execute(
                 "alter table raw_import_batches add column if not exists connection_id varchar"
             )
+        if schema_version < 3:
+            con.execute(
+                "alter table raw_import_batches add column if not exists import_context_json varchar default '{}'"
+            )
+        context_column = next(
+            (row for row in con.execute("pragma table_info('raw_import_batches')").fetchall()
+             if row[1] == "import_context_json"), None,
+        )
+        if context_column is not None and (schema_version < 3 or not context_column[3]):
+            legacy_bitget_context = json.dumps({
+                "context_version": "1",
+                "export_timezone": "UTC+08:00",
+                "timezone_basis": "legacy_default_unverified",
+                "product_scope": "unspecified_legacy",
+            }, sort_keys=True)
+            legacy_condition = "coalesce(import_context_json, '{}')='{}'" if schema_version < 3 else "import_context_json is null"
+            con.execute(
+                "update raw_import_batches set import_context_json=? "
+                f"where lower(source)='bitget' and {legacy_condition}", [legacy_bitget_context],
+            )
+            con.execute("update raw_import_batches set import_context_json='{}' where import_context_json is null")
+            con.execute("alter table raw_import_batches alter column import_context_json set not null")
         con.execute(
             """
             create table if not exists raw_objects (
@@ -755,8 +793,8 @@ class DuckDbStore:
             con.execute(
                 """
                 insert into raw_import_batches
-                    (batch_id, source, filename, file_hash, status, created_at, connection_id)
-                values (?, ?, ?, ?, ?, ?, ?)
+                    (batch_id, source, filename, file_hash, status, created_at, connection_id, import_context_json)
+                values (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     batch_id,
@@ -766,6 +804,7 @@ class DuckDbStore:
                     "created",
                     created_at,
                     str(payload.connection_id) if payload.connection_id else None,
+                    json.dumps(payload.import_context, ensure_ascii=False, sort_keys=True),
                 ],
             )
         batch = self.get_import_batch(batch_id)
@@ -781,8 +820,11 @@ class DuckDbStore:
             con.execute("begin transaction")
             try:
                 con.execute("""insert into raw_import_batches
-                    (batch_id,source,filename,file_hash,status,created_at) values (?,?,?,?,?,?)""",
-                    [batch_id, payload.source, payload.filename, payload.file_hash, "loaded", created_at])
+                    (batch_id,source,filename,file_hash,status,created_at,connection_id,import_context_json)
+                    values (?,?,?,?,?,?,?,?)""",
+                    [batch_id, payload.source, payload.filename, payload.file_hash, "loaded", created_at,
+                     str(payload.connection_id) if payload.connection_id else None,
+                     json.dumps(payload.import_context, ensure_ascii=False, sort_keys=True)])
                 if rows:
                     frame = pd.DataFrame(rows, columns=["raw_object_id", "batch_id", "row_number", "payload_json", "created_at"])
                     con.register("native_raw_rows", frame)
@@ -807,6 +849,7 @@ class DuckDbStore:
                     b.filename,
                     b.file_hash,
                     b.connection_id,
+                    b.import_context_json,
                     b.status,
                     b.created_at,
                     count(o.raw_object_id) as raw_object_count
@@ -815,7 +858,7 @@ class DuckDbStore:
                 where b.batch_id = ?
                 group by
                     b.batch_id, b.source, b.filename, b.file_hash,
-                    b.connection_id, b.status, b.created_at
+                    b.connection_id, b.import_context_json, b.status, b.created_at
                 """,
                 [batch_id],
             ).fetchone()
@@ -827,9 +870,10 @@ class DuckDbStore:
             filename=row[2],
             file_hash=row[3],
             connection_id=row[4],
-            status=row[5],
-            created_at=row[6],
-            raw_object_count=row[7],
+            import_context=self._decode_import_context(row[5]),
+            status=row[6],
+            created_at=row[7],
+            raw_object_count=row[8],
         )
 
     def get_import_batch_by_file_hash(
@@ -876,6 +920,7 @@ class DuckDbStore:
                     b.filename,
                     b.file_hash,
                     b.connection_id,
+                    b.import_context_json,
                     b.status,
                     b.created_at,
                     count(o.raw_object_id) as raw_object_count
@@ -883,7 +928,7 @@ class DuckDbStore:
                 left join raw_objects o on o.batch_id = b.batch_id
                 group by
                     b.batch_id, b.source, b.filename, b.file_hash,
-                    b.connection_id, b.status, b.created_at
+                    b.connection_id, b.import_context_json, b.status, b.created_at
                 order by b.created_at desc
                 """
             ).fetchall()
@@ -894,12 +939,26 @@ class DuckDbStore:
                 filename=row[2],
                 file_hash=row[3],
                 connection_id=row[4],
-                status=row[5],
-                created_at=row[6],
-                raw_object_count=row[7],
+                import_context=self._decode_import_context(row[5]),
+                status=row[6],
+                created_at=row[7],
+                raw_object_count=row[8],
             )
             for row in rows
         ]
+
+    @staticmethod
+    def _decode_import_context(value: str | None) -> dict[str, str]:
+        try:
+            decoded = json.loads(value or "{}")
+        except (TypeError, ValueError):
+            raise RuntimeError("import_batch_context_invalid") from None
+        if not isinstance(decoded, dict) or any(
+            not isinstance(key, str) or not isinstance(item, str)
+            for key, item in decoded.items()
+        ):
+            raise RuntimeError("import_batch_context_invalid")
+        return decoded
 
     def upsert_admin_setting(self, setting: AdminSettingWrite) -> AdminSetting:
         updated_at = datetime.now(timezone.utc)

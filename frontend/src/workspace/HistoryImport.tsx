@@ -3,6 +3,7 @@ import { AlertCircle, Check, Download, LoaderCircle, Pause, Play, RefreshCw, Upl
 import { HelpTip } from "../Help";
 import { ApiReadError, canonicalDecimal, readApi, timestamp, useResource } from "./resource";
 import { Badge, ExactQuantity, ResourceNotice } from "./Ui";
+import { BinanceSpotMatchReview } from "./BinanceSpotMatchReview";
 import "./history-import.css";
 
 // Local mirrors of contracts/history.py; the source is always taken from the panel.
@@ -104,6 +105,9 @@ const errors: Record<string, string> = {
   history_request_id_conflict: "Diese Anfragekennung gehört bereits zu anderen Abrufparametern. Den bestehenden Auftragsstatus und die Eingaben prüfen.",
   history_job_id_invalid: "Die Auftragskennung ist ungültig. Den Auftrag erneut aus der gespeicherten Liste auswählen.",
   history_job_storage_limit: "Die maximale Zahl gespeicherter Historienaufträge ist erreicht. Die serverseitige Auftragsverwaltung prüfen.",
+  history_match_api_evidence_not_persisted: "Der API-Fill ist noch nicht als Rohbeleg gespeichert. Zuerst die passende CSV an dieselbe Verbindung binden oder den API-Historienimport ausdrücklich abschließen.",
+  history_match_both_sources_already_imported: "CSV und API-Historie wurden bereits importiert. Ein neuer Abgleich ändert keine Ereignisse; den bestehenden Prüf- und Korrekturablauf verwenden.",
+  history_match_revoke_after_import: "Dieser Abgleich wurde bereits importiert. Ein Widerruf würde historische Ereignisse nicht zurücksetzen; eine gesonderte Korrekturprüfung ist erforderlich.",
   history_job_capacity: "Alle verfügbaren Abrufplätze sind belegt. Laufende Aufträge abwarten und später erneut versuchen.",
   history_binance_earn_connection_required: "Simple Earn ist nur mit einer ausdrücklich ausgewählten Binance-Kontoverbindung verfügbar. Globale oder Legacy-Zugangsdaten werden dafür nicht verwendet.",
   history_provider_request_budget_exhausted: "Das sichere Kontingent von 10.000 Anbieteranfragen für diesen Historienauftrag ist erreicht. Der Auftrag wird nicht weiter abgerufen; Umfang und gespeicherten Fortschritt prüfen.",
@@ -404,6 +408,9 @@ function SourceHistory({ sourceRef, sourceLabel, onApplied }: Props) {
         </div>
       </>}
       {job.status === "succeeded" && <><p role="status">{job.imported_events} Ereignisse importiert. Abdeckung und offene Review-Aufgaben bleiben zu prüfen.{typeof job.approval?.actor === "string" && ` Freigegeben von: ${job.approval.actor}.`}</p><a className="wsButton" href="#portfolio?tab=prices">Historische EUR-Preise ermitteln</a></>}
+      {job.provider.toLowerCase() === "binance" && !job.includes_binance_earn && (job.status === "ready" || job.status === "succeeded") && <BinanceSpotMatchReview key={job.id}
+        base={base} jobId={job.id} jobStatus={job.status} sourceLabel={sourceLabel} actor={actor}
+        setActor={(value) => { setActor(value); sessionActor = value; }} />}
       <details className="wsTechnical"><summary>Technische Auftragsdetails</summary><pre>{JSON.stringify({ source_ref: job.source_ref, id: job.id, provider: job.provider, phase: job.phase, max_records: job.max_records, error_code: job.error_code, preview_sha256: job.preview_sha256, complete_history_proven: job.complete_history_proven, before_summary: job.before_summary, after_summary: job.after_summary, approval: job.approval, sample_rows: job.sample_rows }, null, 2)}</pre></details>
     </section>}
     {capability?.blocked_reason && <details className="wsTechnical"><summary>Technische Einrichtungshinweise</summary><code>{capability.blocked_reason}</code></details>}

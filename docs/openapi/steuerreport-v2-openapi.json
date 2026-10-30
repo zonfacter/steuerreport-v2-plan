@@ -3165,6 +3165,94 @@
         "title": "ApiResponse[BinanceReconciliationEvidenceReport]",
         "type": "object"
       },
+      "ApiResponse_BinanceSpotMatchDecisionResult_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BinanceSpotMatchDecisionResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[BinanceSpotMatchDecisionResult]",
+        "type": "object"
+      },
+      "ApiResponse_BinanceSpotMatchPreview_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BinanceSpotMatchPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[BinanceSpotMatchPreview]",
+        "type": "object"
+      },
       "ApiResponse_BitgetStrategyBasisDecisionReport_": {
         "properties": {
           "data": {
@@ -18436,6 +18524,471 @@
         "title": "BinanceReconciliationEvidenceReport",
         "type": "object"
       },
+      "BinanceSpotMatchCandidate": {
+        "properties": {
+          "api_financial_facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BinanceSpotMatchFinancialFacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "api_financial_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Financial Sha256"
+          },
+          "api_record_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Record Identity"
+          },
+          "csv_financial_facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BinanceSpotMatchFinancialFacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "csv_financial_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csv Financial Sha256"
+          },
+          "csv_provider_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csv Provider Record Id"
+          },
+          "csv_row_number": {
+            "title": "Csv Row Number",
+            "type": "integer"
+          },
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "decision_state": {
+            "default": "none",
+            "enum": [
+              "none",
+              "active",
+              "revoked"
+            ],
+            "title": "Decision State",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "matchable",
+              "missing_stable_id",
+              "symbol_missing",
+              "api_record_missing",
+              "csv_id_ambiguous",
+              "api_id_ambiguous",
+              "financial_digest_conflict",
+              "financial_shape_unsupported",
+              "already_decided",
+              "match_revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "csv_row_number",
+          "status"
+        ],
+        "title": "BinanceSpotMatchCandidate",
+        "type": "object"
+      },
+      "BinanceSpotMatchDecisionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Actor",
+            "type": "string"
+          },
+          "api_record_identity": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Api Record Identity",
+            "type": "string"
+          },
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "confirm_match": {
+            "const": true,
+            "title": "Confirm Match",
+            "type": "boolean"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "content_base64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Base64"
+          },
+          "csv_row_number": {
+            "minimum": 1.0,
+            "title": "Csv Row Number",
+            "type": "integer"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "preview_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Preview Sha256",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 8,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          }
+        },
+        "required": [
+          "preview_sha256",
+          "csv_row_number",
+          "api_record_identity",
+          "actor",
+          "rationale",
+          "confirm_match"
+        ],
+        "title": "BinanceSpotMatchDecisionCreate",
+        "type": "object"
+      },
+      "BinanceSpotMatchDecisionResult": {
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "status"
+        ],
+        "title": "BinanceSpotMatchDecisionResult",
+        "type": "object"
+      },
+      "BinanceSpotMatchFinancialFacts": {
+        "properties": {
+          "asset": {
+            "title": "Asset",
+            "type": "string"
+          },
+          "event_time_utc": {
+            "title": "Event Time Utc",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "fee_asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Asset"
+          },
+          "fee_quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Quantity"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "quote_asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Asset"
+          },
+          "quote_quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Quantity"
+          }
+        },
+        "required": [
+          "event_time_utc",
+          "event_type",
+          "asset",
+          "quantity"
+        ],
+        "title": "BinanceSpotMatchFinancialFacts",
+        "type": "object"
+      },
+      "BinanceSpotMatchPreview": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/BinanceSpotMatchCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "file_sha256": {
+            "title": "File Sha256",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "preview_sha256": {
+            "title": "Preview Sha256",
+            "type": "string"
+          },
+          "provider": {
+            "const": "binance",
+            "default": "binance",
+            "title": "Provider",
+            "type": "string"
+          },
+          "source_batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Batch Id"
+          }
+        },
+        "required": [
+          "connection_id",
+          "job_id",
+          "file_sha256",
+          "preview_sha256"
+        ],
+        "title": "BinanceSpotMatchPreview",
+        "type": "object"
+      },
+      "BinanceSpotMatchPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "content_base64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Base64"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          }
+        },
+        "title": "BinanceSpotMatchPreviewRequest",
+        "type": "object"
+      },
+      "BinanceSpotMatchRevocation": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Actor",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 8,
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor",
+          "rationale"
+        ],
+        "title": "BinanceSpotMatchRevocation",
+        "type": "object"
+      },
       "BitgetStrategyApiHistoryBoundary": {
         "properties": {
           "classic_spot_history_endpoint": {
@@ -28732,6 +29285,13 @@
       },
       "CsvImportPreview": {
         "properties": {
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Reasons",
+            "type": "array"
+          },
           "can_import": {
             "title": "Can Import",
             "type": "boolean"
@@ -28778,6 +29338,20 @@
             ],
             "title": "Duplicate Batch Id"
           },
+          "duplicate_batch_import_context": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Batch Import Context"
+          },
           "file_format": {
             "default": "csv",
             "title": "File Format",
@@ -28797,6 +29371,13 @@
           "filename": {
             "title": "Filename",
             "type": "string"
+          },
+          "import_context": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Import Context",
+            "type": "object"
           },
           "import_fingerprint": {
             "anyOf": [
@@ -35584,6 +36165,13 @@
               }
             ]
           },
+          "import_context": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Import Context",
+            "type": "object"
+          },
           "import_mode": {
             "enum": [
               "file",
@@ -35676,6 +36264,33 @@
       },
       "ImportAssistantRequest": {
         "properties": {
+          "bitget_margin_pair": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bitget Margin Pair"
+          },
+          "bitget_product_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "spot",
+                  "usdt_futures",
+                  "isolated_margin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bitget Product Scope"
+          },
           "connection_id": {
             "anyOf": [
               {
@@ -35709,6 +36324,17 @@
               }
             ],
             "title": "Content Base64"
+          },
+          "export_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Timezone"
           },
           "filename": {
             "anyOf": [
@@ -35798,9 +36424,15 @@
             "type": "integer"
           },
           "estimated_normalizable_rows": {
-            "default": 0,
-            "title": "Estimated Normalizable Rows",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Normalizable Rows"
           },
           "expected_review_issue_codes": {
             "items": {
@@ -35857,6 +36489,13 @@
               }
             ],
             "title": "Filename"
+          },
+          "import_context": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Import Context",
+            "type": "object"
           },
           "raw_object_count": {
             "default": 0,
@@ -35922,6 +36561,13 @@
               }
             ],
             "title": "Filename"
+          },
+          "import_context": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Import Context",
+            "type": "object"
           },
           "source": {
             "minLength": 1,
@@ -83867,7 +84513,7 @@
     "description": "Versionierte V2-API fuer das Web-Cockpit und kuenftige Android-/iOS-Clients. Decimal-Werte werden verlustfrei als JSON-Strings transportiert. Die API ist ohne vorgeschaltete Authentifizierung ausschliesslich fuer ein vertrauenswuerdiges LAN bestimmt und darf nicht direkt im Internet exponiert werden.",
     "summary": "Nachvollziehbare Krypto-Steuer-, FIFO-, Portfolio- und Beleg-API",
     "title": "Steuerreport V2 API",
-    "version": "0.2.0rc37"
+    "version": "0.2.0rc38"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -105881,6 +106527,138 @@
         "x-mobile-surface": "expert-or-internal"
       }
     },
+    "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/binance-spot-matches": {
+      "post": {
+        "description": "Create binance spot match. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "create_binance_spot_match_api_v1_workspace_sources__ref__history_jobs__job_id__binance_spot_matches_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BinanceSpotMatchDecisionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BinanceSpotMatchDecisionResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Binance Spot Match",
+        "tags": [
+          "Cockpit"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/binance-spot-matches/preview": {
+      "post": {
+        "description": "Preview binance spot matches. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "preview_binance_spot_matches_api_v1_workspace_sources__ref__history_jobs__job_id__binance_spot_matches_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BinanceSpotMatchPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BinanceSpotMatchPreview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Binance Spot Matches",
+        "tags": [
+          "Cockpit"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
     "/api/v1/workspace/sources/{ref}/history/jobs/{job_id}/cancel": {
       "post": {
         "description": "Cancel. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
@@ -106173,6 +106951,71 @@
           }
         },
         "summary": "Resume",
+        "tags": [
+          "Cockpit"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/workspace/sources/{ref}/history/spot-matches/{decision_id}/revoke": {
+      "post": {
+        "description": "Revoke binance spot match. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "revoke_binance_spot_match_api_v1_workspace_sources__ref__history_spot_matches__decision_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "decision_id",
+            "required": true,
+            "schema": {
+              "title": "Decision Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BinanceSpotMatchRevocation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BinanceSpotMatchDecisionResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Binance Spot Match",
         "tags": [
           "Cockpit"
         ],

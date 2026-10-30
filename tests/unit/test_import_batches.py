@@ -1,9 +1,12 @@
 import pytest
 import duckdb
+import hashlib
+import shutil
 
 from steuerreport_v2.contracts.imports import ImportBatchCreate, RawObjectCreate
 from steuerreport_v2.contracts.events import CanonicalEventCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+import steuerreport_v2.db.duckdb_store as store_module
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -58,11 +61,119 @@ def test_schema_v1_migration_preserves_old_imports_as_unbound(tmp_path):
     assert migrated.connection_id is None
     assert migrated.file_hash == "sha256:legacy"
     assert store.list_raw_objects("legacy-batch", limit=None)[0].payload_json == original_payload
-    assert store.health()["schema_version"] == 2
+    assert store.health()["schema_version"] == 3
     with store.connect() as upgraded:
         assert upgraded.execute(
             "select connection_id from raw_import_batches where batch_id='legacy-batch'"
         ).fetchone() == (None,)
+        assert upgraded.execute(
+            "select import_context_json from raw_import_batches where batch_id='legacy-batch'"
+        ).fetchone() == ('{}',)
+
+
+def test_schema_v2_migration_labels_legacy_bitget_context_without_rewriting_rows(tmp_path):
+    path = tmp_path / "legacy-v2.duckdb"
+    con = duckdb.connect(str(path))
+    con.execute("create table schema_meta (key varchar primary key, value varchar not null)")
+    con.execute("insert into schema_meta values ('schema_version', '2')")
+    con.execute("""create table raw_import_batches (
+        batch_id varchar primary key, source varchar not null, filename varchar,
+        file_hash varchar, status varchar not null, created_at timestamp not null,
+        connection_id varchar
+    )""")
+    con.execute("""create table raw_objects (
+        raw_object_id varchar primary key, batch_id varchar not null, row_number integer,
+        payload_json varchar not null, created_at timestamp not null
+    )""")
+    created = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    original_payload = '{"coin":"DEMOCOIN","amount":"4"}'
+    con.execute("insert into raw_import_batches values (?, ?, ?, ?, ?, ?, ?)", [
+        "legacy-bitget", "bitget", "old.csv", "sha256:legacy", "loaded", created, None,
+    ])
+    con.execute("insert into raw_objects values (?, ?, ?, ?, ?)", [
+        "legacy-raw", "legacy-bitget", 1, original_payload, created,
+    ])
+    con.close()
+
+    store = DuckDbStore(path)
+    migrated = store.get_import_batch("legacy-bitget")
+
+    assert migrated is not None
+    assert migrated.import_context == {
+        "context_version": "1",
+        "export_timezone": "UTC+08:00",
+        "product_scope": "unspecified_legacy",
+        "timezone_basis": "legacy_default_unverified",
+    }
+    assert store.list_raw_objects("legacy-bitget", limit=None)[0].payload_json == original_payload
+    with store.connect() as con:
+        column = next(row for row in con.execute("pragma table_info('raw_import_batches')").fetchall()
+                      if row[1] == "import_context_json")
+        assert column[3] is True
+
+
+def test_schema_v2_upgrade_requires_preupgrade_backup_for_old_schema_reader(tmp_path, monkeypatch):
+    original = tmp_path / "schema2.duckdb"
+    with duckdb.connect(str(original)) as con:
+        con.execute("create table schema_meta (key varchar primary key, value varchar not null)")
+        con.execute("insert into schema_meta values ('schema_version', '2')")
+        con.execute("""create table raw_import_batches (
+            batch_id varchar primary key, source varchar not null, filename varchar,
+            file_hash varchar, status varchar not null, created_at timestamp not null,
+            connection_id varchar
+        )""")
+        con.execute("insert into raw_import_batches values ('synthetic', 'bitget', 'fixture.csv', 'sha256:test', 'loaded', '2025-01-01', NULL)")
+    backup = tmp_path / "schema2-backup.duckdb"
+    shutil.copyfile(original, backup)
+    backup_hash = hashlib.sha256(backup.read_bytes()).hexdigest()
+
+    upgraded = DuckDbStore(original)
+    assert upgraded.health()["schema_version"] == 3
+    assert hashlib.sha256(backup.read_bytes()).hexdigest() == backup_hash
+    monkeypatch.setattr(store_module, "SCHEMA_VERSION", 2)
+    with pytest.raises(RuntimeError, match="database_schema_newer_than_application"):
+        DuckDbStore(original).health()
+    with duckdb.connect(str(backup), read_only=True) as restored:
+        assert restored.execute("select value from schema_meta where key='schema_version'").fetchone() == ("2",)
+        assert restored.execute("select batch_id, source from raw_import_batches").fetchall() == [("synthetic", "bitget")]
+
+
+def test_newer_schema_is_rejected_before_schema_mutation(tmp_path):
+    path = tmp_path / "future-schema.duckdb"
+    with duckdb.connect(str(path)) as con:
+        con.execute("create table schema_meta (key varchar primary key, value varchar not null)")
+        con.execute("insert into schema_meta values ('schema_version', '4')")
+        con.execute("create table tax_lots (sentinel varchar)")
+        con.execute("insert into tax_lots values ('unchanged')")
+
+    with pytest.raises(RuntimeError, match="database_schema_newer_than_application"):
+        DuckDbStore(path).health()
+    with duckdb.connect(str(path), read_only=True) as con:
+        assert con.execute("select sentinel from tax_lots").fetchall() == [("unchanged",)]
+        assert con.execute("select count(*) from information_schema.tables where table_name='ai_change_sets'").fetchone() == (0,)
+
+
+def test_nullable_schema3_context_is_hardened_without_overwriting_known_context(tmp_path):
+    path = tmp_path / "nullable-schema3.duckdb"
+    with duckdb.connect(str(path)) as con:
+        con.execute("create table schema_meta (key varchar primary key, value varchar not null)")
+        con.execute("insert into schema_meta values ('schema_version', '3')")
+        con.execute("""create table raw_import_batches (
+            batch_id varchar primary key, source varchar not null, filename varchar,
+            file_hash varchar, status varchar not null, created_at timestamp not null,
+            connection_id varchar, import_context_json varchar default '{}'
+        )""")
+        con.execute("insert into raw_import_batches values ('legacy', 'bitget', NULL, NULL, 'loaded', '2025-01-01', NULL, NULL)")
+        con.execute("insert into raw_import_batches values ('known', 'bitget', NULL, NULL, 'loaded', '2025-01-01', NULL, ?)", ['{"export_timezone":"UTC"}'])
+
+    store = DuckDbStore(path)
+    assert store.get_import_batch("legacy").import_context["timezone_basis"] == "legacy_default_unverified"
+    assert store.get_import_batch("known").import_context == {"export_timezone": "UTC"}
+    with store.connect() as con:
+        column = next(row for row in con.execute("pragma table_info('raw_import_batches')").fetchall()
+                      if row[1] == "import_context_json")
+        assert column[3] is True
+    assert DuckDbStore(path).get_import_batch("known").import_context == {"export_timezone": "UTC"}
 
 
 def test_add_raw_object_updates_batch_count_and_status(tmp_path):

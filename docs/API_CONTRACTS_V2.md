@@ -164,6 +164,175 @@ Vollstaendigkeit bleibt unbestaetigt; Konto-/Quellen-/Jahresfreigaben bleiben
 getrennt. Ausfuehrliche Wirkungen und Limits:
 [Automatischer Quellenimport](AUTOMATISCHER_QUELLENIMPORT.md).
 
+## Binance-Spot-CSV/API-Abgleich
+
+Die folgenden drei Routen erlauben einen ausdruecklichen Abgleich zwischen einer
+Binance-Spot-CSV-Zeile und genau einem API-Fill. Sie gelten nur fuer einen
+Binance-Spot-Historienjob, nicht fuer Binance-Earn. `ref` bezeichnet die Quelle;
+der Historienjob bestimmt die konkrete `connection_id`. Der Request kann diesen
+Verbindungsscope nicht ueberschreiben. Ein `batch_id` muss zu Binance und genau
+dieser Verbindung gehoeren. Hochgeladene CSV-Inhalte werden fuer die Vorschau
+verwendet; die Entscheidung bindet den SHA-256-Dateihash und die CSV-Datenzeile
+nach derselben Zeilenzaehlung wie der Import. Ignorierte CSV-Zeilen behalten
+ihre Position. Ist die Datei bereits fuer diese Verbindung importiert, wird
+ihre gespeicherte Rohzeile verwendet; sonst bleibt `source_batch_id` null.
+
+Alle Antworten verwenden die gemeinsame `ApiResponse`-Huelle (`status`, `data`,
+`errors`, `warnings`, `trace_id`). Es findet kein automatischer Match statt:
+`matchable` in einer Vorschau ist nur ein Kandidat. Erst die separate POST-Anfrage
+mit `confirm_match: true`, `actor` und `rationale` legt eine persistente
+Review-Entscheidung an. Der angegebene `actor` ist Request-Text und wird nicht
+durch Authentifizierung verifiziert; er belegt keine Benutzeridentitaet.
+
+### Vorschau
+
+`POST /api/v1/workspace/sources/{ref}/history/jobs/{job_id}/binance-spot-matches/preview`
+
+Request: genau eine Eingabequelle. Entweder eine bereits importierte,
+verbindungsspezifische CSV mit `batch_id`, oder ein Upload mit `filename` und
+genau einem von `content` (Text) oder `content_base64` (Base64). `sheet_name` ist
+bei Bedarf Teil des Uploads; andere Tabellenformate werden fuer diesen Abgleich
+nicht akzeptiert.
+
+```json
+{"batch_id":"<csv-batch-uuid>"}
+```
+
+Alternativ:
+
+```json
+{"filename":"binance-trades.csv","content_base64":"<base64-csv>"}
+```
+
+Response `data` enthaelt `provider`, `connection_id`, `job_id`, `file_sha256`,
+`source_batch_id` (bei Upload ggf. `null`), `preview_sha256` und `candidates`.
+Jeder Kandidat enthaelt `csv_row_number`, `csv_provider_record_id`, `symbol`,
+`api_record_identity`, beide Finanz-Digests, `csv_financial_facts` und
+`api_financial_facts` (UTC-Zeit, Ereignistyp, Asset/Menge, Gegenwert und Gebuehr
+als dezimale Textwerte), `decision_id`, `decision_state` (`none`, `active`,
+`revoked`) sowie einen Status:
+`matchable`, `missing_stable_id`, `symbol_missing`, `api_record_missing`,
+`csv_id_ambiguous`, `api_id_ambiguous`, `financial_digest_conflict` oder
+`financial_shape_unsupported`, `already_decided` oder `match_revoked`. Nur
+`matchable` kann ausdruecklich bestaetigt werden. Die Vorschau schreibt weder
+CSV-Rohdaten noch eine Match-Entscheidung.
+
+Beispielhafte Response:
+
+```json
+{
+  "status":"ok",
+  "data":{
+    "provider":"binance",
+    "connection_id":"<connection-uuid>",
+    "job_id":"<job-uuid>",
+    "file_sha256":"<64-hex>",
+    "source_batch_id":null,
+    "preview_sha256":"<64-hex>",
+    "candidates":[{
+      "csv_row_number":12,
+      "csv_provider_record_id":"<binance-trade-id>",
+      "symbol":"BTCUSDT",
+      "api_record_identity":"<scoped-api-record-identity>",
+      "csv_financial_sha256":"<64-hex>",
+      "api_financial_sha256":"<64-hex>",
+      "decision_id":null,
+      "decision_state":"none",
+      "status":"matchable"
+    }]
+  },
+  "errors":[],
+  "warnings":[],
+  "trace_id":"<trace-uuid>"
+}
+```
+
+### Entscheidung anlegen
+
+`POST /api/v1/workspace/sources/{ref}/history/jobs/{job_id}/binance-spot-matches`
+
+Request: dieselbe Eingabequelle wie bei der Vorschau, dazu deren
+`preview_sha256`, die exakte `csv_row_number`, `api_record_identity`,
+`actor` (1-120 Zeichen), `rationale` (8-2000 Zeichen) und das strikt wahre
+`confirm_match`.
+
+```json
+{
+  "batch_id":"<csv-batch-uuid>",
+  "preview_sha256":"<64-lowercase-hex>",
+  "csv_row_number":12,
+  "api_record_identity":"<identity-from-preview>",
+  "actor":"<angegebener-pruefername>",
+  "rationale":"CSV und API-Beleg anhand der gebundenen Finanzdaten geprueft.",
+  "confirm_match":true
+}
+```
+
+Bei einem Upload wird `batch_id` durch `filename` und genau eines von `content`
+oder `content_base64` ersetzt. Wenn die CSV-Datei fuer diese Verbindung noch
+nicht importiert wurde, muss der zugehoerige API-Fill bereits als Rohbeleg
+gespeichert sein; ein nur abgerufener Historienjob reicht nicht. Nach der
+Entscheidung wird dieselbe Datei ueber den gefuehrten Dateiimport erneut
+ausgewaehlt. Response `data` enthaelt `status: "active"` und
+`decision`, ein gespeichertes `ReviewDecision` mit `decision_id`, `decision_type`,
+`scope`, `rationale`, `actor`, `source`, `affected_ids`, `payload` und Zeitstempel.
+Der Antwortaufbau ist `{"status":"ok","data":{"status":"active","decision":...},"errors":[],"warnings":[],"trace_id":"..."}`.
+
+Die Zuordnung ist nur bei exaktem, verbindungsgebundenem Binance-Spot-Trade-
+Identifier (Symbol und stabiler Provider-Trade-ID) und gleichem Finanz-Digest
+zulaessig. Datum, Asset oder Betrag allein sind keine Matchkriterien. Fehlende
+oder mehrdeutige IDs, doppelte IDs, nicht unterstuetzte Finanzformen,
+Digest-Konflikte, bereits entschiedene Paare und eine veraltete Vorschau werden
+abgewiesen. Der bestehende Overlap-Importschutz bleibt fuer nicht bestaetigte
+Zeilen aktiv. Bei spaeterer Verwendung wird die Entscheidung erneut gegen
+Verbindung, Datei-/Rohzeilenbeleg und API-Beleg geprueft; fehlende oder
+veraenderte Evidenz sperrt den Import (fail-closed).
+
+Der normale CSV-Importpfad prueft Ueberschneidungen mit gespeicherter Binance-
+Spot-API-Historie und blockiert nicht bestaetigte Zeilen. Der niedrigere
+Rohimport kann diese Sperre nicht umgehen. Match-Entscheidung, History-Import
+und gefuehrter CSV-Import verwenden im unterstuetzten Einprozessbetrieb denselben
+Prozess-Lock. Das ist keine koordinierte Sperre zwischen unabhaengigen Prozessen
+oder Hosts; Mehrworkerbetrieb benoetigt vorher eine atomare
+Datenbank-/Koordinatorloesung.
+
+### Entscheidung widerrufen
+
+`POST /api/v1/workspace/sources/{ref}/history/spot-matches/{decision_id}/revoke`
+
+Request:
+
+```json
+{
+  "actor":"<angegebener-pruefername>",
+  "rationale":"Der Abgleich muss wegen eines neu erkannten Belegkonflikts erneut geprueft werden."
+}
+```
+
+Response `data` enthaelt `status: "revoked"` und das neue
+`ReviewDecision`. Widerruf loescht oder veraendert die urspruengliche Entscheidung
+nicht; er wird als eigener append-only Eintrag gespeichert. Ein widerrufener
+Abgleich wird nicht weiter fuer die Deduplizierung akzeptiert und blockiert eine
+erneute Uebernahme. Diese drei Endpunkte bieten keinen Weg, einen widerrufenen
+Abgleich wieder zu aktivieren. Ein bereits in einem erfolgreichen API- und
+CSV-Import verwendeter Abgleich kann nicht ueber diesen Endpunkt widerrufen
+werden; der Widerruf wuerde gespeicherte Ereignisse nicht rueckgaengig machen.
+Eine nachtraegliche Korrektur benoetigt den gesonderten geprueften Ablauf.
+
+### Fehler und Sperren
+
+Validierungsfehler liefern `422`; ein unbekannter Job bzw. eine unbekannte
+Entscheidung `404`; Scope-, Mehrdeutigkeits-, Konflikt-, Doppelentscheidungs-
+oder Veraltungssperren `409`. Fehler kommen in der gemeinsamen `errors`-Liste,
+zum Beispiel mit `history_match_not_exact`,
+`history_match_api_evidence_not_persisted`,
+`history_match_both_sources_already_imported`, `history_match_revoke_after_import`,
+`history_match_preview_stale`,
+`history_match_already_decided`, `history_match_already_revoked` oder
+`history_match_csv_not_imported`. Technische Servicefehler liefern `503`.
+Kein Fehlerfall wird durch eine Aehnlichkeitsheuristik oder stillen
+Auto-Match umgangen.
+
 ## Direkter Solana-Historienimport: Idempotenz und Grenzen
 
 `POST /api/v1/portfolio/jup-wallet/import-history` bleibt eine ausdruecklich
@@ -609,24 +778,64 @@ ausgewaehlt wurde, bestimmt sie das normalisierte Konto auch dann, wenn die
 Datei eine eigene Konto-/Wallet-Bezeichnung enthaelt; diese Originalspalte
 bleibt als Rohbeleg erhalten.
 
-Schema 2 fuehrt das nullable Feld `raw_import_batches.connection_id` ein.
-Vorhandene Schema-1-Batches werden mit `connection_id=NULL` migriert und
-weder nachtraeglich zugeordnet noch umgeschrieben. Die Dateidublettenpruefung
+Fuer Bitget-Dateien akzeptiert der Assistent zusaetzlich `connection_id`,
+`export_timezone`, `bitget_product_scope` (`spot`, `usdt_futures` oder
+`isolated_margin`) und bei Isolated Margin `bitget_margin_pair`. Der gefuehrte
+Import sperrt die Ausfuehrung, wenn eine bestehende Verbindung, eine gueltige
+IANA-Zeitzone bzw. ein fester Offset und ein Produktscope fehlen. Der Scope wird
+mit dem Batch persistiert und bildet zusammen mit der Verbindungs-ID den
+Importkontext; die normalisierte Kontoidentitaet bleibt `connection:<ID>`, damit
+die Quellenregistry die bestehende Verbindung eindeutig zuordnen kann. Der
+Produktscope erzeugt kein separates Eigentumskonto und ist kein
+Eigentumsnachweis. Explizite Offsets in Zeitwerten bleiben massgeblich. Ein
+Widerspruch zwischen einem expliziten Zeitwert und dem UTC-Offset im Spaltenkopf
+blockiert die Vorschau. Bei Zeitwerten ohne Offset blockiert auch ein Widerspruch
+zwischen Spaltenkopf und ausgewaehlter Exportzeitzone; bei IANA-Zonen wird der
+Offset zum jeweiligen Ereigniszeitpunkt beruecksichtigt. Mehrdeutige
+oder nicht existierende lokale Zeiten einer IANA-Zone sowie fehlende oder
+ungueltige Zeilenzeitstempel blockieren bereits die Preview vor der Anlage
+eines Batches. Nichtkanonische Schreibweisen der Quelle werden vor Preview und
+Speicherung auf `bitget` kanonisiert. Gefuehrte Importe akzeptieren keine leere
+oder nur aus Leerzeichen bestehende Zeitzone. Vorschau und `ImportBatch` liefern
+den geheimnisfreien `import_context` zur Nachvollziehbarkeit.
+
+Bei gefuehrtem Isolated-Margin-Import blockiert eine nicht interpretierbare
+Gebuehrenmenge oder eine von null verschiedene Gebuehr ohne ausgewiesenes
+Gebuehrenasset bereits die Vorschau. Ein vorhandenes Asset belegt noch nicht,
+ob eine separate Gebuehrenbuchung denselben Vorgang betrifft; eine automatische
+Zuordnung oder steuerliche Freigabe erfolgt nicht. Diese Sperre gilt nicht als
+Nachweis fuer alte direkte Rohimportpfade ohne Produktscope. Sie setzt eine
+zutreffende Auswahl von `isolated_margin` voraus; eine falsche Scope-Auswahl
+kann sie umgehen und wird nicht zuverlaessig automatisch erkannt.
+
+Direkte Legacy-Rohimportpfade koennen den bisherigen UTC+08-Fallback zur
+Abwaertskompatibilitaet verwenden. In diesem Fall liefern Preview und Import
+ausdruecklich den Hinweis `bitget_legacy_timezone_unverified`; dies ist kein
+Nachweis der tatsaechlichen Exportzeitzone und keine Bestaetigung des
+Produktscopes.
+
+Schema 2 fuehrt das nullable Feld `raw_import_batches.connection_id` ein;
+Schema 3 fuehrt `import_context_json` fuer neue Importmetadaten ein. Vorhandene
+Nicht-Bitget-Batches erhalten den leeren Kontext `{}`; alte Bitget-Batches ohne
+Kontext erhalten nur einen Legacy-Marker fuer den nicht verifizierten UTC+8-
+Standard und einen nicht angegebenen Produktscope. Historische Rohdaten und
+Ereignisse werden nicht neu zugeordnet oder umgeschrieben. Die
+Dateidublettenpruefung
 ist bei gebundenen Binance-Dateien verbindungsspezifisch: gleicher Hash und
 dieselbe Verbindung blockieren den Reimport; gleiche Bytes fuer eine andere
 explizit ausgewaehlte Verbindung bleiben getrennt. Ein ungebundener Altbatch
 mit gleichem Quell-/Dateihash blockiert die automatische Neuzuordnung.
 
-Diese Bindung loest keine CSV-/API-Recordueberlappung auf. Der vorhandene
-`history_preview`-Legacy-Kontenschutz bleibt unveraendert; bei fehlender
-`history_scope_identity` bleibt die Ueberlappung blockiert. Es gibt in diesem
-Slice keine passende persistierte Reviewentscheidung, die Record-ID, finanzielle
-Semantik, Belege und Vorschauhash gemeinsam bestaetigt. Daher kein automatisches
-Zusammenfuehren und keine Unterdrueckung des Guards. Die niedrigstufigen
+Diese Bindung loest keine CSV-/API-Recordueberlappung automatisch auf. Der
+gefuhrte Binance-Spot-Abgleich kann eine einzelne Zeile nur nach exakter
+Trade-ID, Symbol, Finanzdigest und ausdruecklicher Reviewentscheidung
+verknuepfen; weitere Details stehen im Abschnitt
+[Binance-Spot-CSV/API-Abgleich](#binance-spot-csvapi-abgleich). Ohne diese
+Entscheidung bleibt der Import blockiert. Die niedrigstufigen
 `/api/v1/import/file/raw`- und CSV-Endpunkte akzeptieren ebenfalls
 `connection_id` und blockieren kontolose Binance-Rohimporte ohne ausdrueckliche
-Bindung. Die Preview-Endpunkte bleiben lesend und weisen auf eine fehlende
-Bindung hin.
+Bindung sowie nicht bestaetigte API-Spot-Ueberlappungen. Die Preview-Endpunkte
+bleiben lesend und weisen auf eine fehlende Bindung hin.
 
 Zusaetzliche Wirkungsfelder:
 
