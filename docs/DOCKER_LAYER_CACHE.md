@@ -20,7 +20,10 @@ einen erneut ausgefuehrten Projektinstall mit erfolgreichem `pip check`. Beide
 Images werden mit frischem Volume und ohne Netzwerk auf ihren synthetischen
 Anwendungs- und Neustartpfad geprueft; Zugangsdaten sind ausschliesslich
 synthetische Testwerte. Der Job belegt Wiederverwendung auf seinem Runner, nicht
-den Umfang des beim Betreiber freigebbaren Speichers.
+den Umfang des beim Betreiber freigebbaren Speichers. Der Publish-Workflow
+laeuft fuer getrennte Releases auf frischen Runnern und importiert derzeit
+keinen nachgewiesenen dauerhaften BuildKit-Cache. Die Wiederverwendung zwischen
+unabhaengigen Releases ist daher noch nicht belegt.
 
 Diese Aenderung entfernt weder vorhandene Images noch Daten. Docker meldet
 `reclaimable` als Schaetzung und nicht als Freigabe. Vor einer Bereinigung

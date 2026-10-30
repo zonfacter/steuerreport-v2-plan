@@ -13,7 +13,8 @@ der nativen Anwendung.
 - #30: Runtime-Abhaengigkeiten werden getrennt vom Anwendungscode aus dem
   gepinnten Lockfile installiert. Fehlende oder unvertraegliche Abhaengigkeiten
   sollen `pip check` im Build stoppen. Der Zwei-Build-Test muss den Cache-Treffer
-  und isolierte Containerstarts gesondert belegen.
+  und isolierte Containerstarts gesondert belegen. Er zeigt keine garantierte
+  Wiederverwendung zwischen unabhaengigen Release-Runnern.
 - #31: README-Version, Releasehinweis und Docker-Pull-Befehl werden auf den
   aktuellen Release abgestimmt und durch einen Regressionstest geprueft.
 
