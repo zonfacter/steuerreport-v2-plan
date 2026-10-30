@@ -84,6 +84,98 @@ jobs:
       - name: AI usage guide drift
         run: python scripts/generate_ai_usage_guide_v2.py --check
 
+  docker-layer-proof:
+    name: Docker dependency layer reuse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Build twice and validate isolated containers
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/docker-layer-proof"
+          mkdir -p "$proof/a" "$proof/b"
+          git archive HEAD | tar -x -C "$proof/a"
+          cp -a "$proof/a/." "$proof/b/"
+          printf '\n# synthetic cache proof\n' >> "$proof/b/src/steuerreport_v2/__init__.py"
+          git -C "$proof/b" init -q
+          git -C "$proof/b" add --force .
+          GIT_AUTHOR_DATE='2000-01-01T00:00:00Z' GIT_COMMITTER_DATE='2000-01-01T00:00:00Z' \
+            git -C "$proof/b" -c user.name='Synthetic CI' -c user.email='synthetic@example.invalid' commit -q -m 'Synthetic source change'
+          synthetic_revision="$(git -C "$proof/b" rev-parse HEAD)"
+          python -c 'import json,sys; print(json.dumps({"baseline":sys.argv[1],"synthetic_revision":sys.argv[2],"synthetic":True}))' \
+            "$GITHUB_SHA" "$synthetic_revision" > "$proof/source-context.json"
+          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          container_a="sr-cache-a-$GITHUB_RUN_ID"
+          container_b="sr-cache-b-$GITHUB_RUN_ID"
+          cleanup() { docker rm --force --volumes "$container_a" "$container_b" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          for suffix in a b; do
+            revision="$GITHUB_SHA"
+            if [ "$suffix" = b ]; then revision="$synthetic_revision"; fi
+            docker build --progress=plain --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$revision" --label "org.opencontainers.image.version=$version" \
+              --tag "sr-cache-proof:$suffix" "$proof/$suffix" > "$proof/build-$suffix.log" 2>&1
+          done
+          python scripts/check_docker_dependency_cache_v2.py "$proof/build-b.log" | tee "$proof/cache-proof.txt"
+          for suffix in a b; do
+            name="sr-cache-$suffix-$GITHUB_RUN_ID"
+            revision="$GITHUB_SHA"
+            if [ "$suffix" = b ]; then revision="$synthetic_revision"; fi
+            docker image inspect "sr-cache-proof:$suffix" > "$proof/image-$suffix.raw.json"
+            python scripts/container_release_v2.py verify --local --inspect "$proof/image-$suffix.raw.json" \
+              --image "ghcr.io/$owner/steuerreport-v2" --version "$version" --sha "$revision" \
+              --repository "$GITHUB_REPOSITORY" --output "$proof/image-$suffix.json"
+            docker run --detach --name "$name" --read-only --network none --cap-drop ALL \
+              --security-opt no-new-privileges:true --tmpfs /tmp:size=256m,mode=1777 \
+              --mount type=volume,destination=/state "sr-cache-proof:$suffix"
+            python scripts/container_release_v2.py smoke --container "$name" --version "$version" \
+              --output "$proof/smoke-$suffix.json"
+            python scripts/check_container_user_path_v2.py --container "$name" --version "$version" \
+              --source-sha "$revision" --output "$proof/user-path-$suffix.json"
+            docker exec "$name" python -c 'import json,sys,urllib.request; payload=json.dumps({"connector_id":"binance","api_key":"synthetic-key","api_secret":"synthetic-secret"}).encode(); req=urllib.request.Request("http://127.0.0.1:8010/api/v1/admin/cex-credentials",data=payload,headers={"Content-Type":"application/json"},method="POST"); response=json.load(urllib.request.urlopen(req,timeout=30)); sys.exit(0 if response.get("status") == "ok" else 1)'
+            volume="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/state"}}{{.Name}}{{end}}{{end}}' "$name")"
+            [[ "$volume" =~ ^[a-f0-9]{64}$ ]]
+            docker stop --time 30 "$name" >/dev/null
+            first_key="$(docker run --rm -i --network none --read-only --entrypoint python \
+              -e STEUERREPORT_SYNTHETIC_VAULT_PROOF=1 --mount "type=volume,source=$volume,destination=/state,readonly" \
+              "sr-cache-proof:$suffix" - < scripts/check_vault_fixture_offline_v2.py)"
+            docker start "$name" >/dev/null
+            ready=0
+            for attempt in $(seq 1 30); do
+              if docker exec "$name" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8010/health",timeout=3)' >/dev/null 2>&1; then ready=1; break; fi
+              sleep 1
+            done
+            test "$ready" = 1
+            docker stop --time 30 "$name" >/dev/null
+            second_key="$(docker run --rm -i --network none --read-only --entrypoint python \
+              -e STEUERREPORT_SYNTHETIC_VAULT_PROOF=1 --mount "type=volume,source=$volume,destination=/state,readonly" \
+              "sr-cache-proof:$suffix" - < scripts/check_vault_fixture_offline_v2.py)"
+            test "$first_key" = "$second_key"
+            printf 'synthetic encrypted vault and restart verified\n' > "$proof/vault-$suffix.txt"
+            docker rm --force --volumes "$name" >/dev/null
+          done
+      - name: Archive sanitized layer proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-layer-proof
+          path: |
+            ${{ runner.temp }}/docker-layer-proof/cache-proof.txt
+            ${{ runner.temp }}/docker-layer-proof/source-context.json
+            ${{ runner.temp }}/docker-layer-proof/image-*.json
+            !${{ runner.temp }}/docker-layer-proof/*.raw.json
+            ${{ runner.temp }}/docker-layer-proof/smoke-*.json
+            ${{ runner.temp }}/docker-layer-proof/user-path-*.json
+            ${{ runner.temp }}/docker-layer-proof/vault-*.txt
+          if-no-files-found: warn
+          retention-days: 30
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
