@@ -238,7 +238,7 @@ def main():
         overview = page.get_by_role("region", name="Gespeicherte Wallet-Bestände")
         expect(overview).to_contain_text("18 Bestandspositionen")
         expect(overview).to_contain_text("Noch nicht verfügbar")
-        live_summary = page.locator(".wsSummaryLine").filter(has_text="Gespeicherter Live-Vergleich")
+        live_summary = page.locator(".wsSummaryLine").filter(has_text="Gespeicherter Vergleichswert, Kursstand nicht ausgewiesen")
         expect(live_summary).to_contain_text("Noch nicht verfügbar")
         assert "0,00 EUR" not in live_summary.inner_text()
         for width in (390, 768, 1280, 1440):
