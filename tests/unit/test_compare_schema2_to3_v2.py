@@ -34,6 +34,11 @@ TABLE_NAMES = (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolated_comparator_temp_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(comparator.tempfile, "gettempdir", lambda: str(tmp_path))
+
+
 def _create_schema(connection, *, with_context=False):
     connection.execute(
         "create table schema_meta(key varchar primary key, value varchar not null)"
@@ -510,3 +515,15 @@ def test_different_column_collation_fails_closed(tmp_path):
         compare_schema2_to3(before, after)
 
     assert error.value.code == "unsupported_table_collation"
+
+
+def test_input_outside_temporary_root_is_rejected(tmp_path, monkeypatch):
+    before, after = _pair(tmp_path)
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    monkeypatch.setattr(comparator.tempfile, "gettempdir", lambda: str(allowed))
+
+    with pytest.raises(SchemaComparisonError) as error:
+        compare_schema2_to3(before, after)
+
+    assert error.value.code == "input_must_be_regular_temp_copy"
