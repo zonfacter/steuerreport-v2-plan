@@ -24,6 +24,11 @@ def test_exact_dependency_step_cached_and_project_rebuilt():
     assert proof.valid_cache_evidence(GOOD)
 
 
+def test_repeated_header_for_same_buildkit_step_is_accepted():
+    header = "#11 [stage-1 3/9] RUN pip install --no-cache-dir --no-deps -r requirements-runtime.lock"
+    assert proof.valid_cache_evidence(GOOD + header + "\n#11 CACHED\n")
+
+
 @pytest.mark.parametrize("bad", [
     GOOD.replace("#11 CACHED", "#99 CACHED"),
     GOOD.replace("#17 DONE 2.6s", "#17 CACHED"),

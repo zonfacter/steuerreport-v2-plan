@@ -8,12 +8,12 @@ from pathlib import Path
 
 
 def _one_step(lines: list[str], fragment: str) -> str | None:
-    matches = []
+    matches: set[str] = set()
     for line in lines:
         match = re.match(r"^#(\d+) \[.*\] RUN (.*)$", line)
         if match and fragment in match.group(2):
-            matches.append(match.group(1))
-    return matches[0] if len(matches) == 1 else None
+            matches.add(match.group(1))
+    return next(iter(matches)) if len(matches) == 1 else None
 
 
 def valid_cache_evidence(log: str) -> bool:
