@@ -162,6 +162,7 @@ def main() -> None:
                     "external_price_days": summary["external_price_days"],
                     "existing_primary_days": summary["existing_primary_days"],
                     "importable_price_days": summary["importable_price_days"],
+                    "unverified_v1_asset_usd_days": summary["unverified_v1_asset_usd_days"],
                     "failure_count": summary["failure_count"],
                     "budget_limited": budget_limited,
                     "failures": failures[:20],
@@ -171,20 +172,23 @@ def main() -> None:
 
     report = {
         "mode": "dry-run",
+        "execute_allowed": False,
         "generated_at": datetime.now(UTC).isoformat(),
         "methodology": (
-            "Read-only all-asset scan of taxable income/reward/staking/mining event days. "
+            "Unapproved candidate scan of taxable income/reward/staking/mining event days. "
             "Groups are selected when at least one event day has no non-derived same-day "
             "price anchor. External previews prefer stable-USD FX pricing, local V1 asset/USD "
             "and USD/EUR cache values, CoinMarketCap public historical closes, and then "
-            "DefiLlama CoinGecko history. No price_ledger, FIFO or import data is changed."
+            "DefiLlama CoinGecko history. Unverified V1 asset/USD is review-only. Reports or store "
+            "schema may be written; no price_ledger, FIFO or import data is changed. "
+            "All results are candidates and neither --execute path is enabled."
         ),
         "summary": {
             "candidate_groups": len(candidates),
             "configured_groups": sum(1 for row in rows if row.get("coin_id")),
             "missing_coin_id_groups": sum(1 for row in rows if row.get("status") == "missing_coin_id"),
-            "ready_groups": sum(1 for row in rows if row.get("status") == "ready_for_execute"),
-            "review_groups": sum(1 for row in rows if row.get("status") != "ready_for_execute"),
+            "ready_groups": 0,
+            "review_groups": len(rows),
             "external_days_attempted": total_external_days,
             "total_delta_eur": str(
                 sum((decimal_value(row.get("delta_eur")) for row in rows), Decimal("0"))
@@ -299,8 +303,10 @@ def load_candidate_groups(
 def group_status(summary: dict[str, Any]) -> str:
     if int(summary["failure_count"]):
         return "provider_or_fx_review_required"
+    if int(summary.get("unverified_v1_asset_usd_days", 0)):
+        return "v1_asset_usd_review_required"
     if int(summary["importable_price_days"]):
-        return "ready_for_execute"
+        return "candidate_review_required"
     return "no_import_needed"
 
 

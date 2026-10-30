@@ -1542,11 +1542,17 @@ noch die Pipeline neu berechnet. Der interne Legacy-Rechenkern bleibt fuer
 Referenztests vorhanden; seine Preisobjekte sind keine Uebernahmefreigabe.
 Dies sperrt nicht andere eigenstaendige Backfill- oder Importpfade. Insbesondere
 koennen `scripts/run_hnt_legacy_reward_price_repair_20260626.py` und
-`scripts/apply_ready_income_price_repairs_20260626.py` V1-Asset/USD-Kurse nutzen
-und mit `--execute` Preise schreiben und die Pipeline neu berechnen. Externe und
-Stichtags-Backfills nutzen ebenfalls V1-FX-Daten. Diese Pfade sind nicht durch
-den API-Guard abgedeckt und bleiben gesondert zu pruefen; ihre Nennung ist keine
-Freigabe. Eine manuelle beleggebundene Preisvorschau ist davon nicht betroffen.
+`scripts/apply_ready_income_price_repairs_20260626.py` im Dry-run V1-Asset/USD
+als ungepruefte, nicht importierbare Kandidaten anzeigen. Ihr `--execute` wird
+vor Datenbank-, Netzwerk- und Artefaktzugriff immer gesperrt, auch mit
+`--exclude-v1-asset-usd`. Dieser Schalter beeinflusst nur die Auswahl im
+Dry-run; andere Quellen und V1-FX bleiben gesondert zu pruefen und sind nicht
+automatisch belegt oder steuerlich freigegeben. Trockenlaeufe
+koennen Berichte, Provider-Caches oder ein Store-Schema schreiben.
+Externe und Stichtags-Backfills nutzen ebenfalls V1-FX-Daten und werden durch
+diesen Guard nicht abgesichert. Die interne Verwendung der Legacy-Hilfsfunktionen
+aus anderen Programmen ist nicht generell gesperrt. Eine manuelle beleggebundene
+Preisvorschau ist davon nicht betroffen.
 
 `POST /api/v1/prices/backfill/external`
 
