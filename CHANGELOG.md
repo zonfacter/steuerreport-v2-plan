@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.2.0rc39 - 2026-10-30 (Releasekandidat)
+
+- GitHub #30: Eine lesende Hostdiagnose zeigt Dateisystem- und Inodekapazitaet
+  sowie aggregierte Docker-Werte. Unvollstaendige Abfragen bleiben Teilstatus;
+  gemeldeter Reclaimable-Speicher ist keine Bereinigungsfreigabe. Das Werkzeug
+  entfernt keine Dateien, Images oder Volumes.
+- GitHub #31: Die Installationsanleitung nennt wieder den aktuellen Release und
+  einen passenden Image-Tag. Ein Test prueft diese Angaben auf Versionsdrift.
+- GitHub #30: Der Docker-Build trennt gepinnte Runtime-Abhaengigkeiten vom
+  Quellcode. Ein Zwei-Build-CI-Test prueft die Layer-Wiederverwendung und
+  isolierte Containerpfade; alte Images werden nicht automatisch entfernt.
+
 ## 0.2.0rc38 - 2026-10-30 (Releasekandidat)
 
 - GitHub #13: Binance-Spot-CSV/API-Abgleich ist im Historienauftrag als

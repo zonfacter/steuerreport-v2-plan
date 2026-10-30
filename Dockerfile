@@ -17,7 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     STEUERREPORT_V2_REQUIRE_ENCRYPTED_SECRETS=true
 WORKDIR /app
 COPY requirements-runtime.lock ./
-RUN pip install --no-cache-dir -r requirements-runtime.lock
+RUN pip install --no-cache-dir --no-deps -r requirements-runtime.lock
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir --no-deps . \

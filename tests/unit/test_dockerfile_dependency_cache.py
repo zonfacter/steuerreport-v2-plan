@@ -16,7 +16,7 @@ def test_runtime_lock_layer_precedes_application_source_layer():
     lock_install = next(
         index
         for index, line in enumerate(lines)
-        if "pip install --no-cache-dir -r requirements-runtime.lock" in line
+        if "pip install --no-cache-dir --no-deps -r requirements-runtime.lock" in line
     )
     project_copy = lines.index("COPY pyproject.toml README.md ./")
     source_copy = lines.index("COPY src/ ./src/")

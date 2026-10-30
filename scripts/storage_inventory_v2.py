@@ -50,6 +50,14 @@ def _filesystem_capacity(label: str, path: Path) -> dict[str, Any]:
     available = stats.f_bavail * block_size
     if free > total or available > total:
         return {"label": label, "status": "unavailable", "reason": "filesystem_stats_invalid"}
+    inode_data: dict[str, Any] = {"status": "not_reported"}
+    if stats.f_files > 0 and 0 <= stats.f_favail <= stats.f_ffree <= stats.f_files:
+        inode_data = {
+            "status": "available",
+            "total": stats.f_files,
+            "free": stats.f_ffree,
+            "available_to_unprivileged": stats.f_favail,
+        }
     return {
         "label": label,
         "status": "available",
@@ -58,6 +66,7 @@ def _filesystem_capacity(label: str, path: Path) -> dict[str, Any]:
         "used_bytes": total - free,
         "free_bytes": free,
         "available_to_unprivileged_bytes": available,
+        "inodes": inode_data,
     }
 
 
@@ -103,7 +112,7 @@ def _parse_docker_summary(output: str) -> list[dict[str, Any]] | None:
         )
         seen.add(resource_type)
 
-    return resources or None
+    return resources if seen == set(_RESOURCE_TYPES.values()) else None
 
 
 def _docker_summary(runner: DockerRunner) -> dict[str, Any]:
@@ -146,7 +155,9 @@ def collect_inventory(
         _filesystem_capacity(label, path) for label, path in paths
     ]
     if docker_data_path is not None:
-        filesystems.append(_filesystem_capacity("docker_data_path", docker_data_path))
+        docker_filesystem = _filesystem_capacity("docker_data_path", docker_data_path)
+        docker_filesystem["daemon_path_binding"] = "operator_supplied_unverified"
+        filesystems.append(docker_filesystem)
     docker = _docker_summary(runner)
     complete = docker["status"] == "available" and all(
         filesystem["status"] == "available" for filesystem in filesystems
@@ -158,7 +169,9 @@ def collect_inventory(
         "docker": docker,
         "scope_note": (
             "Keine Dateinamen oder Docker-Ressourcennamen werden inventarisiert. "
-            "Es werden keine Bereinigungs- oder Schreibaktionen ausgefuehrt."
+            "Es werden keine Bereinigungs- oder Schreibaktionen ausgefuehrt. "
+            "Der Status bestaetigt nur die Abfragen, keine Speicherfreigabe; "
+            "Quotas und der Docker-Daemon-Pfad sind nicht verifiziert."
         ),
     }
 
@@ -185,6 +198,13 @@ def _render_text(report: dict[str, Any]) -> str:
             f"verfuegbar {_human_bytes(filesystem['available_to_unprivileged_bytes'])}; "
             f"belegt {_human_bytes(filesystem['used_bytes'])} von {_human_bytes(filesystem['total_bytes'])}"
         )
+        inodes = filesystem["inodes"]
+        if inodes["status"] == "available":
+            lines.append(f"    Inodes verfuegbar: {inodes['available_to_unprivileged']} von {inodes['total']}")
+        else:
+            lines.append("    Inodes: nicht gemeldet")
+        if filesystem.get("daemon_path_binding"):
+            lines.append("    Docker-Pfad: Betreiberangabe, nicht mit dem Daemon abgeglichen")
 
     docker = report["docker"]
     lines.append("Docker:")

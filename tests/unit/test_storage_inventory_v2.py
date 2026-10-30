@@ -148,3 +148,34 @@ def test_human_output_is_path_free_and_warns_against_deletion(tmp_path, capsys):
     assert "reclaimable 1.0GB (25%)" in output
     assert "keine Aussage zur sicheren Loeschbarkeit" in output
     assert str(tmp_path) not in output
+
+
+def test_incomplete_docker_summary_never_reports_complete(tmp_path, capsys):
+    def runner(command, **kwargs):
+        return _docker_result("Images|4|2|1GB|0B (0%)")
+
+    assert storage_inventory.main(["--path", str(tmp_path), "--json"], docker_runner=runner) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "partial"
+    assert report["docker"]["reason"] == "docker_output_unrecognized"
+
+
+def test_duplicate_and_unknown_docker_rows_are_rejected(tmp_path, capsys):
+    for extra in ("Images|1|0|1GB|0B", "Other|1|0|1GB|0B"):
+        def runner(command, **kwargs):
+            return _docker_result(_summary() + "\n" + extra)
+
+        assert storage_inventory.main(["--path", str(tmp_path), "--json"], docker_runner=runner) == 1
+        assert json.loads(capsys.readouterr().out)["status"] == "partial"
+
+
+def test_inodes_and_unverified_docker_path_are_reported(tmp_path, capsys):
+    def runner(command, **kwargs):
+        return _docker_result(_summary())
+
+    assert storage_inventory.main(["--docker-data-path", str(tmp_path), "--json"], docker_runner=runner) == 0
+    report = json.loads(capsys.readouterr().out)
+    docker_fs = report["filesystems"][-1]
+    assert docker_fs["daemon_path_binding"] == "operator_supplied_unverified"
+    assert docker_fs["inodes"]["status"] in {"available", "not_reported"}
+    assert "Quotas" in report["scope_note"]

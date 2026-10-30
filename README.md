@@ -1,19 +1,20 @@
 # Steuerreport V2
 
-Version 0.2.0rc36, Releasekandidat mit issuebezogenen Import-, Konfigurations-,
+Version 0.2.0rc39, Releasekandidat mit issuebezogenen Import-, Konfigurations-,
 Bewertungs- und Docker-Abnahmekorrekturen. Kein amtliches
 Guetesiegel und keine automatische steuerliche Jahresfreigabe.
 Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc36](docs/RELEASE_0.2.0rc36.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc39](docs/RELEASE_0.2.0rc39.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
+[Speicherdiagnose](docs/STORAGE_DIAGNOSE.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
 [Containerpaket](https://github.com/zonfacter/steuerreport-v2-plan/pkgs/container/steuerreport-v2)
 
 Issue #4: nativer MEXC-Dateiimport mit Konto-/Exportartzuordnung und
 begruendeter Belegverknuepfung. [Umfang und Grenzen](docs/MEXC_IMPORT.md).
-Release und Image werden am unveraenderlichen rc36-Quellstand geprueft;
+Release und Image werden am unveraenderlichen rc39-Quellstand geprueft;
 produktive Container werden nur mit gesondertem Backup-/Rollbacknachweis ersetzt.
 
 ## Docker-Installation
@@ -27,7 +28,7 @@ eigenen privaten Paketbereitstellung ein GitHub Personal Access Token (classic) 
 nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
 ```bash
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc36
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc39
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -39,7 +40,7 @@ Die zusaetzliche Kennung `sha-<vollstaendiger Release-Commit>` bezeichnet
 denselben veroeffentlichten Quellstand. Vorabversionen erhalten kein `latest`.
 Aktuell wird `linux/amd64` gebaut und geprueft, nicht ARM64.
 
-rc36 ist ein Releasekandidat. Massgeblich sind der Release-Commit und der in
+rc39 ist ein Releasekandidat. Massgeblich sind der Release-Commit und der in
 den GitHub-Aktionen dokumentierte Image-Digest. Eine Produktivumschaltung ist
 davon getrennt und wird erst nach konsistenter Sicherung und Smoke-Test bestaetigt.
 

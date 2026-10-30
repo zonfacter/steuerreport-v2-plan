@@ -32,6 +32,7 @@ def test_release_excludes_case_work_runtime_and_originals():
         "src/steuerreport_v2/domain/mobile_documents.py",
         "tests/unit/test_tax_filing_audit.py", "frontend/package-lock.json",
         "docs/openapi/steuerreport-v2-openapi.json", ".env.example",
+        "docs/RELEASE_0.2.0rc39.md", "docs/STORAGE_DIAGNOSE.md", "docs/DOCKER_LAYER_CACHE.md",
         "docs/RELEASE_0.2.0rc36.md", "docs/RELEASE_0.2.0rc35.md",
         "docs/audit/2026-10-28/acceptance_tests.py",
         "docs/audit/2026-10-28/issues/issue2-original.py",
