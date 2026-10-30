@@ -40,7 +40,8 @@ test("dashboard labels synthetic missing, old and future prices and stored live 
     "dashboard-status": { year: 2024, balance_entries: 1, events_count: 1, dimensions: {}, next_section: "sources" },
     "dashboard-portfolio": { total_value_eur: "20", positions: [{}], missing_price_assets: ["MISSING"], asset_summary: [
       row("MISSING", "missing", null), row("OLD", "fresh", new Date(now - 5 * 86400000).toISOString()),
-      row("FUTURE", "fresh", new Date(now + 86400000).toISOString())
+      row("FUTURE", "fresh", new Date(now + 86400000).toISOString()),
+      { ...row("EUR", "fiat", "1970-01-01T00:00:00Z"), price_sources: ["fiat:EUR"] }
     ] },
     "dashboard-sources": { sources: [{ ref: "fixture", label: "Fixture", live_balance_status: "available", live_value_eur: "10", live_assets_count: 1, live_unpriced_assets_count: 0 }] }
   };
@@ -53,6 +54,9 @@ test("dashboard labels synthetic missing, old and future prices and stored live 
     assert.match(html, /Nicht bewertet/);
     assert.match(html, /gespeicherte Live-Anker/);
     assert.match(html, /Kursstand nicht ausgewiesen/);
+    assert.equal((html.match(/EUR-Referenzwert/g) || []).length, 1);
+    assert.match(html, /Fester Wert: 1 EUR = 1 EUR/);
+    assert.match(html, /Bewertungsquelle in Details/);
     assert.doesNotMatch(html, /Berechneter Ledger-Bestand/);
   } finally {
     delete globals.dashboardFixtures;
