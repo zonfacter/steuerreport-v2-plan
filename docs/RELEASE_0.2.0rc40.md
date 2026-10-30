@@ -1,14 +1,17 @@
 # Steuerreport V2 0.2.0rc40
 
 Releasekandidat mit einer eng begrenzten Korrektur der Bitget-CSV-Profilzuordnung.
-Diese Vorbereitung ist keine steuerliche Freigabe und baut oder veroeffentlicht
-kein Containerimage.
+Diese Version ist keine steuerliche Freigabe. Das Containerimage wird separat
+in der GHCR-Pipeline gebaut und geprueft.
 
 ## Aenderung
 
 - `Fee Deducted In` wird als Gebuehrenasset, nicht als Quote-Asset behandelt.
   Bei einer Zeile mit `Amount (USDT)` prueft ein synthetischer Importtest den
   USDT-Gegenwert und das separat ausgewiesene Gebuehrenasset.
+- Ein synthetischer FIFO-Test prueft Vorjahreskauf, Teilverkauf, Rohbezug und
+  Wiederholung anhand unabhaengiger Sollwerte. Er belegt keine Datenparitaet
+  zur nativen Altinstallation.
 
 ## Grenzen
 
@@ -18,5 +21,5 @@ kein Containerimage.
 - Es erfolgt keine steuerliche Freigabe. Issue #22 bleibt offen; insbesondere
   sind separate Margin-Gebuehren und die sichere Paarung unvollstaendiger
   Trade-Beine nicht geloest.
-- Kein Docker-Build, Deployment, Zugriff auf produktive Datenbanken oder
-  Providerabruf ist Teil dieser Vorbereitung.
+- Ein produktives Deployment, eine Neuberechnung bestehender Daten oder ein
+  Providerabruf erfolgt nicht automatisch durch dieses Release.

@@ -9,6 +9,9 @@
   als USDT-Gegenwert normalisiert. Bestehende Batches und Canonical Events
   werden nicht automatisch erneut importiert oder normalisiert; eine bewusst
   wiederholte Normalisierung kann die korrigierte Profilzuordnung anwenden.
+- GitHub #20: Ein synthetischer Cross-Year-FIFO-Test prueft Rohbezug,
+  unabhaengige Sollwerte und eine wiederholte Berechnung. Ein Vergleich realer
+  Alt- und Docker-Daten ist damit nicht nachgewiesen.
 - Keine steuerliche Freigabe oder Reparatur bestehender Importe. Issue #22
   bleibt offen; separate Gebuehrenbuchungen und Trade-Leg-Zuordnung sind damit
   nicht geloest.
