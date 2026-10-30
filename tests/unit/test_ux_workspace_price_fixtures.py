@@ -1,9 +1,16 @@
 import json
+import importlib.util
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from scripts.ux_workspace_fixtures import WorkspaceFixture
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "ux_workspace_fixtures.py"
+SPEC = importlib.util.spec_from_file_location("ux_workspace_fixtures", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+fixture_module = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(fixture_module)
+WorkspaceFixture = fixture_module.WorkspaceFixture
 
 
 class FakeRoute:
