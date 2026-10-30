@@ -138,7 +138,7 @@ jobs:
               --output "$proof/smoke-$suffix.json"
             python scripts/check_container_user_path_v2.py --container "$name" --version "$version" \
               --source-sha "$revision" --output "$proof/user-path-$suffix.json"
-            docker exec "$name" python -c 'import json,urllib.request; payload=json.dumps({"connector_id":"binance","api_key":"synthetic-key","api_secret":"synthetic-secret"}).encode(); req=urllib.request.Request("http://127.0.0.1:8010/api/v1/admin/cex-credentials",data=payload,headers={"Content-Type":"application/json"},method="POST"); response=json.load(urllib.request.urlopen(req,timeout=30)); assert response["status"] == "ok"'
+            docker exec "$name" python -c 'import json,sys,urllib.request; payload=json.dumps({"connector_id":"binance","api_key":"synthetic-key","api_secret":"synthetic-secret"}).encode(); req=urllib.request.Request("http://127.0.0.1:8010/api/v1/admin/cex-credentials",data=payload,headers={"Content-Type":"application/json"},method="POST"); response=json.load(urllib.request.urlopen(req,timeout=30)); sys.exit(0 if response.get("status") == "ok" else 1)'
             volume="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/state"}}{{.Name}}{{end}}{{end}}' "$name")"
             [[ "$volume" =~ ^[a-f0-9]{64}$ ]]
             docker stop --time 30 "$name" >/dev/null

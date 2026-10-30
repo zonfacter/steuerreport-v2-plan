@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -61,7 +64,7 @@ def test_plaintext_is_rejected(fixture):
     _, pairs, connection = fixture
     name = next(iter(pairs))
     connection.rows[name] = [(json.dumps(pairs[name]),)]
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="not_encrypted"):
         proof.main()
     assert connection.closed
 
@@ -72,3 +75,30 @@ def test_missing_confirmation_stops_before_open(fixture, monkeypatch):
     with pytest.raises(RuntimeError, match="synthetic_fixture_confirmation_required"):
         proof.main()
     assert not connection.closed
+
+
+def test_plaintext_is_rejected_with_python_optimization():
+    code = r'''
+import importlib.util, json, os, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("proof", sys.argv[1])
+proof = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(proof)
+class Fake:
+    def execute(self, query, params): return self
+    def fetchall(self): return [(json.dumps("synthetic-key"),)]
+    def close(self): pass
+proof.Path.read_bytes = lambda self: bytes(range(1,33))
+proof.duckdb.connect = lambda *args, **kwargs: Fake()
+os.environ["STEUERREPORT_SYNTHETIC_VAULT_PROOF"] = "1"
+try:
+    proof.main()
+except ValueError as exc:
+    if str(exc) == "not_encrypted": raise SystemExit(0)
+raise SystemExit(1)
+'''
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    script = Path(__file__).resolve().parents[2] / "scripts/check_vault_fixture_offline_v2.py"
+    result = subprocess.run([sys.executable, "-O", "-c", code, str(script)], env=env, check=False, capture_output=True)
+    assert result.returncode == 0
