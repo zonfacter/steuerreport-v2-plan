@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.2.0rc40 - 2026-10-30 (Releasekandidat)
+
+- GitHub #22: `Fee Deducted In` wird im Bitget-CSV-Profil nur noch als
+  Gebuehrenasset ausgewertet. `Amount (USDT)` wird im synthetischen Importtest
+  als USDT-Gegenwert normalisiert. Bestehende Batches und Canonical Events
+  werden nicht automatisch erneut importiert oder normalisiert; eine bewusst
+  wiederholte Normalisierung kann die korrigierte Profilzuordnung anwenden.
+- Keine steuerliche Freigabe oder Reparatur bestehender Importe. Issue #22
+  bleibt offen; separate Gebuehrenbuchungen und Trade-Leg-Zuordnung sind damit
+  nicht geloest.
+
 ## 0.2.0rc39 - 2026-10-30 (Releasekandidat)
 
 - GitHub #30: Eine lesende Hostdiagnose zeigt Dateisystem- und Inodekapazitaet

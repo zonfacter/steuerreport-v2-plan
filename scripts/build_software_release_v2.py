@@ -29,6 +29,7 @@ PUBLIC_DOCUMENTS = {
     )),
 }
 DOCUMENTS = {
+    "docs/RELEASE_0.2.0rc40.md",
     "docs/RELEASE_0.2.0rc39.md",
     "docs/STORAGE_DIAGNOSE.md",
     "docs/DOCKER_LAYER_CACHE.md",
