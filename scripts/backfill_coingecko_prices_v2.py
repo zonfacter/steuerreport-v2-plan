@@ -41,6 +41,13 @@ def main() -> None:
     parser.add_argument("--allow-current-fallback", action="store_true")
     args = parser.parse_args()
 
+    if args.execute:
+        raise SystemExit(
+            "--execute gesperrt: Dieser Legacy-Pfad hat keinen geprueften "
+            "Identitaets- und Belegvertrag. Nur eine ausdruecklich gepruefte "
+            "Preisvorschau verwenden."
+        )
+
     store = DuckDbStore(args.db)
     targets = _missing_portfolio_targets(store)
     if args.assets:
@@ -79,6 +86,11 @@ def main() -> None:
         result["price_eur"] = str(price_eur)
         result["price_source"] = source
         result["price_at"] = priced_at
+        result["price_at_is_verified"] = False
+        result["note"] = (
+            "Ungepruefter Kandidat; Zeit und Assetidentitaet sind nicht "
+            "durch archivierte Providerbelege nachgewiesen."
+        )
         results.append(result)
         price_points.append(
             PricePointCreate(
@@ -162,7 +174,7 @@ def _fetch_price_eur(
                 event_time=event_time,
                 timeout=timeout,
             ),
-            event_time,
+            _ensure_utc(event_time).replace(hour=0, minute=0, second=0, microsecond=0),
             COINGECKO_SOURCE,
         )
     except requests.HTTPError as exc:
@@ -181,7 +193,7 @@ def _fetch_history_price_eur(
 ) -> Decimal | None:
     response = requests.get(
         f"https://api.coingecko.com/api/v3/coins/{coin_id}/history",
-        params={"date": event_time.strftime("%d-%m-%Y"), "localization": "false"},
+        params={"date": _ensure_utc(event_time).date().isoformat(), "localization": "false"},
         timeout=timeout,
         headers={"accept": "application/json"},
     )

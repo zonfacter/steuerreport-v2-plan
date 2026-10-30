@@ -78,3 +78,18 @@ freie und kostenpflichtige Schnittstellen. Die
 beschreibt Zugangstypen und Limits; historische Abdeckung haengt von Quelle,
 Asset und Zugang ab. Diese Quellen sind Moeglichkeiten, keine Garantie fuer
 jeden Token oder jeden vergangenen Tag.
+
+## Aelteres CoinGecko-Backfill-Skript
+
+`scripts/backfill_coingecko_prices_v2.py` ist nur eine ungepruefte
+Kandidatenvorschau. `--execute` ist vor Datenbank- und Netzwerkzugriff
+gesperrt: Das Skript archiviert weder einen ausreichenden Providerbeleg noch
+beweist sein Symbolmapping die Assetidentitaet. Auch ein gespeicherter
+Abfragezeitpunkt ist kein belegter Kurszeitpunkt. Bereits vorhandene Werte
+werden durch diese Sperre nicht automatisch bewertet oder veraendert.
+
+Der historische Abruf verwendet das UTC-Datum im Format `YYYY-MM-DD`; die
+[CoinGecko-Referenz](https://docs.coingecko.com/reference/coins-id-history)
+beschreibt fuer diesen Endpunkt einen Snapshot um 00:00 UTC. Die separate,
+ausdruecklich aktivierbare aktuelle Ersatzabfrage ist keine historische
+Beobachtung und rechtfertigt keine Jahres- oder Stichtagsfreigabe.
