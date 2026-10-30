@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
+from pathlib import Path
 
 import duckdb
 import pytest
 
-import scripts.compare_schema2_to3_v2 as comparator
-from scripts.compare_schema2_to3_v2 import (
-    SchemaComparisonError,
-    compare_schema2_to3,
-    main,
+SPEC = importlib.util.spec_from_file_location(
+    "compare_schema2_to3_v2", Path(__file__).resolve().parents[2] / "scripts/compare_schema2_to3_v2.py"
 )
+assert SPEC is not None and SPEC.loader is not None
+comparator = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(comparator)
+SchemaComparisonError = comparator.SchemaComparisonError
+compare_schema2_to3 = comparator.compare_schema2_to3
+main = comparator.main
 
 
 BITGET_CONTEXT = {
