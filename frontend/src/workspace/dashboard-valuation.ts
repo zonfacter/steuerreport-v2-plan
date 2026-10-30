@@ -25,7 +25,7 @@ export function dashboardPriceState(row: DashboardAsset, now = new Date()): Dash
 
 export const dashboardPriceLabels: Record<DashboardPriceState, string> = {
   fiat: "EUR-Referenzwert",
-  fresh: "Gespeicherter Kurs, höchstens 3 volle Tage alt",
+  fresh: "Gespeicherter Zeitstempel höchstens 3 volle Tage alt; Anbieterzeit ungeprüft",
   old: "Gespeicherter Kurs veraltet",
   future: "Kurszeitpunkt liegt in der Zukunft",
   missing: "Kurs fehlt",
@@ -36,7 +36,7 @@ export const dashboardPriceLabels: Record<DashboardPriceState, string> = {
 export function dashboardValuationState(assets: DashboardAsset[], missingAssets: string[], now = new Date()) {
   const states = assets.map((asset) => dashboardPriceState(asset, now));
   const incomplete = missingAssets.length > 0 || states.some((state) => state === "missing");
-  const uncertain = states.some((state) => !["fiat", "fresh"].includes(state));
+  const uncertain = states.some((state) => state !== "fiat");
   return { incomplete, uncertain };
 }
 

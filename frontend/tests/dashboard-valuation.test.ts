@@ -27,8 +27,9 @@ test("stored prices distinguish fresh, old, future, missing and unproven values"
 });
 
 test("valuation remains incomplete or uncertain even when it has a numeric total", () => {
-  assert.deepEqual(dashboardValuationState([asset], [], now), { incomplete: false, uncertain: false });
-  assert.deepEqual(dashboardValuationState([asset], ["MISSING"], now), { incomplete: true, uncertain: false });
+  assert.deepEqual(dashboardValuationState([asset], [], now), { incomplete: false, uncertain: true });
+  assert.deepEqual(dashboardValuationState([asset], ["MISSING"], now), { incomplete: true, uncertain: true });
+  assert.deepEqual(dashboardValuationState([{ ...asset, asset: "EUR", price_status: "fiat", price_sources: ["fiat:EUR"] }], [], now), { incomplete: false, uncertain: false });
   assert.deepEqual(dashboardValuationState([{ ...asset, price_status: "missing" }], [], now), { incomplete: true, uncertain: true });
   assert.deepEqual(dashboardValuationState([{ ...asset, priced_at_latest: "2026-10-30T13:00:00Z" }], [], now), { incomplete: false, uncertain: true });
 });
