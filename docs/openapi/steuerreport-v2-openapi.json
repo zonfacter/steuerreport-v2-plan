@@ -72092,11 +72092,35 @@
       },
       "V1FxCacheImportPreview": {
         "properties": {
+          "block_code": {
+            "const": "v1_fx_cache_import_blocked_unverified",
+            "default": "v1_fx_cache_import_blocked_unverified",
+            "title": "Block Code",
+            "type": "string"
+          },
+          "block_reason": {
+            "default": "V1-Cache-Uebernahme gesperrt: Beleg, Kurszeit, Identitaet und unveraenderlicher Snapshot sind nicht geprueft. Die Vorschau zeigt nur Kandidaten.",
+            "title": "Block Reason",
+            "type": "string"
+          },
+          "candidate_only": {
+            "const": true,
+            "default": true,
+            "title": "Candidate Only",
+            "type": "boolean"
+          },
           "db_path": {
             "title": "Db Path",
             "type": "string"
           },
+          "import_allowed": {
+            "const": false,
+            "default": false,
+            "title": "Import Allowed",
+            "type": "boolean"
+          },
           "importable": {
+            "description": "Unverbindliche Kandidaten; Beleg, Zeit, Identitaet und Snapshot sind nicht geprueft",
             "items": {
               "$ref": "#/components/schemas/V1FxCacheImportRow"
             },
@@ -72104,6 +72128,7 @@
             "type": "array"
           },
           "importable_count": {
+            "description": "Anzahl unverbindlicher rechnerischer Kandidaten; keine Importfreigabe",
             "title": "Importable Count",
             "type": "integer"
           },
@@ -95310,6 +95335,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_V1FxCacheImportResult_"
+                }
+              }
+            },
+            "description": "V1-Cache-Uebernahme ohne geprueften Vertrag gesperrt"
           },
           "422": {
             "content": {

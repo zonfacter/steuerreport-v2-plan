@@ -60,6 +60,8 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 PURPOSE_OVERRIDES = {
+    ("POST", "/api/v1/prices/import/v1-fx-cache/preview"): "Zeigt unverbindliche V1-Cache-Kandidaten ohne Uebernahmefreigabe",
+    ("POST", "/api/v1/prices/import/v1-fx-cache"): "Blockiert direkte V1-Cache-Uebernahme ohne geprueften Vertrag",
     ("POST", "/api/v1/prices/historical/plan"): "Plant historische Tagespreise lokal mit Jahresuebersicht und reiner Listenpagination",
     ("POST", "/api/v1/prices/historical/manual-previews"): "Prueft einen einzelnen manuellen EUR- oder USD/FX-Originalbeleg in einer isolierten Vorschau ohne Anbieterabruf",
     ("POST", "/api/v1/prices/historical/previews"): "Sammelt bestaetigte Preisbelege und berechnet eine isolierte Vorschau",
@@ -261,6 +263,10 @@ def default_purpose(route: Route) -> str:
 
 
 def default_effect(route: Route) -> str:
+    if route.method == "POST" and route.path == "/api/v1/prices/import/v1-fx-cache/preview":
+        return "Kandidaten ohne Finanzimport; kalter Store kann Schema initialisieren oder migrieren"
+    if route.method == "POST" and route.path == "/api/v1/prices/import/v1-fx-cache":
+        return "HTTP 409; kein Preisimport und keine Pipeline-Neuberechnung"
     if route.path == "/api/v1/prices/historical/plan":
         return "read-only; keine Anbieterabfrage"
     if route.path == "/api/v1/prices/historical/manual-previews":
@@ -336,7 +342,9 @@ def render(
                 (default_purpose(route), default_effect(route)),
             )
             purpose = PURPOSE_OVERRIDES.get((route.method, route.path), purpose)
-            if route.path.startswith("/api/v1/prices/historical"):
+            if route.path.startswith("/api/v1/prices/historical") or route.path in {
+                "/api/v1/prices/import/v1-fx-cache", "/api/v1/prices/import/v1-fx-cache/preview",
+            }:
                 effect = default_effect(route)
             lines.append(
                 f"| `{route.method}` | `{route.path}` | {purpose} | {effect} | "

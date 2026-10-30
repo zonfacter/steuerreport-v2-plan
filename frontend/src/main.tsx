@@ -4814,22 +4814,6 @@ function App() {
     }
   }
 
-  async function importV1FxCache(dbPath: string, confidence: string) {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await postApi<Record<string, unknown>>("/api/v1/prices/import/v1-fx-cache", {
-        db_path: dbPath,
-        confidence
-      });
-      setNotice(`V1-Preiscache importiert: ${String(result.imported_prices ?? 0)} Preise`);
-      await refresh();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "V1-Preiscache konnte nicht importiert werden");
-      setLoading(false);
-    }
-  }
-
   async function backfillExternalPrices(maxRequests: string, provider: string, dryRun: boolean, assets: string) {
     setLoading(true);
     setError(null);
@@ -5599,7 +5583,6 @@ function App() {
           onRunImportBatch={runImportBatch}
           onAddPrice={addPrice}
           onImportPriceCsv={importPriceCsv}
-          onImportV1FxCache={importV1FxCache}
           onBackfillExternalPrices={backfillExternalPrices}
           onBackfillCurrentPortfolioPrices={backfillCurrentPortfolioPrices}
           onAddPriceGapDecision={addPriceGapDecision}
@@ -5797,7 +5780,6 @@ function Content({
   onRunImportBatch,
   onAddPrice,
   onImportPriceCsv,
-  onImportV1FxCache,
   onBackfillExternalPrices,
   onBackfillCurrentPortfolioPrices,
   onAddPriceGapDecision,
@@ -5922,7 +5904,6 @@ function Content({
   onRunImportBatch: (batchId: string) => void;
   onAddPrice: (asset: string, priceEur: string, pricedAt: string, source: string, confidence: string) => void;
   onImportPriceCsv: (content: string, defaultSource: string) => void;
-  onImportV1FxCache: (dbPath: string, confidence: string) => void;
   onBackfillExternalPrices: (maxRequests: string, provider: string, dryRun: boolean, assets: string) => void;
   onBackfillCurrentPortfolioPrices: (maxRequests: string, dryRun: boolean, assets: string) => void;
   onAddPriceGapDecision: (scope: string, decisionStatus: string) => void;
@@ -6160,6 +6141,7 @@ function Content({
           <>
             <PriceForm onAddPrice={onAddPrice} />
             <PriceCsvImportForm onImportPriceCsv={onImportPriceCsv} />
+            <V1FxCacheImportForm />
             <button type="button" onClick={() => onPortfolioViewModeChange("prices")}>Historische EUR-Preise planen und prüfen</button>
             <CurrentPortfolioPriceBackfillForm onBackfillCurrentPortfolioPrices={onBackfillCurrentPortfolioPrices} />
             <PriceCoveragePanel
@@ -20187,32 +20169,18 @@ function PriceCsvImportForm({
   );
 }
 
-function V1FxCacheImportForm({
-  onImportV1FxCache
-}: {
-  onImportV1FxCache: (dbPath: string, confidence: string) => void;
-}) {
-  const [dbPath, setDbPath] = useState("");
-  const [confidence, setConfidence] = useState("1.0");
+function V1FxCacheImportForm() {
   return (
-    <div className="panel formPanel">
+    <section className="panel formPanel" aria-label="V1-Preiscache">
       <div className="panelToolbar">
-        <strong>V1-Preiscache importieren</strong>
-        <button type="button" onClick={() => onImportV1FxCache(dbPath, confidence)} disabled={!dbPath.trim()}>
+        <strong>V1-Preiscache</strong>
+        <button type="button" disabled aria-describedby="v1-cache-block-reason">
           Importieren
         </button>
       </div>
-      <div className="formGrid">
-        <label>
-          V1-Datenbank
-          <input value={dbPath} onChange={(event) => setDbPath(event.target.value)} />
-        </label>
-        <label>
-          Confidence
-          <input value={confidence} onChange={(event) => setConfidence(event.target.value)} />
-        </label>
-      </div>
-    </div>
+      <p id="v1-cache-block-reason">Übernahme gesperrt: Beleg, Kurszeit, Identität und unveränderlicher Snapshot sind nicht geprüft.</p>
+      <a href="#portfolio?tab=prices">Historische EUR-Preise planen und manuell belegen</a>
+    </section>
   );
 }
 
