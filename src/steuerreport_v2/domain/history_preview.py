@@ -14,6 +14,7 @@ from steuerreport_v2.domain.ai_changes import DERIVED_TABLES, _fingerprint, _sum
 from steuerreport_v2.domain.history_storage import PREFIX, HistoryStorage
 from steuerreport_v2.domain.history_types import HistoryFetchError, HistoryTarget
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.importers.binance_spot_lock import BINANCE_SPOT_IMPORT_LOCK
 from steuerreport_v2.importers.source_history_importer import canonical_json, import_records, prepare_records
 
 
@@ -32,7 +33,20 @@ class HistoryPreview:
         self.storage = HistoryStorage(store)
 
     def prepare(self, job: dict, target: HistoryTarget) -> dict:
+        if target.provider == "binance":
+            with BINANCE_SPOT_IMPORT_LOCK:
+                return self._prepare_locked(job, target)
+        return self._prepare_locked(job, target)
+
+    def _prepare_locked(self, job: dict, target: HistoryTarget) -> dict:
         records = self.storage.records(job)
+        matched_records = 0
+        matched_csv_raw_ids: list[str] = []
+        if target.provider == "binance":
+            from steuerreport_v2.domain.binance_spot_matches import BinanceSpotHistoryMatchService
+            records, matched_records, matched_csv_raw_ids = BinanceSpotHistoryMatchService(
+                self.store,
+            ).history_records_for_import(job, target, records)
         directory = self.storage.directory(job["id"], create=True)
         # A non-main extension keeps diagnostic tools from mistaking a private
         # calculation copy for another productive database.
@@ -41,14 +55,22 @@ class HistoryPreview:
             revision = fingerprint(con)
             before, before_tax = _summary(con), _tax_groups(con)
             if target.provider != "solana":
+                matched_filter = ""
+                guard_params: list[object] = [
+                    target.provider, job["_options"]["start"], job["_options"]["end"], target.account,
+                ]
+                if matched_csv_raw_ids:
+                    matched_filter = "and e.raw_object_id not in (select unnest(?))"
+                    guard_params.append(matched_csv_raw_ids)
                 ambiguous = con.execute(
-                    """
+                    f"""
                     select count(*) from canonical_events e
                     left join raw_objects r on r.raw_object_id=e.raw_object_id
                     where lower(e.source)=? and e.event_time>=? and e.event_time<=?
                       and (e.account=? or not starts_with(coalesce(e.account, ''), 'connection:'))
                       and coalesce(json_extract_string(r.payload_json, '$.history_scope_identity'), '')=''
-                    """, [target.provider, job["_options"]["start"], job["_options"]["end"], target.account],
+                      {matched_filter}
+                    """, guard_params,
                 ).fetchone()[0]
                 if ambiguous:
                     raise HistoryFetchError("history_legacy_account_assignment_required", resumable=False)
@@ -60,6 +82,7 @@ class HistoryPreview:
         try:
             clone = DuckDbStore(working)
             accepted, duplicates = prepare_records(clone, target, records)
+            duplicates += matched_records
             batches = import_records(clone, target, accepted, job["id"])
             pipeline = None
             for batch in batches:
@@ -114,6 +137,10 @@ class HistoryPreview:
             raise
 
     def apply(self, job: dict, request: HistoryApprove) -> dict:
+        with BINANCE_SPOT_IMPORT_LOCK:
+            return self._apply_locked(job, request)
+
+    def _apply_locked(self, job: dict, request: HistoryApprove) -> dict:
         preview = job.get("_preview")
         if not isinstance(preview, dict) or preview.get("preview_sha256") != request.preview_sha256:
             raise HistoryFetchError("history_preview_required", resumable=False)

@@ -1,4 +1,4 @@
-# Importformate und Spaltenlayouts (0.2.0rc37)
+# Importformate und Spaltenlayouts (0.2.0rc38)
 
 Generiert aus den tatsaechlichen Importprofilen. Keine Zusage fuer beliebige Exporte eines Anbieters.
 
@@ -12,7 +12,7 @@ Generiert aus den tatsaechlichen Importprofilen. Keine Zusage fuer beliebige Exp
 
 - Spaltennamen: Gross-/Kleinschreibung wird ignoriert, Unterstriche werden zu Leerzeichen, fuehrende/nachfolgende und wiederholte Leerzeichen normalisiert. Andere Satzzeichen und Klammern sind nicht frei austauschbar. Die Tabellen zeigen echte Profil-Aliase in Suchreihenfolge, nicht zusaetzliche Pflichtspalten. In der Regel genuegt ein Alias je Feld. Konkurrierende Alias-Spalten vermeiden; quellenspezifische Sonderregeln koennen Vorrang haben.
 
-- Zeitpunkt: empfohlen 2025-01-15T10:00:00Z oder 2025-01-15T11:00:00+01:00. Beide Beispiele meinen denselben Zeitpunkt. Weitere erkannte Formen sind YYYY-MM-DD HH:MM:SS, YYYY/MM/DD HH:MM:SS, DD.MM.YYYY HH:MM:SS und DD.MM.YYYY HH:MM. Ohne Offset gilt normalerweise UTC; Bitget verwendet UTC+8. Erkannte UTC+/-Angaben in Spaltennamen, bei Binance auch im Dateinamen, koennen die Standardzeitzone vorgeben. Bewahren Sie diese Angaben im Original auf. Unix-Sekunden/-Millisekunden nicht als allgemein unterstuetzt voraussetzen. Ein Datum ohne Uhrzeit ersetzt keine genaue Ausfuehrungszeit.
+- Zeitpunkt: empfohlen 2025-01-15T10:00:00Z oder 2025-01-15T11:00:00+01:00. Beide Beispiele meinen denselben Zeitpunkt. Weitere erkannte Formen sind YYYY-MM-DD HH:MM:SS, YYYY/MM/DD HH:MM:SS, DD.MM.YYYY HH:MM:SS und DD.MM.YYYY HH:MM. Ohne Offset gilt normalerweise UTC. Im gefuehrten Bitget-Import muss eine Exportzeitzone ausgewaehlt werden; niedrigstufige Altpfade behalten UTC+8 nur als nicht verifizierten Fallback. Erkannte UTC+/-Angaben in Spaltennamen, bei Binance auch im Dateinamen, koennen die Standardzeitzone vorgeben. Bewahren Sie diese Angaben im Original auf. Unix-Sekunden/-Millisekunden nicht als allgemein unterstuetzt voraussetzen. Ein Datum ohne Uhrzeit ersetzt keine genaue Ausfuehrungszeit.
 
 - Zahlen: vorzugsweise Dezimalpunkt ohne Tausendertrennzeichen, z. B. 0.001 oder -25.50; Dezimalkomma nur mit korrekt getrennten/quotierten Feldern. Keine Waehrungszeichen oder Textzusatz in eigenen Mengenfeldern. Mengen, Handelsgegenwert und Preis je Token sind verschiedene Groessen. Vorzeichen aus dem Beleg erhalten; type kann die Richtung zusaetzlich bestimmen. Ein positiver Zufluss ist nicht automatisch Einkommen, Handelsvolumen keine EUR-Auszahlung.
 
@@ -80,7 +80,7 @@ UTC_Time,Account,Operation,Coin,Change,Remark,tx_id
 
 ## Bitget CSV (`bitget`)
 
-Beispiel fuer Ein-/Auszahlungshistorie. Handelslisten koennen stattdessen Trading pair und Executed sowie Action und Transacted amount verwenden. Fuer einen Trade wird ein belegter Gegenwert benoetigt, nicht ein beliebiger USD-Schaetzwert. Spot-Finanzhistorie, Orders und Derivate nicht als identische Vorgangsarten behandeln. Ohne explizite Zeitzone nimmt dieses Profil UTC+8 an, auch bei einer Spalte Time. ISO-Zeitstempel mit Z oder Offset haben Vorrang; im Beispiel ist 18:00 UTC+8 gleich 10:00 UTC.
+Beispiel fuer Ein-/Auszahlungshistorie. Handelslisten koennen stattdessen Trading pair und Executed sowie Action und Transacted amount verwenden. Fuer einen Trade wird ein belegter Gegenwert benoetigt, nicht ein beliebiger USD-Schaetzwert. Spot-Finanzhistorie, Orders und Derivate nicht als identische Vorgangsarten behandeln. Der gefuehrte Import verlangt eine bestehende Bitget-Verbindung, einen Produktscope und eine Exportzeitzone je Datei. Der Scope ist Batch-Kontext, kein Eigentumsnachweis; eine falsche Auswahl kann produktspezifische Pruefungen umgehen. Die Kontoidentitaet bleibt connection:<ID>; eine vollstaendige Trennung der Produktbestaende ist damit nicht belegt. Zeitwerte mit eigenem Offset behalten diesen; bei Widerspruch zum UTC-Spaltenkopf wird der Import blockiert. Bei Zeitwerten ohne Offset blockiert auch ein Widerspruch zwischen Spaltenkopf und gewaehlter Zone; bei IANA-Zonen gilt der Offset am Ereigniszeitpunkt. Mehrdeutige oder nicht existierende lokale Zeiten und ungueltige Zeitstempel blockieren die Vorschau. Gefuehrte Isolated-Margin-Importe blockieren nicht interpretierbare oder nichtnull Gebuehren ohne ausgewiesenes Gebuehrenasset. Ein Asset allein belegt keine Zuordnung zu einer separaten Spot-Gebuehr. Diese Pruefung setzt die zutreffende Scope-Auswahl voraus und schuetzt keine alten Rohimportpfade ohne Scope. Direkte Legacy-Rohpfade verwenden gegebenenfalls den nicht verifizierten UTC+08-Fallback mit Warnung.
 
 Leere CSV: `frontend/public/import-vorlagen/bitget.csv`
 

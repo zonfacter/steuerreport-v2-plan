@@ -5,6 +5,7 @@ import { HelpTip } from "./Help";
 
 type Profile = { source: string; label: string };
 type BindingConnection = { id: string; provider: string; label: string; account: string; subaccount: string };
+type BitgetProductScope = "spot" | "usdt_futures" | "isolated_margin";
 const MEXC_KINDS = {
   spot_statement: "Spot Statement", funding_other: "Funding Other", asset_snapshot: "Asset Snapshots",
   futures_capital_flow: "Futures Capital Flow", futures_statement: "Futures Statement",
@@ -35,6 +36,7 @@ type Status = "pending" | "checking" | "ready" | "duplicate" | "blocked" | "empt
 type Item = {
   id: string; file: File; encoded?: string; sheet?: string; sheets?: string[]; preview?: Preview; status: Status; error?: string; result?: Outcome;
   exportKind?: MexcKind; timezone?: MexcTimezone; decisions?: Record<string, MexcDecision>; review?: MexcPreview;
+  exportTimezone?: string; bitgetProductScope?: BitgetProductScope; bitgetMarginPair?: string;
 };
 const LABELS: Record<Status, string> = { pending: "Ungeprueft", checking: "Wird geprueft", ready: "Importierbar", duplicate: "Bereits vorhanden", blocked: "Nicht importierbar", empty: "Leer (kein Import)", writing: "Wird importiert", imported: "Importiert", error: "Fehler" };
 const SOURCES = new Set(["manual-csv", "binance", "bitget", "mexc", "pionex", "coinbase", "helium", "solana_rpc"]);
@@ -138,7 +140,7 @@ function encodedFile(file: File): Promise<string> {
 
 export function FileImportWizard({ onComplete }: { onComplete: () => void | Promise<void> }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [binanceConnections, setBinanceConnections] = useState<BindingConnection[]>([]);
+  const [providerConnections, setProviderConnections] = useState<BindingConnection[]>([]);
   const [connectionState, setConnectionState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [connectionId, setConnectionId] = useState("");
   const [source, setSource] = useState("");
@@ -152,18 +154,23 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
   const generation = useRef(0);
   const gate = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const preferredConnectionRef = useRef("");
   useEffect(() => {
     let mounted = true;
     const preferred = window.sessionStorage.getItem("steuerreport:import-source-once");
+    const preferredConnection = window.sessionStorage.getItem("steuerreport:import-connection-once");
+    preferredConnectionRef.current = preferredConnection || "";
     window.sessionStorage.removeItem("steuerreport:import-source-once");
+    window.sessionStorage.removeItem("steuerreport:import-connection-once");
     if (preferred && SOURCES.has(preferred)) setSource(preferred);
+    if (preferredConnection) setConnectionId(preferredConnection);
     void api<Profile[]>("/api/v1/import/profiles").then((rows) => { if (mounted) setProfiles(rows.filter((row) => SOURCES.has(row.source))); })
       .catch(() => { if (mounted) setError("Importquellen konnten nicht geladen werden."); });
     return () => { mounted = false; generation.current += 1; };
   }, []);
   useEffect(() => {
-    if (source !== "binance") {
-      setBinanceConnections([]);
+    if (source !== "binance" && source !== "bitget") {
+      setProviderConnections([]);
       setConnectionState("idle");
       return;
     }
@@ -172,7 +179,13 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
     void api<{ connections: BindingConnection[] }>("/api/v1/admin/connections")
       .then((result) => {
         if (!mounted) return;
-        setBinanceConnections(result.connections.filter((connection) => connection.provider === "binance"));
+        const scoped = result.connections.filter((connection) => connection.provider === source);
+        setProviderConnections(scoped);
+        const preferredConnection = preferredConnectionRef.current;
+        if (preferredConnection) {
+          if (!scoped.some((connection) => connection.id === preferredConnection)) setConnectionId("");
+          preferredConnectionRef.current = "";
+        }
         setConnectionState("ready");
       })
       .catch(() => { if (mounted) setConnectionState("error"); });
@@ -181,13 +194,16 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
   const ready = items.filter((item) => item.status === "ready");
   const imported = items.filter((item) => item.status === "imported");
   const current = items.find((item) => item.id === details);
-  const selectedConnection = binanceConnections.find((connection) => connection.id === connectionId);
+  const selectedConnection = providerConnections.find((connection) => connection.id === connectionId);
+  const connectionRequired = source === "binance" || source === "bitget";
+  const connectionProviderLabel = source === "binance" ? "Binance" : "Bitget";
   const stage = imported.length ? 4 : ready.length ? 3 : items.length ? 2 : 1;
   const update = (id: string, value: Partial<Item>) => setItems((rows) => rows.map((row) => row.id === id ? { ...row, ...value } : row));
 
   function resetItem(item: Item, selectedSource: string): Item {
     const problem = fileProblem(item.file, selectedSource);
-    return { ...item, status: problem ? "error" : "pending", preview: undefined, review: undefined, decisions: undefined, error: problem };
+    return { ...item, exportTimezone: undefined, bitgetProductScope: undefined, bitgetMarginPair: undefined,
+      status: problem ? "error" : "pending", preview: undefined, review: undefined, decisions: undefined, error: problem };
   }
 
   function configureItem(id: string, value: Partial<Item>) {
@@ -200,6 +216,14 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
     return source === "mexc" && item.exportKind && mexcAccount.trim() ? { mexc: {
       export_kind: item.exportKind, account: mexcAccount.trim(), ...(item.timezone ? { timezone: item.timezone } : {}), decisions: item.decisions || {},
     } } : {};
+  }
+
+  function bitgetPayload(item: Item) {
+    return source === "bitget" ? {
+      export_timezone: item.exportTimezone,
+      bitget_product_scope: item.bitgetProductScope,
+      ...(item.bitgetProductScope === "isolated_margin" ? { bitget_margin_pair: item.bitgetMarginPair } : {}),
+    } : {};
   }
 
   function addFiles(files: File[]) {
@@ -217,8 +241,11 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
 
   async function checkFiles() {
     if (gate.current || !source) return;
-    if (source === "binance" && (!connectionId || connectionState !== "ready")) {
-      setError("Bitte eine konkrete, bestehende Binance-Verbindung laden und auswaehlen."); return;
+    if ((source === "binance" || source === "bitget") && (!connectionId || connectionState !== "ready")) {
+      setError(`Bitte eine konkrete, bestehende ${source === "binance" ? "Binance" : "Bitget"}-Verbindung laden und auswaehlen.`); return;
+    }
+    if (source === "bitget" && items.some((item) => !item.exportTimezone?.trim() || !item.bitgetProductScope || (item.bitgetProductScope === "isolated_margin" && !item.bitgetMarginPair?.trim()))) {
+      setError("Fuer jede Bitget-Datei Exportzeitzone und Produktscope festlegen; bei Isolated Margin auch das Handelspaar."); return;
     }
     gate.current = true; setBusy(true); setApproved(false); setError("");
     const token = generation.current;
@@ -234,7 +261,7 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
           }
           const preview = await api<Preview>("/api/v1/import/assistant/preview", {
             source, import_mode: "file", filename: item.file.name, content_base64: encoded, sheet_name: item.sheet,
-            ...mexcPayload(item), ...(source === "binance" ? { connection_id: connectionId } : {}),
+            ...mexcPayload(item), ...bitgetPayload(item), ...(["binance", "bitget"].includes(source) ? { connection_id: connectionId } : {}),
           });
           if (token !== generation.current) break;
           const fingerprint = preview.preview?.import_fingerprint;
@@ -263,7 +290,7 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
         try {
           const result = await api<Outcome>("/api/v1/import/assistant/execute", {
             source, import_mode: "file", filename: item.file.name, content_base64: item.encoded, sheet_name: item.sheet,
-            ...mexcPayload(item), ...(source === "binance" ? { connection_id: connectionId } : {}),
+            ...mexcPayload(item), ...bitgetPayload(item), ...(["binance", "bitget"].includes(source) ? { connection_id: connectionId } : {}),
           }, 240000);
           if (token !== generation.current) break;
           update(item.id, { status: "imported", result });
@@ -283,21 +310,21 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
       <a href="/import-vorlagen/import-vorlagen.xlsx" download className="ghostButton"><Download size={16} /> Excel-Vorlagen</a>
     </div></div>
     <ol className="importStages" aria-label="Importfortschritt">{["Dateien", "Pruefung", "Freigabe", "Ergebnis"].map((label, index) => <li key={label} aria-current={stage === index + 1 ? "step" : undefined} className={stage > index + 1 ? "complete" : ""}><span>{stage > index + 1 ? <Check size={15} /> : index + 1}</span>{label}</li>)}</ol>
-    <p className="actionRequirement" role="status">{busy ? "Dateivorgang wird verarbeitet." : !source ? "Zuerst die Quelle fuer deine Dateien waehlen." : source === "binance" && connectionState === "loading" ? "Binance-Verbindungen werden geladen." : source === "binance" && connectionState === "error" ? "Binance-Verbindungen konnten nicht geladen werden." : source === "binance" && !connectionId ? "Eine konkrete Binance-Verbindung auswaehlen; es gibt keinen automatischen Konten-Fallback." : !items.length ? "Dateien auswaehlen oder hierher ziehen." : ready.length && !approved ? "Vorschau und Warnungen pruefen, dann die geprueften Dateien freigeben." : ready.length ? "Freigegebene Dateien sind bereit fuer den Import." : imported.length === items.length ? "Import abgeschlossen. Ergebnis und offene Hinweise pruefen." : items.every((item) => item.status === "empty") ? "Leere Exporte enthalten keine Datenzeilen und werden nicht importiert." : items.some((item) => ["error", "blocked"].includes(item.status)) ? "Dateihinweise klaeren oder betroffene Dateien aus der Auswahl entfernen." : "Dateien pruefen und danach die Vorschau kontrollieren."}</p>
+    <p className="actionRequirement" role="status">{busy ? "Dateivorgang wird verarbeitet." : !source ? "Zuerst die Quelle fuer deine Dateien waehlen." : connectionRequired && connectionState === "loading" ? `${connectionProviderLabel}-Verbindungen werden geladen.` : connectionRequired && connectionState === "error" ? `${connectionProviderLabel}-Verbindungen konnten nicht geladen werden.` : connectionRequired && !connectionId ? `Eine konkrete ${connectionProviderLabel}-Verbindung auswaehlen; es gibt keinen automatischen Konten-Fallback.` : source === "bitget" && items.some((item) => !item.exportTimezone?.trim() || !item.bitgetProductScope || (item.bitgetProductScope === "isolated_margin" && !item.bitgetMarginPair?.trim())) ? "Fuer jede Bitget-Datei Exportzeitzone und Produktscope festlegen." : !items.length ? "Dateien auswaehlen oder hierher ziehen." : ready.length && !approved ? "Vorschau und Warnungen pruefen, dann die geprueften Dateien freigeben." : ready.length ? "Freigegebene Dateien sind bereit fuer den Import." : imported.length === items.length ? "Import abgeschlossen. Ergebnis und offene Hinweise pruefen." : items.every((item) => item.status === "empty") ? "Leere Exporte enthalten keine Datenzeilen und werden nicht importiert." : items.some((item) => ["error", "blocked"].includes(item.status)) ? "Dateihinweise klaeren oder betroffene Dateien aus der Auswahl entfernen." : "Dateien pruefen und danach die Vorschau kontrollieren."}</p>
     {error && <p role="alert" className="error">{error}</p>}
     <div className="importSelection"><label>Quelle<select aria-label="Importquelle" value={source} disabled={busy || imported.length > 0} onChange={(event) => { const selectedSource = event.target.value; generation.current += 1; setSource(selectedSource); setConnectionId(""); setMexcAccount(""); setApproved(false); setError(""); setItems((rows) => rows.map((row) => resetItem(row, selectedSource))); }}>
       <option value="">Quelle auswaehlen</option>{profiles.map((profile) => <option key={profile.source} value={profile.source}>{profile.label}</option>)}
     </select></label>
-    {source === "binance" && <label>Bestehende Binance-Verbindung<select aria-label="Bestehende Binance-Verbindung" value={connectionId} disabled={busy || imported.length > 0 || connectionState !== "ready"} onChange={(event) => { generation.current += 1; setConnectionId(event.target.value); setApproved(false); setItems((rows) => rows.map((row) => fileProblem(row.file, source) ? row : ({ ...row, status: "pending", preview: undefined, error: undefined }))); }}>
-      <option value="">Verbindung auswaehlen</option>{binanceConnections.map((connection) => <option key={connection.id} value={connection.id}>{connection.label} · {connection.account || "Konto nicht benannt"}{connection.subaccount ? ` / ${connection.subaccount}` : ""} · ID …{connection.id.slice(-8)}</option>)}
+    {connectionRequired && <label>Bestehende {connectionProviderLabel}-Verbindung<select aria-label={`Bestehende ${connectionProviderLabel}-Verbindung`} value={connectionId} disabled={busy || imported.length > 0 || connectionState !== "ready"} onChange={(event) => { generation.current += 1; setConnectionId(event.target.value); setApproved(false); setItems((rows) => rows.map((row) => fileProblem(row.file, source) ? row : ({ ...row, status: "pending", preview: undefined, error: undefined }))); }}>
+      <option value="">Verbindung auswaehlen</option>{providerConnections.map((connection) => <option key={connection.id} value={connection.id}>{connection.label} · {connection.account || "Konto nicht benannt"}{connection.subaccount ? ` / ${connection.subaccount}` : ""} · ID …{connection.id.slice(-8)}</option>)}
     </select></label>}
     {source === "mexc" && <label>MEXC-Konto<input aria-label="MEXC-Konto" value={mexcAccount} maxLength={128} disabled={busy || imported.length > 0}
       onChange={(event) => { generation.current += 1; setMexcAccount(event.target.value); setApproved(false); setError(""); setItems((rows) => rows.map((row) => resetItem(row, source))); }} /></label>}
     <input ref={fileInput} hidden type="file" multiple accept={source === "mexc" ? ".csv,.xlsx" : ".csv,.xlsx,.xls"} aria-label="Importdateien auswaehlen" disabled={busy} onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.target.value = ""; }} />
-    <button type="button" disabled={busy || !source || (source === "binance" && (!connectionId || connectionState !== "ready")) || !items.some((item) => item.status !== "imported" && !fileProblem(item.file, source))} onClick={() => void checkFiles()}><ClipboardCheck size={16} /> Dateien pruefen</button></div>
-    {source === "binance" && connectionState === "error" && <p role="alert" className="error">Verbindungsliste nicht verfuegbar. <button type="button" className="ghostButton" onClick={() => { setSource(""); window.setTimeout(() => setSource("binance"), 0); }}>Erneut laden</button></p>}
-    {source === "binance" && connectionState === "ready" && !binanceConnections.length && <p role="note">Noch keine eigene Binance-Verbindung vorhanden. <a href="#admin">Unter Einrichtung eine Verbindung anlegen</a>. Es wurde kein Zugang getestet oder externer Abruf gestartet.</p>}
-    {source === "binance" && selectedConnection && <p className="adminInlineHelp">Importbindung: {selectedConnection.label} · stabile ID <code>{selectedConnection.id}</code>. Die Verbindung wird nicht aus Dateiname, Anzeigename, Zugangsdaten oder Bestand abgeleitet.</p>}
+    <button type="button" disabled={busy || !source || (connectionRequired && (!connectionId || connectionState !== "ready")) || !items.some((item) => item.status !== "imported" && !fileProblem(item.file, source))} onClick={() => void checkFiles()}><ClipboardCheck size={16} /> Dateien pruefen</button></div>
+    {connectionRequired && connectionState === "error" && <p role="alert" className="error">Verbindungsliste nicht verfuegbar. <button type="button" className="ghostButton" onClick={() => { const selectedSource = source; setSource(""); window.setTimeout(() => setSource(selectedSource), 0); }}>Erneut laden</button></p>}
+    {connectionRequired && connectionState === "ready" && !providerConnections.length && <p role="note">Noch keine eigene {connectionProviderLabel}-Verbindung vorhanden. <a href="#admin">Unter Einrichtung eine Verbindung anlegen</a>. Es wurde kein Zugang getestet oder externer Abruf gestartet.</p>}
+    {connectionRequired && selectedConnection && <p className="adminInlineHelp">Importbindung: {selectedConnection.label} · stabile ID <code>{selectedConnection.id}</code>. Die Verbindung wird nicht aus Dateiname, Anzeigename, Zugangsdaten oder Bestand abgeleitet.</p>}
     {source === "mexc" && <>
       <p className="importWarning">Bestandsbelege und ungeklaerte Mengen sind keine Erwerbsbasis und erzeugen keine belegten Anschaffungskosten. Eine Belegzuordnung ist keine Steuerentscheidung; fehlende Anfangshistorie bleibt offen.</p>
       <HelpTip label="MEXC Exportart und Zeitbasis">Die Exportart muss zum tatsaechlichen Produkt passen; der Dateiname allein ist kein Nachweis. Ohne Konto und Exportart ist eine erste Vorschau moeglich, aber keine Freigabe. Bei Time ohne Offset bleibt die Zeitbasis offen. UTC+01:00 ist ein fester Offset, Europe/Berlin wechselt zwischen Sommer- und Winterzeit. Eine abweichende Header-Zeitbasis muss der Server pruefen. Sicherheitsgrenzen fuer MEXC: 10.000 Datenzeilen, 25 MiB je Datei und 100 MiB entpackter XLSX-Inhalt; serverseitige Pruefung.</HelpTip>
@@ -332,6 +359,20 @@ export function FileImportWizard({ onComplete }: { onComplete: () => void | Prom
       {item.preview?.blocked_reason && <p role="status">{item.preview.blocked_reason}</p>}
       {item.preview?.preview?.duplicate_batch_id && source === "binance" && !item.preview.preview.duplicate_batch_connection_id && <p className="importWarning">Gleicher Dateiinhalt liegt bereits als ungebundener Altimport vor (Batch {item.preview.preview.duplicate_batch_id}). Er wird nicht automatisch dieser Verbindung zugeordnet.</p>}
       {item.preview?.warnings?.filter((warning) => !item.preview?.preview?.duplicate_batch_id || !warning.startsWith("Dublette erkannt:")).map((warning, index) => <p className="importWarning" key={index}>{warning}</p>)}
+      {source === "bitget" && <div className="importSelection" style={{ marginTop: 12 }}>
+        <label>Exportzeitzone<input aria-label={`Bitget-Exportzeitzone fuer ${item.file.name}`} list={`bitget-timezones-${item.id}`} value={item.exportTimezone || ""} disabled={busy || item.status === "imported"}
+          placeholder="z. B. Europe/Berlin oder UTC+01:00" onChange={(event) => configureItem(item.id, { exportTimezone: event.target.value || undefined })} />
+          <datalist id={`bitget-timezones-${item.id}`}><option value="UTC" /><option value="UTC+01:00" /><option value="UTC+08:00" /><option value="Europe/Berlin" /></datalist>
+          <small>Nur fuer Zeitwerte ohne eigenen Offset. IANA-Zonen mit nicht existenter oder mehrdeutiger lokaler Zeit werden abgewiesen.</small>
+        </label>
+        <label>Bitget-Produktscope<select aria-label={`Bitget-Produktscope fuer ${item.file.name}`} value={item.bitgetProductScope || ""} disabled={busy || item.status === "imported"}
+          onChange={(event) => configureItem(item.id, { bitgetProductScope: (event.target.value || undefined) as BitgetProductScope | undefined, bitgetMarginPair: undefined })}>
+          <option value="">Produktscope waehlen</option><option value="spot">Spot</option><option value="usdt_futures">USDT-M Futures</option><option value="isolated_margin">Isolated Margin</option>
+        </select></label>
+        {item.bitgetProductScope === "isolated_margin" && <label>Isolated-Margin-Handelspaar<input aria-label={`Bitget-Margin-Handelspaar fuer ${item.file.name}`} value={item.bitgetMarginPair || ""} maxLength={41} disabled={busy || item.status === "imported"}
+          placeholder="z. B. BTC_USDT" onChange={(event) => configureItem(item.id, { bitgetMarginPair: event.target.value || undefined })} /></label>}
+        <p className="adminInlineHelp">Verbindung und Produktscope werden im Importbatch gespeichert. Produktscope anhand des Originalexports prüfen: Eine falsche Auswahl kann produktspezifische Prüfungen umgehen. Der Scope belegt weder Eigentum noch steuerliche Zuordnung.</p>
+      </div>}
       {source === "mexc" && <MexcReview item={item} disabled={busy || item.status === "imported"} onDecision={(row, decision) => {
         const decisions = { ...item.decisions };
         if (decision) decisions[String(row)] = decision; else delete decisions[String(row)];

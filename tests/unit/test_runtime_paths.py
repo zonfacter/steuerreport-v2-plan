@@ -11,5 +11,5 @@ def test_duckdb_store_uses_configured_default_path(tmp_path, monkeypatch):
     assert store.path == db_path
     assert db_path.is_file()
     assert health["exists"] is True
-    assert health["schema_version"] == 2
+    assert health["schema_version"] == 3
     assert health["path"] == str(db_path)

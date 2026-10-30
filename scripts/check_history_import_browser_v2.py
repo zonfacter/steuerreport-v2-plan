@@ -8,10 +8,12 @@ Kein Backend, keine echten Anbieter, keine Produktionsbrowser oder Zugangsdaten.
 from __future__ import annotations
 
 import argparse
+import base64
 from contextlib import ExitStack, suppress
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from functools import partial
+import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
@@ -33,6 +35,13 @@ JOB_IDS = {
     OTHER: "22222222-2222-4222-8222-222222222222",
 }
 OLD_JOB = "33333333-3333-4333-8333-333333333333"
+ALT_BINANCE_JOB = "55555555-5555-4555-8555-555555555555"
+MATCH_DECISION_ID = "66666666-6666-4666-8666-666666666666"
+BINANCE_CONNECTION_ID = "77777777-7777-4777-8777-777777777777"
+SYNTHETIC_BINANCE_CSV = (
+    b"symbol,id,orderId,price,qty,quoteQty,commission,commissionAsset,time,isBuyer,isMaker,isBestMatch\n"
+    b"BTCUSDT,42,9001,10000,0.1,1000,0.001,BNB,1735732800000,true,false,true\n"
+)
 STAMP = "2026-10-27T10:00:00Z"
 NOTE = "Synthetischer Anbieter: begrenzte Abdeckung, keine Vollstaendigkeitsgarantie."
 EXACT_QUANTITY = "0.123456789012345678"
@@ -69,6 +78,7 @@ class HistoryFixture(WorkspaceFixture):
         self.view_errors = {}
         self.job_errors = {}
         self.foreign_view_job = False
+        self.spot_matches = {}
         self.sequence = 0
 
     def sources(self):
@@ -155,8 +165,77 @@ class HistoryFixture(WorkspaceFixture):
         request = route.request
         path = unquote(urlparse(request.url).path)
         body = request.post_data_json if request.post_data else None
-        self.api_calls.append({"method": request.method, "path": path, "body": body})
+        logged_body = deepcopy(body)
+        if isinstance(logged_body, dict) and "content_base64" in logged_body:
+            logged_body["content_base64"] = "<synthetic-file-content>"
+        self.api_calls.append({"method": request.method, "path": path, "body": logged_body})
         try:
+            match = re.fullmatch(
+                re.escape(PREFIX) + r"(s_[a-f0-9]{20})/history/jobs/([a-f0-9-]{36})/binance-spot-matches(?:/(preview))?",
+                path,
+            )
+            if match:
+                ref, job_id, action = match.groups()
+                assert ref == SOURCE, "Binance-Match muss an der synthetischen Quelle bleiben"
+                job = next((item for item in self.jobs[ref] if item["id"] == job_id), None)
+                assert job is not None and job["status"] == "succeeded", "API-first-Test braucht einen importierten synthetischen API-Job"
+                if action == "preview":
+                    assert request.method == "POST" and set(body) == {"filename", "content_base64"}
+                    assert body["filename"] == "synthetic-binance-spot.csv"
+                    assert base64.b64decode(body["content_base64"], validate=True) == SYNTHETIC_BINANCE_CSV
+                    state = self.spot_matches.get(job_id, "none")
+                    status = {"none": "matchable", "active": "already_decided", "revoked": "match_revoked"}[state]
+                    preview_hash = hashlib.sha256((job_id + hashlib.sha256(SYNTHETIC_BINANCE_CSV).hexdigest()).encode()).hexdigest()
+                    self.reply(route, {
+                        "provider": "binance", "connection_id": BINANCE_CONNECTION_ID, "job_id": job_id,
+                        "file_sha256": hashlib.sha256(SYNTHETIC_BINANCE_CSV).hexdigest(),
+                        "source_batch_id": None, "preview_sha256": preview_hash,
+                        "candidates": [{
+                            "csv_row_number": 1, "csv_provider_record_id": "42", "symbol": "BTCUSDT",
+                            "api_record_identity": 'cex:["binance","synthetic-connection","/api/v3/myTrades","BTCUSDT","42"]',
+                            "csv_financial_sha256": "c" * 64, "api_financial_sha256": "c" * 64,
+                            "csv_financial_facts": {"event_time_utc": "2025-01-01T12:00:00.000000+00:00",
+                                "event_type": "trade", "asset": "BTC", "quantity": "0.1",
+                                "quote_asset": "USDT", "quote_quantity": "1000", "fee_asset": "BNB",
+                                "fee_quantity": "0.001"},
+                            "api_financial_facts": {"event_time_utc": "2025-01-01T12:00:00.000000+00:00",
+                                "event_type": "trade", "asset": "BTC", "quantity": "0.1",
+                                "quote_asset": "USDT", "quote_quantity": "1000", "fee_asset": "BNB",
+                                "fee_quantity": "0.001"},
+                            "decision_id": MATCH_DECISION_ID if state != "none" else None,
+                            "decision_state": state, "status": status,
+                        }],
+                    })
+                else:
+                    assert request.method == "POST" and set(body) == {
+                        "filename", "content_base64", "preview_sha256", "csv_row_number",
+                        "api_record_identity", "actor", "rationale", "confirm_match",
+                    }
+                    assert self.spot_matches.get(job_id, "none") == "none"
+                    expected_hash = hashlib.sha256((job_id + hashlib.sha256(SYNTHETIC_BINANCE_CSV).hexdigest()).encode()).hexdigest()
+                    assert body["filename"] == "synthetic-binance-spot.csv"
+                    assert base64.b64decode(body["content_base64"], validate=True) == SYNTHETIC_BINANCE_CSV
+                    assert body["preview_sha256"] == expected_hash and body["csv_row_number"] == 1
+                    assert body["api_record_identity"] == 'cex:["binance","synthetic-connection","/api/v3/myTrades","BTCUSDT","42"]'
+                    assert body["actor"] == "Synthetic reviewer" and len(body["rationale"]) >= 8
+                    assert body["confirm_match"] is True
+                    self.spot_matches[job_id] = "active"
+                    self.reply(route, {"decision": {"decision_id": MATCH_DECISION_ID}, "status": "active"})
+                return True
+
+            match = re.fullmatch(re.escape(PREFIX) + r"(s_[a-f0-9]{20})/history/spot-matches/([a-f0-9-]{36})/revoke", path)
+            if match:
+                ref, decision_id = match.groups()
+                assert request.method == "POST" and ref == SOURCE and decision_id == MATCH_DECISION_ID
+                assert set(body) == {"actor", "rationale"}
+                assert body["actor"] == "Synthetic reviewer" and len(body["rationale"]) >= 8
+                active_jobs = [job_id for job_id, state in self.spot_matches.items() if state == "active"]
+                assert len(active_jobs) == 1, "Widerruf muss genau eine aktive synthetische Entscheidung treffen"
+                job_id = active_jobs[0]
+                self.spot_matches[job_id] = "revoked"
+                self.reply(route, {"decision": {"decision_id": decision_id}, "status": "revoked"})
+                return True
+
             match = re.fullmatch(re.escape(PREFIX) + r"(s_[a-f0-9]{20})/history(?:/jobs(?:/([a-f0-9-]{36})(?:/(pause|resume|cancel|import))?)?)?", path)
             if match:
                 ref, job_id, action = match.groups()
@@ -558,6 +637,78 @@ class Run:
             expect(area).not_to_contain_text(JOB_IDS[OTHER])
             assert not fixture.posts()
 
+        def binance_spot_csv_match(page, fixture):
+            """CSV-Vorschau und manuelle Entscheidung; Jobwechsel leert Kontext, API-first-Widerruf vor CSV-Import."""
+            fixture.job(status="succeeded", created_at="2026-10-27T11:00:00Z")
+            fixture.job(status="succeeded", job_id=ALT_BINANCE_JOB, created_at="2026-10-26T11:00:00Z")
+            area = open_source(page, self.base)
+            jobs = area.get_by_label("Gespeicherte Aufträge")
+            expect(jobs).to_have_value(JOB_IDS[SOURCE])
+            match = area.locator(".hiMatch")
+            file_input = match.locator('input[type="file"]')
+            preview_button = match.get_by_role("button", name="Vorschau vergleichen", exact=True)
+
+            file_input.set_input_files({
+                "name": "synthetic-binance-spot.csv", "mimeType": "text/csv",
+                "buffer": SYNTHETIC_BINANCE_CSV,
+            })
+            preview_button.click()
+            row = match.locator(".hiMatchRow")
+            expect(row).to_contain_text("Exakte Übereinstimmung zur manuellen Prüfung")
+            expect(match.get_by_text(re.compile("Datei-SHA-256:"))).to_be_visible()
+            assert len([call for call in fixture.api_calls if call["path"].endswith("/binance-spot-matches/preview")]) == 1
+
+            jobs.select_option(ALT_BINANCE_JOB)
+            expect(jobs).to_have_value(ALT_BINANCE_JOB)
+            assert file_input.evaluate("element => element.files.length") == 0
+            expect(match.get_by_text(re.compile("Datei-SHA-256:"))).to_have_count(0)
+            expect(match.locator(".hiMatchRow")).to_have_count(0)
+            expect(match.get_by_label("Begründung für die folgende Einzelentscheidung")).to_have_count(0)
+            expect(preview_button).to_be_disabled()
+
+            jobs.select_option(JOB_IDS[SOURCE])
+            expect(jobs).to_have_value(JOB_IDS[SOURCE])
+            expect(match.get_by_text(re.compile("Datei-SHA-256:"))).to_have_count(0)
+            assert file_input.evaluate("element => element.files.length") == 0
+            file_input.set_input_files({
+                "name": "synthetic-binance-spot.csv", "mimeType": "text/csv",
+                "buffer": SYNTHETIC_BINANCE_CSV,
+            })
+            preview_button.click()
+            expect(row).to_contain_text("Exakte Übereinstimmung zur manuellen Prüfung")
+            match.get_by_label("Prüfende Person (wird protokolliert, derzeit nicht serverseitig authentifiziert)").fill("Synthetic reviewer")
+            match.get_by_label("Begründung für die folgende Einzelentscheidung").fill(
+                "Synthetische Originalbelege einzeln geprüft."
+            )
+            match.get_by_role("checkbox", name=re.compile("Ich habe CSV-Zeile 1")).check()
+            match.get_by_role("button", name="Diese Zeile ausdrücklich abgleichen", exact=True).click()
+
+            expect(row).to_contain_text("Bereits ausdrücklich abgeglichen")
+            expect(row).to_contain_text(MATCH_DECISION_ID)
+            import_link = match.get_by_role("link", name="CSV mit gleicher Verbindung importieren", exact=True)
+            expect(import_link).to_be_visible()
+            assert fixture.spot_matches == {JOB_IDS[SOURCE]: "active"}
+
+            row.get_by_role("checkbox", name=re.compile("Ich bestätige den Widerruf für CSV-Zeile 1")).check()
+            row.get_by_role("button", name="Abgleich widerrufen", exact=True).click()
+            expect(row).to_contain_text("Abgleich widerrufen; erneute Übernahme bleibt gesperrt")
+            expect(import_link).to_have_count(0)
+            assert fixture.spot_matches == {JOB_IDS[SOURCE]: "revoked"}
+
+            match_posts = [call for call in fixture.api_calls if call["method"] == "POST"
+                           and "/binance-spot-matches" in call["path"]]
+            assert [call["path"].rsplit("/", 1)[-1] for call in match_posts].count("preview") == 4
+            decision = next(call for call in match_posts if call["path"].endswith("/binance-spot-matches"))
+            assert decision["body"]["confirm_match"] is True
+            assert decision["body"]["actor"] == "Synthetic reviewer"
+            assert decision["body"]["content_base64"] == "<synthetic-file-content>"
+            revocations = [call for call in fixture.api_calls if call["method"] == "POST"
+                           and call["path"].endswith(f"/spot-matches/{MATCH_DECISION_ID}/revoke")]
+            assert len(revocations) == 1 and revocations[0]["body"]["actor"] == "Synthetic reviewer"
+            assert not fixture.posts("/import"), "Der API-first-Widerruf darf keinen CSV-/Historienimport starten"
+            assert not any(call["method"] == "POST" and "/api/v1/import" in call["path"]
+                           for call in fixture.api_calls), "Der geführte Dateiimport darf nicht gestartet werden"
+
         def legacy_rpc_jobs(page, fixture):
             """Fehlende und null RPC-Metadaten bleiben sicher; Formularwahl aendert keinen Altauftrag und Resume sendet keinen Provider."""
             job = fixture.job(OTHER, status="paused")
@@ -730,6 +881,7 @@ class Run:
 
         return {"loading": loading, "overview-file": overview_and_file, "consent-uuid": consent_uuid, "solana-start": solana_start,
                 "progress-controls": progress_controls, "ready-approval": ready_approval, "prior-jobs": prior_jobs,
+                "binance-spot-csv-match": binance_spot_csv_match,
                 "non-resumable": non_resumable, "legacy-rpc-jobs": legacy_rpc_jobs,
                 "source-races": source_races, "unsupported-setup": unsupported_setup, "mapped-errors": mapped_errors,
                 "responsive-keyboard": responsive_keyboard}

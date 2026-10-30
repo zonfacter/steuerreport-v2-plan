@@ -9,7 +9,19 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from steuerreport_v2.contracts.common import ApiMessage, ApiResponse
-from steuerreport_v2.contracts.history import HistoryApprove, HistoryJob, HistoryResume, HistoryStart, HistoryView
+from steuerreport_v2.contracts.history import (
+    BinanceSpotMatchDecisionCreate,
+    BinanceSpotMatchDecisionResult,
+    BinanceSpotMatchPreview,
+    BinanceSpotMatchPreviewRequest,
+    BinanceSpotMatchRevocation,
+    HistoryApprove,
+    HistoryJob,
+    HistoryResume,
+    HistoryStart,
+    HistoryView,
+)
+from steuerreport_v2.domain.binance_spot_matches import BinanceSpotHistoryMatchService
 from steuerreport_v2.domain.history import HistoryService
 from steuerreport_v2.domain.history_types import HistoryFetchError
 from steuerreport_v2.importers.solana_history_identity import SolanaHistoryConflict
@@ -34,6 +46,10 @@ class _HistoryRoute(APIRoute):
                 return error(exc.code, 404 if exc.code.endswith("not_found") else 409)
             except SolanaHistoryConflict:
                 return error("history_existing_evidence_conflict", 409)
+            except ValueError:
+                if "/binance-spot-matches" in request.url.path or "/spot-matches/" in request.url.path:
+                    return error("history_match_invalid", 409)
+                return error("history_service_unavailable", 503)
             except Exception:
                 return error("history_service_unavailable", 503)
         return safe
@@ -42,6 +58,7 @@ class _HistoryRoute(APIRoute):
 def build_history_router(store, on_import):
     router = APIRouter(prefix="/api/v1/workspace/sources/{ref}/history", tags=["source-history"], route_class=_HistoryRoute)
     service = HistoryService(store)
+    match_service = BinanceSpotHistoryMatchService(store)
 
     @router.get("")
     def history(ref: str) -> ApiResponse[HistoryView]:
@@ -80,5 +97,25 @@ def build_history_router(store, on_import):
     @router.get("/jobs/{job_id}/audit.json")
     def audit(ref: str, job_id: UUID) -> ApiResponse[dict]:
         return ApiResponse(data=service.audit(ref, str(job_id)))
+
+    @router.post("/jobs/{job_id}/binance-spot-matches/preview")
+    def preview_binance_spot_matches(
+        ref: str, job_id: UUID, request: BinanceSpotMatchPreviewRequest,
+    ) -> ApiResponse[BinanceSpotMatchPreview]:
+        return ApiResponse(data=match_service.preview(ref, str(job_id), request))
+
+    @router.post("/jobs/{job_id}/binance-spot-matches")
+    def create_binance_spot_match(
+        ref: str, job_id: UUID, request: BinanceSpotMatchDecisionCreate,
+    ) -> ApiResponse[BinanceSpotMatchDecisionResult]:
+        decision = match_service.decide(ref, str(job_id), request)
+        return ApiResponse(data=BinanceSpotMatchDecisionResult(decision=decision, status="active"))
+
+    @router.post("/spot-matches/{decision_id}/revoke")
+    def revoke_binance_spot_match(
+        ref: str, decision_id: str, request: BinanceSpotMatchRevocation,
+    ) -> ApiResponse[BinanceSpotMatchDecisionResult]:
+        decision = match_service.revoke(ref, decision_id, request)
+        return ApiResponse(data=BinanceSpotMatchDecisionResult(decision=decision, status="revoked"))
 
     return router

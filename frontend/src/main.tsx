@@ -19922,7 +19922,7 @@ function ImportForm({
           </div>
           <div className="reviewSummary">
             <Metric title="Zeilen" value={String(importPreview?.row_count ?? taxImpact?.estimated_new_rows ?? 0)} />
-            <Metric title="Normalisierbar" value={String(taxImpact?.estimated_normalizable_rows ?? 0)} />
+            <Metric title="Normalisierbar" value={taxImpact?.estimated_normalizable_rows == null ? "Unbekannt" : String(taxImpact.estimated_normalizable_rows)} />
             <Metric title="Profil" value={String(importPreview?.profile_label ?? "-")} />
             <Metric title="Assets" value={Array.isArray(taxImpact?.detected_assets) ? taxImpact.detected_assets.join(", ") : "-"} />
             <Metric title="Jahre" value={Array.isArray(taxImpact?.detected_years) ? taxImpact.detected_years.join(", ") : "-"} />

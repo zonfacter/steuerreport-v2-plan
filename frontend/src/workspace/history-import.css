@@ -46,6 +46,23 @@
 .hiPhases li > span { color: #52675d; font-size: 12px; }
 .hiPhases progress { display: block; width: 100%; height: 8px; margin-block: 5px; accent-color: #197b93; }
 .hiEstimate { font-variant-numeric: tabular-nums; }
+.hiMatch { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid #cad8d0; min-width: 0; }
+.hiMatch > p, .hiMatch h3 { margin: 0; }
+.hiMatchHeading { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; justify-content: space-between; }
+.hiMatchHeading > span { color: #52675d; font-size: 12px; }
+.hiMatch input[type="file"] { display: block; width: 100%; }
+.hiMatchList { display: grid; gap: 12px; min-width: 0; }
+.hiMatchRow { display: grid; gap: 10px; min-width: 0; padding: 12px 0; border-top: 1px solid #d4e0d8; }
+.hiMatchRow > .hiJobHeading > strong { overflow-wrap: anywhere; }
+.hiMatchRow > .hiJobHeading > span { color: #52675d; font-size: 12px; }
+.hiMatchFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.hiMatchFacts > section { min-width: 0; padding: 10px; border: 1px solid #d4e0d8; border-radius: 4px; overflow-wrap: anywhere; }
+.hiMatchFacts dl { display: grid; grid-template-columns: minmax(90px, auto) minmax(0, 1fr); gap: 4px 10px; margin: 8px 0 0; }
+.hiMatchFacts dl > div { display: contents; }
+.hiMatchFacts dt { color: #52675d; }
+.hiMatchFacts dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.hiMatchRow details { overflow-wrap: anywhere; }
+.hiMatchRow code { overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .hiFields { grid-template-columns: minmax(0, 1fr); }
   .hiCounts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -54,5 +71,7 @@
   .hiActions > :is(button, a) { flex: 1 1 150px; }
   .hiModes, .hiPhases { grid-template-columns: minmax(0, 1fr); }
   .hiLimitValues { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hiMatchFacts { grid-template-columns: minmax(0, 1fr); }
+  .hiMatchFacts dl { grid-template-columns: minmax(90px, auto) minmax(0, 1fr); }
   .hiRpcChoice .hiActions > .helpTipAnchor { flex: 0 0 auto; align-self: center; }
 }

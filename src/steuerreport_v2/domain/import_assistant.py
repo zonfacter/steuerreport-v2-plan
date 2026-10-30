@@ -15,6 +15,7 @@ from steuerreport_v2.contracts.imports import (
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.connections import ConnectionError, ConnectionService
+from steuerreport_v2.domain.import_context import bitget_import_context
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.review import ReviewService
 from steuerreport_v2.domain.tax import TaxService
@@ -34,7 +35,7 @@ def validate_import_connection_binding(
     provider = source.strip().lower()
     if import_mode != "file":
         raise ValueError("connection_binding_file_mode_required")
-    if provider != "binance":
+    if provider not in {"binance", "bitget"}:
         raise ValueError("connection_binding_provider_unsupported")
     try:
         return ConnectionService(store).validate_import_binding(connection_id, provider)
@@ -55,6 +56,33 @@ class ImportAssistantService:
     def preview(self, request: ImportAssistantRequest) -> ImportAssistantPreview:
         warnings: list[str] = []
         current_state = self._current_state()
+        import_context: dict[str, str] = {}
+        context_error: str | None = None
+        context_missing: list[str] = []
+        if request.source.strip().lower() == "bitget":
+            try:
+                import_context = bitget_import_context(
+                    export_timezone=request.export_timezone,
+                    product_scope=request.bitget_product_scope,
+                    margin_pair=request.bitget_margin_pair,
+                    allow_legacy_defaults=False,
+                )
+            except ValueError as exc:
+                context_error = {
+                    "import_timezone_invalid": "Die Exportzeitzone ist ungueltig.",
+                    "bitget_export_timezone_required": "Eine Exportzeitzone muss ausdruecklich ausgewaehlt werden.",
+                    "bitget_product_scope_required": "Ein Bitget-Produktscope muss ausdruecklich ausgewaehlt werden.",
+                    "bitget_margin_pair_required": "Bei Isolated Margin ist ein Handelspaar erforderlich.",
+                    "bitget_margin_pair_not_applicable": "Ein Margin-Paar ist nur bei Isolated Margin zulaessig.",
+                }.get(str(exc), "Der Bitget-Importkontext ist ungueltig.")
+            if not request.export_timezone or not request.export_timezone.strip():
+                context_missing.append("Exportzeitzone")
+            if request.bitget_product_scope is None:
+                context_missing.append("Produktscope")
+            if request.connection_id is None:
+                context_missing.append("Bitget-Verbindung")
+            if context_error:
+                context_missing.append("gueltige Zeitzone oder Margin-Paar")
         connection_id = validate_import_connection_binding(
             self.store,
             source=request.source,
@@ -67,6 +95,7 @@ class ImportAssistantService:
                 source=request.source,
                 import_mode=request.import_mode,
                 can_execute=False,
+                import_context=import_context,
                 blocked_reason=(
                     "Dieser Assistent fuehrt diese Importart nicht direkt aus. "
                     "Nutze zuerst die verlinkten Preflight-Endpunkte; ein spaeterer "
@@ -88,7 +117,8 @@ class ImportAssistantService:
                 ],
             )
 
-        preview = self._file_preview(request)
+        preview = self._file_preview(request, import_context)
+        warnings.extend(preview.blocking_reasons)
         if preview.mexc:
             warnings.extend(preview.mexc.warnings)
             warnings.extend(preview.mexc.blocking_reasons)
@@ -99,7 +129,15 @@ class ImportAssistantService:
             years = sorted({reporting_tax_year(datetime.fromisoformat(row.event_time))
                             for row in preview.mexc.rows if row.event_time})
         price_needs = self._price_needs(assets, years)
-        estimated_normalizable_rows = (preview.mexc.bookable_rows if preview.mexc else preview.row_count) if preview.can_import else 0
+        timezone_unavailable = (
+            request.source.strip().lower() == "bitget"
+            and (context_error is not None or not request.export_timezone or not request.export_timezone.strip())
+        )
+        estimated_normalizable_rows = (
+            None if timezone_unavailable
+            else (preview.mexc.bookable_rows if preview.mexc else preview.row_count)
+            if preview.can_import else 0
+        )
         expected_issues = []
         if preview.missing_required_groups:
             expected_issues.append("missing_required_columns")
@@ -110,6 +148,13 @@ class ImportAssistantService:
             expected_issues.append("missing_current_price_reference")
         if preview.duplicate_batch_id:
             warnings.append(f"Dublette erkannt: {preview.duplicate_batch_id}")
+            if (
+                request.source.strip().lower() == "bitget"
+                and preview.duplicate_batch_import_context != import_context
+            ):
+                warnings.append(
+                    "Der vorhandene Batch wurde mit anderem oder unbekanntem Importkontext angelegt. Er wird nicht als Import mit der aktuellen Auswahl wiederverwendet."
+                )
         if preview.missing_required_groups:
             warnings.append(
                 "Fehlende Pflichtfelder: " + ", ".join(preview.missing_required_groups)
@@ -122,6 +167,23 @@ class ImportAssistantService:
                 "Diese Binance-Datei hat keine Konto-/Wallet-Spalte. Vor dem Import muss "
                 "eine konkrete Binance-Verbindung ausgewaehlt werden."
             )
+        if request.source.strip().lower() == "bitget":
+            if request.export_timezone and request.export_timezone.strip() and not context_error:
+                warnings.append(
+                    "Zeitstempel mit eigenem UTC-Offset behalten diesen Offset; die ausgewaehlte Exportzeitzone gilt nur fuer Zeitwerte ohne Offset."
+                )
+            else:
+                warnings.append(
+                    "Der Importkontext ist unvollstaendig oder ungueltig. Lokale Zeitwerte werden in dieser Vorschau nicht interpretiert; es wird kein UTC+08-Fallback verwendet und der Import bleibt gesperrt."
+                )
+            if request.bitget_product_scope:
+                warnings.append(
+                    "Produktscope anhand des Originalexports pruefen: Eine falsche Auswahl kann produktspezifische Plausibilitaetspruefungen umgehen. Der Scope ist kein Eigentums- oder Unterkontonachweis."
+                )
+            if context_error:
+                warnings.append(context_error)
+            if context_missing:
+                warnings.append("Vor dem Import erforderlich: " + ", ".join(context_missing) + ".")
         mexc_blocked = bool(
             preview.mexc
             and (preview.mexc.blocking_reasons or preview.mexc.disposition in {"empty", "unsupported"})
@@ -130,16 +192,23 @@ class ImportAssistantService:
             preview.can_import
             and preview.duplicate_batch_id is None
             and not (binding_required and connection_id is None)
+            and not context_missing
+            and not preview.blocking_reasons
             and not mexc_blocked
         )
         return ImportAssistantPreview(
             source=request.source,
             import_mode=request.import_mode,
+            import_context=import_context,
             can_execute=can_execute,
             blocked_reason=(
                 "Fuer eine Binance-Datei ohne Konto-/Wallet-Spalte ist eine ausdrueckliche "
                 "Bindung an eine bestehende Binance-Verbindung erforderlich."
                 if binding_required and connection_id is None
+                else "Bitget-Import benoetigt eine bestehende Verbindung, Exportzeitzone und Produktscope."
+                if request.source.strip().lower() == "bitget" and context_missing
+                else "; ".join(preview.blocking_reasons)
+                if preview.blocking_reasons
                 else "; ".join(preview.mexc.blocking_reasons)
                 if preview.mexc and preview.mexc.blocking_reasons
                 else self._blocked_reason(preview)
@@ -186,6 +255,7 @@ class ImportAssistantService:
                 sheet_name=request.sheet_name,
                 connection_id=str(connection_id) if connection_id else None,
                 mexc=request.mexc,
+                import_context=preview.import_context,
             )
         else:
             batch = CsvRawImporter(self.store).import_text(
@@ -194,11 +264,12 @@ class ImportAssistantService:
                 content=request.content or "",
                 connection_id=str(connection_id) if connection_id else None,
                 mexc=request.mexc,
+                import_context=preview.import_context,
             )
         run = PipelineService(self.store).rebuild_after_import(batch.batch_id)
         return ImportAssistantExecuteResult(preview=preview, batch=batch, run=run)
 
-    def _file_preview(self, request: ImportAssistantRequest):
+    def _file_preview(self, request: ImportAssistantRequest, import_context: dict[str, str]):
         connection_id = str(request.connection_id) if request.connection_id else None
         if request.content_base64:
             return FileRawImporter(CsvRawImporter(self.store)).preview_base64(
@@ -208,6 +279,8 @@ class ImportAssistantService:
                 sheet_name=request.sheet_name,
                 connection_id=connection_id,
                 mexc=request.mexc,
+                import_context=import_context,
+                allow_legacy_bitget_context=False,
             )
         return CsvRawImporter(self.store).preview_text(
             source=request.source,
@@ -215,6 +288,8 @@ class ImportAssistantService:
             content=request.content or "",
                 connection_id=connection_id,
             mexc=request.mexc,
+            import_context=import_context,
+            allow_legacy_bitget_context=False,
         )
 
     def _price_needs(self, assets: list[str], years: list[int]) -> list[ImportAssistantPriceNeed]:

@@ -66,6 +66,39 @@ def test_csv_upload_preserves_original_byte_hash_and_preview_is_readonly(tmp_pat
     assert len(trace["raw_objects"]) == len(trace["canonical_events"]) == 1
 
 
+@pytest.mark.parametrize("route", ["/api/v1/import/csv/raw", "/api/v1/import/file/raw"])
+def test_legacy_bitget_raw_routes_warn_that_utc8_fallback_is_unverified(route, tmp_path):
+    store = DuckDbStore(tmp_path / "legacy-bitget-warning.duckdb")
+    client = TestClient(create_app(store))
+    content = b"Date,Coin,Type,Amount\n2025-01-02 12:00:00,DEMOCOIN,deposit,4\n"
+    request = {"source": "bitget", "filename": "legacy.csv"}
+    if route.endswith("csv/raw"):
+        request["content"] = content.decode()
+    else:
+        request["content_base64"] = base64.b64encode(content).decode()
+
+    response = client.post(route, json=request).json()
+
+    assert response["status"] == "warning"
+    assert any(item["code"] == "bitget_legacy_timezone_unverified" for item in response["warnings"])
+    batch = store.get_import_batch(response["data"]["batch_id"])
+    assert batch is not None
+    assert batch.import_context["timezone_basis"] == "legacy_default_unverified"
+
+
+def test_invalid_bitget_timestamp_is_rejected_before_legacy_raw_batch_creation(tmp_path):
+    store = DuckDbStore(tmp_path / "legacy-bitget-invalid-time.duckdb")
+    client = TestClient(create_app(store))
+    response = client.post("/api/v1/import/csv/raw", json={
+        "source": "bitget", "filename": "legacy.csv",
+        "content": "Date,Coin,Type,Amount\nnot-a-date,DEMOCOIN,deposit,4\n",
+    }).json()
+
+    assert response["status"] == "error"
+    assert response["errors"][0]["code"] == "import_preview_blocked"
+    assert store.list_import_batches() == []
+
+
 def test_excel_hash_is_original_file_but_import_identity_includes_sheet(tmp_path):
     store = DuckDbStore(tmp_path / "guided.duckdb")
     client = TestClient(create_app(store))

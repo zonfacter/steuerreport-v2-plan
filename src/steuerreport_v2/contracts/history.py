@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
+from steuerreport_v2.contracts.review import ReviewDecision
+
 
 class HistoryRateState(BaseModel):
     available: bool = False
@@ -139,6 +141,107 @@ class HistoryApprove(BaseModel):
         if value is not True:
             raise ValueError("history_import_confirmation_required")
         return value
+
+
+class BinanceSpotMatchSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    batch_id: str | None = None
+    filename: str | None = Field(default=None, min_length=1, max_length=240)
+    content: str | None = None
+    content_base64: str | None = None
+    sheet_name: str | None = None
+
+    @model_validator(mode="after")
+    def one_source(self):
+        existing = self.batch_id is not None
+        uploaded = self.filename is not None and (self.content is not None) != (self.content_base64 is not None)
+        if existing == uploaded:
+            raise ValueError("history_match_source_invalid")
+        return self
+
+
+class BinanceSpotMatchPreviewRequest(BinanceSpotMatchSource):
+    pass
+
+
+class BinanceSpotMatchDecisionCreate(BinanceSpotMatchSource):
+    preview_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    csv_row_number: int = Field(ge=1)
+    api_record_identity: str = Field(min_length=1, max_length=500)
+    actor: str = Field(min_length=1, max_length=120)
+    rationale: str = Field(min_length=8, max_length=2000)
+    confirm_match: Literal[True]
+
+    @field_validator("actor", "rationale")
+    @classmethod
+    def non_blank(cls, value):
+        if not value.strip():
+            raise ValueError("history_match_review_text_required")
+        return value.strip()
+
+    @field_validator("confirm_match", mode="before")
+    @classmethod
+    def explicit_match(cls, value):
+        if value is not True:
+            raise ValueError("history_match_confirmation_required")
+        return value
+
+
+class BinanceSpotMatchRevocation(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    actor: str = Field(min_length=1, max_length=120)
+    rationale: str = Field(min_length=8, max_length=2000)
+
+    @field_validator("actor", "rationale")
+    @classmethod
+    def non_blank(cls, value):
+        if not value.strip():
+            raise ValueError("history_match_review_text_required")
+        return value.strip()
+
+
+class BinanceSpotMatchFinancialFacts(BaseModel):
+    event_time_utc: str
+    event_type: str
+    asset: str
+    quantity: str
+    quote_asset: str | None = None
+    quote_quantity: str | None = None
+    fee_asset: str | None = None
+    fee_quantity: str | None = None
+
+
+class BinanceSpotMatchCandidate(BaseModel):
+    csv_row_number: int
+    csv_provider_record_id: str | None = None
+    symbol: str | None = None
+    api_record_identity: str | None = None
+    csv_financial_sha256: str | None = None
+    api_financial_sha256: str | None = None
+    csv_financial_facts: BinanceSpotMatchFinancialFacts | None = None
+    api_financial_facts: BinanceSpotMatchFinancialFacts | None = None
+    decision_id: str | None = None
+    decision_state: Literal["none", "active", "revoked"] = "none"
+    status: Literal[
+        "matchable", "missing_stable_id", "symbol_missing", "api_record_missing",
+        "csv_id_ambiguous", "api_id_ambiguous", "financial_digest_conflict",
+        "financial_shape_unsupported", "already_decided", "match_revoked",
+    ]
+
+
+class BinanceSpotMatchPreview(BaseModel):
+    provider: Literal["binance"] = "binance"
+    connection_id: UUID
+    job_id: UUID
+    file_sha256: str
+    source_batch_id: str | None = None
+    preview_sha256: str
+    candidates: list[BinanceSpotMatchCandidate] = Field(default_factory=list)
+
+
+class BinanceSpotMatchDecisionResult(BaseModel):
+    decision: ReviewDecision
+    status: Literal["active", "revoked"]
 
 
 class HistoryJob(BaseModel):

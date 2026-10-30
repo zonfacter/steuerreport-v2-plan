@@ -5,8 +5,10 @@ from io import BytesIO, StringIO
 import json
 from pathlib import Path
 import re
+import tomllib
 
 from openpyxl import load_workbook
+from pypdf import PdfReader
 import pytest
 
 from steuerreport_v2.db.duckdb_store import DuckDbStore
@@ -124,3 +126,12 @@ def test_type_is_not_a_technical_requirement_but_missing_fields_are():
 def test_shipped_documentation_pdfs_exist():
     for name in ("benutzerleitfaden.pdf", "importformate.pdf"):
         assert (ROOT / "frontend/public" / name).read_bytes().startswith(b"%PDF-")
+
+
+def test_import_format_pdf_matches_version_and_contains_margin_limit():
+    pdf = PdfReader(ROOT / "frontend/public/importformate.pdf")
+    assert 1 <= len(pdf.pages) <= 100
+    text = " ".join(" ".join(page.extract_text() for page in pdf.pages).split())
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    assert f"Version {version}" in text
+    assert "Isolated-Margin" in text

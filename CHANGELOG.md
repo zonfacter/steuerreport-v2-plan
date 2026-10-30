@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## 0.2.0rc38 - 2026-10-30 (Releasekandidat)
+
+- GitHub #13: Binance-Spot-CSV/API-Abgleich ist im Historienauftrag als
+  ausdrueckliche Einzelentscheidung bedienbar. Die Vorschau zeigt beide
+  normalisierten Finanzbelege und bindet stabile Trade-ID, Handelspaar,
+  Zeilennummer, Dateihash und Verbindung. Nicht bestaetigte Overlaps sowie
+  ungebundene Rohimporte bleiben gesperrt; spaete oder widerrufene
+  Entscheidungen aendern keine bereits importierten Ereignisse. Entscheidung,
+  CSV-Import und komplette lokale API-Vorschauvorbereitung teilen eine Sperre;
+  spaetere Aenderungen machen den Vorschauhash ungueltig. Der Lock gilt nur fuer
+  den dokumentierten Einprozessbetrieb; keine Benutzeridentitaet wird durch das
+  freie Akteursfeld authentifiziert.
+- GitHub #22: Gefuehrte Bitget-Dateiimporte speichern Zeitzone und Produktscope
+  als Kontext am Importbatch. Alte Rohbelege bleiben unveraendert und werden als
+  nicht verifizierter Legacy-Kontext markiert. Das ordnet Futures, Spot,
+  Gebuehren oder Gegenlegs nicht automatisch steuerlich zu. Leerzeichenwerte
+  umgehen Pflichtfelder nicht; nichtkanonische Quellen werden normalisiert,
+  ungueltige Zeitstempel vor dem Speichern blockiert. Eine ungueltige oder
+  unvollstaendige gefuehrte Vorschau verwendet keinen irrefuehrenden UTC+08-
+  Fallback und meldet betroffene Zeilen nicht als normalisierbar; die
+  Kontoidentitaet bleibt stabil an der Verbindung. Legacy-Rohpfade weisen ihren
+  UTC+08-Fallback ausdruecklich als nicht verifiziert aus. Widersprueche zwischen
+  Zeitwert, UTC-Spaltenkopf und gewaehlter Exportzeitzone blockieren die Vorschau,
+  statt still eine widersprechende Zeit anzuwenden.
+- GitHub #22: Gefuehrte Isolated-Margin-Imports blockieren eine nicht numerische
+  oder nicht null betragende Gebuehr ohne belegtes Gebuehrenasset. Das ist keine
+  automatische Zuordnung separater Gebuehren und schuetzt nicht die alten
+  Rohimportpfade ohne Produktscope.
+- Schema 3 setzt fuer migrierte und neue Importbatches dieselbe NOT-NULL-Regel.
+  Neuere Datenbankschemata werden vor Schemaoperationen abgewiesen. Fuer den
+  Rueckweg zu einem aelteren Image bleibt ein Schema-2-Backup erforderlich; ein
+  separater lesender Vergleichshelfer prueft isolierte Datenbankkopien.
+- Die Aenderungen nehmen keine automatische Datenmigration aus dem nativen
+  Bestand, keinen Historienimport und keine Methodenaktivierung vor. Eine
+  Containeraktualisierung ist getrennt abzusichern und nachzuweisen.
+
 ## 0.2.0rc37 - 2026-10-29 (Releasekandidat)
 
 - GitHub #4: MEXC-XLSX mit mehreren Tabellenblaettern verlangt jetzt eine
