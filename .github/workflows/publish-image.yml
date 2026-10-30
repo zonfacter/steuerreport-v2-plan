@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Vorhandener Release-Tag (z.B. v0.2.0rc3)"
+        description: "Vorhandener Release-Tag (z.B. v0.2.0rc40)"
         required: true
-        default: v0.2.0rc39
+        default: v0.2.0rc40
         type: string
 
 permissions:

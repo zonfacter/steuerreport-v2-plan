@@ -276,7 +276,7 @@ PROFILES: dict[str, SourceProfile] = {
         ),
         type_columns=("type", "action", "action (english)", "status", "sub category"),
         pair_columns=("trading pair", "trading pair"),
-        quote_asset_columns=("quote_asset", "quote asset", "fee deducted in"),
+        quote_asset_columns=("quote_asset", "quote asset"),
         quote_quantity_columns=(
             "quote_quantity",
             "amount in usdt",

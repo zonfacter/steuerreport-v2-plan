@@ -1,4 +1,4 @@
-# Importformate und Spaltenlayouts (0.2.0rc39)
+# Importformate und Spaltenlayouts (0.2.0rc40)
 
 Generiert aus den tatsaechlichen Importprofilen. Keine Zusage fuer beliebige Exporte eines Anbieters.
 
@@ -98,7 +98,7 @@ Timestamp UTC+8 (Completion),Coin,Quantity,Type,Transaction hash(txid),Account
 | Tokenmenge: technisch erforderlich | `surplus/deduction (after fee)` / `surplus/deduction (before fee)` / `amount` / `quantity` / `executed` / `size` |
 | Ereignisart: fuer die Zuordnung wesentlich | `type` / `action` / `action (english)` / `status` / `sub category` |
 | Handelspaar: optionaler Asset-Ersatz | `trading pair` |
-| Gegenasset: bei Handel erforderlich zur Rekonstruktion | `quote_asset` / `quote asset` / `fee deducted in` |
+| Gegenasset: bei Handel erforderlich zur Rekonstruktion | `quote_asset` / `quote asset` |
 | Gegenmenge: bei Handel erforderlich zur Rekonstruktion | `quote_quantity` / `amount in usdt` / `amount (usdt)` / `transacted amount` / `executed amount (usdt)` |
 | Gebuehrenasset: sofern eine Gebuehr anfaellt | `fee_asset` / `fee asset` / `fee deducted in` |
 | Gebuehrenmenge: sofern eine Gebuehr anfaellt | `fee_quantity` / `fee` / `fee (coin quantity)` / `withdrawal fee` |

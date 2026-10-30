@@ -1,12 +1,12 @@
 # Steuerreport V2
 
-Version 0.2.0rc39, Releasekandidat mit issuebezogenen Import-, Konfigurations-,
-Bewertungs- und Docker-Abnahmekorrekturen. Kein amtliches
+Version 0.2.0rc40, Releasekandidat mit einer gezielten Bitget-Importprofilkorrektur.
+Kein amtliches
 Guetesiegel und keine automatische steuerliche Jahresfreigabe.
 Software fuer nachvollziehbare Krypto-Steuer-, FIFO-,
 Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
-[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc39](docs/RELEASE_0.2.0rc39.md) ·
+[Changelog](CHANGELOG.md) · [Release-Hinweise 0.2.0rc40](docs/RELEASE_0.2.0rc40.md) ·
 [Inbetriebnahme](docs/INBETRIEBNAHME.md) ·
 [Speicherdiagnose](docs/STORAGE_DIAGNOSE.md) ·
 [GitHub Releases](https://github.com/zonfacter/steuerreport-v2-plan/releases) ·
@@ -14,8 +14,10 @@ Portfolio- und Belegauswertungen mit DuckDB, FastAPI und React/TypeScript.
 
 Issue #4: nativer MEXC-Dateiimport mit Konto-/Exportartzuordnung und
 begruendeter Belegverknuepfung. [Umfang und Grenzen](docs/MEXC_IMPORT.md).
-Release und Image werden am unveraenderlichen rc39-Quellstand geprueft;
-produktive Container werden nur mit gesondertem Backup-/Rollbacknachweis ersetzt.
+Der Quellstand rc40 ist ein Releasekandidat. Ein Image muss separat gebaut,
+veroeffentlicht und anhand seines Digests geprueft werden; diese Vorbereitung
+erstellt kein Image. Produktive Container werden nur mit gesondertem
+Backup-/Rollbacknachweis ersetzt.
 
 ## Docker-Installation
 
@@ -27,8 +29,11 @@ eigenen privaten Paketbereitstellung ein GitHub Personal Access Token (classic) 
 `read:packages` verwenden. Token nur lokal beim Docker-Login eingeben,
 nicht in Dateien dieses Repositorys oder in Chats hinterlegen.
 
+Der Pull-Befehl setzt voraus, dass rc40 zuvor durch den separaten Releaseworkflow
+gebaut und veroeffentlicht wurde.
+
 ```bash
-docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc39
+docker pull ghcr.io/zonfacter/steuerreport-v2:0.2.0rc40
 docker compose -f compose.ghcr.yml up -d
 ```
 
@@ -40,9 +45,10 @@ Die zusaetzliche Kennung `sha-<vollstaendiger Release-Commit>` bezeichnet
 denselben veroeffentlichten Quellstand. Vorabversionen erhalten kein `latest`.
 Aktuell wird `linux/amd64` gebaut und geprueft, nicht ARM64.
 
-rc39 ist ein Releasekandidat. Massgeblich sind der Release-Commit und der in
-den GitHub-Aktionen dokumentierte Image-Digest. Eine Produktivumschaltung ist
-davon getrennt und wird erst nach konsistenter Sicherung und Smoke-Test bestaetigt.
+rc40 ist ein Releasekandidat. Fuer ein spaeter gebautes Image sind der
+Release-Commit und der in den GitHub-Aktionen dokumentierte Image-Digest
+massgeblich. Eine Produktivumschaltung ist davon getrennt und wird erst nach
+konsistenter Sicherung und Smoke-Test bestaetigt.
 
 ### Lokal aus dem Quellstand bauen
 
