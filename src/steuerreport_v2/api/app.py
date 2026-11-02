@@ -276,6 +276,7 @@ from steuerreport_v2.contracts.prices import (
     CurrentPortfolioPriceBackfillResult,
     ExternalPriceBackfillRequest,
     ExternalPriceBackfillResult,
+    ExternalPriceBackfillStorageUnknown,
     PriceCsvImportRequest,
     PriceCsvImportResult,
     PriceCsvPreview,
@@ -543,7 +544,7 @@ from steuerreport_v2.domain.fairspot_staking import (
     FairspotStakingReconciliationService,
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
-from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
+from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService, HistoricalBackfillStorageUnknown
 from steuerreport_v2.domain.flows import FlowService
 from steuerreport_v2.domain.import_coverage import ImportCoverageService
 from steuerreport_v2.domain.import_policy import ImportPolicyService
@@ -2230,25 +2231,45 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             ).model_dump(mode="json"),
         )
 
-    @app.post("/api/v1/prices/backfill/external")
+    @app.post("/api/v1/prices/backfill/external", responses={
+        500: {"model": ApiResponse[ExternalPriceBackfillStorageUnknown], "description": "Speicherzustand unbekannt; vor Wiederholung pruefen"},
+    })
     def backfill_external_prices(
         payload: ExternalPriceBackfillRequest,
     ) -> ApiResponse[ExternalPriceBackfillResult]:
-        result = ExternalPriceBackfillService(db).run(
-            config_path=payload.config_path,
-            v1_fx_db_path=payload.v1_fx_db_path,
-            provider=payload.provider,
-            assets_filter=payload.assets,
-            max_requests=payload.max_requests,
-            timeout_seconds=payload.timeout_seconds,
-            confidence=payload.confidence,
-            dry_run=payload.dry_run,
-        )
+        try:
+            result = ExternalPriceBackfillService(db).run(
+                config_path=payload.config_path,
+                v1_fx_db_path=payload.v1_fx_db_path,
+                provider=payload.provider,
+                assets_filter=payload.assets,
+                max_requests=payload.max_requests,
+                timeout_seconds=payload.timeout_seconds,
+                confidence=payload.confidence,
+                dry_run=payload.dry_run,
+            )
+        except HistoricalBackfillStorageUnknown:
+            clear_response_cache()
+            return JSONResponse(
+                status_code=500,
+                content=ApiResponse[ExternalPriceBackfillStorageUnknown](
+                    status="error",
+                    data=ExternalPriceBackfillStorageUnknown(),
+                    errors=[ApiMessage(
+                        code="price_backfill_storage_unknown",
+                        message="Speicherung fehlgeschlagen; Preisbestand unbekannt. Vor Wiederholung Zustand pruefen.",
+                    )],
+                ).model_dump(mode="json"),
+            )
         if result.imported_prices:
             clear_response_cache()
         return ApiResponse(
-            status="ok" if result.dry_run or result.imported_prices else "warning",
+            status="ok" if result.pipeline_status != "failed" and (result.dry_run or result.imported_prices) else "warning",
             data=result,
+            warnings=[ApiMessage(
+                code="price_backfill_pipeline_failed",
+                message="Preise gespeichert, Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise. Vor Wiederholung Zustand pruefen.",
+            )] if result.pipeline_status == "failed" else [],
         )
 
     @app.post("/api/v1/prices/backfill/current-portfolio")

@@ -20,7 +20,11 @@ from typing import Any
 
 from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
+from steuerreport_v2.domain.external_price_backfill import (
+    ExternalPriceBackfillService,
+    HistoricalBackfillIncompleteError,
+    require_backfill_pipeline_success,
+)
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.review import ReviewService
@@ -124,7 +128,13 @@ def main() -> int:
 
     stage_db = _snapshot_database(db_path, "jup_solscan_balance_change_stage")
     result["stage_db"] = str(stage_db)
-    result["stage"] = _apply(stage_db, wallet=wallet, rows=rows, fx_db=Path(args.fx_db))
+    try:
+        result["stage"] = _apply(stage_db, wallet=wallet, rows=rows, fx_db=Path(args.fx_db))
+    except HistoricalBackfillIncompleteError as exc:
+        result["blocked_reason"] = "stage_price_backfill_incomplete"
+        result["error"] = str(exc)
+        print(json.dumps(result, indent=2, default=str))
+        return 2
     if not result["stage"]["review"]["allow_export"]:
         result["blocked_reason"] = "stage_review_not_export_ready"
         print(json.dumps(result, indent=2, default=str))
@@ -141,6 +151,12 @@ def main() -> int:
     result["backup"] = str(backup)
     try:
         result["applied"] = _apply(db_path, wallet=wallet, rows=rows, fx_db=Path(args.fx_db))
+    except HistoricalBackfillIncompleteError as exc:
+        result["blocked_reason"] = "live_price_backfill_incomplete_state_unknown_or_partial"
+        result["target_changed"] = None
+        result["error"] = str(exc)
+        print(json.dumps(result, indent=2, default=str))
+        return 2
     except Exception as exc:
         shutil.copy2(backup, db_path)
         result["blocked_reason"] = "live_exception_restored_from_backup"
@@ -337,6 +353,7 @@ def _apply(db_path: Path, *, wallet: str, rows: list[dict[str, Any]], fx_db: Pat
         confidence=Decimal("0.95"),
         dry_run=False,
     )
+    require_backfill_pipeline_success(backfill)
     PortfolioService(store).refresh_reconciliation_snapshots(connectors=["jup_wallet"])
     _store_jlwsol_live_price(store)
     pipeline = PipelineService(store).rebuild_all()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
@@ -30,6 +31,26 @@ DEFILLAMA_COINS_BASE_URL = "https://coins.llama.fi"
 FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 DEFAULT_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
 EXAMPLE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.example.json"
+logger = logging.getLogger(__name__)
+
+
+class HistoricalBackfillIncompleteError(RuntimeError):
+    """A backfill did not complete; callers must stop and inspect state."""
+
+
+class HistoricalBackfillStorageUnknown(HistoricalBackfillIncompleteError):
+    def __init__(self) -> None:
+        super().__init__("Preisbackfill: Speicherzustand unbekannt; vor Wiederholung pruefen.")
+
+
+class HistoricalBackfillPipelineFailed(HistoricalBackfillIncompleteError):
+    def __init__(self) -> None:
+        super().__init__("Preisbackfill: Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise.")
+
+
+def require_backfill_pipeline_success(result: ExternalPriceBackfillResult) -> None:
+    if result.pipeline_status == "failed":
+        raise HistoricalBackfillPipelineFailed()
 
 
 @dataclass(frozen=True)
@@ -186,9 +207,26 @@ class ExternalPriceBackfillService:
                 )
 
         pipeline = None
+        stored_price_ids: list[str] = []
+        pipeline_status = "not_started"
+        pipeline_effects = "not_started"
         if prices:
-            self.store.add_price_points(prices)
-            pipeline = PipelineService(self.store).rebuild_all()
+            try:
+                stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
+            except Exception:
+                logger.error("Historical price backfill storage failed; storage state unknown")
+                stored_price_ids = None
+            if stored_price_ids is None:
+                raise HistoricalBackfillStorageUnknown()
+            try:
+                pipeline = PipelineService(self.store).rebuild_all()
+            except Exception:
+                logger.error("Historical price backfill pipeline failed after price storage")
+                pipeline_status = "failed"
+                pipeline_effects = "unknown_or_partial"
+            else:
+                pipeline_status = "completed"
+                pipeline_effects = "completed"
         return ExternalPriceBackfillResult(
             requirements_count=len(requirements),
             configured_assets=sorted({asset.symbol for asset in assets}),
@@ -201,6 +239,9 @@ class ExternalPriceBackfillService:
             dry_run=dry_run,
             jobs=jobs[:200],
             pipeline=pipeline,
+            stored_price_ids=stored_price_ids,
+            pipeline_status=pipeline_status,
+            pipeline_effects=pipeline_effects,
         )
 
     def run_current_portfolio(

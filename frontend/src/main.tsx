@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { externalPriceBackfillError } from "./external-price-backfill-error";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
 import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
 import { ConnectorSetupSettings } from "./ConnectorSetupSettings";
@@ -4833,14 +4834,20 @@ function App() {
         },
         180_000
       );
-      setNotice(
-        dryRun
-          ? `Externer Preisbackfill geplant: ${String(result.planned_jobs ?? 0)} Jobs`
-          : `Externer Preisbackfill importiert: ${String(result.imported_prices ?? 0)} Preise`
-      );
       await refresh();
+      if (result.pipeline_status === "failed") {
+        const ids = Array.isArray(result.stored_price_ids) ? result.stored_price_ids.join(", ") : "unbekannt";
+        const partial = `Preisbackfill: ${String(result.imported_prices ?? 0)} Preise gespeichert (IDs: ${ids}). Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise. Nicht erneut starten, bevor der Zustand geprueft wurde.`;
+        setError((current) => current ? `${partial} ${current}` : partial);
+      } else {
+        setNotice(
+          dryRun
+            ? `Externer Preisbackfill geplant: ${String(result.planned_jobs ?? 0)} Jobs`
+            : `Externer Preisbackfill importiert: ${String(result.imported_prices ?? 0)} Preise`
+        );
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Externer Preisbackfill konnte nicht ausgefuehrt werden");
+      setError(externalPriceBackfillError(caught));
       setLoading(false);
     }
   }

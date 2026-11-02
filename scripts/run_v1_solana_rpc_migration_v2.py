@@ -16,7 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
+from steuerreport_v2.domain.external_price_backfill import (
+    ExternalPriceBackfillService,
+    HistoricalBackfillIncompleteError,
+    require_backfill_pipeline_success,
+)
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.review import ReviewService
@@ -72,6 +76,11 @@ def main() -> int:
             price_config=Path(args.price_config),
             max_year=args.max_year,
         )
+    except HistoricalBackfillIncompleteError as exc:
+        result["blocked_reason"] = "stage_price_backfill_incomplete"
+        result["error"] = str(exc)
+        print(json.dumps(result, indent=2, default=str))
+        return 2
     except Exception as exc:
         result["blocked_reason"] = "stage_exception"
         result["error"] = repr(exc)
@@ -97,6 +106,12 @@ def main() -> int:
             price_config=Path(args.price_config),
             max_year=args.max_year,
         )
+    except HistoricalBackfillIncompleteError as exc:
+        result["blocked_reason"] = "live_price_backfill_incomplete_state_unknown_or_partial"
+        result["target_changed"] = None
+        result["error"] = str(exc)
+        print(json.dumps(result, indent=2, default=str))
+        return 2
     except Exception as exc:
         shutil.copy2(backup, db_path)
         result["blocked_reason"] = "live_exception_restored_from_backup"
@@ -196,6 +211,7 @@ def _backfill_prices(db_path: Path, *, v1_db: Path, price_config: Path) -> dict[
         confidence=Decimal("0.80"),
         dry_run=False,
     )
+    require_backfill_pipeline_success(result)
     return result.model_dump(mode="json")
 
 
