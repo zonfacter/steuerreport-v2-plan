@@ -1572,6 +1572,19 @@ Blockpit-Preflight, unter anderem `IOT`, `ZEUS`, `JUPSOL`, `MANEKI`, `POPCAT`,
 Provider technisch bekannt ist; ein steuerlicher Preis gilt erst nach
 konkretem historischen Backfill oder manuellem Beleg im Price-Ledger.
 
+Der Ergebnisvertrag enthaelt `stored_price_ids`, `pipeline_status` und
+`pipeline_effects`. Die IDs sind die beim erfolgreichen Ruecksprung des
+Speichervorgangs zurueckgegebenen IDs, kein spaeterer Bestandsnachweis.
+Ohne Pipeline-Lauf sind beide Statuswerte `not_started`; bei erfolgreichem
+Lauf sind beide `completed`. Bei abgefangener Pipeline-Ausnahme antwortet der
+Endpunkt mit HTTP 200 und `status=warning`, `pipeline_status=failed`,
+`pipeline_effects=unknown_or_partial` und den gespeicherten IDs. Ein Fehler
+des Speichervorgangs oder eine verlorene Antwort hat keinen solchen Vertrag:
+der Zustand ist dann unbekannt. Keine Aussage impliziert einen Rollback oder
+eine steuerliche Freigabe. Vor einem erneuten Aufruf Bestand und abgeleitete
+Daten pruefen; Abrufe und neue Preiszeilen koennen wiederholt werden. Weitere
+Grenzen und Testnachweise: `docs/ISSUE_49_BACKFILL_TEILZUSTAND.md`.
+
 `POST /api/v1/prices/backfill/current-portfolio`
 
 Laedt aktuelle EUR-Marktpreise fuer positive Portfolio-Assets. Der Endpoint

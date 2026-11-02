@@ -164,6 +164,9 @@ class ExternalPriceBackfillResult(BaseModel):
     dry_run: bool
     jobs: list[ExternalPriceBackfillJob]
     pipeline: PipelineResult | None = None
+    stored_price_ids: list[str] = Field(default_factory=list, description="Beim erfolgreichen Speichern zurueckgegebene Preis-IDs, kein spaeterer Bestandsnachweis")
+    pipeline_status: Literal["not_started", "completed", "failed"] = "not_started"
+    pipeline_effects: Literal["not_started", "completed", "unknown_or_partial"] = "not_started"
 
 
 class CurrentPortfolioPriceBackfillRequest(BaseModel):

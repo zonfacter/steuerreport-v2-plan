@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
@@ -30,6 +31,7 @@ DEFILLAMA_COINS_BASE_URL = "https://coins.llama.fi"
 FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 DEFAULT_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
 EXAMPLE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.example.json"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -186,9 +188,20 @@ class ExternalPriceBackfillService:
                 )
 
         pipeline = None
+        stored_price_ids: list[str] = []
+        pipeline_status = "not_started"
+        pipeline_effects = "not_started"
         if prices:
-            self.store.add_price_points(prices)
-            pipeline = PipelineService(self.store).rebuild_all()
+            stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
+            try:
+                pipeline = PipelineService(self.store).rebuild_all()
+            except Exception:
+                logger.exception("Historical price backfill pipeline failed after price storage")
+                pipeline_status = "failed"
+                pipeline_effects = "unknown_or_partial"
+            else:
+                pipeline_status = "completed"
+                pipeline_effects = "completed"
         return ExternalPriceBackfillResult(
             requirements_count=len(requirements),
             configured_assets=sorted({asset.symbol for asset in assets}),
@@ -201,6 +214,9 @@ class ExternalPriceBackfillService:
             dry_run=dry_run,
             jobs=jobs[:200],
             pipeline=pipeline,
+            stored_price_ids=stored_price_ids,
+            pipeline_status=pipeline_status,
+            pipeline_effects=pipeline_effects,
         )
 
     def run_current_portfolio(

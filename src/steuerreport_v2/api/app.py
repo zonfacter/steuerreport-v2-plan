@@ -2247,8 +2247,12 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         if result.imported_prices:
             clear_response_cache()
         return ApiResponse(
-            status="ok" if result.dry_run or result.imported_prices else "warning",
+            status="ok" if result.pipeline_status != "failed" and (result.dry_run or result.imported_prices) else "warning",
             data=result,
+            warnings=[ApiMessage(
+                code="price_backfill_pipeline_failed",
+                message="Preise gespeichert, Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise. Vor Wiederholung Zustand pruefen.",
+            )] if result.pipeline_status == "failed" else [],
         )
 
     @app.post("/api/v1/prices/backfill/current-portfolio")
