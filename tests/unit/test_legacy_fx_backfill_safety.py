@@ -163,6 +163,7 @@ def test_current_api_partial_failure_is_warning_even_when_another_asset_imports(
     assert response.status_code == 200 and body["status"] == "warning"
     assert body["data"]["imported_prices"] == 1 and body["data"]["failed"] == 1
     assert any(w["code"] == "price_backfill_partial_failure" for w in body["warnings"])
+    assert any(w["code"] == module.PRICE_OUT_OF_RANGE for w in body["warnings"])
     assert [point.asset for point in store.list_price_points()] == ["GOOD"]
 
 
@@ -366,3 +367,28 @@ def test_historical_job_limit_keeps_both_unverified_and_invalid_fx_warnings(tmp_
         module.FX_REFERENCE_INVALID, module.FX_REFERENCE_UNVERIFIED,
     }
     assert result.imported_prices == 0 and not store.list_price_points()
+
+
+def test_historical_job_limit_keeps_three_distinct_warnings(tmp_path, monkeypatch):
+    store, config = synthetic_store(tmp_path)
+    requirements = [SimpleNamespace(asset="TEST", price_date=date(2024, 1, 1) + timedelta(days=i))
+                    for i in range(202)]
+    monkeypatch.setattr(module, "PriceCoverageService", lambda _: SimpleNamespace(
+        requirements=lambda: SimpleNamespace(requirements=requirements)))
+    reference = module.FxReference(Decimal("0.9"), date(2024, 1, 1), "USD", "EUR", Decimal("0.9"), "synthetic")
+    accepted_days = {item.price_date.isoformat() for item in requirements[-2:]}
+    monkeypatch.setattr(ExternalPriceBackfillService, "_timed_usd_eur_reference",
+                        lambda self, path, day: reference if day in accepted_days else None)
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd",
+                        lambda self, **kwargs: (Decimal("1e100") if kwargs["date_str"] == requirements[-1].price_date.isoformat() else Decimal("100"), "synthetic"))
+    monkeypatch.setattr(module.PipelineService, "rebuild_all", lambda self: None)
+    mock_client(monkeypatch)
+    result = ExternalPriceBackfillService(store).run(
+        config_path=str(config), v1_fx_db_path="unused", provider="auto", assets_filter=[],
+        max_requests=5, timeout_seconds=5, confidence=Decimal("1"), dry_run=False,
+    )
+    assert len(result.jobs) == 200
+    assert {warning.code for warning in module.fx_reference_warnings(result.jobs)} == {
+        module.FX_REFERENCE_INVALID, module.FX_REFERENCE_UNVERIFIED, module.PRICE_OUT_OF_RANGE,
+    }
+    assert result.imported_prices == result.failed == 1

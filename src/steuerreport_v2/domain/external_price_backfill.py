@@ -60,9 +60,10 @@ def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
             "Ein nicht darstellbarer Preiskandidat wurde verworfen; ein anderer Kurs wurde verwendet. "
             "Die Quelle und Bewertung bleiben zu pruefen."
         )))
-    if any(PRICE_OUT_OF_RANGE in getattr(job, "additional_reasons", []) for job in jobs):
+    if any(job.reason == PRICE_OUT_OF_RANGE or PRICE_OUT_OF_RANGE in getattr(job, "additional_reasons", [])
+           for job in jobs):
         warnings.append(ApiMessage(code=PRICE_OUT_OF_RANGE, message=(
-            "Ein zusaetzlicher EUR-Preiskandidat liegt ausserhalb des speicherbaren Bereichs "
+            "Ein EUR-Preiskandidat liegt ausserhalb des speicherbaren Bereichs "
             "und wurde nicht gespeichert."
         )))
     return warnings
@@ -262,11 +263,12 @@ class ExternalPriceBackfillService:
             self.store.add_price_points(prices)
             pipeline = PipelineService(self.store).rebuild_all()
         visible_jobs = jobs[:200]
-        for reason in (FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED):
+        tracked_reasons = (FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED, PRICE_OUT_OF_RANGE)
+        for reason in tracked_reasons:
             if any(job.reason == reason for job in jobs) and not any(job.reason == reason for job in visible_jobs):
                 counts = Counter(job.reason for job in visible_jobs)
                 replace_at = next(i for i in range(len(visible_jobs) - 1, -1, -1)
-                                  if visible_jobs[i].reason not in {FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED}
+                                  if visible_jobs[i].reason not in tracked_reasons
                                   or counts[visible_jobs[i].reason] > 1)
                 visible_jobs[replace_at] = next(job for job in jobs if job.reason == reason)
         return ExternalPriceBackfillResult(
