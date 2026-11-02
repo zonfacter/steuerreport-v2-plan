@@ -3176,6 +3176,10 @@ async function fetchApiResponse<T>(
       signal: controller.signal
     });
     if (!response.ok) {
+      if (path === "/api/v1/prices/as-of-gate/backfill" && response.status === 422) {
+        const body = await response.json().catch(() => null) as { detail?: unknown } | null;
+        if (typeof body?.detail === "string") throw new Error(body.detail);
+      }
       throw new Error(`${path}: HTTP ${response.status}`);
     }
     const body = (await response.json()) as ApiResponse<T>;
@@ -4562,9 +4566,10 @@ function App() {
   ) {
     setAsOfPriceGateLoading(true);
     setError(null);
-    setNotice(dryRun ? "Stichtagspreise werden ohne Schreibzugriff vorgeprueft." : "Belegte Stichtagspreise werden in das Price-Ledger geschrieben.");
+    setNotice(dryRun ? "Stichtagspreise werden vorgeprueft." : "Stichtags-Preiskandidaten werden verarbeitet.");
+    let receivedResult = false;
     try {
-      const asOfPriceGateBackfill = await postApi<NonNullable<Snapshot["asOfPriceGateBackfill"]>>(
+      const response = await postApiResponse<NonNullable<Snapshot["asOfPriceGateBackfill"]>>(
         "/api/v1/prices/as-of-gate/backfill",
         {
           as_of_date: targetDate,
@@ -4576,18 +4581,25 @@ function App() {
         },
         180_000
       );
+      const asOfPriceGateBackfill = response.data;
+      receivedResult = true;
+      const resultNotice = `${dryRun ? "Preis-Preview" : "Preisimport"}: ${asOfPriceGateBackfill.attempted} geprueft, `
+        + `${asOfPriceGateBackfill.imported_prices} importiert, ${asOfPriceGateBackfill.failed} fehlgeschlagen. `
+        + response.warnings.map((warning) => warning.message).join(" ");
+      setSnapshot((current) => ({ ...current, asOfPriceGateBackfill }));
+      setNotice(resultNotice);
       const refreshed = await refreshDivorcePriceGates();
       const activeGate = targetDate === divorceCutoffDate
         ? refreshed.asOfCutoffPriceGate
         : refreshed.asOfPriceGate;
-      setSnapshot((current) => ({ ...current, asOfPriceGateBackfill }));
       setNotice(
-        `${dryRun ? "Preis-Preview" : "Preisimport"}: ${asOfPriceGateBackfill.attempted} geprueft, `
-        + `${asOfPriceGateBackfill.imported_prices} importiert, ${asOfPriceGateBackfill.failed} fehlgeschlagen. `
-        + `${activeGate?.requirements_count ?? 0} Preis-/Tokenreviews bleiben offen.`
+        resultNotice + " "
+        + (activeGate ? `${activeGate.requirements_count} Preis-/Tokenreviews bleiben offen. ` : "Prüfstand nicht verfügbar. ")
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Stichtagspreis-Lauf fehlgeschlagen");
+      if (!receivedResult) setNotice(null);
+      const message = caught instanceof Error ? caught.message : "Stichtagspreis-Lauf fehlgeschlagen";
+      setError(receivedResult ? `Ergebnis erhalten, aber Aktualisierung fehlgeschlagen: ${message}` : message);
     } finally {
       setAsOfPriceGateLoading(false);
     }
@@ -4822,7 +4834,7 @@ function App() {
         .split(",")
         .map((asset) => asset.trim().toUpperCase())
         .filter((asset) => asset.length > 0);
-      const result = await postApi<Record<string, unknown>>(
+      const response = await postApiResponse<Record<string, unknown>>(
         "/api/v1/prices/backfill/external",
         {
           provider,
@@ -4833,12 +4845,14 @@ function App() {
         },
         180_000
       );
-      setNotice(
-        dryRun
+      const result = response.data;
+      const warning = response.warnings.map((item) => item.message).join(" ");
+      const resultNotice = (
+        (dryRun
           ? `Externer Preisbackfill geplant: ${String(result.planned_jobs ?? 0)} Jobs`
-          : `Externer Preisbackfill importiert: ${String(result.imported_prices ?? 0)} Preise`
+          : `Externer Preisbackfill importiert: ${String(result.imported_prices ?? 0)} Preise`) + (warning ? ` ${warning}` : "")
       );
-      await refresh();
+      try { await refresh(); } finally { setNotice(resultNotice); }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Externer Preisbackfill konnte nicht ausgefuehrt werden");
       setLoading(false);
@@ -4853,7 +4867,7 @@ function App() {
         .split(",")
         .map((asset) => asset.trim().toUpperCase())
         .filter((asset) => asset.length > 0);
-      const result = await postApi<Record<string, unknown>>(
+      const response = await postApiResponse<Record<string, unknown>>(
         "/api/v1/prices/backfill/current-portfolio",
         {
           provider: "coingecko",
@@ -4864,12 +4878,14 @@ function App() {
         },
         180_000
       );
-      setNotice(
-        dryRun
+      const result = response.data;
+      const warning = response.warnings.map((item) => item.message).join(" ");
+      const resultNotice = (
+        (dryRun
           ? `Aktuelle Portfolio-Preise geplant: ${String(result.planned_jobs ?? 0)} Jobs`
-          : `Aktuelle Portfolio-Preise importiert: ${String(result.imported_prices ?? 0)} Preise`
+          : `Aktuelle Portfolio-Preise importiert: ${String(result.imported_prices ?? 0)} Preise`) + (warning ? ` ${warning}` : "")
       );
-      await refresh();
+      try { await refresh(); } finally { setNotice(resultNotice); }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Aktuelle Portfolio-Preise konnten nicht geladen werden");
       setLoading(false);

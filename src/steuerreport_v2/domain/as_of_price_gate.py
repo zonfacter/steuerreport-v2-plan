@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from contextlib import nullcontext
 from datetime import date, datetime, timezone
-from decimal import Decimal, localcontext
+from decimal import Decimal
 import json
 from pathlib import Path
 
@@ -21,7 +22,11 @@ from steuerreport_v2.contracts.prices import (
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.divorce import DivorceEqualizationService
-from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
+from steuerreport_v2.domain.external_price_backfill import (
+    FX_REFERENCE_UNVERIFIED,
+    ExternalPriceBackfillService,
+    checked_eur_price,
+)
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.stichtag_token_valuation import (
@@ -299,19 +304,25 @@ class AsOfPriceGateService:
             resolve_project_path(request.config_path)
         )
         price_date = valuation_at.date()
-        fx_reference = backfill_service._usd_eur_reference(
-            request.v1_fx_db_path, price_date.isoformat()
+        fx_reference = (
+            backfill_service._timed_usd_eur_reference(request.v1_fx_db_path, price_date.isoformat())
+            if candidates else None
         )
-        if fx_reference is None:
+        if candidates and fx_reference is None:
             raise ValueError(
-                f"Kein belegter USD/EUR-Kurs fuer {price_date.isoformat()} vorhanden."
+                f"Kein belegter USD/EUR-Kurs wird durch Quelltag und Quelllabel nachgewiesen; "
+                f"fuer {price_date.isoformat()} fehlt eine zulaessige Referenz eines frueheren Quelltags. "
+                "Auch eine zeitlich begrenzte Referenz ist ohne geprueften Originalbeleg; "
+                "eine intrataegliche Kurs- oder Veroeffentlichungszeit wurde nicht geprueft."
             )
-        usd_eur = fx_reference.rate_eur_per_usd
-        with managed_client(
+        usd_eur = fx_reference.rate_eur_per_usd if fx_reference else None
+        client_context = managed_client(
             timeout=request.timeout_seconds,
             headers={"user-agent": "steuerreport-v2/0.1"},
-        ) as client:
+        ) if candidates else nullcontext(None)
+        with client_context as client:
             for candidate in candidates:
+                assert fx_reference is not None and usd_eur is not None
                 coingecko_id, defillama_id = provider_sources.get(
                     candidate.asset, (None, None)
                 )
@@ -322,6 +333,7 @@ class AsOfPriceGateService:
                             price_date=price_date,
                             provider_id=candidate.provider_id,
                             status="planned",
+                            reason=FX_REFERENCE_UNVERIFIED,
                             usd_eur=usd_eur,
                             source=("defillama_coingecko_history:usd_eur:v1_fx_cache:as_of_gate:"
                                     + fx_reference.source_suffix()),
@@ -342,7 +354,7 @@ class AsOfPriceGateService:
                     reason = f"provider_error:{type(exc).__name__}"
                 else:
                     reason = None
-                if price_usd <= 0:
+                if not price_usd.is_finite() or price_usd <= 0:
                     failed += 1
                     jobs.append(
                         AsOfPriceGateBackfillJob(
@@ -354,9 +366,15 @@ class AsOfPriceGateService:
                         )
                     )
                     continue
-                with localcontext() as arithmetic:
-                    arithmetic.prec = 60
-                    price_eur = (price_usd * usd_eur).quantize(Decimal("0.000000000000000001"))
+                price_eur = checked_eur_price(price_usd, usd_eur)
+                if price_eur is None:
+                    failed += 1
+                    jobs.append(AsOfPriceGateBackfillJob(
+                        asset=candidate.asset, price_date=price_date,
+                        provider_id=candidate.provider_id, status="failed",
+                        reason="price_out_of_range",
+                    ))
+                    continue
                 source_label = (
                     f"{source}:usd_eur:v1_fx_cache:as_of_gate:{price_date.isoformat()}:{fx_reference.source_suffix()}"
                 )
@@ -377,6 +395,7 @@ class AsOfPriceGateService:
                         price_date=price_date,
                         provider_id=candidate.provider_id,
                         status="imported",
+                        reason=FX_REFERENCE_UNVERIFIED,
                         price_usd=price_usd,
                         usd_eur=usd_eur,
                         price_eur=price_eur,
@@ -409,9 +428,12 @@ class AsOfPriceGateService:
             jobs=jobs,
             artifact_path=self._display_path(artifact_path),
             methodology=(
+                "Keine passenden fetchable Stichtagspositionen; kein FX- oder Providerabruf."
+                if not candidates else
                 "Historischer Preisbackfill nur fuer materielle, fetchable Stichtagspositionen. "
                 "DefiLlama liefert den historischen USD-Preis anhand der konfigurierten CoinGecko- oder Chain-ID; "
-                "der vorhandene V1-FX-Cache liefert den belegten USD/EUR-Tageskurs. Apply schreibt nur "
+                "der vorhandene V1-FX-Cache liefert eine zeitlich begrenzte USD/EUR-Referenz mit Quelllabel "
+                "und frueherem Quelltag, ohne geprueften Originalbeleg oder intrataegliche Kurszeit. Apply schreibt nur "
                 "neue Price-Ledger-Punkte und baut weder Ledger noch Steuer-FIFO automatisch neu."
             ),
         )
@@ -421,12 +443,13 @@ class AsOfPriceGateService:
                 result.model_dump(mode="json"), indent=2, ensure_ascii=False
             ).encode("utf-8"),
         )
-        self._atomic_write(
-            self.artifact_root / "latest_as_of_price_gate_run.json",
-            json.dumps(
-                result.model_dump(mode="json"), indent=2, ensure_ascii=False
-            ).encode("utf-8"),
-        )
+        if candidates:
+            self._atomic_write(
+                self.artifact_root / "latest_as_of_price_gate_run.json",
+                json.dumps(
+                    result.model_dump(mode="json"), indent=2, ensure_ascii=False
+                ).encode("utf-8"),
+            )
         return result
 
     @staticmethod

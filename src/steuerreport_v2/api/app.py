@@ -543,7 +543,7 @@ from steuerreport_v2.domain.fairspot_staking import (
     FairspotStakingReconciliationService,
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
-from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
+from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService, backfill_result_warnings
 from steuerreport_v2.domain.flows import FlowService
 from steuerreport_v2.domain.import_coverage import ImportCoverageService
 from steuerreport_v2.domain.import_policy import ImportPolicyService
@@ -2246,10 +2246,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         )
         if result.imported_prices:
             clear_response_cache()
-        return ApiResponse(
-            status="ok" if result.dry_run or result.imported_prices else "warning",
-            data=result,
-        )
+        warnings = backfill_result_warnings(result)
+        return ApiResponse(status="warning" if warnings else ("ok" if result.dry_run or result.imported_prices else "warning"),
+                           data=result, warnings=warnings)
 
     @app.post("/api/v1/prices/backfill/current-portfolio")
     def backfill_current_portfolio_prices(
@@ -2266,10 +2265,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         )
         if result.imported_prices:
             clear_response_cache()
-        return ApiResponse(
-            status="ok" if result.dry_run or result.imported_prices else "warning",
-            data=result,
-        )
+        warnings = backfill_result_warnings(result)
+        return ApiResponse(status="warning" if warnings else ("ok" if result.dry_run or result.imported_prices else "warning"),
+                           data=result, warnings=warnings)
 
     @app.get("/api/v1/prices/as-of-gate")
     def prices_as_of_gate(
@@ -2295,10 +2293,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             result = AsOfPriceGateService(db).backfill(payload)
         except (OSError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return ApiResponse(
-            status="ok" if result.dry_run or result.imported_prices else "warning",
-            data=result,
-        )
+        warnings = backfill_result_warnings(result)
+        return ApiResponse(status="warning" if warnings else ("ok" if result.dry_run or result.imported_prices else "warning"),
+                           data=result, warnings=warnings)
 
     @app.post("/api/v1/prices/as-of-gate/token-review-decisions")
     def accept_as_of_token_valuation(

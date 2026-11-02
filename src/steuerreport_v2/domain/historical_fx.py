@@ -62,7 +62,8 @@ def select_fx_reference(payload: object, day: date) -> FxReference | None:
     return min(latest, key=lambda item: (item.original_base, item.original_quote, item.source))
 
 
-def cache_fx_reference(con: sqlite3.Connection, day: date) -> FxReference | None:
+def cache_fx_reference(con: sqlite3.Connection, day: date, *, before_day: bool = False,
+                       require_source: bool = False) -> FxReference | None:
     """Read legacy observations without changing the SQLite file or its schema."""
     columns = {row[1] for row in con.execute("pragma table_info(fx_cache)").fetchall()}
     if not {"rate_date", "base_ccy", "quote_ccy", "rate", "source"} <= columns:
@@ -79,8 +80,14 @@ def cache_fx_reference(con: sqlite3.Connection, day: date) -> FxReference | None
             if "source_rate_date" in columns and not source_date:
                 return None
             observed = source_date or recorded
-            if not source or date.fromisoformat(observed) > date.fromisoformat(recorded):
+            if date.fromisoformat(observed) > date.fromisoformat(recorded):
                 return None
+            if require_source and not str(source or "").strip():
+                continue
+            if not source:
+                return None
+            if before_day and date.fromisoformat(observed) >= day:
+                continue
             payload.append({"date": observed, "base": base, "quote": quote, "rate": rate, "source": source})
     except (TypeError, ValueError):
         return None

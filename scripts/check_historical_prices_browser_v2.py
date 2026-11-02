@@ -45,6 +45,7 @@ def main():
         from steuerreport_v2.db.duckdb_store import DuckDbStore
         from steuerreport_v2.domain import historical_prices as module
         from steuerreport_v2.domain.external_http import managed_client
+        from steuerreport_v2.domain.external_price_backfill import FX_REFERENCE_INVALID, FX_REFERENCE_INVALID_MESSAGE
         from steuerreport_v2.domain.historical_prices import HistoricalPriceService
         from steuerreport_v2.domain.request_limits import RequestLimiter
         from ux_workspace_fixtures import WorkspaceFixture
@@ -136,6 +137,12 @@ def main():
                     assert response.status_code == 200, response.text
                     collected.append(response.json()["data"])
                 route.fulfill(status=response.status_code, body=response.content, content_type="application/json")
+            elif parsed.path == "/api/v1/prices/backfill/current-portfolio" and request.method == "POST":
+                calls.append({"method": request.method, "path": parsed.path, "body": json.loads(request.post_data)})
+                route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                    "status": "warning", "data": {"imported_prices": 0, "planned_jobs": 0}, "errors": [],
+                    "warnings": [{"code": FX_REFERENCE_INVALID, "message": FX_REFERENCE_INVALID_MESSAGE}],
+                }))
             elif parsed.path.startswith("/api/"):
                 if not fixture.handle(route):
                     fixture.send(route, {})
@@ -167,6 +174,10 @@ def main():
             expect(region.get_by_role("heading", name="Manueller Portfolio-Kursabruf", exact=True)).to_be_visible()
             expect(region.get_by_text("Ein heutiger Abruf belegt keinen heutigen Kurs.", exact=False)).to_be_visible()
             expect(region.get_by_text("Der Abruf speichert Preise im gemeinsamen Preis-Ledger", exact=False)).to_be_visible()
+            page.once("dialog", lambda dialog: dialog.accept())
+            region.get_by_role("button", name="Kurse abrufen und neu berechnen", exact=True).click()
+            expect(page.locator(".notice").filter(has_text=FX_REFERENCE_INVALID_MESSAGE)).to_be_visible()
+            assert not provider_calls and service._revision() == before
             expect(region.get_by_role("combobox", name="Preisumfang", exact=True)).to_have_value("all_observed")
             region.get_by_label("HTTP-Anfragen pro Abschnitt", exact=True).fill("2")
             expect(region.get_by_label("Gesamtes HTTP-Budget", exact=True)).to_have_value("200")
