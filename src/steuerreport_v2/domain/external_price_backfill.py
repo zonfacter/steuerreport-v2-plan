@@ -17,7 +17,6 @@ from steuerreport_v2.contracts.prices import (
     CurrentPortfolioPriceBackfillResult,
     ExternalPriceBackfillJob,
     ExternalPriceBackfillResult,
-    ExternalPriceBackfillStorageUnknown,
     PricePointCreate,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
@@ -33,6 +32,25 @@ FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 DEFAULT_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
 EXAMPLE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.example.json"
 logger = logging.getLogger(__name__)
+
+
+class HistoricalBackfillIncompleteError(RuntimeError):
+    """A backfill did not complete; callers must stop and inspect state."""
+
+
+class HistoricalBackfillStorageUnknown(HistoricalBackfillIncompleteError):
+    def __init__(self) -> None:
+        super().__init__("Preisbackfill: Speicherzustand unbekannt; vor Wiederholung pruefen.")
+
+
+class HistoricalBackfillPipelineFailed(HistoricalBackfillIncompleteError):
+    def __init__(self) -> None:
+        super().__init__("Preisbackfill: Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise.")
+
+
+def require_backfill_pipeline_success(result: ExternalPriceBackfillResult) -> None:
+    if result.pipeline_status == "failed":
+        raise HistoricalBackfillPipelineFailed()
 
 
 @dataclass(frozen=True)
@@ -58,7 +76,7 @@ class ExternalPriceBackfillService:
         timeout_seconds: int,
         confidence: Decimal,
         dry_run: bool,
-    ) -> ExternalPriceBackfillResult | ExternalPriceBackfillStorageUnknown:
+    ) -> ExternalPriceBackfillResult:
         assets = self._load_assets(config_path)
         alias_map = self._alias_map(assets)
         requirements = PriceCoverageService(self.store).requirements().requirements
@@ -197,7 +215,9 @@ class ExternalPriceBackfillService:
                 stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
             except Exception:
                 logger.error("Historical price backfill storage failed; storage state unknown")
-                return ExternalPriceBackfillStorageUnknown()
+                stored_price_ids = None
+            if stored_price_ids is None:
+                raise HistoricalBackfillStorageUnknown()
             try:
                 pipeline = PipelineService(self.store).rebuild_all()
             except Exception:

@@ -20,6 +20,9 @@ IDs. Pipeline-Ausnahmen werden als Teilzustand gemeldet. Eine abgefangene
 Speicherausnahme ergibt HTTP 500 mit `storage_status=unknown` und ohne IDs oder
 gespeicherte Anzahl; der Pipeline-Aufruf hat dann nicht begonnen. Speicher- und
 Pipeline-Ausnahmen werden ohne Exception-Text oder Traceback protokolliert.
+Der Service wirft bei einer Speicherausnahme eine feste Exception ohne den
+urspruenglichen Exception-Kontext; die API wandelt sie in den HTTP-500-Vertrag
+um. Direkte Aufrufer muessen sie als Abbruch behandeln, nicht als Rollback.
 Ein erfolgreicher Pipeline-Ruecksprung ist keine Aussage ueber steuerliche
 Richtigkeit. Die Antwort ist nicht dauerhaft als Jobjournal gespeichert.
 Ein Absturz, nicht abgefangener Fehler, Timeout oder Verbindungsabbruch kann
@@ -35,6 +38,14 @@ erneuten Abruf und doppelte Einfuegung. Fuer sichere Wiederaufnahme waeren unter
 anderem dauerhafte Auftragsidentitaet, konsistente Planung, Konkurrenzschutz,
 Providerkosten-Regeln, nachweisbarer Schreibstatus und abgestimmte
 Pipeline-Recovery erforderlich. Ihre konkrete Ausgestaltung ist offen.
+
+Die beiden gefundenen direkten Skriptaufrufer (`import_jup_solscan_balance_change_v2.py`
+und `run_v1_solana_rpc_migration_v2.py`) stoppen bei unbekanntem Speicherstand
+oder fehlgeschlagener Backfill-Pipeline vor weiteren Verarbeitungsschritten.
+Im Live-Zweig erfolgt fuer diese Fehler keine automatische Backup-Rueckkopie;
+fruehere Schritte koennen bereits Aenderungen vorgenommen haben. Der Zielzustand
+bleibt unbekannt oder teilweise und muss geprueft werden. Andere Fehlerpfade
+der Skripte und deren bestehende Backup-Logik wurden hier nicht bewertet.
 
 ## HTTP und Clients
 
@@ -73,9 +84,9 @@ abzustimmen. #46 bleibt ebenfalls unabhaengig.
 - OpenAPI und Endpunktreferenz regeneriert; beide Generatoren bestehen
   `--check`. Die Referenzaenderung betrifft Datum und Quellzeilen.
 - `ruff check src tests scripts`: bestanden mit Ruff 0.15.11.
-- 12 gezielte Tests: Teilzustand einschliesslich Log-Canary vor und nach dem
-  Speicher-Insert, OpenAPI-Vertrag,
-  Referenzgenerator und Preis-Store bestanden. Ein interaktiver UI-Test und
+- 23 gezielte Tests: Teilzustand einschliesslich Log-Canary vor und nach dem
+  Speicher-Insert, direkte Skriptaufrufer und deren Stage-/Live-Abbruch,
+  OpenAPI-Vertrag und Solscan-Importtests bestanden. Ein interaktiver UI-Test und
   die vollstaendige Testsuite sind damit nicht abgedeckt.
 - Keine produktiven Daten, Container oder echten Preisprovider fuer diese
   Pruefungen; die beobachteten Duplikat- und Speicherfehler bleiben offen.

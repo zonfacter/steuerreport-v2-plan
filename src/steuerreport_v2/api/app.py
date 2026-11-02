@@ -544,7 +544,7 @@ from steuerreport_v2.domain.fairspot_staking import (
     FairspotStakingReconciliationService,
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
-from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
+from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService, HistoricalBackfillStorageUnknown
 from steuerreport_v2.domain.flows import FlowService
 from steuerreport_v2.domain.import_coverage import ImportCoverageService
 from steuerreport_v2.domain.import_policy import ImportPolicyService
@@ -2237,23 +2237,24 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     def backfill_external_prices(
         payload: ExternalPriceBackfillRequest,
     ) -> ApiResponse[ExternalPriceBackfillResult]:
-        result = ExternalPriceBackfillService(db).run(
-            config_path=payload.config_path,
-            v1_fx_db_path=payload.v1_fx_db_path,
-            provider=payload.provider,
-            assets_filter=payload.assets,
-            max_requests=payload.max_requests,
-            timeout_seconds=payload.timeout_seconds,
-            confidence=payload.confidence,
-            dry_run=payload.dry_run,
-        )
-        if isinstance(result, ExternalPriceBackfillStorageUnknown):
+        try:
+            result = ExternalPriceBackfillService(db).run(
+                config_path=payload.config_path,
+                v1_fx_db_path=payload.v1_fx_db_path,
+                provider=payload.provider,
+                assets_filter=payload.assets,
+                max_requests=payload.max_requests,
+                timeout_seconds=payload.timeout_seconds,
+                confidence=payload.confidence,
+                dry_run=payload.dry_run,
+            )
+        except HistoricalBackfillStorageUnknown:
             clear_response_cache()
             return JSONResponse(
                 status_code=500,
                 content=ApiResponse[ExternalPriceBackfillStorageUnknown](
                     status="error",
-                    data=result,
+                    data=ExternalPriceBackfillStorageUnknown(),
                     errors=[ApiMessage(
                         code="price_backfill_storage_unknown",
                         message="Speicherung fehlgeschlagen; Preisbestand unbekannt. Vor Wiederholung Zustand pruefen.",

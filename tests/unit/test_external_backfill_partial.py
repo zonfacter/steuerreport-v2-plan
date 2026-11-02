@@ -175,6 +175,8 @@ def test_store_exception_has_unknown_state_without_canary(tmp_path, monkeypatch,
     ))
     monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", lambda self, **kwargs: (Decimal("2"), "synthetic"))
     original_add = store.add_price_points
+    requirements = PriceCoverageService(store).requirements()
+    monkeypatch.setattr(PriceCoverageService, "requirements", lambda self: requirements)
     canary = "SYNTHETIC_STORAGE_SECRET_CANARY_49"
     def fail_store(prices):
         if insert_before_failure:
@@ -203,3 +205,12 @@ def test_store_exception_has_unknown_state_without_canary(tmp_path, monkeypatch,
     assert records[0].exc_info is None and records[0].exc_text is None and records[0].stack_info is None
     with store.connect() as con:
         assert con.execute("select count(*) from price_ledger").fetchone()[0] == int(insert_before_failure)
+    from steuerreport_v2.domain.external_price_backfill import HistoricalBackfillStorageUnknown
+    with pytest.raises(HistoricalBackfillStorageUnknown) as raised:
+        ExternalPriceBackfillService(store).run(
+            config_path=str(config), v1_fx_db_path=str(tmp_path / "unused"), provider="auto",
+            assets_filter=[], max_requests=1, timeout_seconds=3, confidence=Decimal("1"), dry_run=False,
+        )
+    assert raised.value.__context__ is None
+    assert raised.value.__cause__ is None
+    assert canary not in str(raised.value)
