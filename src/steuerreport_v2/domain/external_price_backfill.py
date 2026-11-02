@@ -196,7 +196,7 @@ class ExternalPriceBackfillService:
             try:
                 pipeline = PipelineService(self.store).rebuild_all()
             except Exception:
-                logger.exception("Historical price backfill pipeline failed after price storage")
+                logger.error("Historical price backfill pipeline failed after price storage")
                 pipeline_status = "failed"
                 pipeline_effects = "unknown_or_partial"
             else:

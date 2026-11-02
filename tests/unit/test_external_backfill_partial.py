@@ -1,3 +1,4 @@
+import logging
 from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -13,6 +14,50 @@ from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfill
 from steuerreport_v2.domain.historical_fx import FxReference
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.valuation import PriceCoverageService
+
+
+def test_pipeline_exception_does_not_disclose_canary_in_api_or_log(tmp_path, monkeypatch, caplog):
+    store = DuckDbStore(tmp_path / "isolated.duckdb")
+    store.add_canonical_event(CanonicalEventCreate(
+        source="synthetic", source_ref="reward", event_time=datetime(2024, 1, 1, 12, tzinfo=timezone.utc),
+        event_type="reward", asset="SYNTH", quantity=Decimal("1"),
+    ))
+    config = tmp_path / "assets.json"
+    config.write_text('{"assets":[{"symbol":"SYNTH","coingecko_id":"synthetic","aliases":["SYNTH"]}]}')
+    monkeypatch.setattr("steuerreport_v2.domain.external_price_backfill.managed_client", lambda **kwargs: nullcontext(object()))
+    monkeypatch.setattr(ExternalPriceBackfillService, "_usd_eur_reference", lambda self, *args: FxReference(
+        Decimal("1"), date(2024, 1, 1), "USD", "EUR", Decimal("1"), "synthetic",
+    ))
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", lambda self, **kwargs: (Decimal("2"), "synthetic"))
+    canary = "SYNTHETIC_SECRET_CANARY_49"
+    def fail(self):
+        raise RuntimeError(f"/private/synthetic-receipt-123 token={canary}")
+    monkeypatch.setattr(PipelineService, "rebuild_all", fail)
+    caplog.set_level(logging.ERROR, logger="steuerreport_v2.domain.external_price_backfill")
+
+    response = TestClient(create_app(store)).post(
+        "/api/v1/prices/backfill/external",
+        json={"config_path": str(config), "v1_fx_db_path": str(tmp_path / "unused"), "dry_run": False},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "warning"
+    result = response.json()["data"]
+    assert result["pipeline_status"] == "failed"
+    assert result["pipeline_effects"] == "unknown_or_partial"
+    with store.connect() as con:
+        assert con.execute("select price_id from price_ledger").fetchone()[0] == result["stored_price_ids"][0]
+    assert canary not in response.text
+    assert "/private/synthetic-receipt-123" not in response.text
+    records = [r for r in caplog.records if r.name == "steuerreport_v2.domain.external_price_backfill"]
+    assert len(records) == 1
+    assert records[0].levelno == logging.ERROR
+    assert records[0].exc_info is None
+    assert records[0].exc_text is None
+    assert records[0].stack_info is None
+    assert records[0].getMessage() == "Historical price backfill pipeline failed after price storage"
+    assert canary not in caplog.text
+    assert "/private/synthetic-receipt-123" not in caplog.text
+    assert "Traceback" not in caplog.text
 
 
 def test_partial_pipeline_and_repeat_are_observable_not_idempotent(tmp_path, monkeypatch):
