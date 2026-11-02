@@ -5,7 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-import requests
+import httpx
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/backfill_coingecko_prices_v2.py"
 SPEC = importlib.util.spec_from_file_location("backfill_coingecko_prices_v2", SCRIPT)
@@ -20,7 +20,7 @@ def test_execute_rejected_before_database_or_network(monkeypatch):
         raise AssertionError("no database or provider access allowed")
 
     monkeypatch.setattr(legacy, "DuckDbStore", unexpected)
-    monkeypatch.setattr(legacy.requests, "get", unexpected)
+    monkeypatch.setattr(legacy.httpx, "get", unexpected)
     with pytest.raises(SystemExit, match="--execute gesperrt"):
         legacy.main()
 
@@ -41,7 +41,7 @@ def test_history_request_uses_utc_iso_date_and_reference_midnight(monkeypatch):
         captured.update(url=url, **kwargs)
         return Response()
 
-    monkeypatch.setattr(legacy.requests, "get", get)
+    monkeypatch.setattr(legacy.httpx, "get", get)
     event = datetime(2025, 7, 2, 1, tzinfo=timezone(timedelta(hours=2)))
     value, timestamp, source = legacy._fetch_price_eur(
         coin_id="example", event_time=event, timeout=5, allow_current_fallback=False
@@ -53,20 +53,52 @@ def test_history_request_uses_utc_iso_date_and_reference_midnight(monkeypatch):
 
 
 def test_history_error_does_not_silently_use_current_price(monkeypatch):
-    response = requests.Response()
-    response.status_code = 429
+    request = httpx.Request("GET", "https://example.invalid/history")
+    response = httpx.Response(429, request=request)
 
     def fail(*args, **kwargs):
-        raise requests.HTTPError(response=response)
+        raise httpx.HTTPStatusError("limited", request=request, response=response)
 
     monkeypatch.setattr(legacy, "_fetch_history_price_eur", fail)
     monkeypatch.setattr(
         legacy, "_fetch_current_price_eur", lambda **kwargs: pytest.fail("unexpected fallback")
     )
-    with pytest.raises(requests.HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         legacy._fetch_price_eur(
             coin_id="example", event_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
             timeout=5, allow_current_fallback=False,
+        )
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 429])
+def test_current_price_fallback_requires_explicit_permission(monkeypatch, status):
+    request = httpx.Request("GET", "https://example.invalid/history")
+    response = httpx.Response(status, request=request)
+
+    def fail(*args, **kwargs):
+        raise httpx.HTTPStatusError("provider error", request=request, response=response)
+
+    monkeypatch.setattr(legacy, "_fetch_history_price_eur", fail)
+    monkeypatch.setattr(legacy, "_fetch_current_price_eur", lambda **kwargs: Decimal("9"))
+    price, _, source = legacy._fetch_price_eur(
+        coin_id="example", event_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        timeout=5, allow_current_fallback=True,
+    )
+    assert price == Decimal("9")
+    assert source == legacy.COINGECKO_CURRENT_SOURCE
+
+
+def test_server_error_does_not_trigger_fallback_even_when_enabled(monkeypatch):
+    request = httpx.Request("GET", "https://example.invalid/history")
+    response = httpx.Response(500, request=request)
+    monkeypatch.setattr(legacy.httpx, "get", lambda *args, **kwargs: response)
+    monkeypatch.setattr(
+        legacy, "_fetch_current_price_eur", lambda **kwargs: pytest.fail("unexpected fallback")
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        legacy._fetch_price_eur(
+            coin_id="example", event_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            timeout=5, allow_current_fallback=True,
         )
 
 

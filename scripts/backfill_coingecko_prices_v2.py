@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import requests
+import httpx
 
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 
@@ -163,8 +163,8 @@ def _fetch_price_eur(
             _ensure_utc(event_time).replace(hour=0, minute=0, second=0, microsecond=0),
             COINGECKO_SOURCE,
         )
-    except requests.HTTPError as exc:
-        status = exc.response.status_code if exc.response is not None else None
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
         if not allow_current_fallback or status not in {401, 403, 404, 429}:
             raise
         current_price = _fetch_current_price_eur(coin_id=coin_id, timeout=timeout)
@@ -177,14 +177,12 @@ def _fetch_history_price_eur(
     event_time: datetime,
     timeout: float,
 ) -> Decimal | None:
-    response = requests.get(
+    response = httpx.get(
         f"https://api.coingecko.com/api/v3/coins/{coin_id}/history",
         params={"date": _ensure_utc(event_time).date().isoformat(), "localization": "false"},
         timeout=timeout,
         headers={"accept": "application/json"},
     )
-    if response.status_code == 429:
-        response.raise_for_status()
     response.raise_for_status()
     payload = response.json()
     price = payload.get("market_data", {}).get("current_price", {}).get("eur")
@@ -194,7 +192,7 @@ def _fetch_history_price_eur(
 
 
 def _fetch_current_price_eur(*, coin_id: str, timeout: float) -> Decimal | None:
-    response = requests.get(
+    response = httpx.get(
         "https://api.coingecko.com/api/v3/simple/price",
         params={"ids": coin_id, "vs_currencies": "eur"},
         timeout=timeout,
