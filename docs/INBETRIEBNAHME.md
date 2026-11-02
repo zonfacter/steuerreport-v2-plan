@@ -19,6 +19,10 @@ Kein `docker compose down -v` verwenden. Die Anwendung besitzt weiterhin keine
 globale Benutzeranmeldung; nur im vertrauenswuerdigen LAN/VPN oder hinter TLS
 und einem geeigneten Authentifizierungszugang betreiben.
 
+Vor Updates Datenstand und Vault mit dem Betreiber-Runbook sichern und den
+Rueckweg isoliert pruefen: [Docker-Backup, Restore und Rollback](DOCKER_BACKUP_RESTORE.md).
+Das Werkzeug benoetigt keine KI und aktiviert keinen wiederhergestellten Dienst.
+
 ## Version und Updates (Entwicklungsstand nach rc32)
 
 Die Versionsanzeige im Kopfbereich oeffnet **Einrichtung -> Version & Updates**
