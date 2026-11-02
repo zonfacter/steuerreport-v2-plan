@@ -78,6 +78,13 @@ def test_price_ledger_rounds_once_after_exact_decimal_multiplication():
     assert module.checked_eur_price(Decimal("1." + "2" * 256), Decimal("1")) is None
 
 
+def test_exact_current_prices_keep_existing_decimal_scale():
+    assert str(module.checked_eur_price(Decimal("3.21"), Decimal("1"), preserve_exact_scale=True)) == "3.21"
+    assert str(module.checked_eur_price(Decimal("75"), Decimal("0.90"), preserve_exact_scale=True)) == "67.50"
+    value = Decimal("1.0000000000000000005" + "0" * 55 + "1")
+    assert module.checked_eur_price(value, Decimal("1"), preserve_exact_scale=True) == Decimal("1.000000000000000001")
+
+
 @pytest.mark.parametrize("source", ["usd", "eur"])
 def test_current_backfill_rejects_unrepresentable_price_without_write(tmp_path, monkeypatch, source):
     store, config = synthetic_store(tmp_path, event_type="transfer")

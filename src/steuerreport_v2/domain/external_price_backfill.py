@@ -79,7 +79,7 @@ def backfill_result_warnings(result: Any) -> list[ApiMessage]:
     return warnings
 
 
-def checked_eur_price(price_usd: Decimal, usd_eur: Decimal) -> Decimal | None:
+def checked_eur_price(price_usd: Decimal, usd_eur: Decimal, *, preserve_exact_scale: bool = False) -> Decimal | None:
     """Return only positive values representable by the price ledger's DECIMAL(38,18)."""
     if not price_usd.is_finite() or not usd_eur.is_finite() or price_usd <= 0 or usd_eur <= 0:
         return None
@@ -89,11 +89,14 @@ def checked_eur_price(price_usd: Decimal, usd_eur: Decimal) -> Decimal | None:
     try:
         with localcontext() as arithmetic:
             arithmetic.prec = max(60, digits + 20)
-            value = (price_usd * usd_eur).quantize(Decimal("0.000000000000000001"))
+            product = price_usd * usd_eur
+            value = product.quantize(Decimal("0.000000000000000001"))
     except DecimalException:
         return None
     if not value.is_finite() or value <= 0 or value >= Decimal("1e20"):
         return None
+    if preserve_exact_scale and product == value and product.as_tuple().exponent >= -18:
+        return product
     return value
 
 
@@ -412,7 +415,7 @@ class ExternalPriceBackfillService:
             price_out_of_range = False
             if asset.defillama_id and fx_reference is not None:
                 if price_usd.is_finite() and price_usd > 0:
-                    converted = checked_eur_price(price_usd, usd_eur)
+                    converted = checked_eur_price(price_usd, usd_eur, preserve_exact_scale=True)
                     price_out_of_range = converted is None
                     price_eur = converted or Decimal("0")
                     source_label = (
@@ -425,7 +428,7 @@ class ExternalPriceBackfillService:
                 if direct.is_finite() and direct > 0:
                     provider_id = asset.coingecko_id
                     source_label = f"{normalized_provider}:simple-price:eur"
-                converted = checked_eur_price(direct, Decimal("1"))
+                converted = checked_eur_price(direct, Decimal("1"), preserve_exact_scale=True)
                 price_out_of_range = price_out_of_range or (direct.is_finite() and direct > 0 and converted is None)
                 price_eur = converted or Decimal("0")
                 if price_eur > 0:
