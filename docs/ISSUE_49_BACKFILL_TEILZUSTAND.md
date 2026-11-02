@@ -41,10 +41,13 @@ Pipeline-Recovery erforderlich. Ihre konkrete Ausgestaltung ist offen.
 HTTP 500 signalisiert einen internen Fehler, ohne einen Konflikt oder Rollback
 zu behaupten. HTTP 409 wuerde einen bekannten Konflikt suggerieren; HTTP 200
 koennte von Clients, die den Antwortstatus ignorieren, als Erfolg gelten.
-Die vorhandene UI verwirft bei HTTP-Fehlern den Antwortinhalt und meldet den
-Speicher- und Pipelinezustand als unbekannt mit Warnung vor Wiederholung. Sie
-unterscheidet deshalb Speicherfehler nicht von anderen Fehlern; ein Browserlauf
-ist nicht nachgewiesen. Clients koennen HTTP-Fehler ignorieren oder automatisch
+Der vorhandene UI-Fehlerpfad verwirft bei HTTP-Fehlern den Antwortinhalt und
+meldet den Speicher- und Pipelinezustand als unbekannt mit Warnung vor
+Wiederholung. Er unterscheidet Speicherfehler nicht von anderen Fehlern.
+Das historische Backfill-Formular ist im aktuellen Quellstand nicht gerendert;
+die tatsaechliche Bedienbarkeit und Anzeige sind nicht nachgewiesen. Ein
+isolierter Frontend-Test prueft den Meldungstext, aber keinen Browserablauf.
+Clients koennen HTTP-Fehler ignorieren oder automatisch
 wiederholen. Der bestehende Pipeline-Teilzustand nutzt HTTP 200 und `warning`:
 Altclients, die nur HTTP 200 auswerten, koennen ihn weiterhin als Erfolg lesen.
 Kompatibilitaet und Wiederholverhalten fremder Clients sind nicht nachgewiesen;

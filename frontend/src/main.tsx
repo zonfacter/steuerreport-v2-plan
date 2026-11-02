@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { externalPriceBackfillError } from "./external-price-backfill-error";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
 import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
 import { ConnectorSetupSettings } from "./ConnectorSetupSettings";
@@ -4846,8 +4847,7 @@ function App() {
         );
       }
     } catch (caught) {
-      const detail = caught instanceof Error ? caught.message : "Unbekannter Fehler";
-      setError(`Preisbackfill: ${detail}. Der Speicher- und Pipelinezustand ist unbekannt; vor einer Wiederholung pruefen.`);
+      setError(externalPriceBackfillError(caught));
       setLoading(false);
     }
   }

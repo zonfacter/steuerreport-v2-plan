@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 
 const output = mkdtempSync(join(tmpdir(), "steuerreport-dashboard-tests-"));
 await build({
-  entryPoints: ["tests/dashboard-valuation.test.ts", "tests/dashboard-render.test.tsx"],
+  entryPoints: ["tests/dashboard-valuation.test.ts", "tests/dashboard-render.test.tsx", "tests/external-price-backfill-error.test.ts"],
   outdir: output,
   bundle: true,
   platform: "node",
@@ -22,6 +22,6 @@ await build({
     }
   }]
 });
-const result = spawnSync(process.execPath, ["--test", join(output, "dashboard-valuation.test.js"), join(output, "dashboard-render.test.js")], { stdio: "inherit" });
+const result = spawnSync(process.execPath, ["--test", join(output, "dashboard-valuation.test.js"), join(output, "dashboard-render.test.js"), join(output, "external-price-backfill-error.test.js")], { stdio: "inherit" });
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;
