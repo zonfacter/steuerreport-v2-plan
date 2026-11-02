@@ -17,6 +17,7 @@ from steuerreport_v2.contracts.prices import (
     CurrentPortfolioPriceBackfillResult,
     ExternalPriceBackfillJob,
     ExternalPriceBackfillResult,
+    ExternalPriceBackfillStorageUnknown,
     PricePointCreate,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
@@ -57,7 +58,7 @@ class ExternalPriceBackfillService:
         timeout_seconds: int,
         confidence: Decimal,
         dry_run: bool,
-    ) -> ExternalPriceBackfillResult:
+    ) -> ExternalPriceBackfillResult | ExternalPriceBackfillStorageUnknown:
         assets = self._load_assets(config_path)
         alias_map = self._alias_map(assets)
         requirements = PriceCoverageService(self.store).requirements().requirements
@@ -192,7 +193,11 @@ class ExternalPriceBackfillService:
         pipeline_status = "not_started"
         pipeline_effects = "not_started"
         if prices:
-            stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
+            try:
+                stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
+            except Exception:
+                logger.error("Historical price backfill storage failed; storage state unknown")
+                return ExternalPriceBackfillStorageUnknown()
             try:
                 pipeline = PipelineService(self.store).rebuild_all()
             except Exception:

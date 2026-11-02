@@ -276,6 +276,7 @@ from steuerreport_v2.contracts.prices import (
     CurrentPortfolioPriceBackfillResult,
     ExternalPriceBackfillRequest,
     ExternalPriceBackfillResult,
+    ExternalPriceBackfillStorageUnknown,
     PriceCsvImportRequest,
     PriceCsvImportResult,
     PriceCsvPreview,
@@ -2230,7 +2231,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             ).model_dump(mode="json"),
         )
 
-    @app.post("/api/v1/prices/backfill/external")
+    @app.post("/api/v1/prices/backfill/external", responses={
+        500: {"model": ApiResponse[ExternalPriceBackfillStorageUnknown], "description": "Speicherzustand unbekannt; vor Wiederholung pruefen"},
+    })
     def backfill_external_prices(
         payload: ExternalPriceBackfillRequest,
     ) -> ApiResponse[ExternalPriceBackfillResult]:
@@ -2244,6 +2247,19 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             confidence=payload.confidence,
             dry_run=payload.dry_run,
         )
+        if isinstance(result, ExternalPriceBackfillStorageUnknown):
+            clear_response_cache()
+            return JSONResponse(
+                status_code=500,
+                content=ApiResponse[ExternalPriceBackfillStorageUnknown](
+                    status="error",
+                    data=result,
+                    errors=[ApiMessage(
+                        code="price_backfill_storage_unknown",
+                        message="Speicherung fehlgeschlagen; Preisbestand unbekannt. Vor Wiederholung Zustand pruefen.",
+                    )],
+                ).model_dump(mode="json"),
+            )
         if result.imported_prices:
             clear_response_cache()
         return ApiResponse(

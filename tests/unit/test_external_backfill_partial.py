@@ -3,6 +3,7 @@ from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
+import pytest
 from fastapi.testclient import TestClient
 
 from steuerreport_v2.api.app import create_app
@@ -159,7 +160,8 @@ def test_pipeline_completed_and_no_work_contract(tmp_path, monkeypatch):
     assert calls == ["2024-01-01"]
 
 
-def test_exception_after_store_return_is_not_assumed_to_roll_back(tmp_path, monkeypatch):
+@pytest.mark.parametrize("insert_before_failure", [False, True], ids=["before-insert", "after-insert"])
+def test_store_exception_has_unknown_state_without_canary(tmp_path, monkeypatch, caplog, insert_before_failure):
     store = DuckDbStore(tmp_path / "isolated.duckdb")
     store.add_canonical_event(CanonicalEventCreate(
         source="synthetic", source_ref="reward", event_time=datetime(2024, 1, 1, 12, tzinfo=timezone.utc),
@@ -173,17 +175,31 @@ def test_exception_after_store_return_is_not_assumed_to_roll_back(tmp_path, monk
     ))
     monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", lambda self, **kwargs: (Decimal("2"), "synthetic"))
     original_add = store.add_price_points
-    def fail_after_insert(prices):
-        original_add(prices)
-        raise RuntimeError("synthetic failure after insert")
-    monkeypatch.setattr(store, "add_price_points", fail_after_insert)
+    canary = "SYNTHETIC_STORAGE_SECRET_CANARY_49"
+    def fail_store(prices):
+        if insert_before_failure:
+            original_add(prices)
+        raise RuntimeError(f"/private/synthetic-receipt-456 token={canary}")
+    monkeypatch.setattr(store, "add_price_points", fail_store)
     monkeypatch.setattr(PipelineService, "rebuild_all", lambda self: (_ for _ in ()).throw(AssertionError("unexpected pipeline")))
+    caplog.set_level(logging.ERROR)
     with store.connect() as con:
         assert con.execute("select count(*) from price_ledger").fetchone()[0] == 0
-    response = TestClient(create_app(store), raise_server_exceptions=False).post(
+    response = TestClient(create_app(store)).post(
         "/api/v1/prices/backfill/external",
         json={"config_path": str(config), "v1_fx_db_path": str(tmp_path / "unused"), "dry_run": False},
     )
     assert response.status_code == 500
+    body = response.json()
+    assert body["status"] == "error"
+    assert body["errors"][0]["code"] == "price_backfill_storage_unknown"
+    assert body["data"] == {"storage_status": "unknown", "pipeline_status": "not_started"}
+    assert canary not in response.text and "/private/synthetic-receipt-456" not in response.text
+    assert canary not in caplog.text and "/private/synthetic-receipt-456" not in caplog.text
+    assert "Traceback" not in caplog.text
+    records = [r for r in caplog.records if r.name == "steuerreport_v2.domain.external_price_backfill"]
+    assert len(records) == 1
+    assert records[0].getMessage() == "Historical price backfill storage failed; storage state unknown"
+    assert records[0].exc_info is None and records[0].exc_text is None and records[0].stack_info is None
     with store.connect() as con:
-        assert con.execute("select count(*) from price_ledger").fetchone()[0] == 1
+        assert con.execute("select count(*) from price_ledger").fetchone()[0] == int(insert_before_failure)

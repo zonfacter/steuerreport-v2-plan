@@ -5013,6 +5013,50 @@
         "title": "ApiResponse[ExternalPriceBackfillResult]",
         "type": "object"
       },
+      "ApiResponse_ExternalPriceBackfillStorageUnknown_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalPriceBackfillStorageUnknown"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ExternalPriceBackfillStorageUnknown]",
+        "type": "object"
+      },
       "ApiResponse_FairspotStakingReconciliationReport_": {
         "properties": {
           "data": {
@@ -33764,6 +33808,24 @@
           "jobs"
         ],
         "title": "ExternalPriceBackfillResult",
+        "type": "object"
+      },
+      "ExternalPriceBackfillStorageUnknown": {
+        "properties": {
+          "pipeline_status": {
+            "const": "not_started",
+            "default": "not_started",
+            "title": "Pipeline Status",
+            "type": "string"
+          },
+          "storage_status": {
+            "const": "unknown",
+            "default": "unknown",
+            "title": "Storage Status",
+            "type": "string"
+          }
+        },
+        "title": "ExternalPriceBackfillStorageUnknown",
         "type": "object"
       },
       "FairspotStakingDecisionLayer": {
@@ -94545,6 +94607,16 @@
               }
             },
             "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ExternalPriceBackfillStorageUnknown_"
+                }
+              }
+            },
+            "description": "Speicherzustand unbekannt; vor Wiederholung pruefen"
           }
         },
         "summary": "Backfill External Prices",

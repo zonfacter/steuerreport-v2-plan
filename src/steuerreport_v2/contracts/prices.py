@@ -169,6 +169,11 @@ class ExternalPriceBackfillResult(BaseModel):
     pipeline_effects: Literal["not_started", "completed", "unknown_or_partial"] = "not_started"
 
 
+class ExternalPriceBackfillStorageUnknown(BaseModel):
+    storage_status: Literal["unknown"] = "unknown"
+    pipeline_status: Literal["not_started"] = "not_started"
+
+
 class CurrentPortfolioPriceBackfillRequest(BaseModel):
     config_path: str = "configs/crypto_price_sources.json"
     provider: str = "coingecko"

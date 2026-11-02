@@ -31,6 +31,12 @@ def test_external_backfill_partial_state_is_in_live_and_exported_openapi():
         assert properties["stored_price_ids"]["items"]["type"] == "string"
         assert properties["pipeline_status"]["enum"] == ["not_started", "completed", "failed"]
         assert properties["pipeline_effects"]["enum"] == ["not_started", "completed", "unknown_or_partial"]
+        error_schema = schema["paths"]["/api/v1/prices/backfill/external"]["post"]["responses"]["500"]["content"]["application/json"]["schema"]
+        assert error_schema["$ref"] == "#/components/schemas/ApiResponse_ExternalPriceBackfillStorageUnknown_"
+        unknown = schema["components"]["schemas"]["ExternalPriceBackfillStorageUnknown"]["properties"]
+        assert set(unknown) == {"storage_status", "pipeline_status"}
+        assert unknown["storage_status"]["const"] == "unknown"
+        assert unknown["pipeline_status"]["const"] == "not_started"
 
 
 def test_api_capabilities_exposes_mobile_transport_contract(tmp_path):

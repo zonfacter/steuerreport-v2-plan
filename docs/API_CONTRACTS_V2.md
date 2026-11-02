@@ -1578,9 +1578,13 @@ Speichervorgangs zurueckgegebenen IDs, kein spaeterer Bestandsnachweis.
 Ohne Pipeline-Lauf sind beide Statuswerte `not_started`; bei erfolgreichem
 Lauf sind beide `completed`. Bei abgefangener Pipeline-Ausnahme antwortet der
 Endpunkt mit HTTP 200 und `status=warning`, `pipeline_status=failed`,
-`pipeline_effects=unknown_or_partial` und den gespeicherten IDs. Ein Fehler
-des Speichervorgangs oder eine verlorene Antwort hat keinen solchen Vertrag:
-der Zustand ist dann unbekannt. Keine Aussage impliziert einen Rollback oder
+`pipeline_effects=unknown_or_partial` und den gespeicherten IDs. Eine am
+Speicheraufruf abgefangene Exception ergibt HTTP 500, `status=error`, Fehlercode
+`price_backfill_storage_unknown` und `data` mit `storage_status=unknown` und
+`pipeline_status=not_started`. Es werden weder IDs noch eine gespeicherte Anzahl
+behauptet. Bei einer verlorenen Antwort ist der Zustand ebenfalls unbekannt;
+ein HTTP-Fehler allgemein beweist keinen bestimmten Speicherzustand. Keine
+Aussage impliziert einen Rollback oder
 eine steuerliche Freigabe. Vor einem erneuten Aufruf Bestand und abgeleitete
 Daten pruefen; Abrufe und neue Preiszeilen koennen wiederholt werden. Weitere
 Grenzen und Testnachweise: `docs/ISSUE_49_BACKFILL_TEILZUSTAND.md`.
