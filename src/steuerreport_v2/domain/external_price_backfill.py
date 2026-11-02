@@ -33,6 +33,7 @@ FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 FX_REFERENCE_INVALID = "usd_eur_source_date_or_source_invalid"
 FX_REFERENCE_UNVERIFIED = "usd_eur_daily_reference_unverified"
 PRICE_CANDIDATE_OUT_OF_RANGE = "price_candidate_out_of_range"
+PRICE_OUT_OF_RANGE = "price_out_of_range"
 FX_REFERENCE_INVALID_MESSAGE = (
     "USD/EUR-Referenz nicht verwendet: Quelltag, Quelllabel oder Waehrungseinheit fehlen "
     "oder sind ungueltig; der Quelltag muss innerhalb von sieben Tagen vor dem Bewertungstag liegen. "
@@ -58,6 +59,11 @@ def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
         warnings.append(ApiMessage(code=PRICE_CANDIDATE_OUT_OF_RANGE, message=(
             "Ein nicht darstellbarer Preiskandidat wurde verworfen; ein anderer Kurs wurde verwendet. "
             "Die Quelle und Bewertung bleiben zu pruefen."
+        )))
+    if any(PRICE_OUT_OF_RANGE in getattr(job, "additional_reasons", []) for job in jobs):
+        warnings.append(ApiMessage(code=PRICE_OUT_OF_RANGE, message=(
+            "Ein zusaetzlicher EUR-Preiskandidat liegt ausserhalb des speicherbaren Bereichs "
+            "und wurde nicht gespeichert."
         )))
     return warnings
 
@@ -432,6 +438,7 @@ class ExternalPriceBackfillService:
                         provider_id=provider_id,
                         status="failed",
                         reason=FX_REFERENCE_INVALID if fx_rejected else ("price_out_of_range" if price_out_of_range else "asset_eur_missing"),
+                        additional_reasons=[PRICE_OUT_OF_RANGE] if fx_rejected and price_out_of_range else [],
                         source=source_label,
                     )
                 )

@@ -119,6 +119,28 @@ def test_current_backfill_warns_when_valid_fallback_replaces_out_of_range_usd(tm
     assert module.fx_reference_warnings(result.jobs)[0].code == module.PRICE_CANDIDATE_OUT_OF_RANGE
 
 
+def test_current_api_reports_invalid_fx_and_unrepresentable_eur_fallback(tmp_path, monkeypatch):
+    store, config = synthetic_store(tmp_path, event_type="transfer")
+    mock_client(monkeypatch)
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_defillama_current_prices_usd",
+                        lambda *args: {"synthetic:token": Decimal("100")})
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_coingecko_simple_prices_eur",
+                        lambda *args: {"synthetic-test": Decimal("1e-50")})
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_frankfurter_usd_eur",
+                        lambda *args: (Decimal("0.9"), "2024-01-01"))
+    response = TestClient(create_app(store)).post("/api/v1/prices/backfill/current-portfolio", json={
+        "config_path": str(config), "assets": ["TEST"], "dry_run": False,
+    })
+    body = response.json()
+    assert response.status_code == 200 and body["status"] == "warning"
+    assert {w["code"] for w in body["warnings"]} >= {module.FX_REFERENCE_INVALID, module.PRICE_OUT_OF_RANGE}
+    job = body["data"]["jobs"][0]
+    assert job["reason"] == module.FX_REFERENCE_INVALID
+    assert job["additional_reasons"] == [module.PRICE_OUT_OF_RANGE]
+    assert job["provider_id"] == "synthetic-test" and job["source"] == "coingecko:simple-price:eur"
+    assert not store.list_price_points()
+
+
 def test_current_api_partial_failure_is_warning_even_when_another_asset_imports(tmp_path, monkeypatch):
     store, config = synthetic_store(tmp_path, event_type="transfer")
     config.write_text(json.dumps({"assets": [

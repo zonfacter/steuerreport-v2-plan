@@ -29486,6 +29486,13 @@
       },
       "CurrentPortfolioPriceBackfillJob": {
         "properties": {
+          "additional_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Additional Reasons",
+            "type": "array"
+          },
           "asset": {
             "title": "Asset",
             "type": "string"

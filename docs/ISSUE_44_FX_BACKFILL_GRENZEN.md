@@ -26,6 +26,8 @@
 - Bei fehlgeschlagenen Teiljobs meldet die API eine Warnung auch dann, wenn
   andere Preise bereits gespeichert wurden. Eine gueltige Ersatzquelle nach
   einem nicht darstellbaren Kandidaten bleibt als solche gekennzeichnet.
+  Der aktuelle Backfill stellt bei mehreren Ursachen `additional_reasons`
+  zusaetzlich zum bisherigen `reason` bereit; Clients muessen beide beachten.
   Im Stichtagsdialog bleibt die Warnung bei einem Fehler der nachfolgenden
   Ansichtsaktualisierung sichtbar; der Refresh ist kein Rollback des Imports.
 

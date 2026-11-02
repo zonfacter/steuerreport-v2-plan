@@ -181,6 +181,7 @@ class CurrentPortfolioPriceBackfillJob(BaseModel):
     provider_id: str | None = None
     status: str
     reason: str | None = None
+    additional_reasons: list[str] = Field(default_factory=list)
     price_eur: Decimal | None = None
     source: str | None = None
 
