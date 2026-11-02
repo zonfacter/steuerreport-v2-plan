@@ -4865,7 +4865,8 @@ function App() {
           setError((current) => current?.includes(partial) ? current : current ? `${partial} ${current}` : partial);
         }
       } else {
-        try { await refresh(); } finally { setNotice(resultNotice); }
+        setNotice(resultNotice);
+        try { await refresh(true, true); } finally { setNotice(resultNotice); }
       }
     } catch (caught) {
       setError(externalPriceBackfillError(caught));
@@ -4899,7 +4900,8 @@ function App() {
           ? `Aktuelle Portfolio-Preise geplant: ${String(result.planned_jobs ?? 0)} Jobs`
           : `Aktuelle Portfolio-Preise importiert: ${String(result.imported_prices ?? 0)} Preise`) + (warning ? ` ${warning}` : "")
       );
-      try { await refresh(); } finally { setNotice(resultNotice); }
+      setNotice(resultNotice);
+      try { await refresh(true, true); } finally { setNotice(resultNotice); }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Aktuelle Portfolio-Preise konnten nicht geladen werden");
       setLoading(false);

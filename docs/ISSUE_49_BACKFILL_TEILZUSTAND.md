@@ -22,7 +22,9 @@ gespeicherte Anzahl; der Pipeline-Aufruf hat dann nicht begonnen. Speicher- und
 Pipeline-Ausnahmen werden ohne Exception-Text oder Traceback protokolliert.
 Der Service wirft bei einer Speicherausnahme eine feste Exception ohne den
 urspruenglichen Exception-Kontext; die API wandelt sie in den HTTP-500-Vertrag
-um. Direkte Aufrufer muessen sie als Abbruch behandeln, nicht als Rollback.
+um. Vorher bekannte, fest formulierte FX-/Teiljobwarnungen bleiben dabei
+erhalten; aus dem unbekannten Speicherzustand werden keine IDs abgeleitet.
+Direkte Aufrufer muessen sie als Abbruch behandeln, nicht als Rollback.
 Ein erfolgreicher Pipeline-Ruecksprung ist keine Aussage ueber steuerliche
 Richtigkeit. Die Antwort ist nicht dauerhaft als Jobjournal gespeichert.
 Ein Absturz, nicht abgefangener Fehler, Timeout oder Verbindungsabbruch kann
@@ -44,7 +46,10 @@ und `run_v1_solana_rpc_migration_v2.py`) stoppen bei unbekanntem Speicherstand
 oder fehlgeschlagener Backfill-Pipeline vor weiteren Verarbeitungsschritten.
 Im Live-Zweig erfolgt fuer diese Fehler keine automatische Backup-Rueckkopie;
 fruehere Schritte koennen bereits Aenderungen vorgenommen haben. Der Zielzustand
-bleibt unbekannt oder teilweise und muss geprueft werden. Andere Fehlerpfade
+bleibt unbekannt oder teilweise und muss geprueft werden. IDs aus einer vor dem
+Pipelinefehler bestaetigten Speicherung werden je nach Phase als Stage- oder
+Live-IDs getrennt ausgewiesen; sie sind kein Nachweis des aktuellen Bestands.
+Andere Fehlerpfade
 der Skripte und deren bestehende Backup-Logik wurden hier nicht bewertet.
 
 ## HTTP und Clients

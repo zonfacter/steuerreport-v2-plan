@@ -2252,7 +2252,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 confidence=payload.confidence,
                 dry_run=payload.dry_run,
             )
-        except HistoricalBackfillStorageUnknown:
+        except HistoricalBackfillStorageUnknown as exc:
             clear_response_cache()
             return JSONResponse(
                 status_code=500,
@@ -2263,6 +2263,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                         code="price_backfill_storage_unknown",
                         message="Speicherung fehlgeschlagen; Preisbestand unbekannt. Vor Wiederholung Zustand pruefen.",
                     )],
+                    warnings=exc.warnings,
                 ).model_dump(mode="json"),
             )
         if result.imported_prices:

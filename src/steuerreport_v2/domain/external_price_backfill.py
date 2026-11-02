@@ -35,6 +35,8 @@ FX_REFERENCE_INVALID = "usd_eur_source_date_or_source_invalid"
 FX_REFERENCE_UNVERIFIED = "usd_eur_daily_reference_unverified"
 PRICE_CANDIDATE_OUT_OF_RANGE = "price_candidate_out_of_range"
 PRICE_OUT_OF_RANGE = "price_out_of_range"
+FX_SOURCE_UNREADABLE = "usd_eur_source_unreadable"
+PRICE_PROVIDER_ERROR = "price_provider_error"
 FX_REFERENCE_INVALID_MESSAGE = (
     "USD/EUR-Referenz nicht verwendet: Quelltag, Quelllabel oder Waehrungseinheit fehlen "
     "oder sind ungueltig; der Quelltag muss innerhalb von sieben Tagen vor dem Bewertungstag liegen. "
@@ -56,18 +58,20 @@ class HistoricalBackfillIncompleteError(RuntimeError):
 
 
 class HistoricalBackfillStorageUnknown(HistoricalBackfillIncompleteError):
-    def __init__(self) -> None:
+    def __init__(self, warnings: list[ApiMessage] | None = None) -> None:
         super().__init__("Preisbackfill: Speicherzustand unbekannt; vor Wiederholung pruefen.")
+        self.warnings = list(warnings or [])
 
 
 class HistoricalBackfillPipelineFailed(HistoricalBackfillIncompleteError):
-    def __init__(self) -> None:
+    def __init__(self, stored_price_ids: list[str] | None = None) -> None:
         super().__init__("Preisbackfill: Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise.")
+        self.stored_price_ids = list(stored_price_ids or [])
 
 
 def require_backfill_pipeline_success(result: ExternalPriceBackfillResult) -> None:
     if result.pipeline_status == "failed":
-        raise HistoricalBackfillPipelineFailed()
+        raise HistoricalBackfillPipelineFailed(result.stored_price_ids)
 
 
 def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
@@ -94,7 +98,7 @@ def backfill_result_warnings(result: Any) -> list[ApiMessage]:
     warnings = fx_reference_warnings(result.jobs)
     if result.failed:
         warnings.append(ApiMessage(code="price_backfill_partial_failure", message=(
-            f"{result.failed} Preisabrufe sind fehlgeschlagen; bereits gespeicherte Preise "
+            f"{result.failed} Preisjobs sind fehlgeschlagen; bereits gespeicherte Preise "
             "bleiben bestehen. Einzelne Ergebnisse vor einem erneuten Abruf pruefen."
         )))
     return warnings
@@ -193,7 +197,17 @@ class ExternalPriceBackfillService:
                         )
                     )
                     continue
-                fx_reference = self._timed_usd_eur_reference(v1_fx_db_path, requirement.price_date.isoformat())
+                try:
+                    fx_reference = self._timed_usd_eur_reference(v1_fx_db_path, requirement.price_date.isoformat())
+                except (sqlite3.DatabaseError, OSError):
+                    logger.error("Historical price backfill FX source could not be read")
+                    failed += 1
+                    jobs.append(ExternalPriceBackfillJob(
+                        asset=requirement.asset, price_date=requirement.price_date,
+                        provider_id=asset.coingecko_id or asset.defillama_id,
+                        status="failed", reason=FX_SOURCE_UNREADABLE,
+                    ))
+                    continue
                 if fx_reference is None:
                     skipped += 1
                     jobs.append(
@@ -230,7 +244,17 @@ class ExternalPriceBackfillService:
                 }
                 if asset.defillama_id:
                     fetch_kwargs["defillama_id"] = asset.defillama_id
-                price_usd, source = self._fetch_price_usd(**fetch_kwargs)
+                try:
+                    price_usd, source = self._fetch_price_usd(**fetch_kwargs)
+                except Exception:
+                    logger.error("Historical price backfill provider request failed")
+                    failed += 1
+                    jobs.append(ExternalPriceBackfillJob(
+                        asset=requirement.asset, price_date=requirement.price_date,
+                        provider_id=asset.coingecko_id or asset.defillama_id,
+                        status="failed", reason=PRICE_PROVIDER_ERROR,
+                    ))
+                    continue
                 price_source_date = requirement.price_date.isoformat()
                 # A later first quote is not evidence for this historical event day.
                 if not price_usd.is_finite() or price_usd <= 0:
@@ -293,7 +317,12 @@ class ExternalPriceBackfillService:
                 logger.error("Historical price backfill storage failed; storage state unknown")
                 stored_price_ids = None
             if stored_price_ids is None:
-                raise HistoricalBackfillStorageUnknown()
+                warnings = fx_reference_warnings(jobs)
+                if failed:
+                    warnings.append(ApiMessage(code="price_backfill_partial_failure", message=(
+                        f"{failed} Preisjobs sind vor dem Speicherfehler fehlgeschlagen."
+                    )))
+                raise HistoricalBackfillStorageUnknown(warnings)
             try:
                 pipeline = PipelineService(self.store).rebuild_all()
             except Exception:
@@ -304,7 +333,8 @@ class ExternalPriceBackfillService:
                 pipeline_status = "completed"
                 pipeline_effects = "completed"
         visible_jobs = jobs[:200]
-        tracked_reasons = (FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED, PRICE_OUT_OF_RANGE)
+        tracked_reasons = (FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED, PRICE_OUT_OF_RANGE,
+                           FX_SOURCE_UNREADABLE, PRICE_PROVIDER_ERROR)
         for reason in tracked_reasons:
             if any(job.reason == reason for job in jobs) and not any(job.reason == reason for job in visible_jobs):
                 counts = Counter(job.reason for job in visible_jobs)

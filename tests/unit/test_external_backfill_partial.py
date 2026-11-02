@@ -3,6 +3,7 @@ import sqlite3
 from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -51,6 +52,39 @@ def test_pipeline_partial_and_fx_provenance_warnings_are_both_reported(tmp_path,
     assert body["data"]["stored_price_ids"] == [stored[0].price_id]
     assert fx_path.read_bytes() == original_fx
     assert "SYNTHETIC_PIPELINE_CANARY" not in response.text and "SYNTHETIC_PIPELINE_CANARY" not in caplog.text
+
+
+def test_storage_unknown_preserves_prior_safe_warnings_without_ids(tmp_path, monkeypatch, caplog):
+    store = DuckDbStore(tmp_path / "isolated.duckdb")
+    config = tmp_path / "assets.json"
+    config.write_text('{"assets":[{"symbol":"SYNTH","coingecko_id":"synthetic"}]}')
+    requirements = [SimpleNamespace(asset="SYNTH", price_date=date(2024, 1, day)) for day in (1, 2, 3)]
+    monkeypatch.setattr(PriceCoverageService, "requirements", lambda self: SimpleNamespace(requirements=requirements))
+    monkeypatch.setattr("steuerreport_v2.domain.external_price_backfill.managed_client", lambda **kwargs: nullcontext(object()))
+    fx = FxReference(Decimal("0.9"), date(2023, 12, 31), "USD", "EUR", Decimal("0.9"), "synthetic")
+    monkeypatch.setattr(ExternalPriceBackfillService, "_timed_usd_eur_reference",
+                        lambda self, path, day: None if day.endswith("03") else fx)
+    def fetch(self, **kwargs):
+        if kwargs["date_str"].endswith("02"):
+            raise RuntimeError("SYNTHETIC_PROVIDER_CANARY")
+        return Decimal("100"), "synthetic"
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", fetch)
+    def fail_store(prices):
+        raise RuntimeError("SYNTHETIC_STORAGE_CANARY")
+    monkeypatch.setattr(store, "add_price_points", fail_store)
+    caplog.set_level(logging.ERROR)
+    response = TestClient(create_app(store)).post("/api/v1/prices/backfill/external", json={
+        "config_path": str(config), "v1_fx_db_path": str(tmp_path / "unused"), "dry_run": False,
+    })
+    body = response.json()
+    assert response.status_code == 500 and body["data"]["storage_status"] == "unknown"
+    assert "stored_price_ids" not in body["data"]
+    assert {warning["code"] for warning in body["warnings"]} >= {
+        "usd_eur_daily_reference_unverified", "usd_eur_source_date_or_source_invalid", "price_backfill_partial_failure",
+    }
+    assert "SYNTHETIC_PROVIDER_CANARY" not in response.text + caplog.text
+    assert "SYNTHETIC_STORAGE_CANARY" not in response.text + caplog.text
+    assert not store.list_price_points()
 
 
 def test_pipeline_exception_does_not_disclose_canary_in_api_or_log(tmp_path, monkeypatch, caplog):

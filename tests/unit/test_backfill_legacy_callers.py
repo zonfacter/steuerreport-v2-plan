@@ -36,7 +36,7 @@ def make_backfill(kind):
         def run(self, **kwargs):
             if kind == "storage":
                 raise HistoricalBackfillStorageUnknown()
-            return SimpleNamespace(pipeline_status="failed")
+            return SimpleNamespace(pipeline_status="failed", stored_price_ids=["synthetic-price-id"])
     return FakeBackfill
 
 
@@ -87,7 +87,7 @@ def test_cli_failure_stops_without_restore(scripts, tmp_path, monkeypatch, capsy
     error = HistoricalBackfillStorageUnknown if kind == "storage" else HistoricalBackfillPipelineFailed
     def run(path, **kwargs):
         if path == (stage if phase == "stage" else live):
-            raise error()
+            raise error(["synthetic-price-id"]) if kind == "pipeline" else error()
         return {"review": {"allow_export": True}, "reconciliation_rows": []}
     if which == "jup":
         monkeypatch.setattr(jup, "_fetch_balance_changes", lambda *args, **kwargs: ([{}], {}))
@@ -102,3 +102,7 @@ def test_cli_failure_stops_without_restore(scripts, tmp_path, monkeypatch, capsy
     assert result["blocked_reason"] == ("stage_price_backfill_incomplete" if phase == "stage" else "live_price_backfill_incomplete_state_unknown_or_partial")
     assert result["target_changed"] is (False if phase == "stage" else None)
     assert "restored" not in result["blocked_reason"]
+    if kind == "pipeline":
+        assert result[f"{phase}_confirmed_backfill_price_ids"] == ["synthetic-price-id"]
+    else:
+        assert f"{phase}_confirmed_backfill_price_ids" not in result
