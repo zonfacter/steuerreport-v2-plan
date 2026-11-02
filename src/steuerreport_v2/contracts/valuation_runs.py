@@ -66,6 +66,12 @@ class DivorceValuationRunReport(BaseModel):
     generated_at: datetime
     status: Literal["blocked", "review", "strict_ready"]
     strict_ready: bool = False
+    price_gate_version: str | None = None
+    historical_status: Literal["blocked", "review", "strict_ready"] | None = None
+    historical_strict_ready: bool | None = None
+    historical_cutoff_price_gate: DivorceValuationGate | None = None
+    historical_valuation_price_gate: DivorceValuationGate | None = None
+    current_validity: Literal["versioned_gate", "unverified_legacy_gate"] | None = None
     cutoff_at: datetime
     valuation_at: datetime
     materiality_threshold_eur: Decimal

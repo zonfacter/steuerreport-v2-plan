@@ -1218,6 +1218,14 @@ class DivorceEqualizationService:
         normalized_price = DivorceEqualizationService._naive(priced_at)
         normalized_valuation = DivorceEqualizationService._naive(valuation_at)
         age_days = max((normalized_valuation.date() - normalized_price.date()).days, 0)
+        source = str(price_source or "").lower()
+        if (
+            ":as_of_gate:" in source
+            or "v1_fx_cache" in source
+            or source.startswith("bmf_event_price_anchor:")
+            or source.startswith("bitget_strategy_basis_anchor:")
+        ):
+            return age_days, "unverified_daily_reference"
         if str(price_source or "").startswith("derived:event_quote"):
             return age_days, "derived_event_quote"
         if age_days == 0:
@@ -1237,6 +1245,7 @@ class DivorceEqualizationService:
         same_day = 0
         prior_day = 0
         stale = 0
+        unverified_daily = 0
         missing = 0
         review = 0
         accepted_review = 0
@@ -1295,11 +1304,19 @@ class DivorceEqualizationService:
             elif price_status == "missing":
                 missing += 1
                 affected.add(asset)
+            elif price_status == "unverified_daily_reference":
+                unverified_daily += 1
+                affected.add(asset)
             elif price_status in {"stale", "derived_event_quote"}:
                 stale += 1
                 affected.add(asset)
-        strict_ready = not any((prior_day, stale, missing, review))
+        strict_ready = not any((prior_day, stale, missing, review, unverified_daily))
         findings: list[str] = []
+        if unverified_daily:
+            findings.append(
+                f"{unverified_daily} Positionen verwenden Tagesreferenzen ohne belegten "
+                "Preis- und FX-Zeitpunkt; keine strenge Stichtagsfreigabe."
+            )
         if prior_day:
             findings.append(
                 f"{prior_day} Positionen haben nur einen Vortagskurs als Diagnose; keine Wertfreigabe."
@@ -1321,8 +1338,8 @@ class DivorceEqualizationService:
             )
         if strict_ready:
             findings.append(
-                "Alle materiellen Positionen besitzen einen belegten Same-Day-Preis; "
-                "offene Token-Risikoflags bestehen nicht."
+                "Keine bekannten Preis- oder Tokenrisiko-Blocker erkannt; Same-Day allein "
+                "belegt keinen exakten Preis- oder FX-Zeitpunkt."
             )
         return DivorceValuationGate(
             valuation_at=valuation_at.replace(tzinfo=timezone.utc),
@@ -1332,6 +1349,7 @@ class DivorceEqualizationService:
             same_day_price_count=same_day,
             prior_day_price_count=prior_day,
             stale_price_count=stale,
+            unverified_daily_reference_count=unverified_daily,
             missing_price_count=missing,
             review_asset_count=review,
             accepted_review_asset_count=accepted_review,

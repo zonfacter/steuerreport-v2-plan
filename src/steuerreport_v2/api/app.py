@@ -8670,6 +8670,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             project_root / "src/steuerreport_v2/domain/tax_time.py",
             project_root / "src/steuerreport_v2/domain/valuation.py",
             project_root / "src/steuerreport_v2/domain/valuation_runs.py",
+            project_root / "src/steuerreport_v2/domain/valuation_validity.py",
             project_root / "src/steuerreport_v2/domain/wallet_fifo_runs.py",
             private_config_path('source_registry.json'),
             private_config_path('solana_service_swap_tax_mappings.json'),
@@ -8691,6 +8692,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             / "var/solana_staking_position_reconciliation/latest_solana_staking_position_reconciliation.json",
             project_root / "var/source_registry/latest_source_registry.json",
             project_root / "var/valuation_runs/latest_valuation_gate.json",
+            DivorceValuationRunService(db).artifact_root / "latest_valuation_gate.json",
             project_root
             / "var/bmf_filing_readiness/latest_bmf_filing_readiness_2021_2025.json",
             project_root

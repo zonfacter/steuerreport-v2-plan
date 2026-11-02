@@ -210,6 +210,11 @@ class AsOfPriceGateCandidate(BaseModel):
     current_price_source: str | None = None
     current_price_age_days: int | None = None
     current_price_status: str
+    price_evidence_type: Literal["known_daily_reference", "unclassified"] = "unclassified"
+    daily_reference_date: date | None = None
+    observed_price_at: datetime | None = None
+    provider_time_evidence: str = "not_verified"
+    fx_time_evidence: str = "not_verified"
     provider_id: str | None = None
     token_mint: str | None = None
     token_verified: bool | None = None

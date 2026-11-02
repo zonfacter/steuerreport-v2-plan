@@ -69,7 +69,16 @@ class AsOfPriceGateService:
         positions_by_asset: defaultdict[str, list[object]] = defaultdict(list)
         for position in portfolio.positions:
             value = abs(position.value_eur or Decimal("0"))
-            if position.price_eur is None or value >= materiality_threshold_eur:
+            _, position_status = divorce_service._price_status(
+                priced_at=position.priced_at,
+                price_source=position.price_source,
+                valuation_at=divorce_service._naive(valuation_at),
+            )
+            if (
+                position.price_eur is None
+                or value >= materiality_threshold_eur
+                or position_status == "unverified_daily_reference"
+            ):
                 positions_by_asset[str(position.asset).upper()].append(position)
         candidates: list[AsOfPriceGateCandidate] = []
         for asset, positions in sorted(positions_by_asset.items()):
@@ -111,11 +120,17 @@ class AsOfPriceGateService:
                 if token_assessment.review_required
                 else "not_required"
             )
-            if price_status != "same_day" and provider_id:
+            if price_status == "unverified_daily_reference":
+                status = "review_only"
+                reason = (
+                    "Tagesreferenz ohne belegten Preis- und FX-Zeitpunkt; "
+                    "keine strenge Stichtagsfreigabe."
+                )
+            elif price_status != "same_day" and provider_id:
                 status = "fetchable"
                 reason = (
-                    "Historischer Provider und USD/EUR-Tageskurs koennen den "
-                    "Stichtagspreis belegen."
+                    "Historischer Provider und USD/EUR-Tageskurs sind konfiguriert; "
+                    "ein zeitlicher Nachweis ist damit nicht garantiert."
                 )
                 if token_review_status == "pending":
                     reason += " Danach bleibt eine stichtagsbezogene Tokenpruefung erforderlich."
@@ -148,6 +163,16 @@ class AsOfPriceGateService:
                     current_price_source=price_source,
                     current_price_age_days=age_days,
                     current_price_status=price_status,
+                    price_evidence_type=(
+                        "known_daily_reference"
+                        if price_status == "unverified_daily_reference"
+                        else "unclassified"
+                    ),
+                    daily_reference_date=(
+                        self._as_utc(priced_at).date()
+                        if priced_at and price_status == "unverified_daily_reference"
+                        else None
+                    ),
                     provider_id=provider_id,
                     token_mint=token_assessment.mint,
                     token_verified=token_assessment.token_verified,
