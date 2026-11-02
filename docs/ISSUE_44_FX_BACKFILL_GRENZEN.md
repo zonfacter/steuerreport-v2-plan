@@ -30,6 +30,10 @@
   zusaetzlich zum bisherigen `reason` bereit; Clients muessen beide beachten.
   Im Stichtagsdialog bleibt die Warnung bei einem Fehler der nachfolgenden
   Ansichtsaktualisierung sichtbar; der Refresh ist kein Rollback des Imports.
+- Im historischen und Stichtags-Backfill werden Provider-Exceptions und
+  unlesbare FX-Dateien in feste Fehlercodes bzw. eine feste Fehlermeldung
+  umgewandelt; Exceptiontexte werden dort nicht protokolliert. Das sichert
+  nicht saemtliche anderen Connector- oder Skriptpfade ab.
 
 ## Weiterhin offen
 

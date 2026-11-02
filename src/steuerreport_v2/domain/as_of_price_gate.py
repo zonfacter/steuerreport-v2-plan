@@ -5,10 +5,12 @@ from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import json
+import logging
 from pathlib import Path
+import sqlite3
 
-import httpx
 from steuerreport_v2.domain.external_http import managed_client
+from steuerreport_v2.domain.request_limits import RequestCancelled, RequestDeadlineExceeded
 
 from steuerreport_v2.contracts.prices import (
     AsOfPriceGateBackfillJob,
@@ -34,6 +36,8 @@ from steuerreport_v2.domain.stichtag_token_valuation import (
 )
 from steuerreport_v2.paths import PROJECT_ROOT as DEFAULT_PROJECT_ROOT
 from steuerreport_v2.paths import resolve_project_path
+
+logger = logging.getLogger(__name__)
 
 
 class AsOfPriceGateService:
@@ -304,10 +308,13 @@ class AsOfPriceGateService:
             resolve_project_path(request.config_path)
         )
         price_date = valuation_at.date()
-        fx_reference = (
-            backfill_service._timed_usd_eur_reference(request.v1_fx_db_path, price_date.isoformat())
-            if candidates else None
-        )
+        try:
+            fx_reference = (
+                backfill_service._timed_usd_eur_reference(request.v1_fx_db_path, price_date.isoformat())
+                if candidates else None
+            )
+        except (sqlite3.DatabaseError, OSError):
+            raise ValueError("Die FX-Quelle konnte nicht gelesen werden; keine Preise wurden importiert.") from None
         if candidates and fx_reference is None:
             raise ValueError(
                 f"Kein belegter USD/EUR-Kurs wird durch Quelltag und Quelllabel nachgewiesen; "
@@ -348,10 +355,13 @@ class AsOfPriceGateService:
                         date_str=price_date.isoformat(),
                         provider=provider,
                     )
-                except httpx.HTTPError as exc:
+                except (RequestCancelled, RequestDeadlineExceeded):
+                    raise
+                except Exception:
+                    logger.error("As-of price backfill provider request failed")
                     price_usd = Decimal("0")
                     source = ""
-                    reason = f"provider_error:{type(exc).__name__}"
+                    reason = "provider_error"
                 else:
                     reason = None
                 if not price_usd.is_finite() or price_usd <= 0:

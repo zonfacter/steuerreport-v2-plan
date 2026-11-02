@@ -132,6 +132,24 @@ def test_as_of_price_gate_backfill_adds_same_day_price_without_pipeline_rebuild(
     assert TaxService(store).list_tax_lines() == []
 
 
+@pytest.mark.parametrize("signal_name", ["RequestCancelled", "RequestDeadlineExceeded"])
+def test_as_of_backfill_propagates_cancellation_without_writes(tmp_path, monkeypatch, signal_name):
+    from steuerreport_v2.domain import request_limits
+
+    signal = getattr(request_limits, signal_name)
+    store = _store(tmp_path)
+    before = [point.model_dump(mode="json") for point in store.list_price_points()]
+    fx_path = _fx_db(tmp_path / "fx.db")
+    def cancel(*args, **kwargs):
+        raise signal("synthetic cancellation")
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", cancel)
+    with pytest.raises(signal):
+        AsOfPriceGateService(store, artifact_root=tmp_path / "price-gate-runs").backfill(
+            AsOfPriceGateBackfillRequest(as_of=AS_OF, v1_fx_db_path=str(fx_path), dry_run=False)
+        )
+    assert [point.model_dump(mode="json") for point in store.list_price_points()] == before
+
+
 def test_as_of_price_gate_backfill_supports_defillama_only_asset(tmp_path, monkeypatch):
     store = _store(tmp_path, asset="JLWSOL")
     fx_path = _fx_db(tmp_path / "fx.db")
@@ -225,6 +243,32 @@ def test_as_of_api_warns_about_unverified_daily_fx(tmp_path, monkeypatch):
     assert body["status"] == "warning"
     assert body["warnings"][0]["code"] == "usd_eur_daily_reference_unverified"
     assert "Originalbeleg" in body["warnings"][0]["message"]
+
+
+@pytest.mark.parametrize("failure", ["provider", "corrupt_fx"])
+def test_as_of_errors_are_safe_and_leave_prices_unchanged(tmp_path, monkeypatch, caplog, failure):
+    store = _store(tmp_path)
+    before = store.list_price_points()
+    path = _fx_db(tmp_path / "fx.db") if failure == "provider" else tmp_path / "corrupt.sqlite"
+    if failure == "corrupt_fx":
+        path.write_bytes(b"not a database")
+    original_fx = path.read_bytes()
+    canary = "SYNTHETIC_AS_OF_PRIVATE_CANARY"
+    def provider_failure(*args, **kwargs):
+        raise RuntimeError(f"/synthetic/private/path?token={canary}")
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", provider_failure)
+    caplog.set_level("ERROR")
+    response = TestClient(create_app(store)).post("/api/v1/prices/as-of-gate/backfill", json={
+        "as_of": AS_OF.isoformat(), "v1_fx_db_path": str(path), "dry_run": False,
+    })
+    if failure == "provider":
+        assert response.status_code == 200 and response.json()["status"] == "warning"
+        assert response.json()["data"]["jobs"][0]["reason"] == "provider_error"
+    else:
+        assert response.status_code == 422 and "FX-Quelle" in response.json()["detail"]
+    assert canary not in response.text and canary not in caplog.text
+    assert "/synthetic/private/path" not in response.text and "/synthetic/private/path" not in caplog.text
+    assert store.list_price_points() == before and path.read_bytes() == original_fx
 
 
 @pytest.mark.parametrize("dry_run", [True, False])

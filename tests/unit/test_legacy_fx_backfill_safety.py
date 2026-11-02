@@ -190,6 +190,33 @@ def test_historical_api_warns_when_daily_fx_is_only_technically_accepted(tmp_pat
     assert not store.list_price_points()
 
 
+@pytest.mark.parametrize("failure", ["provider", "corrupt_fx"])
+def test_historical_backfill_errors_are_structured_without_secret_details(tmp_path, monkeypatch, caplog, failure):
+    store, config = synthetic_store(tmp_path)
+    fx_path = cache(tmp_path / "legacy.sqlite") if failure == "provider" else tmp_path / "corrupt.sqlite"
+    if failure == "corrupt_fx":
+        fx_path.write_bytes(b"not a database")
+    original_fx = fx_path.read_bytes()
+    mock_client(monkeypatch)
+    canary = "SYNTHETIC_PROVIDER_PRIVATE_CANARY"
+    def provider_failure(*args, **kwargs):
+        raise RuntimeError(f"/synthetic/private/path?token={canary}")
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", provider_failure)
+    caplog.set_level("ERROR")
+    response = TestClient(create_app(store)).post("/api/v1/prices/backfill/external", json={
+        "config_path": str(config), "v1_fx_db_path": str(fx_path), "assets": ["TEST"], "dry_run": False,
+    })
+    body = response.json()
+    assert response.status_code == 200 and body["status"] == "warning"
+    assert body["data"]["failed"] == 1 and body["data"]["imported_prices"] == 0
+    assert body["data"]["jobs"][0]["reason"] == (
+        module.PRICE_PROVIDER_ERROR if failure == "provider" else module.FX_SOURCE_UNREADABLE
+    )
+    assert canary not in response.text and canary not in caplog.text
+    assert "/synthetic/private/path" not in response.text and "/synthetic/private/path" not in caplog.text
+    assert fx_path.read_bytes() == original_fx and not store.list_price_points()
+
+
 @pytest.mark.parametrize("with_source_date,source", [(False, "synthetic"), (True, "   ")])
 def test_external_backfill_rejects_unbound_fx_date_or_source(tmp_path, monkeypatch, with_source_date, source):
     store, config = synthetic_store(tmp_path)

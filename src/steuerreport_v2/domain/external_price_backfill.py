@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from collections import Counter
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from steuerreport_v2.contracts.prices import (
 from steuerreport_v2.contracts.common import ApiMessage
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.domain.request_limits import RequestCancelled, RequestDeadlineExceeded
 from steuerreport_v2.domain.valuation import PriceCoverageService
 from steuerreport_v2.domain.historical_fx import FxReference, cache_fx_reference, select_fx_reference
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
@@ -34,6 +36,8 @@ FX_REFERENCE_INVALID = "usd_eur_source_date_or_source_invalid"
 FX_REFERENCE_UNVERIFIED = "usd_eur_daily_reference_unverified"
 PRICE_CANDIDATE_OUT_OF_RANGE = "price_candidate_out_of_range"
 PRICE_OUT_OF_RANGE = "price_out_of_range"
+FX_SOURCE_UNREADABLE = "usd_eur_source_unreadable"
+PRICE_PROVIDER_ERROR = "price_provider_error"
 FX_REFERENCE_INVALID_MESSAGE = (
     "USD/EUR-Referenz nicht verwendet: Quelltag, Quelllabel oder Waehrungseinheit fehlen "
     "oder sind ungueltig; der Quelltag muss innerhalb von sieben Tagen vor dem Bewertungstag liegen. "
@@ -47,6 +51,36 @@ FX_REFERENCE_UNVERIFIED_MESSAGE = (
 )
 DEFAULT_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
 EXAMPLE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.example.json"
+logger = logging.getLogger(__name__)
+
+
+class HistoricalBackfillIncompleteError(RuntimeError):
+    """A backfill did not complete; callers must stop and inspect state."""
+
+
+class HistoricalBackfillStorageUnknown(HistoricalBackfillIncompleteError):
+    def __init__(self, warnings: list[ApiMessage] | None = None) -> None:
+        super().__init__("Preisbackfill: Speicherzustand unbekannt; vor Wiederholung pruefen.")
+        self.warnings = list(warnings or [])
+
+
+class HistoricalBackfillPipelineFailed(HistoricalBackfillIncompleteError):
+    def __init__(self, stored_price_ids: list[str] | None = None) -> None:
+        super().__init__("Preisbackfill: Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise.")
+        self.stored_price_ids = list(stored_price_ids or [])
+
+
+class HistoricalBackfillJobsFailed(HistoricalBackfillIncompleteError):
+    def __init__(self, stored_price_ids: list[str] | None = None) -> None:
+        super().__init__("Preisbackfill: Preisjobs fehlgeschlagen; Ergebnisse vor Fortsetzung pruefen.")
+        self.stored_price_ids = list(stored_price_ids or [])
+
+
+def require_backfill_pipeline_success(result: ExternalPriceBackfillResult) -> None:
+    if result.pipeline_status == "failed":
+        raise HistoricalBackfillPipelineFailed(result.stored_price_ids)
+    if result.failed:
+        raise HistoricalBackfillJobsFailed(result.stored_price_ids)
 
 
 def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
@@ -55,6 +89,10 @@ def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
         warnings.append(ApiMessage(code=FX_REFERENCE_INVALID, message=FX_REFERENCE_INVALID_MESSAGE))
     if any(job.reason == FX_REFERENCE_UNVERIFIED for job in jobs):
         warnings.append(ApiMessage(code=FX_REFERENCE_UNVERIFIED, message=FX_REFERENCE_UNVERIFIED_MESSAGE))
+    if any(job.reason == FX_SOURCE_UNREADABLE for job in jobs):
+        warnings.append(ApiMessage(code=FX_SOURCE_UNREADABLE, message="Die FX-Quelle konnte nicht gelesen werden."))
+    if any(job.reason == PRICE_PROVIDER_ERROR for job in jobs):
+        warnings.append(ApiMessage(code=PRICE_PROVIDER_ERROR, message="Ein Preisabruf ist fehlgeschlagen."))
     if any(job.reason == PRICE_CANDIDATE_OUT_OF_RANGE for job in jobs):
         warnings.append(ApiMessage(code=PRICE_CANDIDATE_OUT_OF_RANGE, message=(
             "Ein nicht darstellbarer Preiskandidat wurde verworfen; ein anderer Kurs wurde verwendet. "
@@ -73,7 +111,7 @@ def backfill_result_warnings(result: Any) -> list[ApiMessage]:
     warnings = fx_reference_warnings(result.jobs)
     if result.failed:
         warnings.append(ApiMessage(code="price_backfill_partial_failure", message=(
-            f"{result.failed} Preisabrufe sind fehlgeschlagen; bereits gespeicherte Preise "
+            f"{result.failed} Preisjobs sind fehlgeschlagen; bereits gespeicherte Preise "
             "bleiben bestehen. Einzelne Ergebnisse vor einem erneuten Abruf pruefen."
         )))
     return warnings
@@ -172,7 +210,17 @@ class ExternalPriceBackfillService:
                         )
                     )
                     continue
-                fx_reference = self._timed_usd_eur_reference(v1_fx_db_path, requirement.price_date.isoformat())
+                try:
+                    fx_reference = self._timed_usd_eur_reference(v1_fx_db_path, requirement.price_date.isoformat())
+                except (sqlite3.DatabaseError, OSError):
+                    logger.error("Historical price backfill FX source could not be read")
+                    failed += 1
+                    jobs.append(ExternalPriceBackfillJob(
+                        asset=requirement.asset, price_date=requirement.price_date,
+                        provider_id=asset.coingecko_id or asset.defillama_id,
+                        status="failed", reason=FX_SOURCE_UNREADABLE,
+                    ))
+                    continue
                 if fx_reference is None:
                     skipped += 1
                     jobs.append(
@@ -209,7 +257,19 @@ class ExternalPriceBackfillService:
                 }
                 if asset.defillama_id:
                     fetch_kwargs["defillama_id"] = asset.defillama_id
-                price_usd, source = self._fetch_price_usd(**fetch_kwargs)
+                try:
+                    price_usd, source = self._fetch_price_usd(**fetch_kwargs)
+                except (RequestCancelled, RequestDeadlineExceeded):
+                    raise
+                except Exception:
+                    logger.error("Historical price backfill provider request failed")
+                    failed += 1
+                    jobs.append(ExternalPriceBackfillJob(
+                        asset=requirement.asset, price_date=requirement.price_date,
+                        provider_id=asset.coingecko_id or asset.defillama_id,
+                        status="failed", reason=PRICE_PROVIDER_ERROR,
+                    ))
+                    continue
                 price_source_date = requirement.price_date.isoformat()
                 # A later first quote is not evidence for this historical event day.
                 if not price_usd.is_finite() or price_usd <= 0:
@@ -262,11 +322,34 @@ class ExternalPriceBackfillService:
                 )
 
         pipeline = None
+        stored_price_ids: list[str] = []
+        pipeline_status = "not_started"
+        pipeline_effects = "not_started"
         if prices:
-            self.store.add_price_points(prices)
-            pipeline = PipelineService(self.store).rebuild_all()
+            try:
+                stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
+            except Exception:
+                logger.error("Historical price backfill storage failed; storage state unknown")
+                stored_price_ids = None
+            if stored_price_ids is None:
+                warnings = fx_reference_warnings(jobs)
+                if failed:
+                    warnings.append(ApiMessage(code="price_backfill_partial_failure", message=(
+                        f"{failed} Preisjobs sind vor dem Speicherfehler fehlgeschlagen."
+                    )))
+                raise HistoricalBackfillStorageUnknown(warnings)
+            try:
+                pipeline = PipelineService(self.store).rebuild_all()
+            except Exception:
+                logger.error("Historical price backfill pipeline failed after price storage")
+                pipeline_status = "failed"
+                pipeline_effects = "unknown_or_partial"
+            else:
+                pipeline_status = "completed"
+                pipeline_effects = "completed"
         visible_jobs = jobs[:200]
-        tracked_reasons = (FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED, PRICE_OUT_OF_RANGE)
+        tracked_reasons = (FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED, PRICE_OUT_OF_RANGE,
+                           FX_SOURCE_UNREADABLE, PRICE_PROVIDER_ERROR)
         for reason in tracked_reasons:
             if any(job.reason == reason for job in jobs) and not any(job.reason == reason for job in visible_jobs):
                 counts = Counter(job.reason for job in visible_jobs)
@@ -286,6 +369,9 @@ class ExternalPriceBackfillService:
             dry_run=dry_run,
             jobs=visible_jobs,
             pipeline=pipeline,
+            stored_price_ids=stored_price_ids,
+            pipeline_status=pipeline_status,
+            pipeline_effects=pipeline_effects,
         )
 
     def run_current_portfolio(
