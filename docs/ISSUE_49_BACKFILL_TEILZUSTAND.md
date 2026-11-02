@@ -1,7 +1,9 @@
-# Issue 49: Historischer Preisbackfill und Teilzustand
+# Issue 49: Unvollstaendiger Review-Draft zum Preisbackfill
 
 Stand: unabhaengige Aenderung auf `181e05f`, keine Integration von #44 oder #46.
-Sie loest Issue #49 nicht vollstaendig.
+Nur zur technischen Pruefung; keine Freigabe und keine vollstaendige Loesung von
+Issue #49. Idempotenz, Prozessabbruch, parallele Aufrufe, Speicherfehler und
+Wiederanlauf bleiben offen.
 
 ## Technische Grenze
 
@@ -44,3 +46,14 @@ nicht als sicher nachgewiesen. Andere Preisimport- und Backfill-Endpunkte sind
 von dieser Aenderung nicht abgedeckt. #44 aendert dieselben Dateien und
 Vertrags-/Warnungsbereiche; Integration und Konfliktaufloesung sind gesondert
 abzustimmen. #46 bleibt ebenfalls unabhaengig.
+
+## Review-Pruefstand
+
+- OpenAPI und Endpunktreferenz regeneriert; beide Generatoren bestehen
+  `--check`. Die Referenzaenderung betrifft Datum und Quellzeilen.
+- `ruff check src tests scripts`: bestanden mit Ruff 0.15.11.
+- 11 gezielte Tests: Teilzustand einschliesslich Log-Canary, OpenAPI-Vertrag,
+  Referenzgenerator und Preis-Store bestanden. Ein interaktiver UI-Test und
+  die vollstaendige Testsuite sind damit nicht abgedeckt.
+- Keine produktiven Daten, Container oder echten Preisprovider fuer diese
+  Pruefungen; die beobachteten Duplikat- und Speicherfehler bleiben offen.

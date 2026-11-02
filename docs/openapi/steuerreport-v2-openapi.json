@@ -33710,6 +33710,26 @@
               }
             ]
           },
+          "pipeline_effects": {
+            "default": "not_started",
+            "enum": [
+              "not_started",
+              "completed",
+              "unknown_or_partial"
+            ],
+            "title": "Pipeline Effects",
+            "type": "string"
+          },
+          "pipeline_status": {
+            "default": "not_started",
+            "enum": [
+              "not_started",
+              "completed",
+              "failed"
+            ],
+            "title": "Pipeline Status",
+            "type": "string"
+          },
           "planned_jobs": {
             "title": "Planned Jobs",
             "type": "integer"
@@ -33721,6 +33741,14 @@
           "skipped": {
             "title": "Skipped",
             "type": "integer"
+          },
+          "stored_price_ids": {
+            "description": "Beim erfolgreichen Speichern zurueckgegebene Preis-IDs, kein spaeterer Bestandsnachweis",
+            "items": {
+              "type": "string"
+            },
+            "title": "Stored Price Ids",
+            "type": "array"
           }
         },
         "required": [

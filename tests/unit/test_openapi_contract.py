@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from steuerreport_v2.api.app import create_app
@@ -14,6 +17,20 @@ def _operations(schema: dict) -> list[tuple[str, str, dict]]:
         for method, operation in path_item.items()
         if method in HTTP_METHODS
     ]
+
+
+def test_external_backfill_partial_state_is_in_live_and_exported_openapi():
+    app = create_app(DuckDbStore(":memory:"))
+    exported = Path(__file__).resolve().parents[2] / "docs/openapi/steuerreport-v2-openapi.json"
+    for schema in (app.openapi(), json.loads(exported.read_text(encoding="utf-8"))):
+        response_schema = schema["paths"]["/api/v1/prices/backfill/external"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+        assert response_schema["$ref"] == "#/components/schemas/ApiResponse_ExternalPriceBackfillResult_"
+        response = schema["components"]["schemas"]["ApiResponse_ExternalPriceBackfillResult_"]
+        assert {"$ref": "#/components/schemas/ExternalPriceBackfillResult"} in response["properties"]["data"]["anyOf"]
+        properties = schema["components"]["schemas"]["ExternalPriceBackfillResult"]["properties"]
+        assert properties["stored_price_ids"]["items"]["type"] == "string"
+        assert properties["pipeline_status"]["enum"] == ["not_started", "completed", "failed"]
+        assert properties["pipeline_effects"]["enum"] == ["not_started", "completed", "unknown_or_partial"]
 
 
 def test_api_capabilities_exposes_mobile_transport_contract(tmp_path):
