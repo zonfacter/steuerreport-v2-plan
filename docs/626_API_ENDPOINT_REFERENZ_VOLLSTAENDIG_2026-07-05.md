@@ -1,6 +1,6 @@
 # Vollstaendige API Endpoint Referenz
 
-Stand: 2026-10-30
+Stand: 2026-11-02
 
 Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt aus `src/steuerreport_v2/api/app.py` und seinen statisch eingebundenen Routermodulen erzeugt. Sie inventarisiert deren statisch deklarierte FastAPI-Routen. Fachliche Request-/Response- und Sicherheitsdetails stehen in `docs/API_CONTRACTS_V2.md` und zur Laufzeit in `/docs` bzw. `/openapi.json`.
 
@@ -253,9 +253,9 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 
 | Methode | Endpoint | Zweck | Schreibwirkung | Code |
 | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/tax-filing-snapshots` | Liefert das append-only Register hashgebundener Abgabe- und Referenzpakete | read-only | `app.py:9701` `tax_filing_snapshots` |
-| `GET` | `/api/v1/tax-filing-snapshots/{snapshot_id}/package.zip` | Liefert ein erneut SHA-256-geprueftes unveraenderliches Abgabepaket | read-only | `app.py:10005` `download_tax_filing_snapshot_package` |
-| `POST` | `/api/v1/tax-filing-snapshots/{snapshot_id}/usage-confirmation` | Confirm tax filing snapshot usage | kann Daten oder Artefakte schreiben | `app.py:9749` `confirm_tax_filing_snapshot_usage` |
+| `GET` | `/api/v1/tax-filing-snapshots` | Liefert das append-only Register hashgebundener Abgabe- und Referenzpakete | read-only | `app.py:9703` `tax_filing_snapshots` |
+| `GET` | `/api/v1/tax-filing-snapshots/{snapshot_id}/package.zip` | Liefert ein erneut SHA-256-geprueftes unveraenderliches Abgabepaket | read-only | `app.py:10007` `download_tax_filing_snapshot_package` |
+| `POST` | `/api/v1/tax-filing-snapshots/{snapshot_id}/usage-confirmation` | Confirm tax filing snapshot usage | kann Daten oder Artefakte schreiben | `app.py:9751` `confirm_tax_filing_snapshot_usage` |
 | `GET` | `/api/v1/tax-methodology/bmf-action-plan` | Tax methodology bmf action plan | read-only | `app.py:4939` `tax_methodology_bmf_action_plan` |
 | `GET` | `/api/v1/tax-methodology/bmf-amendment-worklist` | Tax methodology bmf amendment worklist | read-only | `app.py:5128` `tax_methodology_bmf_amendment_worklist` |
 | `GET` | `/api/v1/tax-methodology/bmf-closure-backlog` | Tax methodology bmf closure backlog | read-only | `app.py:4956` `tax_methodology_bmf_closure_backlog` |
@@ -309,13 +309,13 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 | `GET` | `/api/v1/tax-years/{year}/evidence` | Tax year evidence | read-only | `app.py:6682` `tax_year_evidence` |
 | `GET` | `/api/v1/tax-years/{year}/evidence.html` | Tax year evidence html | read-only | `app.py:6702` `tax_year_evidence_html` |
 | `GET` | `/api/v1/tax-years/{year}/external-inflows` | Tax year external inflows | read-only | `app.py:6720` `tax_year_external_inflows` |
-| `GET` | `/api/v1/tax-years/{year}/filing-audit-report` | Erzeugt bzw. liefert den read-only Einzelpositions-, Ursachen- und Summenabgleich | read-only | `app.py:9782` `tax_filing_audit_report` |
-| `GET` | `/api/v1/tax-years/{year}/filing-audit-report.json` | Liefert das unveraenderliche JSON-Auditartefakt | read-only | `app.py:9790` `tax_filing_audit_report_json` |
-| `GET` | `/api/v1/tax-years/{year}/filing-audit-report.md` | Liefert das unveraenderliche Markdown-Auditartefakt | read-only | `app.py:9808` `tax_filing_audit_report_markdown` |
-| `GET` | `/api/v1/tax-years/{year}/filing-snapshot-comparison` | Vergleicht den eingereichten bzw. archivierten Stand je Einkunftsart mit der aktuellen Berechnung | read-only | `app.py:9766` `tax_filing_snapshot_comparison` |
-| `GET` | `/api/v1/tax-years/{year}/filing-snapshot-comparison.html` | Liefert die druckbare Korrekturpruefungsakte statt einer rohen JSON-Ansicht | read-only | `app.py:9932` `tax_filing_snapshot_comparison_html` |
-| `GET` | `/api/v1/tax-years/{year}/filing-snapshots` | Liefert das hashgebundene Snapshot-Register fuer ein konkretes Steuerjahr | read-only | `app.py:9707` `tax_year_filing_snapshots` |
-| `POST` | `/api/v1/tax-years/{year}/filing-snapshots` | Archiviert den aktuellen Paketstand oder bestaetigt eine konkrete Revision als tatsaechlich eingereicht | kann Daten oder Artefakte schreiben | `app.py:9711` `capture_tax_filing_snapshot` |
+| `GET` | `/api/v1/tax-years/{year}/filing-audit-report` | Erzeugt bzw. liefert den read-only Einzelpositions-, Ursachen- und Summenabgleich | read-only | `app.py:9784` `tax_filing_audit_report` |
+| `GET` | `/api/v1/tax-years/{year}/filing-audit-report.json` | Liefert das unveraenderliche JSON-Auditartefakt | read-only | `app.py:9792` `tax_filing_audit_report_json` |
+| `GET` | `/api/v1/tax-years/{year}/filing-audit-report.md` | Liefert das unveraenderliche Markdown-Auditartefakt | read-only | `app.py:9810` `tax_filing_audit_report_markdown` |
+| `GET` | `/api/v1/tax-years/{year}/filing-snapshot-comparison` | Vergleicht den eingereichten bzw. archivierten Stand je Einkunftsart mit der aktuellen Berechnung | read-only | `app.py:9768` `tax_filing_snapshot_comparison` |
+| `GET` | `/api/v1/tax-years/{year}/filing-snapshot-comparison.html` | Liefert die druckbare Korrekturpruefungsakte statt einer rohen JSON-Ansicht | read-only | `app.py:9934` `tax_filing_snapshot_comparison_html` |
+| `GET` | `/api/v1/tax-years/{year}/filing-snapshots` | Liefert das hashgebundene Snapshot-Register fuer ein konkretes Steuerjahr | read-only | `app.py:9709` `tax_year_filing_snapshots` |
+| `POST` | `/api/v1/tax-years/{year}/filing-snapshots` | Archiviert den aktuellen Paketstand oder bestaetigt eine konkrete Revision als tatsaechlich eingereicht | kann Daten oder Artefakte schreiben | `app.py:9713` `capture_tax_filing_snapshot` |
 | `GET` | `/api/v1/tax-years/{year}/filing-summary` | Tax year filing summary | read-only | `app.py:5296` `tax_year_filing_summary` |
 | `GET` | `/api/v1/tax-years/{year}/filing-summary.html` | Tax year filing summary html | read-only | `app.py:5306` `tax_year_filing_summary_html` |
 | `GET` | `/api/v1/tax-years/{year}/gain-evidence-acquisition-event-deltas` | Tax year gain evidence acquisition event deltas | read-only | `app.py:6621` `tax_year_gain_evidence_acquisition_event_deltas` |
@@ -459,7 +459,7 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 | `GET` | `/api/v1/export/tax-years/{year}/correction-map.csv` | Download tax year correction map csv | read-only | `app.py:5744` `download_tax_year_correction_map_csv` |
 | `GET` | `/api/v1/export/tax-years/{year}/evidence-package.zip` | Download tax year evidence package zip | read-only | `app.py:8650` `download_tax_year_evidence_package_zip` |
 | `GET` | `/api/v1/export/tax-years/{year}/filing-checklist.csv` | Download tax year filing checklist csv | read-only | `app.py:5794` `download_tax_year_filing_checklist_csv` |
-| `GET` | `/api/v1/export/tax-years/{year}/filing-snapshot-comparison.csv` | Liefert den Abgabestand-Delta je Einkunftsart als CSV | read-only | `app.py:9953` `tax_filing_snapshot_comparison_csv` |
+| `GET` | `/api/v1/export/tax-years/{year}/filing-snapshot-comparison.csv` | Liefert den Abgabestand-Delta je Einkunftsart als CSV | read-only | `app.py:9955` `tax_filing_snapshot_comparison_csv` |
 | `GET` | `/api/v1/export/token-risk-documentation.csv` | Download token risk documentation csv | read-only | `app.py:6951` `download_token_risk_documentation_csv` |
 | `GET` | `/api/v1/reports/center` | Report center | read-only | `app.py:6783` `report_center` |
 
@@ -506,35 +506,35 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 
 | Methode | Endpoint | Zweck | Schreibwirkung | Code |
 | --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/ai/agents` | Ai agents | read-only | `app.py:10066` `ai_agents` |
-| `PUT` | `/api/v1/ai/agents` | Save ai agents | schreibt | `app.py:10070` `save_ai_agents` |
-| `GET` | `/api/v1/ai/changes` | Ai change sets | read-only | `app.py:10082` `ai_change_sets` |
-| `POST` | `/api/v1/ai/changes` | Create ai change set | kann Daten oder Artefakte schreiben | `app.py:10086` `create_ai_change_set` |
-| `POST` | `/api/v1/ai/changes/generate` | Generate ai change set | kann Daten oder Artefakte schreiben | `app.py:10090` `generate_ai_change_set` |
-| `GET` | `/api/v1/ai/changes/{identifier}` | Ai change set | read-only | `app.py:10094` `ai_change_set` |
-| `POST` | `/api/v1/ai/changes/{identifier}/apply` | Apply ai change set | kann Daten oder Artefakte schreiben | `app.py:10110` `apply_ai_change_set` |
-| `GET` | `/api/v1/ai/changes/{identifier}/audit.json` | Ai change audit | read-only | `app.py:10124` `ai_change_audit` |
-| `POST` | `/api/v1/ai/changes/{identifier}/preview` | Preview ai change set | kann Daten oder Artefakte schreiben | `app.py:10106` `preview_ai_change_set` |
-| `POST` | `/api/v1/ai/changes/{identifier}/rebase` | Rebase ai change set | kann Daten oder Artefakte schreiben | `app.py:10102` `rebase_ai_change_set` |
-| `POST` | `/api/v1/ai/changes/{identifier}/reject` | Reject ai change set | kann Daten oder Artefakte schreiben | `app.py:10116` `reject_ai_change_set` |
-| `POST` | `/api/v1/ai/changes/{identifier}/revert` | Revert ai change set | kann Daten oder Artefakte schreiben | `app.py:10120` `revert_ai_change_set` |
-| `POST` | `/api/v1/ai/changes/{identifier}/revise` | Revise ai change set | kann Daten oder Artefakte schreiben | `app.py:10098` `revise_ai_change_set` |
-| `POST` | `/api/v1/ai/data-context` | Ai data context | kann Daten oder Artefakte schreiben | `app.py:10074` `ai_data_context` |
-| `POST` | `/api/v1/ai/data-context/targets` | Ai data target context | kann Daten oder Artefakte schreiben | `app.py:10078` `ai_data_target_context` |
-| `GET` | `/api/v1/ai/local-asset-fifo-correction-review` | Local ai asset fifo correction review | read-only | `app.py:10185` `local_ai_asset_fifo_correction_review` |
-| `GET` | `/api/v1/ai/local-asset-fifo-correction-review/artifacts/{artifact}` | Download local ai asset fifo correction artifact | read-only | `app.py:10191` `download_local_ai_asset_fifo_correction_artifact` |
-| `GET` | `/api/v1/ai/local-wallet-fifo-provenance-review` | Local ai wallet fifo provenance review | read-only | `app.py:10218` `local_ai_wallet_fifo_provenance_review` |
-| `GET` | `/api/v1/ai/local-wallet-fifo-provenance-review/artifacts/{artifact}` | Download local ai wallet fifo provenance artifact | read-only | `app.py:10224` `download_local_ai_wallet_fifo_provenance_artifact` |
-| `GET` | `/api/v1/ai/local-year-package-qa` | Local ai year package qa | read-only | `app.py:10154` `local_ai_year_package_qa` |
-| `GET` | `/api/v1/ai/local-year-package-qa/artifacts/{artifact}` | Download local ai year package qa artifact | read-only | `app.py:10158` `download_local_ai_year_package_qa_artifact` |
-| `GET` | `/api/v1/ai/provider` | Ai provider status | read-only | `app.py:10045` `ai_provider_status` |
-| `PUT` | `/api/v1/ai/provider` | Save ai provider | schreibt | `app.py:10130` `save_ai_provider` |
-| `POST` | `/api/v1/ai/provider/models` | Ai provider models | kann Daten oder Artefakte schreiben | `app.py:10134` `ai_provider_models` |
-| `POST` | `/api/v1/ai/provider/test` | Test ai provider | kann Daten oder Artefakte schreiben | `app.py:10138` `test_ai_provider` |
-| `GET` | `/api/v1/ai/tasks` | List ai tasks | read-only | `app.py:10150` `list_ai_tasks` |
-| `POST` | `/api/v1/ai/tasks` | Create ai task | kann Daten oder Artefakte schreiben | `app.py:10146` `create_ai_task` |
-| `DELETE` | `/api/v1/ai/tasks/{task_id}` | Delete ai task | loescht | `app.py:10251` `delete_ai_task` |
-| `POST` | `/api/v1/ai/tasks/{task_id}/execute` | Execute ai task | kann Daten oder Artefakte schreiben | `app.py:10142` `execute_ai_task` |
+| `GET` | `/api/v1/ai/agents` | Ai agents | read-only | `app.py:10068` `ai_agents` |
+| `PUT` | `/api/v1/ai/agents` | Save ai agents | schreibt | `app.py:10072` `save_ai_agents` |
+| `GET` | `/api/v1/ai/changes` | Ai change sets | read-only | `app.py:10084` `ai_change_sets` |
+| `POST` | `/api/v1/ai/changes` | Create ai change set | kann Daten oder Artefakte schreiben | `app.py:10088` `create_ai_change_set` |
+| `POST` | `/api/v1/ai/changes/generate` | Generate ai change set | kann Daten oder Artefakte schreiben | `app.py:10092` `generate_ai_change_set` |
+| `GET` | `/api/v1/ai/changes/{identifier}` | Ai change set | read-only | `app.py:10096` `ai_change_set` |
+| `POST` | `/api/v1/ai/changes/{identifier}/apply` | Apply ai change set | kann Daten oder Artefakte schreiben | `app.py:10112` `apply_ai_change_set` |
+| `GET` | `/api/v1/ai/changes/{identifier}/audit.json` | Ai change audit | read-only | `app.py:10126` `ai_change_audit` |
+| `POST` | `/api/v1/ai/changes/{identifier}/preview` | Preview ai change set | kann Daten oder Artefakte schreiben | `app.py:10108` `preview_ai_change_set` |
+| `POST` | `/api/v1/ai/changes/{identifier}/rebase` | Rebase ai change set | kann Daten oder Artefakte schreiben | `app.py:10104` `rebase_ai_change_set` |
+| `POST` | `/api/v1/ai/changes/{identifier}/reject` | Reject ai change set | kann Daten oder Artefakte schreiben | `app.py:10118` `reject_ai_change_set` |
+| `POST` | `/api/v1/ai/changes/{identifier}/revert` | Revert ai change set | kann Daten oder Artefakte schreiben | `app.py:10122` `revert_ai_change_set` |
+| `POST` | `/api/v1/ai/changes/{identifier}/revise` | Revise ai change set | kann Daten oder Artefakte schreiben | `app.py:10100` `revise_ai_change_set` |
+| `POST` | `/api/v1/ai/data-context` | Ai data context | kann Daten oder Artefakte schreiben | `app.py:10076` `ai_data_context` |
+| `POST` | `/api/v1/ai/data-context/targets` | Ai data target context | kann Daten oder Artefakte schreiben | `app.py:10080` `ai_data_target_context` |
+| `GET` | `/api/v1/ai/local-asset-fifo-correction-review` | Local ai asset fifo correction review | read-only | `app.py:10187` `local_ai_asset_fifo_correction_review` |
+| `GET` | `/api/v1/ai/local-asset-fifo-correction-review/artifacts/{artifact}` | Download local ai asset fifo correction artifact | read-only | `app.py:10193` `download_local_ai_asset_fifo_correction_artifact` |
+| `GET` | `/api/v1/ai/local-wallet-fifo-provenance-review` | Local ai wallet fifo provenance review | read-only | `app.py:10220` `local_ai_wallet_fifo_provenance_review` |
+| `GET` | `/api/v1/ai/local-wallet-fifo-provenance-review/artifacts/{artifact}` | Download local ai wallet fifo provenance artifact | read-only | `app.py:10226` `download_local_ai_wallet_fifo_provenance_artifact` |
+| `GET` | `/api/v1/ai/local-year-package-qa` | Local ai year package qa | read-only | `app.py:10156` `local_ai_year_package_qa` |
+| `GET` | `/api/v1/ai/local-year-package-qa/artifacts/{artifact}` | Download local ai year package qa artifact | read-only | `app.py:10160` `download_local_ai_year_package_qa_artifact` |
+| `GET` | `/api/v1/ai/provider` | Ai provider status | read-only | `app.py:10047` `ai_provider_status` |
+| `PUT` | `/api/v1/ai/provider` | Save ai provider | schreibt | `app.py:10132` `save_ai_provider` |
+| `POST` | `/api/v1/ai/provider/models` | Ai provider models | kann Daten oder Artefakte schreiben | `app.py:10136` `ai_provider_models` |
+| `POST` | `/api/v1/ai/provider/test` | Test ai provider | kann Daten oder Artefakte schreiben | `app.py:10140` `test_ai_provider` |
+| `GET` | `/api/v1/ai/tasks` | List ai tasks | read-only | `app.py:10152` `list_ai_tasks` |
+| `POST` | `/api/v1/ai/tasks` | Create ai task | kann Daten oder Artefakte schreiben | `app.py:10148` `create_ai_task` |
+| `DELETE` | `/api/v1/ai/tasks/{task_id}` | Delete ai task | loescht | `app.py:10253` `delete_ai_task` |
+| `POST` | `/api/v1/ai/tasks/{task_id}/execute` | Execute ai task | kann Daten oder Artefakte schreiben | `app.py:10144` `execute_ai_task` |
 
 ## V1-Paritaet
 

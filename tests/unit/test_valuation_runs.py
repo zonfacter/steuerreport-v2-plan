@@ -62,6 +62,55 @@ def _store(tmp_path):
     return store
 
 
+def test_legacy_valuation_api_and_governance_package_are_fail_closed(tmp_path):
+    from steuerreport_v2.domain.bmf_compliance import BmfComplianceMatrixService
+
+    store = _store(tmp_path)
+    service = DivorceValuationRunService(store)
+    report = service.run(DivorceValuationRunRequest())
+    legacy = report.model_dump(mode="json")
+    for key in ("price_gate_version", "historical_status", "historical_strict_ready", "current_validity"):
+        legacy.pop(key, None)
+    legacy["price_gate_version"] = "known_daily_references_v1"
+    legacy["status"] = "strict_ready"
+    legacy["strict_ready"] = True
+    for key in ("cutoff_price_gate", "valuation_price_gate"):
+        legacy[key]["status"] = "strict_ready"
+        legacy[key]["strict_ready"] = True
+        legacy["summary"][key]["status"] = "strict_ready"
+        legacy["summary"][key]["strict_ready"] = True
+    content = json.dumps(legacy).encode()
+    latest = service.artifact_root / "latest_valuation_gate.json"
+    archived = service.artifact_root / report.run_id / "valuation_run.json"
+    latest.write_bytes(content)
+    archived.write_bytes(content)
+    client = TestClient(create_app(store))
+    for url in ("/api/v1/divorce/valuation-runs/latest", f"/api/v1/divorce/valuation-runs/{report.run_id}"):
+        data = client.get(url).json()["data"]
+        assert data["status"] == "blocked" and data["strict_ready"] is False
+        assert data["historical_status"] == "strict_ready"
+        assert data["historical_cutoff_price_gate"]["strict_ready"] is True
+        assert data["cutoff_price_gate"]["strict_ready"] is False
+        assert data["summary"]["valuation_price_gate"]["strict_ready"] is False
+    assert not BmfComplianceMatrixService._artifact_state(latest, valuation_gate=True)["strict_ready"]
+    response = client.get("/api/v1/export/tax-years/2021/evidence-package.zip")
+    assert response.status_code == 200
+    with ZipFile(io.BytesIO(response.content)) as package:
+        payload = json.loads(package.read("07_Stichtag_Bewertung/tax-year-2021-latest-valuation-gate.json"))
+        assert payload["report"]["strict_ready"] is False
+        assert payload["report"]["historical_strict_ready"] is True
+        matrix = json.loads(package.read("00_Manifest/tax-year-2021-bmf-compliance-matrix.json"))
+        requirement = next(item for item in matrix["requirements"] if item["requirement_id"] == "as_of_holdings_and_source_of_funds")
+        assert requirement["strict_ready"] is False
+        assert requirement["evidence_status"] == "blocked"
+    assert latest.read_bytes() == content and archived.read_bytes() == content
+    latest.write_bytes(content + b"\n")
+    refreshed = client.get("/api/v1/export/tax-years/2021/evidence-package.zip")
+    assert refreshed.status_code == 200
+    assert refreshed.headers["x-steuerreport-cache"] == "miss"
+    assert archived.read_bytes() == content
+
+
 def test_divorce_valuation_run_versions_two_exact_fifo_checkpoints_and_evidence(
     tmp_path,
     monkeypatch,

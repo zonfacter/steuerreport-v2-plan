@@ -100,7 +100,7 @@ class BmfComplianceMatrixService:
         ).readiness()
         active_fifo = TaxMethodologyService(self.store).active_fifo_scope()
         source_registry = self._artifact_state(self.source_registry_latest)
-        stichtag_gate = self._artifact_state(self.stichtag_gate_latest)
+        stichtag_gate = self._artifact_state(self.stichtag_gate_latest, valuation_gate=True)
         legal_research = LegalResearchService(
             artifact_root=self.legal_research_artifact_root
         ).latest()
@@ -1450,7 +1450,7 @@ class BmfComplianceMatrixService:
         return findings
 
     @staticmethod
-    def _artifact_state(path: Path) -> dict[str, object]:
+    def _artifact_state(path: Path, *, valuation_gate: bool = False) -> dict[str, object]:
         if not path.exists():
             return {
                 "status": "missing",
@@ -1467,7 +1467,9 @@ class BmfComplianceMatrixService:
             }
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            if not isinstance(payload, dict):
+                raise ValueError("Ungueltiges Artefakt")
+        except (OSError, ValueError):
             return {
                 "status": "invalid",
                 "strict_ready": False,
@@ -1481,7 +1483,13 @@ class BmfComplianceMatrixService:
                 "documented_route_entries_count": 0,
                 "path": str(path),
             }
-        strict_ready = bool(payload.get("strict_ready") or payload.get("strict_bmf_ready"))
+        if valuation_gate:
+            from steuerreport_v2.domain.valuation_validity import project_valuation_validity
+
+            payload = project_valuation_validity(payload)
+        strict_ready = payload.get("strict_ready") is True if valuation_gate else bool(
+            payload.get("strict_ready") or payload.get("strict_bmf_ready")
+        )
         return {
             "status": str(payload.get("status") or ("strict_ready" if strict_ready else "available")),
             "strict_ready": strict_ready,

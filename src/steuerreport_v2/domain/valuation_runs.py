@@ -41,6 +41,10 @@ from steuerreport_v2.domain.wallet_fifo_runs import WalletFifoParallelRunService
 from steuerreport_v2.domain.wallet_fifo_acceptance import (
     WalletFifoMethodAcceptanceService,
 )
+from steuerreport_v2.domain.valuation_validity import (
+    PRICE_GATE_VERSION,
+    project_valuation_validity,
+)
 
 
 class DivorceValuationRunService:
@@ -243,6 +247,10 @@ class DivorceValuationRunService:
             generated_at=generated_at,
             status=status,
             strict_ready=strict_ready,
+            price_gate_version=PRICE_GATE_VERSION,
+            historical_status=status,
+            historical_strict_ready=strict_ready,
+            current_validity="versioned_gate",
             cutoff_at=summary.cutoff_at,
             valuation_at=summary.valuation_at,
             materiality_threshold_eur=request.materiality_threshold_eur,
@@ -305,8 +313,8 @@ class DivorceValuationRunService:
     def latest(self) -> DivorceValuationRunReport | None:
         path = self.artifact_root / "latest_valuation_gate.json"
         try:
-            return DivorceValuationRunReport.model_validate_json(
-                path.read_text(encoding="utf-8")
+            return DivorceValuationRunReport.model_validate(
+                project_valuation_validity(json.loads(path.read_text(encoding="utf-8")))
             )
         except (OSError, ValueError):
             return None
@@ -316,8 +324,8 @@ class DivorceValuationRunService:
             return None
         path = self.artifact_root / run_id / "valuation_run.json"
         try:
-            return DivorceValuationRunReport.model_validate_json(
-                path.read_text(encoding="utf-8")
+            return DivorceValuationRunReport.model_validate(
+                project_valuation_validity(json.loads(path.read_text(encoding="utf-8")))
             )
         except (OSError, ValueError):
             return None

@@ -203,6 +203,7 @@ class DivorceValuationGate(BaseModel):
     same_day_price_count: int = 0
     prior_day_price_count: int = 0
     stale_price_count: int = 0
+    unverified_daily_reference_count: int = 0
     missing_price_count: int = 0
     review_asset_count: int = 0
     accepted_review_asset_count: int = 0

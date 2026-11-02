@@ -16479,6 +16479,44 @@
             ],
             "title": "Current Priced At"
           },
+          "daily_reference_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Reference Date"
+          },
+          "fx_time_evidence": {
+            "default": "not_verified",
+            "title": "Fx Time Evidence",
+            "type": "string"
+          },
+          "observed_price_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Price At"
+          },
+          "price_evidence_type": {
+            "default": "unclassified",
+            "enum": [
+              "known_daily_reference",
+              "unclassified"
+            ],
+            "title": "Price Evidence Type",
+            "type": "string"
+          },
           "provider_id": {
             "anyOf": [
               {
@@ -16489,6 +16527,11 @@
               }
             ],
             "title": "Provider Id"
+          },
+          "provider_time_evidence": {
+            "default": "not_verified",
+            "title": "Provider Time Evidence",
+            "type": "string"
           },
           "quantity": {
             "default": "0",
@@ -32874,6 +32917,11 @@
             "title": "Token Review Evidence Refs",
             "type": "array"
           },
+          "unverified_daily_reference_count": {
+            "default": 0,
+            "title": "Unverified Daily Reference Count",
+            "type": "integer"
+          },
           "valuation_at": {
             "format": "date-time",
             "title": "Valuation At",
@@ -32897,6 +32945,21 @@
           "artifact_path": {
             "title": "Artifact Path",
             "type": "string"
+          },
+          "current_validity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "versioned_gate",
+                  "unverified_legacy_gate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Validity"
           },
           "cutoff_at": {
             "format": "date-time",
@@ -32950,6 +33013,53 @@
             "title": "Gross Change Eur",
             "type": "string"
           },
+          "historical_cutoff_price_gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DivorceValuationGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "historical_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "blocked",
+                  "review",
+                  "strict_ready"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Historical Status"
+          },
+          "historical_strict_ready": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Historical Strict Ready"
+          },
+          "historical_valuation_price_gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DivorceValuationGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "latest_artifact_path": {
             "title": "Latest Artifact Path",
             "type": "string"
@@ -32974,6 +33084,17 @@
             },
             "title": "Next Actions",
             "type": "array"
+          },
+          "price_gate_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Gate Version"
           },
           "run_id": {
             "title": "Run Id",

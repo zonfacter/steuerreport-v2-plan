@@ -102,6 +102,26 @@ def test_as_of_price_gate_marks_stale_material_asset_as_fetchable(tmp_path):
     assert report.candidates[0].provider_id == "bitcoin"
 
 
+def test_as_of_api_does_not_treat_midnight_anchor_as_observed_price(tmp_path):
+    store = _store(tmp_path)
+    store.add_price_point(PricePointCreate(
+        asset="BTC", price_eur=Decimal("0.00001"),
+        priced_at=datetime(2025, 6, 13, tzinfo=timezone.utc),
+        source="defillama:usd_eur:v1_fx_cache:2025-06-13:fx_date=2025-06-12",
+    ))
+    client = TestClient(create_app(store))
+    response = client.get("/api/v1/prices/as-of-gate", params={"as_of": "2025-06-13T01:00:00Z"})
+    assert response.status_code == 200
+    result = response.json()["data"]
+    assert result["strict_ready"] is False
+    candidate = result["candidates"][0]
+    assert candidate["current_price_status"] == "unverified_daily_reference"
+    assert candidate["price_evidence_type"] == "known_daily_reference"
+    assert candidate["daily_reference_date"] == "2025-06-13"
+    assert candidate["observed_price_at"] is None
+    assert candidate["provider_time_evidence"] == candidate["fx_time_evidence"] == "not_verified"
+
+
 def test_as_of_price_gate_backfill_adds_same_day_price_without_pipeline_rebuild(
     tmp_path, monkeypatch
 ):
@@ -125,8 +145,10 @@ def test_as_of_price_gate_backfill_adds_same_day_price_without_pipeline_rebuild(
     assert result.imported_prices == 1
     assert result.jobs[0].price_eur == Decimal("90.0")
     assert result.gate_before.strict_ready is False
-    assert result.gate_after.strict_ready is True
-    assert result.gate_after.candidates[0].current_price_status == "same_day"
+    assert result.gate_after.strict_ready is False
+    assert result.gate_after.candidates[0].current_price_status == "unverified_daily_reference"
+    assert result.gate_after.candidates[0].observed_price_at is None
+    assert result.gate_after.candidates[0].daily_reference_date == date(2025, 6, 13)
     assert TaxService(store).list_tax_lines() == []
 
 
@@ -168,7 +190,8 @@ def test_as_of_price_gate_backfill_supports_defillama_only_asset(tmp_path, monke
 
     assert result.imported_prices == 1
     assert result.gate_before.candidates[0].provider_id == "solana:jlwsol-mint"
-    assert result.gate_after.strict_ready is True
+    assert result.gate_after.strict_ready is False
+    assert result.gate_after.candidates[0].status == "review_only"
     assert calls[0]["coingecko_id"] is None
     assert calls[0]["defillama_id"] == "solana:jlwsol-mint"
 
