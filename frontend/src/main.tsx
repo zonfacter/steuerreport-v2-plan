@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { externalPriceBackfillError } from "./external-price-backfill-error";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
 import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
 import { ConnectorSetupSettings } from "./ConnectorSetupSettings";
@@ -3384,14 +3385,16 @@ function App() {
     window.localStorage.setItem("steuerreport:selected-tax-year", selectedTaxYear);
   }, [selectedTaxYear]);
 
-  async function refresh(notifyWorkspace = true) {
+  async function refresh(notifyWorkspace = true, preserveFeedback = false) {
     if (notifyWorkspace) window.dispatchEvent(new Event("steuerreport:refresh"));
     const runId = refreshRunId.current + 1;
     refreshRunId.current = runId;
     setPageLoading(true);
     setLoading(true);
-    setError(null);
-    setNotice(null);
+    if (!preserveFeedback) {
+      setError(null);
+      setNotice(null);
+    }
     try {
       const allLoaders: Record<string, SnapshotLoader> = {
         health: { key: "health", label: "Health", load: () => getApi<Record<string, unknown>>("/api/v1/health") },
@@ -4852,9 +4855,20 @@ function App() {
           ? `Externer Preisbackfill geplant: ${String(result.planned_jobs ?? 0)} Jobs`
           : `Externer Preisbackfill importiert: ${String(result.imported_prices ?? 0)} Preise`) + (warning ? ` ${warning}` : "")
       );
-      try { await refresh(); } finally { setNotice(resultNotice); }
+      if (result.pipeline_status === "failed") {
+        const ids = Array.isArray(result.stored_price_ids) ? result.stored_price_ids.join(", ") : "unbekannt";
+        const partial = `Preisbackfill: ${String(result.imported_prices ?? 0)} Preise gespeichert (IDs: ${ids}). Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise. Nicht erneut starten, bevor der Zustand geprueft wurde.`;
+        setNotice(resultNotice);
+        setError((current) => current ? `${partial} ${current}` : partial);
+        try { await refresh(true, true); } finally {
+          setNotice(resultNotice);
+          setError((current) => current?.includes(partial) ? current : current ? `${partial} ${current}` : partial);
+        }
+      } else {
+        try { await refresh(); } finally { setNotice(resultNotice); }
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Externer Preisbackfill konnte nicht ausgefuehrt werden");
+      setError(externalPriceBackfillError(caught));
       setLoading(false);
     }
   }
