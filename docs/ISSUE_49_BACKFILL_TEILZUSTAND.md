@@ -44,6 +44,12 @@ Pipeline-Recovery erforderlich. Ihre konkrete Ausgestaltung ist offen.
 Die beiden gefundenen direkten Skriptaufrufer (`import_jup_solscan_balance_change_v2.py`
 und `run_v1_solana_rpc_migration_v2.py`) stoppen bei unbekanntem Speicherstand
 oder fehlgeschlagener Backfill-Pipeline vor weiteren Verarbeitungsschritten.
+Dies gilt auch fuer fehlgeschlagene einzelne Preisjobs bei ansonsten erfolgreich
+abgeschlossener Pipeline. Abbruch- und Deadline-Signale werden durch den
+historischen Dienst nicht als Preisfehler verschluckt; bereits gesammelte
+Preiskandidaten werden dann dort nicht gespeichert. Das allgemeine
+Ausnahme- und Wiederherstellungsverhalten der Skripte bei solchen Signalen
+ist damit nicht abgesichert (siehe #53).
 Im Live-Zweig erfolgt fuer diese Fehler keine automatische Backup-Rueckkopie;
 fruehere Schritte koennen bereits Aenderungen vorgenommen haben. Der Zielzustand
 bleibt unbekannt oder teilweise und muss geprueft werden. IDs aus einer vor dem
@@ -84,6 +90,11 @@ von dieser Aenderung nicht abgedeckt. #44 aendert dieselben Dateien und
 Vertrags-/Warnungsbereiche; Integration und Konfliktaufloesung sind gesondert
 abzustimmen. #46 bleibt ebenfalls unabhaengig.
 
+Insbesondere besitzt der aktuelle Portfolio-Backfill separate Provider-,
+Speicher- und Pipelinefehlerpfade; deren Geheimnis- und Teilzustandsbehandlung
+ist hier nicht nachgewiesen. Automatische Frontend-Refreshes bei einem
+Navigationswechsel koennen eine Warnung weiterhin ausblenden.
+
 ## Review-Pruefstand
 
 - OpenAPI und Endpunktreferenz regeneriert; beide Generatoren bestehen
@@ -95,3 +106,5 @@ abzustimmen. #46 bleibt ebenfalls unabhaengig.
   die vollstaendige Testsuite sind damit nicht abgedeckt.
 - Keine produktiven Daten, Container oder echten Preisprovider fuer diese
   Pruefungen; die beobachteten Duplikat- und Speicherfehler bleiben offen.
+- Integrationsstand: 101 Tests fuer FX-, Stichtags-, Teilzustands- und direkte
+  Skriptpfade bestanden; zusaetzlich Ruff fuer die geaenderten Pythondateien.

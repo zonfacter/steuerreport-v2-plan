@@ -132,6 +132,24 @@ def test_as_of_price_gate_backfill_adds_same_day_price_without_pipeline_rebuild(
     assert TaxService(store).list_tax_lines() == []
 
 
+@pytest.mark.parametrize("signal_name", ["RequestCancelled", "RequestDeadlineExceeded"])
+def test_as_of_backfill_propagates_cancellation_without_writes(tmp_path, monkeypatch, signal_name):
+    from steuerreport_v2.domain import request_limits
+
+    signal = getattr(request_limits, signal_name)
+    store = _store(tmp_path)
+    before = [point.model_dump(mode="json") for point in store.list_price_points()]
+    fx_path = _fx_db(tmp_path / "fx.db")
+    def cancel(*args, **kwargs):
+        raise signal("synthetic cancellation")
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", cancel)
+    with pytest.raises(signal):
+        AsOfPriceGateService(store, artifact_root=tmp_path / "price-gate-runs").backfill(
+            AsOfPriceGateBackfillRequest(as_of=AS_OF, v1_fx_db_path=str(fx_path), dry_run=False)
+        )
+    assert [point.model_dump(mode="json") for point in store.list_price_points()] == before
+
+
 def test_as_of_price_gate_backfill_supports_defillama_only_asset(tmp_path, monkeypatch):
     store = _store(tmp_path, asset="JLWSOL")
     fx_path = _fx_db(tmp_path / "fx.db")

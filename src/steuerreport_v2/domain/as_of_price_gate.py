@@ -10,6 +10,7 @@ from pathlib import Path
 import sqlite3
 
 from steuerreport_v2.domain.external_http import managed_client
+from steuerreport_v2.domain.request_limits import RequestCancelled, RequestDeadlineExceeded
 
 from steuerreport_v2.contracts.prices import (
     AsOfPriceGateBackfillJob,
@@ -354,6 +355,8 @@ class AsOfPriceGateService:
                         date_str=price_date.isoformat(),
                         provider=provider,
                     )
+                except (RequestCancelled, RequestDeadlineExceeded):
+                    raise
                 except Exception:
                     logger.error("As-of price backfill provider request failed")
                     price_usd = Decimal("0")

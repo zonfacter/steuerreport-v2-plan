@@ -19,6 +19,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.external_price_backfill import (
     ExternalPriceBackfillService,
     HistoricalBackfillIncompleteError,
+    HistoricalBackfillJobsFailed,
     HistoricalBackfillPipelineFailed,
     require_backfill_pipeline_success,
 )
@@ -80,7 +81,7 @@ def main() -> int:
     except HistoricalBackfillIncompleteError as exc:
         result["blocked_reason"] = "stage_price_backfill_incomplete"
         result["error"] = str(exc)
-        if isinstance(exc, HistoricalBackfillPipelineFailed):
+        if isinstance(exc, (HistoricalBackfillPipelineFailed, HistoricalBackfillJobsFailed)):
             result["stage_confirmed_backfill_price_ids"] = exc.stored_price_ids
         print(json.dumps(result, indent=2, default=str))
         return 2
@@ -113,7 +114,7 @@ def main() -> int:
         result["blocked_reason"] = "live_price_backfill_incomplete_state_unknown_or_partial"
         result["target_changed"] = None
         result["error"] = str(exc)
-        if isinstance(exc, HistoricalBackfillPipelineFailed):
+        if isinstance(exc, (HistoricalBackfillPipelineFailed, HistoricalBackfillJobsFailed)):
             result["live_confirmed_backfill_price_ids"] = exc.stored_price_ids
         print(json.dumps(result, indent=2, default=str))
         return 2

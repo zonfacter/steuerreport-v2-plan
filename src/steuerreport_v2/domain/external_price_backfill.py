@@ -23,6 +23,7 @@ from steuerreport_v2.contracts.prices import (
 from steuerreport_v2.contracts.common import ApiMessage
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.domain.request_limits import RequestCancelled, RequestDeadlineExceeded
 from steuerreport_v2.domain.valuation import PriceCoverageService
 from steuerreport_v2.domain.historical_fx import FxReference, cache_fx_reference, select_fx_reference
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
@@ -69,9 +70,17 @@ class HistoricalBackfillPipelineFailed(HistoricalBackfillIncompleteError):
         self.stored_price_ids = list(stored_price_ids or [])
 
 
+class HistoricalBackfillJobsFailed(HistoricalBackfillIncompleteError):
+    def __init__(self, stored_price_ids: list[str] | None = None) -> None:
+        super().__init__("Preisbackfill: Preisjobs fehlgeschlagen; Ergebnisse vor Fortsetzung pruefen.")
+        self.stored_price_ids = list(stored_price_ids or [])
+
+
 def require_backfill_pipeline_success(result: ExternalPriceBackfillResult) -> None:
     if result.pipeline_status == "failed":
         raise HistoricalBackfillPipelineFailed(result.stored_price_ids)
+    if result.failed:
+        raise HistoricalBackfillJobsFailed(result.stored_price_ids)
 
 
 def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
@@ -80,6 +89,10 @@ def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
         warnings.append(ApiMessage(code=FX_REFERENCE_INVALID, message=FX_REFERENCE_INVALID_MESSAGE))
     if any(job.reason == FX_REFERENCE_UNVERIFIED for job in jobs):
         warnings.append(ApiMessage(code=FX_REFERENCE_UNVERIFIED, message=FX_REFERENCE_UNVERIFIED_MESSAGE))
+    if any(job.reason == FX_SOURCE_UNREADABLE for job in jobs):
+        warnings.append(ApiMessage(code=FX_SOURCE_UNREADABLE, message="Die FX-Quelle konnte nicht gelesen werden."))
+    if any(job.reason == PRICE_PROVIDER_ERROR for job in jobs):
+        warnings.append(ApiMessage(code=PRICE_PROVIDER_ERROR, message="Ein Preisabruf ist fehlgeschlagen."))
     if any(job.reason == PRICE_CANDIDATE_OUT_OF_RANGE for job in jobs):
         warnings.append(ApiMessage(code=PRICE_CANDIDATE_OUT_OF_RANGE, message=(
             "Ein nicht darstellbarer Preiskandidat wurde verworfen; ein anderer Kurs wurde verwendet. "
@@ -246,6 +259,8 @@ class ExternalPriceBackfillService:
                     fetch_kwargs["defillama_id"] = asset.defillama_id
                 try:
                     price_usd, source = self._fetch_price_usd(**fetch_kwargs)
+                except (RequestCancelled, RequestDeadlineExceeded):
+                    raise
                 except Exception:
                     logger.error("Historical price backfill provider request failed")
                     failed += 1

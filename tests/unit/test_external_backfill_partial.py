@@ -16,6 +16,7 @@ from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
 from steuerreport_v2.domain.historical_fx import FxReference
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.domain.request_limits import RequestCancelled, RequestDeadlineExceeded
 from steuerreport_v2.domain.valuation import PriceCoverageService
 
 
@@ -58,12 +59,15 @@ def test_storage_unknown_preserves_prior_safe_warnings_without_ids(tmp_path, mon
     store = DuckDbStore(tmp_path / "isolated.duckdb")
     config = tmp_path / "assets.json"
     config.write_text('{"assets":[{"symbol":"SYNTH","coingecko_id":"synthetic"}]}')
-    requirements = [SimpleNamespace(asset="SYNTH", price_date=date(2024, 1, day)) for day in (1, 2, 3)]
+    requirements = [SimpleNamespace(asset="SYNTH", price_date=date(2024, 1, day)) for day in (1, 2, 3, 4)]
     monkeypatch.setattr(PriceCoverageService, "requirements", lambda self: SimpleNamespace(requirements=requirements))
     monkeypatch.setattr("steuerreport_v2.domain.external_price_backfill.managed_client", lambda **kwargs: nullcontext(object()))
     fx = FxReference(Decimal("0.9"), date(2023, 12, 31), "USD", "EUR", Decimal("0.9"), "synthetic")
-    monkeypatch.setattr(ExternalPriceBackfillService, "_timed_usd_eur_reference",
-                        lambda self, path, day: None if day.endswith("03") else fx)
+    def get_fx(self, path, day):
+        if day.endswith("04"):
+            raise sqlite3.DatabaseError("synthetic-corrupt-fx")
+        return None if day.endswith("03") else fx
+    monkeypatch.setattr(ExternalPriceBackfillService, "_timed_usd_eur_reference", get_fx)
     def fetch(self, **kwargs):
         if kwargs["date_str"].endswith("02"):
             raise RuntimeError("SYNTHETIC_PROVIDER_CANARY")
@@ -81,9 +85,34 @@ def test_storage_unknown_preserves_prior_safe_warnings_without_ids(tmp_path, mon
     assert "stored_price_ids" not in body["data"]
     assert {warning["code"] for warning in body["warnings"]} >= {
         "usd_eur_daily_reference_unverified", "usd_eur_source_date_or_source_invalid", "price_backfill_partial_failure",
+        "usd_eur_source_unreadable", "price_provider_error",
     }
     assert "SYNTHETIC_PROVIDER_CANARY" not in response.text + caplog.text
     assert "SYNTHETIC_STORAGE_CANARY" not in response.text + caplog.text
+    assert not store.list_price_points()
+
+
+@pytest.mark.parametrize("signal", [RequestCancelled, RequestDeadlineExceeded])
+def test_cancelled_historical_backfill_does_not_store_earlier_candidates(tmp_path, monkeypatch, signal):
+    store = DuckDbStore(tmp_path / "isolated.duckdb")
+    config = tmp_path / "assets.json"
+    config.write_text('{"assets":[{"symbol":"SYNTH","coingecko_id":"synthetic"}]}')
+    requirements = [SimpleNamespace(asset="SYNTH", price_date=date(2024, 1, day)) for day in (1, 2)]
+    monkeypatch.setattr(PriceCoverageService, "requirements", lambda self: SimpleNamespace(requirements=requirements))
+    monkeypatch.setattr("steuerreport_v2.domain.external_price_backfill.managed_client", lambda **kwargs: nullcontext(object()))
+    fx = FxReference(Decimal("0.9"), date(2023, 12, 31), "USD", "EUR", Decimal("0.9"), "synthetic")
+    monkeypatch.setattr(ExternalPriceBackfillService, "_timed_usd_eur_reference", lambda self, *args: fx)
+    def fetch(self, **kwargs):
+        if kwargs["date_str"].endswith("02"):
+            raise signal("synthetic cancellation")
+        return Decimal("100"), "synthetic"
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", fetch)
+    monkeypatch.setattr(PipelineService, "rebuild_all", lambda self: pytest.fail("pipeline must not start"))
+    with pytest.raises(signal):
+        ExternalPriceBackfillService(store).run(
+            config_path=str(config), v1_fx_db_path=str(tmp_path / "unused"), provider="auto", assets_filter=[],
+            max_requests=5, timeout_seconds=5, confidence=Decimal("1"), dry_run=False,
+        )
     assert not store.list_price_points()
 
 
