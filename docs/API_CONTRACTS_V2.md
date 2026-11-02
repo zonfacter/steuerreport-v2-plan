@@ -1473,7 +1473,12 @@ Der Request enthaelt bevorzugt `as_of_date`, alternativ einen expliziten
 Provider, Confidence und `dry_run`. `as_of_date` wird als deutsches Tagesende
 nach UTC normalisiert. Standard ist `dry_run=true`. Fuer alte
 Stichtage nutzt der produktive Pfad DefiLlama fuer den USD-Preis und den
-vorhandenen V1-FX-Cache fuer den belegten USD/EUR-Tageskurs. Apply schreibt nur
+vorhandenen V1-FX-Cache fuer den USD/EUR-Tageskurs. Ein fehlendes originales
+`source_rate_date`, ein leeres Quelllabel oder eine nach der bestehenden
+Sieben-Tage-Regel ungueltige Referenz blockiert den Abruf mit `422`. Der
+Quelltag muss vor dem Bewertungstag liegen. Die zeitlich begrenzte Referenz
+hat keinen geprueften Originalbeleg; Quelltag und Quelllabel belegen weder
+Veroeffentlichungszeit noch Snapshot-Integritaet. Apply schreibt nur
 neue Price-Ledger-Punkte. Es startet bewusst keinen automatischen Ledger- oder
 Steuer-FIFO-Rebuild. Ein unverified Risikotoken bleibt trotz Preis blockiert,
 bis der nachfolgende Review-Endpunkt fuer genau Datum, Asset und Mint eine
@@ -1561,8 +1566,12 @@ Endpunkt baut aus den offenen V2-Preisbedarfen eine Jobliste, nutzt das
 Asset-Mapping aus `configs/crypto_price_sources.json`, fragt je nach Provider
 CoinGecko und/oder DefiLlama fuer `Asset/USD` ab und kombiniert den Wert mit
 `USD/EUR` aus dem V1-`fx_cache`. Mit `dry_run=true` wird nur geplant; mit
-`dry_run=false` werden belegte EUR-Preise in das V2-Price-Ledger geschrieben
+`dry_run=false` werden EUR-Preiskandidaten in das V2-Price-Ledger geschrieben
 und die Pipeline neu berechnet. `max_requests` begrenzt externe Abrufe.
+Ohne originalen FX-Quelltag vor dem Bewertungstag, nichtleeres Quelllabel oder gueltige Sieben-Tage-
+Referenz bleibt die betroffene Zeile offen (`usd_eur_source_date_or_source_invalid`);
+die API gibt auch bei begrenzter Jobliste eine Warnung aus. Die zeitlich
+begrenzte Referenz hat keinen geprueften Originalbeleg oder intrataeglichen Zeitpunkt.
 Optional kann `assets` als Liste von Asset-Symbolen gesetzt werden, damit
 problematische Quellen getrennt von anderen Preisbedarfen verarbeitet werden,
 zum Beispiel `["BTTC", "VTHO", "NFT"]`.
@@ -1580,9 +1589,17 @@ nutzt dasselbe Asset-Mapping aus `configs/crypto_price_sources.json`, kann per
 `dry_run=false` neue Price-Ledger-Eintraege mit Quelle
 `coingecko:simple-price:eur`. Solana-Mint-Quellen werden, wenn im Mapping als
 `solana:<mint>` hinterlegt, ueber DefiLlama in USD und den aktuellen
-USD/EUR-Referenzkurs bewertet. Diese aktuellen Preise gewinnen im
-Portfolio-Snapshot gegen alte `derived:event_quote`-Preise, ohne historische
-Steuerbewertungen rueckwirkend zu ersetzen.
+USD/EUR-Referenzkurs bewertet. Diese aktuellen Preise koennen im
+Portfolio-Snapshot gegen alte `derived:event_quote`-Preise gewinnen. Der
+gemeinsame Preis-Ledger und die Pipeline werden geschrieben beziehungsweise
+neu berechnet; Auswirkungen auf Bewertungen muessen gesondert geprueft werden.
+Bei USD/EUR via Frankfurter werden USD-Basis, Einheitsbetrag und ein vor dem
+Bewertungstag liegender, hoechstens sieben Kalendertage alter Quelltag verlangt.
+Ein unabhaengiger direkter EUR-Preis kann dennoch verwendet werden. Ein
+fehlender oder ungueltiger FX-Bezug wird auch bei erfolgreichem EUR-Fallback als Jobgrund und API-Warnung gemeldet.
+Diese Pruefung belegt nicht den genauen Provider-Kurszeitpunkt oder die
+Originalantwort; auch der gemeinsame Preis-Ledger-/Pipeline-Pfad bleibt zu
+pruefen.
 
 `GET /api/v1/prices`
 

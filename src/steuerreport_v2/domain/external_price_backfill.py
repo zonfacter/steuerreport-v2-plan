@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation, localcontext
+from decimal import Decimal, DecimalException, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any
 
@@ -18,18 +19,75 @@ from steuerreport_v2.contracts.prices import (
     ExternalPriceBackfillResult,
     PricePointCreate,
 )
+from steuerreport_v2.contracts.common import ApiMessage
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.valuation import PriceCoverageService
-from steuerreport_v2.domain.historical_fx import FxReference, cache_fx_reference
+from steuerreport_v2.domain.historical_fx import FxReference, cache_fx_reference, select_fx_reference
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 from steuerreport_v2.paths import PROJECT_ROOT, resolve_project_path
 
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 DEFILLAMA_COINS_BASE_URL = "https://coins.llama.fi"
 FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
+FX_REFERENCE_INVALID = "usd_eur_source_date_or_source_invalid"
+FX_REFERENCE_UNVERIFIED = "usd_eur_daily_reference_unverified"
+PRICE_CANDIDATE_OUT_OF_RANGE = "price_candidate_out_of_range"
+FX_REFERENCE_INVALID_MESSAGE = (
+    "USD/EUR-Referenz nicht verwendet: Quelltag, Quelllabel oder Waehrungseinheit fehlen "
+    "oder sind ungueltig; der Quelltag muss innerhalb von sieben Tagen vor dem Bewertungstag liegen. "
+    "Auch eine zulaessige Tagesreferenz ist nur zeitlich begrenzt und ohne geprueften Originalbeleg; "
+    "eine intrataegliche Kurs- oder Veroeffentlichungszeit wurde nicht geprueft."
+)
+FX_REFERENCE_UNVERIFIED_MESSAGE = (
+    "Die USD/EUR-Tagesreferenz besteht nur die begrenzte technische Datumspruefung. "
+    "Originalbeleg, Veroeffentlichungszeit und intrataegliche Kurszeit sind nicht geprueft; "
+    "dies ist keine fachliche Freigabe."
+)
 DEFAULT_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.json"
 EXAMPLE_CONFIG = PROJECT_ROOT / "configs/crypto_price_sources.example.json"
+
+
+def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
+    warnings = []
+    if any(job.reason == FX_REFERENCE_INVALID for job in jobs):
+        warnings.append(ApiMessage(code=FX_REFERENCE_INVALID, message=FX_REFERENCE_INVALID_MESSAGE))
+    if any(job.reason == FX_REFERENCE_UNVERIFIED for job in jobs):
+        warnings.append(ApiMessage(code=FX_REFERENCE_UNVERIFIED, message=FX_REFERENCE_UNVERIFIED_MESSAGE))
+    if any(job.reason == PRICE_CANDIDATE_OUT_OF_RANGE for job in jobs):
+        warnings.append(ApiMessage(code=PRICE_CANDIDATE_OUT_OF_RANGE, message=(
+            "Ein nicht darstellbarer Preiskandidat wurde verworfen; ein anderer Kurs wurde verwendet. "
+            "Die Quelle und Bewertung bleiben zu pruefen."
+        )))
+    return warnings
+
+
+def backfill_result_warnings(result: Any) -> list[ApiMessage]:
+    warnings = fx_reference_warnings(result.jobs)
+    if result.failed:
+        warnings.append(ApiMessage(code="price_backfill_partial_failure", message=(
+            f"{result.failed} Preisabrufe sind fehlgeschlagen; bereits gespeicherte Preise "
+            "bleiben bestehen. Einzelne Ergebnisse vor einem erneuten Abruf pruefen."
+        )))
+    return warnings
+
+
+def checked_eur_price(price_usd: Decimal, usd_eur: Decimal) -> Decimal | None:
+    """Return only positive values representable by the price ledger's DECIMAL(38,18)."""
+    if not price_usd.is_finite() or not usd_eur.is_finite() or price_usd <= 0 or usd_eur <= 0:
+        return None
+    digits = len(price_usd.as_tuple().digits) + len(usd_eur.as_tuple().digits)
+    if digits > 256:
+        return None
+    try:
+        with localcontext() as arithmetic:
+            arithmetic.prec = max(60, digits + 20)
+            value = (price_usd * usd_eur).quantize(Decimal("0.000000000000000001"))
+    except DecimalException:
+        return None
+    if not value.is_finite() or value <= 0 or value >= Decimal("1e20"):
+        return None
+    return value
 
 
 @dataclass(frozen=True)
@@ -104,7 +162,7 @@ class ExternalPriceBackfillService:
                         )
                     )
                     continue
-                fx_reference = self._usd_eur_reference(v1_fx_db_path, requirement.price_date.isoformat())
+                fx_reference = self._timed_usd_eur_reference(v1_fx_db_path, requirement.price_date.isoformat())
                 if fx_reference is None:
                     skipped += 1
                     jobs.append(
@@ -113,7 +171,7 @@ class ExternalPriceBackfillService:
                             price_date=requirement.price_date,
                             provider_id=asset.coingecko_id or asset.defillama_id,
                             status="skipped",
-                            reason="usd_eur_missing",
+                            reason=FX_REFERENCE_INVALID,
                         )
                     )
                     continue
@@ -126,6 +184,7 @@ class ExternalPriceBackfillService:
                             price_date=requirement.price_date,
                             provider_id=asset.coingecko_id or asset.defillama_id,
                             status="planned",
+                            reason=FX_REFERENCE_UNVERIFIED,
                             usd_eur=usd_eur,
                         )
                     )
@@ -143,7 +202,7 @@ class ExternalPriceBackfillService:
                 price_usd, source = self._fetch_price_usd(**fetch_kwargs)
                 price_source_date = requirement.price_date.isoformat()
                 # A later first quote is not evidence for this historical event day.
-                if price_usd <= 0:
+                if not price_usd.is_finite() or price_usd <= 0:
                     failed += 1
                     jobs.append(
                         ExternalPriceBackfillJob(
@@ -155,9 +214,15 @@ class ExternalPriceBackfillService:
                         )
                     )
                     continue
-                with localcontext() as arithmetic:
-                    arithmetic.prec = 60
-                    price_eur = (price_usd * usd_eur).quantize(Decimal("0.000000000000000001"))
+                price_eur = checked_eur_price(price_usd, usd_eur)
+                if price_eur is None:
+                    failed += 1
+                    jobs.append(ExternalPriceBackfillJob(
+                        asset=requirement.asset, price_date=requirement.price_date,
+                        provider_id=asset.coingecko_id or asset.defillama_id,
+                        status="failed", reason="price_out_of_range",
+                    ))
+                    continue
                 source_label = f"{source}:usd_eur:v1_fx_cache:{price_source_date}:{fx_reference.source_suffix()}"
                 prices.append(
                     PricePointCreate(
@@ -178,6 +243,7 @@ class ExternalPriceBackfillService:
                         price_date=requirement.price_date,
                         provider_id=asset.coingecko_id,
                         status="imported",
+                        reason=FX_REFERENCE_UNVERIFIED,
                         price_usd=price_usd,
                         usd_eur=usd_eur,
                         price_eur=price_eur,
@@ -189,6 +255,14 @@ class ExternalPriceBackfillService:
         if prices:
             self.store.add_price_points(prices)
             pipeline = PipelineService(self.store).rebuild_all()
+        visible_jobs = jobs[:200]
+        for reason in (FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED):
+            if any(job.reason == reason for job in jobs) and not any(job.reason == reason for job in visible_jobs):
+                counts = Counter(job.reason for job in visible_jobs)
+                replace_at = next(i for i in range(len(visible_jobs) - 1, -1, -1)
+                                  if visible_jobs[i].reason not in {FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED}
+                                  or counts[visible_jobs[i].reason] > 1)
+                visible_jobs[replace_at] = next(job for job in jobs if job.reason == reason)
         return ExternalPriceBackfillResult(
             requirements_count=len(requirements),
             configured_assets=sorted({asset.symbol for asset in assets}),
@@ -199,7 +273,7 @@ class ExternalPriceBackfillService:
             skipped=skipped,
             failed=failed,
             dry_run=dry_run,
-            jobs=jobs[:200],
+            jobs=visible_jobs,
             pipeline=pipeline,
         )
 
@@ -271,6 +345,7 @@ class ExternalPriceBackfillService:
         defillama_prices_usd: dict[str, Decimal] = {}
         usd_eur = Decimal("0")
         fx_source_date = ""
+        fx_reference = None
         if configured and not dry_run:
             with managed_client(
                 timeout=timeout_seconds,
@@ -298,6 +373,11 @@ class ExternalPriceBackfillService:
                 )
                 if defillama_prices_usd:
                     usd_eur, fx_source_date = self._fetch_frankfurter_usd_eur(client)
+                    fx_reference = select_fx_reference(
+                        [{"base": "USD", "quote": "EUR", "rate": usd_eur, "date": fx_source_date}]
+                        if fx_source_date < priced_at.date().isoformat() else [],
+                        priced_at.date(),
+                    )
 
         for asset_symbol, asset in configured.items():
             attempted += 1
@@ -318,17 +398,32 @@ class ExternalPriceBackfillService:
                 )
                 continue
             price_eur = Decimal("0")
-            if asset.defillama_id and usd_eur > 0:
-                price_usd = defillama_prices_usd.get(asset.defillama_id, Decimal("0"))
-                if price_usd > 0:
-                    price_eur = price_usd * usd_eur
+            price_usd = defillama_prices_usd.get(asset.defillama_id, Decimal("0")) if asset.defillama_id else Decimal("0")
+            fx_rejected = bool(price_usd.is_finite() and price_usd > 0 and fx_reference is None)
+            used_fx = False
+            price_out_of_range = False
+            if asset.defillama_id and fx_reference is not None:
+                if price_usd.is_finite() and price_usd > 0:
+                    converted = checked_eur_price(price_usd, usd_eur)
+                    price_out_of_range = converted is None
+                    price_eur = converted or Decimal("0")
                     source_label = (
                         "defillama_token_current:usd_eur:"
                         f"frankfurter_latest:{fx_source_date}"
                     )
+                    used_fx = True
             if price_eur <= 0 and asset.coingecko_id:
-                price_eur = coingecko_prices.get(asset.coingecko_id, Decimal("0"))
-                source_label = f"{normalized_provider}:simple-price:eur"
+                direct = coingecko_prices.get(asset.coingecko_id, Decimal("0"))
+                if direct.is_finite() and direct > 0:
+                    provider_id = asset.coingecko_id
+                    source_label = f"{normalized_provider}:simple-price:eur"
+                converted = checked_eur_price(direct, Decimal("1"))
+                price_out_of_range = price_out_of_range or (direct.is_finite() and direct > 0 and converted is None)
+                price_eur = converted or Decimal("0")
+                if price_eur > 0:
+                    provider_id = asset.coingecko_id
+                    source_label = f"{normalized_provider}:simple-price:eur"
+                    used_fx = False
             if price_eur <= 0:
                 failed += 1
                 jobs.append(
@@ -336,7 +431,7 @@ class ExternalPriceBackfillService:
                         asset=asset_symbol,
                         provider_id=provider_id,
                         status="failed",
-                        reason="asset_eur_missing",
+                        reason=FX_REFERENCE_INVALID if fx_rejected else ("price_out_of_range" if price_out_of_range else "asset_eur_missing"),
                         source=source_label,
                     )
                 )
@@ -355,6 +450,9 @@ class ExternalPriceBackfillService:
                     asset=asset_symbol,
                     provider_id=provider_id,
                     status="imported",
+                    reason=(FX_REFERENCE_INVALID if fx_rejected else
+                            PRICE_CANDIDATE_OUT_OF_RANGE if price_out_of_range else
+                            FX_REFERENCE_UNVERIFIED if used_fx else None),
                     price_eur=price_eur,
                     source=source_label,
                 )
@@ -456,6 +554,17 @@ class ExternalPriceBackfillService:
             return None
         with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as con:
             return cache_fx_reference(con, date.fromisoformat(rate_date))
+
+    def _timed_usd_eur_reference(self, db_path: str, rate_date: str) -> FxReference | None:
+        path = Path(db_path).expanduser()
+        if not path.exists():
+            return None
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as con:
+            columns = {row[1] for row in con.execute("pragma table_info(fx_cache)").fetchall()}
+            if "source_rate_date" not in columns:
+                return None
+            reference = cache_fx_reference(con, date.fromisoformat(rate_date), before_day=True, require_source=True)
+        return reference if reference and reference.source.strip() else None
 
     def _fetch_price_usd(
         self,
@@ -594,10 +703,18 @@ class ExternalPriceBackfillService:
             return Decimal("0"), ""
         response.raise_for_status()
         data = response.json()
+        if not isinstance(data, dict) or data.get("base") != "USD":
+            return Decimal("0"), ""
+        amount = self._decimal(data.get("amount"))
+        if not amount.is_finite() or amount != 1:
+            return Decimal("0"), ""
         rates = data.get("rates") if isinstance(data, dict) else None
         if not isinstance(rates, dict):
             return Decimal("0"), ""
-        return self._decimal(rates.get("EUR")), str(data.get("date") or "")
+        rate = self._decimal(rates.get("EUR"))
+        if not rate.is_finite() or rate <= 0:
+            return Decimal("0"), ""
+        return rate, str(data.get("date") or "")
 
     def _fetch_coingecko_simple_prices_eur(
         self,
@@ -631,6 +748,7 @@ class ExternalPriceBackfillService:
 
     def _decimal(self, value: Any) -> Decimal:
         try:
-            return Decimal(str(value))
+            result = Decimal(str(value))
+            return result if result.is_finite() else Decimal("0")
         except (InvalidOperation, ValueError):
             return Decimal("0")

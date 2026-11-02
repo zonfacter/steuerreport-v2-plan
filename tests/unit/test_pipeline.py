@@ -1,6 +1,6 @@
 import sqlite3
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import json
 from pathlib import Path
@@ -846,7 +846,7 @@ def test_external_price_backfill_dry_run_plans_configured_requirements(tmp_path)
         )
         con.execute(
             "insert into fx_cache values (?, ?, ?, ?, ?, ?, ?)",
-            ("2024-01-01", "USD", "EUR", "0.91", "ecb", "2024-01-01", "now"),
+            ("2024-01-01", "USD", "EUR", "0.91", "ecb", "2023-12-31", "now"),
         )
     client = TestClient(create_app(store))
 
@@ -982,7 +982,7 @@ def test_external_price_backfill_never_backdates_first_available_following_price
         )
         con.execute(
             "insert into fx_cache values (?, ?, ?, ?, ?, ?, ?)",
-            ("2023-04-20", "USD", "EUR", "0.90", "ecb", "2023-04-20", "now"),
+            ("2023-04-20", "USD", "EUR", "0.90", "ecb", "2023-04-19", "now"),
         )
         con.execute(
             "insert into fx_cache values (?, ?, ?, ?, ?, ?, ?)",
@@ -1187,10 +1187,11 @@ def test_current_portfolio_price_backfill_prefers_exact_defillama_mint(
         "_fetch_defillama_current_prices_usd",
         lambda self, client, token_ids: {mint_id: Decimal("75")},
     )
+    fx_day = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
     monkeypatch.setattr(
         ExternalPriceBackfillService,
         "_fetch_frankfurter_usd_eur",
-        lambda self, client: (Decimal("0.90"), "2026-05-22"),
+        lambda self, client: (Decimal("0.90"), fx_day),
     )
     client = TestClient(create_app(store))
 
@@ -1211,7 +1212,7 @@ def test_current_portfolio_price_backfill_prefers_exact_defillama_mint(
     assert body["jobs"][0]["price_eur"] == "67.50"
     assert (
         body["jobs"][0]["source"]
-        == "defillama_token_current:usd_eur:frankfurter_latest:2026-05-22"
+        == f"defillama_token_current:usd_eur:frankfurter_latest:{fx_day}"
     )
     latest = store.latest_price_points()["JLWSOL"]
     assert latest.price_eur == Decimal("67.500000000000000000")

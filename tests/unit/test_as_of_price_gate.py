@@ -4,6 +4,7 @@ import json
 import sqlite3
 
 from fastapi.testclient import TestClient
+import pytest
 
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.events import CanonicalEventCreate
@@ -51,11 +52,11 @@ def _store(tmp_path, asset="BTC"):
 def _fx_db(path):
     with sqlite3.connect(path) as con:
         con.execute(
-            "create table fx_cache (rate_date text, base_ccy text, quote_ccy text, rate text, source text)"
+            "create table fx_cache (rate_date text, base_ccy text, quote_ccy text, rate text, source text, source_rate_date text)"
         )
         con.execute(
-            "insert into fx_cache values (?, 'USD', 'EUR', '0.9', 'test')",
-            ("2025-06-13",),
+            "insert into fx_cache values (?, 'USD', 'EUR', '0.9', 'test', ?)",
+            ("2025-06-13", "2025-06-12"),
         )
     return path
 
@@ -124,6 +125,7 @@ def test_as_of_price_gate_backfill_adds_same_day_price_without_pipeline_rebuild(
 
     assert result.imported_prices == 1
     assert result.jobs[0].price_eur == Decimal("90.0")
+    assert "Quelltag" in result.methodology and "Originalbeleg" in result.methodology
     assert result.gate_before.strict_ready is False
     assert result.gate_after.strict_ready is True
     assert result.gate_after.candidates[0].current_price_status == "same_day"
@@ -171,6 +173,116 @@ def test_as_of_price_gate_backfill_supports_defillama_only_asset(tmp_path, monke
     assert result.gate_after.strict_ready is True
     assert calls[0]["coingecko_id"] is None
     assert calls[0]["defillama_id"] == "solana:jlwsol-mint"
+
+
+@pytest.mark.parametrize("with_source_date,source", [(False, "test"), (True, "   ")])
+def test_as_of_backfill_rejects_unbound_fx_without_writes(tmp_path, monkeypatch, with_source_date, source):
+    store = _store(tmp_path)
+    path = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(path) as con:
+        con.execute("create table fx_cache (rate_date text, base_ccy text, quote_ccy text, rate text, source text" + (", source_rate_date text" if with_source_date else "") + ")")
+        values = ("2025-06-13", "USD", "EUR", "0.9", source) + (("2025-06-13",) if with_source_date else ())
+        con.execute("insert into fx_cache values (" + ",".join("?" for _ in values) + ")", values)
+    before = path.read_bytes()
+    original_prices = store.list_price_points()
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", lambda *args, **kwargs: (Decimal("100"), "synthetic"))
+    service = AsOfPriceGateService(store, artifact_root=tmp_path / "artifacts")
+    with pytest.raises(ValueError, match="USD/EUR.*Quelltag.*Quelllabel"):
+        service.backfill(AsOfPriceGateBackfillRequest(as_of=AS_OF, v1_fx_db_path=str(path), dry_run=False))
+    assert store.list_price_points() == original_prices and path.read_bytes() == before
+    assert not (tmp_path / "artifacts").exists()
+
+
+def test_as_of_api_reports_missing_fx_source_date(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    path = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(path) as con:
+        con.execute("create table fx_cache (rate_date text, base_ccy text, quote_ccy text, rate text, source text)")
+        con.execute("insert into fx_cache values ('2025-06-13', 'USD', 'EUR', '0.9', 'test')")
+    original_prices = store.list_price_points()
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", lambda *args, **kwargs: pytest.fail("unexpected provider call"))
+    response = TestClient(create_app(store)).post("/api/v1/prices/as-of-gate/backfill", json={
+        "as_of": AS_OF.isoformat(), "v1_fx_db_path": str(path), "dry_run": False,
+    })
+    assert response.status_code == 422
+    assert "Quelltag" in response.json()["detail"] and "Originalbeleg" in response.json()["detail"]
+    assert store.list_price_points() == original_prices
+    assert not (tmp_path / "var/price_gate_runs").exists()
+
+
+def test_as_of_api_warns_about_unverified_daily_fx(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    path = _fx_db(tmp_path / "fx.db")
+    monkeypatch.setattr(
+        ExternalPriceBackfillService, "_fetch_price_usd",
+        lambda *args, **kwargs: pytest.fail("dry run must not call provider"),
+    )
+    response = TestClient(create_app(store)).post("/api/v1/prices/as-of-gate/backfill", json={
+        "as_of": AS_OF.isoformat(), "v1_fx_db_path": str(path), "dry_run": True,
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "warning"
+    assert body["warnings"][0]["code"] == "usd_eur_daily_reference_unverified"
+    assert "Originalbeleg" in body["warnings"][0]["message"]
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_as_of_rejects_same_day_fx_without_publication_time(tmp_path, monkeypatch, dry_run):
+    store = _store(tmp_path)
+    path = _fx_db(tmp_path / "fx.db")
+    with sqlite3.connect(path) as con:
+        con.execute("update fx_cache set source_rate_date = '2025-06-13'")
+    before = store.list_price_points()
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", lambda *a, **k: pytest.fail("unexpected request"))
+    service = AsOfPriceGateService(store, artifact_root=tmp_path / "artifacts")
+    with pytest.raises(ValueError, match="frueheren Quelltags"):
+        service.backfill(AsOfPriceGateBackfillRequest(as_of=AS_OF, v1_fx_db_path=str(path), dry_run=dry_run))
+    assert store.list_price_points() == before
+    assert not (tmp_path / "artifacts").exists()
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_empty_as_of_plan_needs_no_fx_or_provider(tmp_path, monkeypatch, dry_run):
+    store = _store(tmp_path)
+    before = store.list_price_points()
+    artifact_root = tmp_path / "artifacts"
+    artifact_root.mkdir()
+    latest = artifact_root / "latest_as_of_price_gate_run.json"
+    latest.write_bytes(b"previous run")
+    monkeypatch.setattr(
+        ExternalPriceBackfillService, "_timed_usd_eur_reference",
+        lambda *args: pytest.fail("empty plan must not access FX"),
+    )
+    monkeypatch.setattr(
+        "steuerreport_v2.domain.as_of_price_gate.managed_client",
+        lambda **kwargs: pytest.fail("empty plan must not create a provider client"),
+    )
+    result = AsOfPriceGateService(store, artifact_root=artifact_root).backfill(
+        AsOfPriceGateBackfillRequest(as_of=AS_OF, assets=["NO_MATCH"], dry_run=dry_run)
+    )
+    assert result.attempted == result.imported_prices == 0
+    assert result.jobs == []
+    assert store.list_price_points() == before
+    assert latest.read_bytes() == b"previous run"
+    assert "kein FX- oder Providerabruf" in result.methodology
+
+
+@pytest.mark.parametrize("price", ["1e100", "1e1000000", "1e-50"])
+def test_as_of_out_of_range_price_fails_without_ledger_write(tmp_path, monkeypatch, price):
+    store = _store(tmp_path)
+    before = store.list_price_points()
+    fx_path = _fx_db(tmp_path / "fx.db")
+    monkeypatch.setattr(
+        ExternalPriceBackfillService, "_fetch_price_usd",
+        lambda *args, **kwargs: (Decimal(price), "synthetic"),
+    )
+    result = AsOfPriceGateService(store, artifact_root=tmp_path / "artifacts").backfill(
+        AsOfPriceGateBackfillRequest(as_of=AS_OF, v1_fx_db_path=str(fx_path), dry_run=False)
+    )
+    assert result.failed == 1 and result.imported_prices == 0
+    assert result.jobs[0].reason == "price_out_of_range"
+    assert store.list_price_points() == before
 
 
 def test_as_of_price_gate_keeps_risk_token_in_review_even_with_same_day_price(tmp_path):
