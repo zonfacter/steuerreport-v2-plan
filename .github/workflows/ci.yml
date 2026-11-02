@@ -10,6 +10,22 @@ permissions:
   contents: read
 
 jobs:
+  python-minimum:
+    name: Locked installation on Python 3.11.0
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11.0"
+      - name: Install every runtime pin and the project
+        run: |
+          python -m pip install --no-deps -r requirements-runtime.lock
+          python -m pip install -c requirements-runtime.lock -e '.[dev]'
+          python -m pip check
+      - name: Dependency smoke tests
+        run: python -m pytest tests/unit/test_python_dependency_compatibility.py tests/unit/test_dockerfile_dependency_cache.py -q
+
   reference-acceptance:
     name: Mandatory independent reference gate
     runs-on: ubuntu-latest
