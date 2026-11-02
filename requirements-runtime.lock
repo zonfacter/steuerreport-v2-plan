@@ -1,4 +1,5 @@
-# Runtime-Versionen fuer das gepruefte RC3-Containerimage.
+# Runtime-Versionen, ausgehend vom geprueften RC3-Containerimage.
+# Python-3.11.0-Kompatibilitaet: soupsieve gegenueber RC3 angepasst (Issue 47).
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
@@ -35,7 +36,7 @@ python-dateutil==3.0.0
 red-black-tree-mod==1.22
 RTFDE==0.1.2.2
 six==1.17.0
-soupsieve==3.0.4
+soupsieve==2.10
 starlette==1.10.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0

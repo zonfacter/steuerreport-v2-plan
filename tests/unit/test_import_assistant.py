@@ -96,6 +96,18 @@ def test_import_assistant_onchain_preview_links_solana_preflights(tmp_path):
     assert preview.linked_preflights[2].writes_database is False
 
 
+def test_import_assistant_v1_cache_is_unverified_and_direct_import_blocked(tmp_path):
+    store = DuckDbStore(tmp_path / "synthetic.duckdb")
+    preview = ImportAssistantService(store).preview(ImportAssistantRequest(source="v1", import_mode="v1_cache"))
+    assert preview.can_execute is False and "gesperrt" in preview.blocked_reason
+    assert preview.execution_plan.writes_database is False
+    link, = preview.linked_preflights
+    assert link.endpoint == "/api/v1/prices/import/v1-fx-cache/preview"
+    assert link.writes_database is True and link.external_requests is False
+    assert "unverbindliche" in link.purpose and "kaltem Store" in link.purpose
+    assert "gesperrt" in link.next_step and "manuell belegen" in link.next_step
+
+
 def test_import_assistant_execute_imports_and_runs_pipeline(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_price_point(

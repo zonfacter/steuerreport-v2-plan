@@ -1523,17 +1523,36 @@ ist fuer belegte historische Preisquellen gedacht und schaetzt keine Preise.
 
 `POST /api/v1/prices/import/v1-fx-cache/preview`
 
-Prueft, welche offenen V2-Preisbedarfe aus dem V1-`fx_cache` belegt werden
-koennen. V1 speichert Asset/USD und USD/EUR getrennt; V2 importiert daraus nur
-dann einen EUR-Preis, wenn fuer den konkreten Asset-Tag ein Asset/USD-Kurs und
-ein USD/EUR-Kurs am selben Tag oder davor vorhanden ist.
+Zeigt unverbindliche Kandidaten fuer offene V2-Preisbedarfe aus dem V1-`fx_cache`.
+Die historischen Feldnamen `importable` und `importable_count` bezeichnen nur
+rechnerische Kandidaten, keine gepruefte Beleg- oder Identitaetsfreigabe. Die
+Antwort traegt immer `status=warning`, `candidate_only=true`,
+`import_allowed=false` sowie einen Blockierungsgrund. V1 speichert Asset/USD
+und USD/EUR getrennt; die Vorschau ersetzt weder einen gebundenen Snapshot noch
+die Pruefung von Kurszeit, Asset-Identitaet und Originalbelegen.
+Nach Storeinitialisierung erfolgen keine Finanzdaten-Schreibvorgaenge; ein
+kalter Store kann beim ersten Zugriff jedoch Schema anlegen oder migrieren.
 
 `POST /api/v1/prices/import/v1-fx-cache`
 
-Importiert die aus V1 belegbaren historischen Preise in das V2-Price-Ledger
-und berechnet die Pipeline neu. Der Standardpfad ist
-`/root/.local/share/steuerreport/steuerreport.db`. Nicht im V1-Cache
-vorhandene Preisbedarfe bleiben offen.
+Ist bis zu einem geprueften Beleg-, Zeit-, Identitaets- und Snapshot-Vertrag
+gesperrt und antwortet mit HTTP 409 und Fehlercode
+`v1_fx_cache_import_blocked_unverified`. Es werden weder Preiszeilen angelegt
+noch die Pipeline neu berechnet. Der interne Legacy-Rechenkern bleibt fuer
+Referenztests vorhanden; seine Preisobjekte sind keine Uebernahmefreigabe.
+Dies sperrt nicht andere eigenstaendige Backfill- oder Importpfade. Insbesondere
+koennen `scripts/run_hnt_legacy_reward_price_repair_20260626.py` und
+`scripts/apply_ready_income_price_repairs_20260626.py` im Dry-run V1-Asset/USD
+als ungepruefte, nicht importierbare Kandidaten anzeigen. Ihr `--execute` wird
+vor Datenbank-, Netzwerk- und Artefaktzugriff immer gesperrt, auch mit
+`--exclude-v1-asset-usd`. Dieser Schalter beeinflusst nur die Auswahl im
+Dry-run; andere Quellen und V1-FX bleiben gesondert zu pruefen und sind nicht
+automatisch belegt oder steuerlich freigegeben. Trockenlaeufe
+koennen Berichte, Provider-Caches oder ein Store-Schema schreiben.
+Externe und Stichtags-Backfills nutzen ebenfalls V1-FX-Daten und werden durch
+diesen Guard nicht abgesichert. Die interne Verwendung der Legacy-Hilfsfunktionen
+aus anderen Programmen ist nicht generell gesperrt. Eine manuelle beleggebundene
+Preisvorschau ist davon nicht betroffen.
 
 `POST /api/v1/prices/backfill/external`
 

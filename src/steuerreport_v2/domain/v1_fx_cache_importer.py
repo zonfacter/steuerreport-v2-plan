@@ -36,6 +36,7 @@ class V1FxCacheImporter:
         db_path: str,
         confidence: Decimal,
     ) -> tuple[V1FxCacheImportPreview, list[PricePointCreate]]:
+        """Legacy-Rechenkern fuer Referenztests; keine belegte Uebernahmefreigabe."""
         importable, missing, requirements_count, missing_asset_usd, missing_usd_eur = self._collect(db_path)
         preview = V1FxCacheImportPreview(
             db_path=str(Path(db_path).expanduser()),

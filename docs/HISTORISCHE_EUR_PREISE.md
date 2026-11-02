@@ -198,6 +198,16 @@ Methoden-, Konfigurations- oder Belegwechsel sperrt die veraltete Uebernahme.
 Dateirechte und SHA256 sind kein WORM-Speicher oder qualifizierter Zeitstempel;
 der Betreiber muss Backups, Zugriffsschutz und Aufbewahrung sicherstellen.
 
+Die `evidence_sha256`-Verweise einer Zeile identifizieren Antwortbytes, nicht
+einen einzelnen Request. Bei identischem Body koennen mehrere Eintraege in
+`evidence` denselben Hash haben, obwohl Provider, URL, Parameter, HTTP-Status
+oder Abrufzeit abweichen. Aus dem Zeilen-Hash allein laesst sich dann nicht
+eindeutig bestimmen, welcher Metadatensatz zu diesem Versuch gehoert; auch
+der aus Hashes gebildete Quellenbezug schafft keine Request-Identitaet. Die
+gespeicherte Vorschau enthaelt die Request-Metadaten, loest diese Mehrdeutigkeit
+aber nicht in allen Faellen auf. Dies ist eine bestehende Vertragsgrenze, keine
+neue Identitaets- oder Schemaaenderung.
+
 Nach Softwarewechsel: Quellen -> Transaktionen abrufen -> Vorschau erneut
 berechnen. Gespeicherte Originale werden geprueft, die alte Vorschau wird
 hashgebunden archiviert; keine neuen Exchange-/RPC-Anfragen. Bestehende

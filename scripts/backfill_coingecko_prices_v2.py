@@ -8,11 +8,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import requests
+import httpx
 
-from steuerreport_v2.contracts.prices import PricePointCreate
 from steuerreport_v2.db.duckdb_store import DuckDbStore
-from steuerreport_v2.domain.pipeline import PipelineService
 
 COINGECKO_SOURCE = "coingecko:coins-history"
 COINGECKO_CURRENT_SOURCE = "coingecko:simple-price"
@@ -41,6 +39,13 @@ def main() -> None:
     parser.add_argument("--allow-current-fallback", action="store_true")
     args = parser.parse_args()
 
+    if args.execute:
+        raise SystemExit(
+            "--execute gesperrt: Dieser Legacy-Pfad hat keinen geprueften "
+            "Identitaets- und Belegvertrag. Nur eine ausdruecklich gepruefte "
+            "Preisvorschau verwenden."
+        )
+
     store = DuckDbStore(args.db)
     targets = _missing_portfolio_targets(store)
     if args.assets:
@@ -48,7 +53,7 @@ def main() -> None:
         targets = [target for target in targets if target["asset"] in requested]
 
     results: list[dict[str, Any]] = []
-    price_points: list[PricePointCreate] = []
+    candidates = 0
     for index, target in enumerate(targets):
         asset = target["asset"]
         coin_id = ASSET_IDS.get(asset)
@@ -75,34 +80,27 @@ def main() -> None:
             result["status"] = "missing_eur_price"
             results.append(result)
             continue
-        result["status"] = "ready"
+        result["status"] = "candidate_unverified"
         result["price_eur"] = str(price_eur)
         result["price_source"] = source
         result["price_at"] = priced_at
-        results.append(result)
-        price_points.append(
-            PricePointCreate(
-                asset=asset,
-                price_eur=price_eur,
-                priced_at=priced_at,
-                source=source,
-                confidence=Decimal("0.90"),
-            )
+        result["price_at_is_verified"] = False
+        result["note"] = (
+            "Ungepruefter Kandidat; Zeit und Assetidentitaet sind nicht "
+            "durch archivierte Providerbelege nachgewiesen."
         )
-
-    pipeline = None
-    if args.execute and price_points:
-        store.add_price_points(price_points)
-        pipeline = PipelineService(store).rebuild_all().model_dump(mode="json")
+        results.append(result)
+        candidates += 1
 
     print(
         json.dumps(
             {
-                "mode": "execute" if args.execute else "dry-run",
+                "mode": "dry-run",
                 "targets": _json_ready(results),
-                "created": len(price_points) if args.execute else 0,
-                "ready": len(price_points),
-                "pipeline": pipeline,
+                "created": 0,
+                "ready": 0,
+                "candidates_unverified": candidates,
+                "pipeline": None,
             },
             indent=2,
         )
@@ -162,11 +160,11 @@ def _fetch_price_eur(
                 event_time=event_time,
                 timeout=timeout,
             ),
-            event_time,
+            _ensure_utc(event_time).replace(hour=0, minute=0, second=0, microsecond=0),
             COINGECKO_SOURCE,
         )
-    except requests.HTTPError as exc:
-        status = exc.response.status_code if exc.response is not None else None
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
         if not allow_current_fallback or status not in {401, 403, 404, 429}:
             raise
         current_price = _fetch_current_price_eur(coin_id=coin_id, timeout=timeout)
@@ -179,14 +177,12 @@ def _fetch_history_price_eur(
     event_time: datetime,
     timeout: float,
 ) -> Decimal | None:
-    response = requests.get(
+    response = httpx.get(
         f"https://api.coingecko.com/api/v3/coins/{coin_id}/history",
-        params={"date": event_time.strftime("%d-%m-%Y"), "localization": "false"},
+        params={"date": _ensure_utc(event_time).date().isoformat(), "localization": "false"},
         timeout=timeout,
         headers={"accept": "application/json"},
     )
-    if response.status_code == 429:
-        response.raise_for_status()
     response.raise_for_status()
     payload = response.json()
     price = payload.get("market_data", {}).get("current_price", {}).get("eur")
@@ -196,7 +192,7 @@ def _fetch_history_price_eur(
 
 
 def _fetch_current_price_eur(*, coin_id: str, timeout: float) -> Decimal | None:
-    response = requests.get(
+    response = httpx.get(
         "https://api.coingecko.com/api/v3/simple/price",
         params={"ids": coin_id, "vs_currencies": "eur"},
         timeout=timeout,

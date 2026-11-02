@@ -22,7 +22,6 @@ if str(PROJECT_ROOT / "src") not in sys.path:
 
 from steuerreport_v2.contracts.prices import PricePointCreate  # noqa: E402
 from steuerreport_v2.db.duckdb_store import DuckDbStore  # noqa: E402
-from steuerreport_v2.domain.pipeline import PipelineService  # noqa: E402
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup  # noqa: E402
 
 DEFAULT_DB = PROJECT_ROOT / "data" / "steuerreport_v2.duckdb"
@@ -56,8 +55,8 @@ class ExternalPrice:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Preview or repair implausible 2021 Legacy-HNT reward prices by adding "
-            "primary DefiLlama/CoinGecko daily price anchors. Existing prices are not deleted."
+            "Preview candidate Legacy-HNT reward prices; --execute is blocked until "
+            "price, FX, identity and evidence contracts are verified."
         )
     )
     parser.add_argument("--db", default=str(DEFAULT_DB))
@@ -68,9 +67,13 @@ def main() -> None:
     parser.add_argument("--coin-id", default="helium")
     parser.add_argument("--cmc-id", default=None)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--exclude-v1-asset-usd", action="store_true", help="V1-Asset/USD-Cache im Dry-run ausschliessen")
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     args = parser.parse_args()
+
+    if args.execute:
+        raise SystemExit("--execute gesperrt: Preis-, FX-, Identitaets- und Belegvertrag sind nicht geprueft. Dry-run liefert nur Kandidaten.")
 
     db_path = Path(args.db)
     store = DuckDbStore(db_path)
@@ -102,12 +105,13 @@ def main() -> None:
                     price_date=reward_day.price_date,
                     v1_fx_db_path=Path(args.v1_fx_db),
                     source_label=source_label,
+                    allow_v1_asset_usd=not args.exclude_v1_asset_usd,
                 )
             except Exception as exc:  # noqa: BLE001 - CLI must expose provider/fx failures.
                 failures.append({"date": reward_day.price_date.isoformat(), "error": str(exc)})
 
     report = build_report(
-        mode="execute" if args.execute else "dry-run",
+        mode="dry-run",
         year=args.year,
         asset=args.asset.upper(),
         source=args.source,
@@ -116,27 +120,7 @@ def main() -> None:
         existing_primary_dates=existing_primary_dates,
         failures=failures,
     )
-
-    pipeline = None
-    backup_path = None
-    if args.execute:
-        if failures:
-            raise SystemExit(f"aborting execute: {len(failures)} price/fx failures; inspect dry-run report")
-        price_points = build_price_points(
-            asset=args.asset,
-            reward_days=reward_days,
-            external_prices=external_prices,
-            existing_primary_dates=existing_primary_dates,
-        )
-        if price_points:
-            backup_path = backup_database(db_path)
-            store.add_price_points(price_points)
-            pipeline = PipelineService(store).rebuild_all().model_dump(mode="json")
-        report["execute"] = {
-            "created_price_points": len(price_points),
-            "backup_path": str(backup_path) if backup_path else None,
-            "pipeline": pipeline,
-        }
+    report["v1_asset_usd_excluded"] = args.exclude_v1_asset_usd
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -228,6 +212,7 @@ def fetch_defillama_eur_price(
     price_date: date,
     v1_fx_db_path: Path,
     source_label: str = SOURCE_LABEL,
+    allow_v1_asset_usd: bool = True,
 ) -> ExternalPrice:
     if asset:
         stable = fetch_stablecoin_eur_price(
@@ -238,14 +223,15 @@ def fetch_defillama_eur_price(
         )
         if stable is not None:
             return stable
-        cached = fetch_cached_eur_price(
-            asset=asset,
-            price_date=price_date,
-            v1_fx_db_path=v1_fx_db_path,
-            source_label=source_label,
-        )
-        if cached is not None:
-            return cached
+        if allow_v1_asset_usd:
+            cached = fetch_cached_eur_price(
+                asset=asset,
+                price_date=price_date,
+                v1_fx_db_path=v1_fx_db_path,
+                source_label=source_label,
+            )
+            if cached is not None:
+                return cached
     if cmc_id:
         cmc = fetch_coinmarketcap_eur_price(
             cmc_id=cmc_id,
@@ -445,7 +431,7 @@ def build_price_points(
         if reward_day.price_date in existing_primary_dates:
             continue
         external = external_prices.get(reward_day.price_date)
-        if external is None:
+        if external is None or is_unverified_v1_asset_usd(external):
             continue
         points.append(
             PricePointCreate(
@@ -457,6 +443,10 @@ def build_price_points(
             )
         )
     return points
+
+
+def is_unverified_v1_asset_usd(price: ExternalPrice) -> bool:
+    return price.source.endswith(":asset_usd_v1_fx_cache")
 
 
 def build_report(
@@ -474,6 +464,7 @@ def build_report(
     current_total = Decimal("0")
     repaired_total = Decimal("0")
     importable = 0
+    unverified_v1 = 0
     existing_primary = 0
     for reward_day in reward_days:
         external = external_prices.get(reward_day.price_date)
@@ -483,8 +474,11 @@ def build_report(
         current_total += reward_day.current_income_eur
         repaired_total += repaired_income
         has_primary = reward_day.price_date in existing_primary_dates
+        unverified = external is not None and is_unverified_v1_asset_usd(external)
         if has_primary:
             existing_primary += 1
+        elif unverified:
+            unverified_v1 += 1
         elif external is not None:
             importable += 1
         rows.append(
@@ -501,23 +495,25 @@ def build_report(
                 "repaired_income_eur": str(repaired_income),
                 "delta_eur": str(repaired_income - reward_day.current_income_eur),
                 "existing_primary_price": has_primary,
-                "will_import": bool(external is not None and not has_primary),
+                "will_import": False,
+                "v1_asset_usd_unverified": unverified,
                 "provider_timestamp": external.provider_timestamp if external else None,
                 "source": external.source if external else None,
             }
         )
     return {
         "mode": mode,
+        "execute_allowed": False,
         "generated_at": datetime.now(UTC).isoformat(),
         "year": year,
         "asset": asset,
         "source": source,
         "methodology": (
-            "Read-only preview unless --execute is used. For taxable reward/mining/staking/income "
-            "days, the script prefers stable-USD FX pricing and the local V1 asset/USD plus USD/EUR "
-            "FX cache, can use CoinMarketCap public historical closes, and falls back to DefiLlama "
-            "CoinGecko history. It adds primary daily price anchors only where no non-derived "
-            "same-day price exists. Existing price_ledger rows are kept."
+            "Dry-run results are unapproved candidates and may create reports or initialise the store. "
+            "V1 asset/USD candidates lack verified identity, timing, evidence and snapshot and cannot "
+            "be imported. --execute is blocked even when the V1 asset cache is excluded. Other sources "
+            "and FX remain unverified; excluding the cache is not an evidence or tax approval. "
+            "The legacy importable_price_days count describes candidates, not permission to import."
         ),
         "summary": {
             "reward_days": len(reward_days),
@@ -529,6 +525,7 @@ def build_report(
             "external_price_days": len(external_prices),
             "existing_primary_days": existing_primary,
             "importable_price_days": importable,
+            "unverified_v1_asset_usd_days": unverified_v1,
             "failure_count": len(failures),
         },
         "failures": failures,

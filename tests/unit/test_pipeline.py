@@ -1,4 +1,5 @@
 import sqlite3
+import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
@@ -18,6 +19,7 @@ from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfill
 from steuerreport_v2.domain.exports import ExportService
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.tax import TaxService
+from steuerreport_v2.domain.v1_fx_cache_importer import V1FxCacheImporter
 from steuerreport_v2.importers.csv_raw_importer import CsvRawImporter
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
@@ -695,7 +697,7 @@ def test_price_csv_import_rebuilds_pipeline(tmp_path):
     assert prices[0].source == "unit-test"
 
 
-def test_v1_fx_cache_import_converts_usd_prices_to_eur(tmp_path):
+def test_v1_fx_cache_preview_is_candidate_only_and_import_is_blocked(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_canonical_event(
         CanonicalEventCreate(
@@ -726,37 +728,87 @@ def test_v1_fx_cache_import_converts_usd_prices_to_eur(tmp_path):
         )
         con.execute(
             "insert into fx_cache values (?, ?, ?, ?, ?, ?, ?)",
-            ("2024-01-01", "MOBILE", "USD", "0.002", "coingecko_history", "2024-01-01", "now"),
+            ("2024-01-01", "MOBILE", "USD", "0.002", "yahoo_finance_history:UNRELATED-USD", "2024-01-02", "now"),
         )
         con.execute(
             "insert into fx_cache values (?, ?, ?, ?, ?, ?, ?)",
             ("2023-12-29", "USD", "EUR", "0.91", "ecb", "2023-12-29", "now"),
         )
     client = TestClient(create_app(store))
+    assert "409" in client.get("/openapi.json").json()["paths"]["/api/v1/prices/import/v1-fx-cache"]["post"]["responses"]
+    source_hash = hashlib.sha256(v1_db.read_bytes()).hexdigest()
+
+    def snapshot():
+        with store.connect() as con:
+            tables = con.execute("select table_name from information_schema.tables where table_schema='main' and table_type='BASE TABLE' order by 1").fetchall()
+            return {name: con.execute('select * from "' + name.replace('"', '""') + '" order by all').fetchall() for (name,) in tables}
+
+    before = snapshot()
 
     preview_response = client.post(
         "/api/v1/prices/import/v1-fx-cache/preview",
         json={"db_path": str(v1_db), "confidence": "1.0"},
     )
-    import_response = client.post(
-        "/api/v1/prices/import/v1-fx-cache",
-        json={"db_path": str(v1_db), "confidence": "1.0"},
-    )
-
     assert preview_response.status_code == 200
-    assert preview_response.json()["data"]["importable_count"] == 1
-    assert import_response.status_code == 200
-    body = import_response.json()["data"]
-    assert body["imported_prices"] == 1
-    assert body["pipeline"]["review_issues_open"] == 0
-    price = store.list_price_points()[0]
-    assert price.asset == "MOBILE"
-    assert price.price_eur == Decimal("0.001820000000000000")
+    preview = preview_response.json()
+    assert preview["status"] == "warning"
+    assert preview["data"]["importable_count"] == 1
+    assert preview["data"]["candidate_only"] is True and preview["data"]["import_allowed"] is False
+    assert preview["data"]["block_code"] == preview["warnings"][0]["code"] == "v1_fx_cache_import_blocked_unverified"
+    assert preview["data"]["importable"][0]["asset_source"] == "yahoo_finance_history:UNRELATED-USD"
+    missing_preview = client.post("/api/v1/prices/import/v1-fx-cache/preview", json={"db_path": str(tmp_path / "missing.db")}).json()
+    assert missing_preview["status"] == "warning" and missing_preview["data"]["candidate_only"] is True
+    assert missing_preview["data"]["import_allowed"] is False
+    assert missing_preview["data"]["missing"][0]["reason"] == "v1_db_missing"
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError("Der gesperrte Import darf keinen Rechenkern oder Schreibpfad aufrufen")
+
+    monkeypatch.setattr(V1FxCacheImporter, "to_price_points", unexpected)
+    monkeypatch.setattr(store, "add_price_points", unexpected)
+    monkeypatch.setattr(PipelineService, "rebuild_all", unexpected)
+    for path in (v1_db, tmp_path / "missing.db"):
+        response = client.post("/api/v1/prices/import/v1-fx-cache", json={"db_path": str(path), "confidence": "1.0"})
+        assert response.status_code == 409
+        body = response.json()
+        assert body["status"] == "error" and body["data"] is None
+        assert body["errors"][0]["code"] == "v1_fx_cache_import_blocked_unverified"
+        assert all(word in body["errors"][0]["message"] for word in ("Beleg", "Kurszeit", "Identitaet", "Snapshot"))
+    assert snapshot() == before
+    assert hashlib.sha256(v1_db.read_bytes()).hexdigest() == source_hash
+    assert not (tmp_path / "missing.db").exists()
+
+
+def test_v1_fx_cache_legacy_calculation_preserves_fx_source_metadata(tmp_path):
+    store = DuckDbStore(tmp_path / "synthetic.duckdb")
+    store.add_canonical_event(CanonicalEventCreate(
+        source="synthetic", source_ref="reward", event_time=datetime(2024, 1, 1, 12, tzinfo=timezone.utc),
+        event_type="reward", asset="MOBILE", quantity=Decimal("100"),
+    ))
+    path = tmp_path / "synthetic-v1.sqlite"
+    with sqlite3.connect(path) as con:
+        con.execute("create table fx_cache (rate_date text, base_ccy text, quote_ccy text, rate text, source text, source_rate_date text)")
+        con.execute("insert into fx_cache values ('2024-01-01', 'MOBILE', 'USD', '0.002', 'coingecko_history', '2024-01-01')")
+        con.execute("insert into fx_cache values ('2023-12-29', 'USD', 'EUR', '0.91', 'ecb', '2023-12-29')")
+    before = hashlib.sha256(path.read_bytes()).hexdigest()
+    preview, prices = V1FxCacheImporter(store).to_price_points(str(path), Decimal("1"))
+    assert preview.candidate_only is True and preview.import_allowed is False
+    assert len(prices) == 1 and prices[0].price_eur == Decimal("0.001820000000000000")
     prefix = "v1_fx_cache:coingecko_history:usd_eur:ecb:fxref:"
-    assert price.source.startswith(prefix)
-    assert json.loads(unquote(price.source.removeprefix(prefix))) == {
+    assert prices[0].source.startswith(prefix)
+    assert json.loads(unquote(prices[0].source.removeprefix(prefix))) == {
         "base": "USD", "quote": "EUR", "rate": "0.91", "source": "ecb",
         "reference_date": "2023-12-29", "policy_id": "fx_reference_on_or_before_max_7_calendar_days_v1"}
+    assert not store.list_price_points() and hashlib.sha256(path.read_bytes()).hexdigest() == before
+
+
+def test_v1_fx_cache_candidate_preview_may_initialize_cold_store(tmp_path):
+    store = DuckDbStore(tmp_path / "cold.duckdb")
+    assert not store._schema_ready and not store.path.exists()
+    preview = V1FxCacheImporter(store).preview(str(tmp_path / "missing.sqlite"))
+    assert preview.candidate_only is True and preview.import_allowed is False
+    assert store._schema_ready and store.path.exists()
+    assert not store.list_price_points() and not store.list_canonical_events()
 
 
 def test_external_price_backfill_dry_run_plans_configured_requirements(tmp_path):

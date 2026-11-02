@@ -9,7 +9,7 @@ const TABS: Record<string, readonly string[]> = {
   stichtage: ["overview"], zugewinn: ["overview"]
 };
 export type ViewState = {
-  section: string; tab: string; page: number; size: number; sort: string; year: string;
+  section: string; tab: string; page: number; size: number; sort: string; year: string; historyYear: string;
   asset: string; source: string; status: string; type: string; start: string; end: string;
   detail: string; detailTab: string; detailPage: number; category: string; account: string; task: string;
   target: string; targetKind: string; evidenceId: string; returnTo: string;
@@ -37,11 +37,14 @@ export function parseView(hash = window.location.hash): ViewState {
   const int = (key: string, fallback: number, max: number) => /^\d{1,7}$/.test(values.get(key) || "") ? Math.max(1, Math.min(max, Number(values.get(key)))) : fallback;
   const candidateYear = values.get("year") || defaultYear(section);
   const year = candidateYear === "all" && !["dashboard", "tax", "export"].includes(section) ? "all" : /^(20\d{2}|2100)$/.test(candidateYear) ? candidateYear : defaultYear(section);
+  const currentCalendarYear = String(Math.min(new Date().getUTCFullYear(), 2100));
+  const candidateHistoryYear = values.get("history_year") || currentCalendarYear;
+  const historyYear = section === "dashboard" && /^(20\d{2}|2100)$/.test(candidateHistoryYear) && candidateHistoryYear <= currentCalendarYear ? candidateHistoryYear : section === "dashboard" ? currentCalendarYear : "";
   const state: ViewState = {
     section, tab: TABS[section].includes(values.get("tab") || "") ? values.get("tab")! : TABS[section][0],
     page: int("page", 1, 1_000_000), size: [10, 25, 50, 100].includes(Number(values.get("size"))) ? Number(values.get("size")) : 25,
     sort: ["newest", "oldest", "name", "value", "issues"].includes(values.get("sort") || "") ? values.get("sort")! : section === "sources" ? "name" : "newest",
-    year, asset: /^[A-Za-z0-9._:-]{1,128}$/.test(values.get("asset") || "") ? values.get("asset")! : "",
+    year, historyYear, asset: /^[A-Za-z0-9._:-]{1,128}$/.test(values.get("asset") || "") ? values.get("asset")! : "",
     source: /^s_[a-f0-9]{20}$/.test(values.get("source") || "") ? values.get("source")! : "",
     account: /^a_[a-f0-9]{20}$/.test(values.get("account") || "") ? values.get("account")! : "",
     task: /^[A-Za-z0-9_-]{1,80}$/.test(values.get("task") || "") ? values.get("task")! : "",
@@ -76,6 +79,7 @@ export function viewHash(view: ViewState) {
   const values = new URLSearchParams();
   if (view.tab !== TABS[view.section][0]) values.set("tab", view.tab);
   if (view.year !== defaultYear(view.section)) values.set("year", view.year);
+  if (view.section === "dashboard" && view.historyYear) values.set("history_year", view.historyYear);
   if (view.page !== 1) values.set("page", String(view.page));
   if (view.size !== 25) values.set("size", String(view.size));
   if (view.sort !== (view.section === "sources" ? "name" : "newest")) values.set("sort", view.sort);

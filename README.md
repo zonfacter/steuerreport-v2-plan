@@ -342,7 +342,16 @@ vorhandene Steuerstaende bleiben davon unberuehrt.
 
 ## Native Installation
 
-Python 3.11+ und Node.js werden vorausgesetzt.
+Python ab 3.11.0 und Node.js werden vorausgesetzt. Das Runtime-Lockfile
+enthaelt fuer diese Untergrenze `soupsieve==2.10`: Version 3.0.4 verlangt
+Python 3.11.5. Der aeltere Pin verzichtet auf spaetere Aenderungen von Soup
+Sieve; laut PyPI meldet 2.10 derzeit keine Advisories, waehrend 2.8.3 vier
+bekannte Sicherheitsluecken hat. Bei Updates muessen Kompatibilitaet und
+Sicherheit erneut geprueft werden. Die CI prueft Python 3.11.0; das im Dockerfile
+gepinnt referenzierte Python-Image enthaelt derzeit 3.11.17. Ein neuer
+Image-Digest oder ein Lockfile-Update erfordert eine erneute Pruefung.
+Einzelheiten und reproduzierbare Tests stehen im
+[Python-Lockfile-Audit](docs/audit/python-minimum-lock-issue47.md).
 
 ```bash
 python3 -m pip install -c requirements-runtime.lock -e '.[dev]'

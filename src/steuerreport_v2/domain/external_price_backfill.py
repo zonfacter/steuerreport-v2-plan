@@ -519,7 +519,7 @@ class ExternalPriceBackfillService:
         dt = datetime.strptime(date_str, "%Y-%m-%d")
         response = client.get(
             f"{COINGECKO_BASE_URL}/coins/{coingecko_id}/history",
-            params={"date": dt.strftime("%d-%m-%Y"), "localization": "false"},
+            params={"date": dt.strftime("%Y-%m-%d"), "localization": "false"},
         )
         if response.status_code in {401, 403, 404, 429} or response.status_code >= 500:
             return Decimal("0")

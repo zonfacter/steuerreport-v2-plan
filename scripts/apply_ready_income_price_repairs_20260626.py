@@ -20,7 +20,6 @@ if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from steuerreport_v2.db.duckdb_store import DuckDbStore  # noqa: E402
-from steuerreport_v2.domain.pipeline import PipelineService  # noqa: E402
 
 REPAIR_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_hnt_legacy_reward_price_repair_20260626.py"
 PREVIEW_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_all_income_price_repair_preview_20260626.py"
@@ -39,7 +38,7 @@ REPAIR_SPEC.loader.exec_module(REPAIR)
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Apply all ready_for_execute groups from an all-income price repair preview in one rebuild."
+        description="Preview income price repair candidates; --execute is blocked until the evidence contract is verified."
     )
     parser.add_argument("--db", default=str(DEFAULT_DB))
     parser.add_argument("--preview", default=str(DEFAULT_PREVIEW))
@@ -48,8 +47,12 @@ def main() -> None:
     parser.add_argument("--price-cache-dir", default=str(DEFAULT_PRICE_CACHE_DIR))
     parser.add_argument("--refresh-price-cache", action="store_true")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--exclude-v1-asset-usd", action="store_true", help="V1-Asset/USD-Cache im Dry-run ausschliessen")
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     args = parser.parse_args()
+
+    if args.execute:
+        raise SystemExit("--execute gesperrt: Preis-, FX-, Identitaets- und Belegvertrag sind nicht geprueft. Dry-run liefert nur Kandidaten.")
 
     db_path = Path(args.db)
     preview = json.loads(Path(args.preview).read_text(encoding="utf-8"))
@@ -68,6 +71,7 @@ def main() -> None:
                 v1_fx_db_path=Path(args.v1_fx_db),
                 price_cache_dir=Path(args.price_cache_dir),
                 refresh_price_cache=args.refresh_price_cache,
+                allow_v1_asset_usd=not args.exclude_v1_asset_usd,
             )
             group_reports.append(report)
             if report["summary"]["failure_count"]:
@@ -83,35 +87,22 @@ def main() -> None:
             price_points.extend(points)
 
     result: dict[str, Any] = {
-        "mode": "execute" if args.execute else "dry-run",
+        "mode": "dry-run",
+        "execute_allowed": False,
+        "v1_asset_usd_excluded": args.exclude_v1_asset_usd,
         "generated_at": datetime.now(UTC).isoformat(),
         "preview_path": str(Path(args.preview)),
-        "ready_groups": len(ready_rows),
-        "created_price_points_planned": len(price_points),
+        "candidate_groups": len(ready_rows),
+        "candidate_price_points": len(price_points),
         "failure_count": len(failures),
         "failures": failures,
         "groups": group_reports,
         "methodology": (
-            "Applies only preview rows with status=ready_for_execute. Each group is recomputed "
-            "before writing; execution aborts if any recomputed group has provider/fx failures. "
-            "External CMC history is cached locally by provider/id/date range to make successful "
-            "provider reads reproducible across later rate limits. "
-            "Existing price rows are not deleted. One DB backup and one PipelineService.rebuild_all "
-            "are used for the whole batch."
+            "Dry-run groups are unapproved candidates; reports, provider caches or store schema may be written. "
+            "V1 asset/USD candidates are not importable. --execute is blocked even when the asset cache is excluded. "
+            "Other sources and FX remain separately unverified; exclusion is not evidence or tax approval."
         ),
     }
-
-    if args.execute:
-        if failures:
-            raise SystemExit(f"aborting execute: {len(failures)} group(s) have recompute failures")
-        backup_path = backup_database(db_path)
-        created = store.add_price_points(price_points)
-        pipeline = PipelineService(store).rebuild_all()
-        result["execute"] = {
-            "backup_path": str(backup_path),
-            "created_price_points": len(created),
-            "pipeline": pipeline.model_dump(mode="json"),
-        }
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -124,10 +115,11 @@ def main() -> None:
 
 
 def select_ready_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Legacy status names select candidates only, never authorize execution."""
     return [
         row
         for row in rows
-        if row.get("status") == "ready_for_execute"
+        if row.get("status") in {"ready_for_execute", "candidate_review_required", "v1_asset_usd_review_required"}
         and row.get("asset")
         and row.get("source")
         and row.get("year") is not None
@@ -143,6 +135,7 @@ def build_group_points(
     v1_fx_db_path: Path,
     price_cache_dir: Path,
     refresh_price_cache: bool,
+    allow_v1_asset_usd: bool = True,
 ) -> tuple[dict[str, Any], list[Any]]:
     asset = str(row["asset"]).upper()
     source = str(row["source"]).lower()
@@ -192,6 +185,7 @@ def build_group_points(
                 cmc_history=cmc_history,
                 price_cache_dir=price_cache_dir,
                 refresh_price_cache=refresh_price_cache,
+                allow_v1_asset_usd=allow_v1_asset_usd,
             )
         except Exception as exc:  # noqa: BLE001 - surfaced in report and aborts execute.
             failures.append({"date": reward_day.price_date.isoformat(), "error": str(exc)})
@@ -226,6 +220,7 @@ def resolve_external_price(
     cmc_history: dict[date, Decimal],
     price_cache_dir: Path,
     refresh_price_cache: bool,
+    allow_v1_asset_usd: bool = True,
 ) -> Any:
     stable = REPAIR.fetch_stablecoin_eur_price(
         asset=asset,
@@ -235,14 +230,15 @@ def resolve_external_price(
     )
     if stable is not None:
         return stable
-    cached = REPAIR.fetch_cached_eur_price(
-        asset=asset,
-        price_date=price_date,
-        v1_fx_db_path=v1_fx_db_path,
-        source_label=source_label,
-    )
-    if cached is not None:
-        return cached
+    if allow_v1_asset_usd:
+        cached = REPAIR.fetch_cached_eur_price(
+            asset=asset,
+            price_date=price_date,
+            v1_fx_db_path=v1_fx_db_path,
+            source_label=source_label,
+        )
+        if cached is not None:
+            return cached
     if cmc_id:
         price_usd = cmc_history.get(price_date, Decimal("0"))
         if price_usd > 0:
