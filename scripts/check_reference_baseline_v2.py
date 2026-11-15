@@ -21,6 +21,11 @@ ADMISSION_RESULTS = (
     ("reference-price-admission-v2.xml", 92),
     ("reference-price-admission-identity.xml", 3),
 )
+AUDIT_PROBES = (
+    ("test_tax_filing_audit_independent_review.py", "df62c3379bf5464abe7c3fef6f052b629715bc1e7d072c5c0e7469890c7f31bf"),
+    ("test_tax_filing_audit_identity_review.py", "7f500d2d8a253819c70a7837016e54c565bd70d97d29acbbeacaf2f9399f2142"),
+    ("test_tax_filing_audit_additional_review.py", "1d6255f969e8b9e90275caa80ef4a8516e10693deff55680fb5a75e82a4a8ff9"),
+)
 ADMISSION_HARNESS_LINES = (
     b'        current = _data(client.get("/api/v1/prices/as-of-gate", params={"as_of_date": VALUATION}))\n',
     b'        other = _data(client.get("/api/v1/prices/as-of-gate", params={"as_of_date": "2025-06-13T01:00:00.123457Z"}))\n',
@@ -61,6 +66,20 @@ def check_admission_results(directory: Path) -> int:
             print("independent_price_admission_results_invalid:" + filename)
             return 1
     print("independent_price_admission_results_verified:92+3")
+    return 0
+
+
+def check_audit_probes() -> int:
+    for filename, expected in AUDIT_PROBES:
+        try:
+            content = (ROOT / "tests/unit" / filename).read_bytes()
+        except OSError:
+            print("independent_audit_probe_unavailable:" + filename)
+            return 1
+        if hashlib.sha256(content).hexdigest() != expected:
+            print("independent_audit_probe_changed:" + filename)
+            return 1
+    print("independent_audit_probes_verified:3")
     return 0
 
 
@@ -140,6 +159,11 @@ def main() -> int:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--admission-results", type=Path, help="Pruefe beide unveraenderten Admission-JUnit-Dateien.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--admission-results", type=Path, help="Pruefe beide unveraenderten Admission-JUnit-Dateien.")
+    mode.add_argument("--audit-probes", action="store_true", help="Pruefe die drei unveraenderten Audit-Gegenproben.")
     args = parser.parse_args()
-    raise SystemExit(check_admission_results(args.admission_results) if args.admission_results is not None else main())
+    raise SystemExit(
+        check_admission_results(args.admission_results) if args.admission_results is not None
+        else check_audit_probes() if args.audit_probes else main()
+    )

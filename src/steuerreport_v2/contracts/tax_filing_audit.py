@@ -116,9 +116,9 @@ class TaxAuditDelta(BaseModel):
 class TaxAuditAggregateReconciliation(BaseModel):
     key: str
     label: str
-    reference_value_eur: Decimal
+    reference_value_eur: Decimal | None
     current_value_eur: Decimal
-    aggregate_delta_eur: Decimal
+    aggregate_delta_eur: Decimal | None
     individual_delta_eur: Decimal | None = None
     residual_eur: Decimal | None = None
     status: TaxAuditReconciliationStatus
@@ -191,7 +191,9 @@ class TaxAuditReproducibility(BaseModel):
 
 
 class TaxFilingAuditReport(BaseModel):
-    schema_version: str = "tax-filing-audit-v2"
+    schema_version: str = "tax-filing-audit-v3"
+    detail_comparison_status: Literal["partial", "not_available"] = "not_available"
+    current_read_binding: Literal["initialized_read_only_transaction"] = "initialized_read_only_transaction"
     year: int
     report_id: str
     generated_at_utc: str

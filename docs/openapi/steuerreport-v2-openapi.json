@@ -58227,9 +58227,16 @@
       "TaxAuditAggregateReconciliation": {
         "properties": {
           "aggregate_delta_eur": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Aggregate Delta Eur",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate Delta Eur"
           },
           "current_value_eur": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -58261,9 +58268,16 @@
             "type": "string"
           },
           "reference_value_eur": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Reference Value Eur",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Value Eur"
           },
           "residual_eur": {
             "anyOf": [
@@ -62149,6 +62163,12 @@
           "current": {
             "$ref": "#/components/schemas/TaxAuditSnapshotMetadata"
           },
+          "current_read_binding": {
+            "const": "initialized_read_only_transaction",
+            "default": "initialized_read_only_transaction",
+            "title": "Current Read Binding",
+            "type": "string"
+          },
           "database_mutated": {
             "default": false,
             "title": "Database Mutated",
@@ -62160,6 +62180,15 @@
             },
             "title": "Deltas",
             "type": "array"
+          },
+          "detail_comparison_status": {
+            "default": "not_available",
+            "enum": [
+              "partial",
+              "not_available"
+            ],
+            "title": "Detail Comparison Status",
+            "type": "string"
           },
           "endpoints": {
             "items": {
@@ -62241,7 +62270,7 @@
             "$ref": "#/components/schemas/TaxAuditReproducibility"
           },
           "schema_version": {
-            "default": "tax-filing-audit-v2",
+            "default": "tax-filing-audit-v3",
             "title": "Schema Version",
             "type": "string"
           },

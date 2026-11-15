@@ -351,8 +351,15 @@ class WalletFifoPreviewService:
         program_settlement_evidence_dir: Path | None = None,
         service_swap_evidence_dir: Path | None = None,
         service_swap_tax_mapping_config_path: Path | None = None,
+        shared_preview_cache: bool = True,
     ) -> None:
         self.store = store
+        self.shared_preview_cache = shared_preview_cache
+        self._local_previews: dict[tuple[int | None, datetime | None], WalletFifoPreviewReport] = {}
+        if not shared_preview_cache:
+            self._PREVIEW_CACHE = {}
+            self._PROVENANCE_CLOSURE_CACHE = {}
+            self._SOLANA_ORIGIN_TRACE_CACHE = {}
         self._tax_service: TaxService | None = None
         self.source_registry_config_path = (
             source_registry_config_path or self.DEFAULT_SOURCE_REGISTRY_CONFIG
@@ -405,6 +412,11 @@ class WalletFifoPreviewService:
         as_of: datetime | None = None,
     ) -> WalletFifoPreviewReport:
         normalized_as_of = self._normalize_as_of(as_of)
+        if not self.shared_preview_cache:
+            key = (year, normalized_as_of)
+            if key not in self._local_previews:
+                self._local_previews[key] = self._build_preview(year, as_of=normalized_as_of)
+            return self._local_previews[key].model_copy(deep=True)
         cache_key = self._preview_cache_key(year, as_of=normalized_as_of)
         cached = self._PREVIEW_CACHE.get(cache_key)
         now = time.monotonic()
