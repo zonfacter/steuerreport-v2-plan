@@ -9846,17 +9846,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     def tax_filing_snapshot_comparison(
         year: int,
     ) -> ApiResponse[TaxFilingSnapshotComparison]:
-        summary = cached_response(
-            f"tax-years:filing-summary:{year}",
-            60,
-            lambda: TaxYearService(db).filing_summary(year),
-        )
-        return ApiResponse(
-            data=TaxFilingSnapshotService(db).comparison(
-                year,
-                current_summary=summary,
-            )
-        )
+        return ApiResponse(data=TaxFilingSnapshotService(db).comparison(year))
 
     @app.get("/api/v1/tax-years/{year}/filing-audit-report")
     def tax_filing_audit_report(year: int) -> ApiResponse[TaxFilingAuditReport]:
@@ -9903,7 +9893,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         )
 
     def format_snapshot_eur(value: Decimal) -> str:
-        rendered = f"{value:,.2f}"
+        rendered = f"{TaxFilingSnapshotService._cents(value):,.2f}"
         return rendered.replace(",", "_").replace(".", ",").replace("_", ".")
 
     def render_tax_filing_snapshot_comparison_html(
@@ -9916,6 +9906,8 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             if report.amendment_review_required
             or report.submission_confirmation_required
             or report.submission_timestamp_required
+            or report.comparison_scope is None
+            or report.comparison_scope.aggregate_status == "not_compared"
             else "ok"
         )
         baseline = report.baseline
@@ -9933,13 +9925,13 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 f"<td>{format_snapshot_eur(item.filed_value_eur)} EUR</td>"
                 f"<td>{format_snapshot_eur(item.current_value_eur)} EUR</td>"
                 f"<td class='{('delta-up' if item.delta_eur > 0 else 'delta-down' if item.delta_eur < 0 else '')}'>"
-                f"{format_snapshot_eur(item.delta_eur)} EUR</td>"
+                f"{format_snapshot_eur(item.rounded_amount_delta_eur) if item.rounded_amount_delta_eur is not None else 'Nicht verfuegbar'} EUR</td>"
                 f"<td>{html.escape(item.explanation)}</td>"
                 "</tr>"
             )
             for item in report.deltas
         ) or (
-            "<tr><td colspan='5'>Noch kein archivierter Vergleichsstand vorhanden.</td></tr>"
+            "<tr><td colspan='5'>Kein belastbarer Aggregatvergleich verfuegbar; keine Aussage zu Gleichheit oder Differenz.</td></tr>"
         )
         package_link = (
             f"<a class='button secondary' href='{html.escape(baseline.package_download_endpoint)}'>"
@@ -9999,7 +9991,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
   </section>
   <div class="actions"><button type="button" onclick="window.print()">Drucken / als PDF sichern</button>{package_link}<a class="button secondary" href="/api/v1/export/tax-years/{report.year}/filing-snapshot-comparison.csv">Delta-CSV</a></div>
   <div class="table-wrap"><table>
-    <thead><tr><th>Bereich</th><th>Abgabestand</th><th>Aktuell</th><th>Delta</th><th>Einordnung</th></tr></thead>
+    <thead><tr><th>Bereich</th><th>Abgabestand</th><th>Aktuell</th><th>Cent-Delta</th><th>Einordnung</th></tr></thead>
     <tbody>{delta_rows}</tbody>
   </table></div>
   <p class="legal"><strong>Rechtlicher Hinweis:</strong> {html.escape(report.legal_notice)}</p>
@@ -10010,15 +10002,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
 
     @app.get("/api/v1/tax-years/{year}/filing-snapshot-comparison.html")
     def tax_filing_snapshot_comparison_html(year: int) -> Response:
-        summary = cached_response(
-            f"tax-years:filing-summary:{year}",
-            60,
-            lambda: TaxYearService(db).filing_summary(year),
-        )
-        report = TaxFilingSnapshotService(db).comparison(
-            year,
-            current_summary=summary,
-        )
+        report = TaxFilingSnapshotService(db).comparison(year)
         return Response(
             content=render_tax_filing_snapshot_comparison_html(report),
             media_type="text/html; charset=utf-8",
@@ -10031,15 +10015,7 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
 
     @app.get("/api/v1/export/tax-years/{year}/filing-snapshot-comparison.csv")
     def tax_filing_snapshot_comparison_csv(year: int) -> Response:
-        summary = cached_response(
-            f"tax-years:filing-summary:{year}",
-            60,
-            lambda: TaxYearService(db).filing_summary(year),
-        )
-        report = TaxFilingSnapshotService(db).comparison(
-            year,
-            current_summary=summary,
-        )
+        report = TaxFilingSnapshotService(db).comparison(year)
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(
@@ -10054,6 +10030,10 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 "Changed_At_Cent_Precision",
                 "Requires_Review",
                 "Explanation",
+                "Comparison_Status",
+                "Aggregate_Status",
+                "Detail_Reconciliation",
+                "Rounded_Amount_Delta_EUR",
             ]
         )
         for item in report.deltas:
@@ -10069,8 +10049,15 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                     item.changed_at_cent_precision,
                     item.requires_review,
                     item.explanation,
+                    report.status,
+                    report.comparison_scope.aggregate_status,
+                    report.comparison_scope.detail_reconciliation,
+                    item.rounded_amount_delta_eur,
                 ]
             )
+        if not report.deltas:
+            writer.writerow([year, "status", "", "Nicht verglichen", "", "", "", "", "",
+                             report.next_action, report.status, "not_compared", "not_compared", ""])
         return Response(
             content=output.getvalue(),
             media_type="text/csv; charset=utf-8",

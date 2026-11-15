@@ -91,6 +91,15 @@ jobs:
           --basetemp="${RUNNER_TEMP}/steuerreport-tests"
           -o tmp_path_retention_policy=all
           -o tmp_path_retention_count=1
+          --junitxml=backend-unit-results.xml
+      - name: Original backend test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-unit-results
+          path: backend-unit-results.xml
+          if-no-files-found: error
+          retention-days: 30
       - name: OpenAPI contract drift
         run: python scripts/export_openapi_v2.py --check
       - name: Endpoint reference drift
@@ -266,6 +275,12 @@ jobs:
       - name: Historical EUR prices against isolated backend and mock providers
         working-directory: .
         run: python scripts/check_historical_prices_browser_v2.py --output "${RUNNER_TEMP}/historical-prices-browser"
+      - name: Current price job status with controlled responses
+        working-directory: .
+        run: python scripts/check_current_price_status_browser_v2.py --output "${RUNNER_TEMP}/current-price-status-browser"
+      - name: Filing aggregate comparison with controlled responses
+        working-directory: .
+        run: python scripts/check_filing_comparison_browser_v2.py --output "${RUNNER_TEMP}/filing-comparison-browser"
       - name: Update settings, selection and clipboard with controlled responses
         working-directory: .
         run: python scripts/check_updates_browser_v2.py --output "${RUNNER_TEMP}/updates-browser"
@@ -286,6 +301,8 @@ jobs:
             ${{ runner.temp }}/history-provider-eta-browser/
             ${{ runner.temp }}/solana-limits-browser/
             ${{ runner.temp }}/historical-prices-browser/
+            ${{ runner.temp }}/current-price-status-browser/
+            ${{ runner.temp }}/filing-comparison-browser/
             ${{ runner.temp }}/updates-browser/
             ${{ runner.temp }}/updates-backend-browser/
             ${{ runner.temp }}/mexc-import-browser/

@@ -327,3 +327,61 @@ def test_status_contract_is_read_only(current):
     store, _, _ = current
     operation = create_app(store).openapi()["paths"]["/api/v1/prices/backfill/current-portfolio/status"]["post"]
     assert operation["x-data-effect"] == "read-only"
+
+
+def test_partial_price_job_and_filing_comparison_share_state_without_reexecution(current, monkeypatch):
+    import hashlib
+    import io
+    import json
+    import zipfile
+    from steuerreport_v2.contracts.tax_filing_snapshots import TaxFilingSnapshotCaptureRequest
+    from steuerreport_v2.domain.tax_filing_snapshots import TaxFilingSnapshotService
+
+    store, payload, calls = current
+    summary = {"year": 2025, "generated_at": "2026-01-01T00:00:00Z", "export_ready": False,
+               "tax_free_lines_count": 0, **{field: "0" for field in (
+                   "taxable_private_disposals_eur", "taxable_disposal_proceeds_eur", "acquisition_cost_eur",
+                   "rewards_mining_staking_income_eur", "derivative_pnl_eur", "tax_free_private_disposals_eur")}}
+    content = json.dumps(summary).encode()
+    path = "02_Steuerliche_CSVs/tax-year-2025-filing-summary.json"
+    manifest = {"year": 2025, "generated_at": summary["generated_at"], "files": [
+        {"path": path, "sha256": hashlib.sha256(content).hexdigest(), "size_bytes": len(content)}]}
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as package:
+        package.writestr("00_Manifest/year-evidence-manifest.json", json.dumps(manifest))
+        package.writestr(path, content)
+    service = TaxFilingSnapshotService(store)
+    reference = service.capture_package(year=2025, package_bytes=archive.getvalue(),
+        request=TaxFilingSnapshotCaptureRequest(), source_kind="synthetic-integration").snapshot
+    pipeline_calls = []
+    def partial_pipeline(self):
+        pipeline_calls.append("pipeline")
+        with store.connect() as con:
+            con.execute("""insert into derivative_lines
+                (derivative_line_id, event_id, source, event_time, asset, quantity,
+                 price_eur, value_eur, price_source, created_at)
+                values ('synthetic-partial', 'synthetic-event', 'synthetic', '2025-06-02',
+                        'EUR', 10, 1, 10, 'synthetic', '2025-06-02')""")
+        raise RuntimeError("synthetic partial pipeline")
+    monkeypatch.setattr(PipelineService, "rebuild_all", partial_pipeline)
+    client = TestClient(create_app(store))
+    response = client.post("/api/v1/prices/backfill/current-portfolio", json=payload)
+    assert response.status_code == 200 and response.json()["status"] == "warning"
+    original_result = response.json()["data"]
+    assert original_result["pipeline_status"] == "failed"
+    assert len(original_result["stored_price_ids"]) == 2
+    with store.connect() as con:
+        original_journal = con.execute("select * from current_price_backfill_requests").fetchall()
+    comparison = client.get("/api/v1/tax-years/2025/filing-snapshot-comparison").json()["data"]
+    assert comparison["comparison_scope"]["aggregate_status"] == "different"
+    assert comparison["comparison_scope"]["detail_reconciliation"] == "not_compared"
+    assert comparison["submission_confirmation_required"] is True
+    assert Decimal(comparison["current_values"]["derivative_pnl_eur"]) == Decimal("10")
+    restored = client.post("/api/v1/prices/backfill/current-portfolio/status", json={"request_id": payload["request_id"]})
+    assert restored.json()["status"] == "warning"
+    assert restored.json()["data"]["result"] == original_result
+    assert client.post("/api/v1/prices/backfill/current-portfolio", json=payload).status_code == 409
+    with store.connect() as con:
+        assert con.execute("select * from current_price_backfill_requests").fetchall() == original_journal
+    assert service.read_package(reference.snapshot_id) == archive.getvalue()
+    assert calls == ["coin", "defi"] and pipeline_calls == ["pipeline"]

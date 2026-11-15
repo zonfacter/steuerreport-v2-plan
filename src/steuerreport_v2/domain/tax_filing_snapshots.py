@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, localcontext
 import hashlib
 import io
 import json
@@ -17,6 +17,7 @@ from steuerreport_v2.contracts.tax_filing_snapshots import (
     TaxFilingSnapshotCaptureRequest,
     TaxFilingSnapshotCaptureResult,
     TaxFilingSnapshotComparison,
+    TaxFilingSnapshotComparisonScope,
     TaxFilingSnapshotDelta,
     TaxFilingSnapshotFile,
     TaxFilingSnapshotList,
@@ -32,6 +33,15 @@ from steuerreport_v2.domain.tax_years import TaxYearService
 SUBMISSION_CONFIRMATION_TEXT = "ICH BESTAETIGE DIE TATSAECHLICHE ABGABE"
 SOFTWARE_VERSION = __version__
 METHOD_VERSION = "bmf_readiness_v3_provider_basis_classification"
+MAX_COMPARISON_DECIMAL_DIGITS = 256
+AGGREGATE_FIELDS = frozenset({
+    "taxable_private_disposals_eur",
+    "taxable_disposal_proceeds_eur",
+    "acquisition_cost_eur",
+    "rewards_mining_staking_income_eur",
+    "derivative_pnl_eur",
+    "tax_free_private_disposals_eur",
+})
 
 
 class TaxFilingSnapshotError(ValueError):
@@ -395,6 +405,23 @@ class TaxFilingSnapshotService:
         *,
         current_summary: TaxYearFilingSummary | None = None,
     ) -> TaxFilingSnapshotComparison:
+        if current_summary is None:
+            with self.store.read_snapshot() as snapshot:
+                values = TaxYearService(snapshot).filing_aggregate_values(year)
+                return TaxFilingSnapshotService(snapshot)._comparison_from_values(
+                    year, current_values=values, current_bound=True,
+                )
+        current = None
+        if type(getattr(current_summary, "year", None)) is int and current_summary.year == year:
+            try:
+                current = self._values_from_mapping(current_summary.model_dump(exclude_unset=True))
+            except (TaxFilingSnapshotError, AttributeError):
+                pass
+        return self._comparison_from_values(year, current_values=current, current_bound=False)
+
+    def _comparison_from_values(
+        self, year: int, *, current_values: TaxFilingValues | None, current_bound: bool,
+    ) -> TaxFilingSnapshotComparison:
         snapshots = self.list(year=year).snapshots
         latest_reference = next(
             (item for item in snapshots if item.state == "reference"), None
@@ -432,25 +459,29 @@ class TaxFilingSnapshotService:
             if baseline is not None
             else "none"
         )
-        current = self._values_from_summary(
-            current_summary or TaxYearService(self.store).filing_summary(year)
-        )
-        deltas = self._deltas(baseline.values, current) if baseline else []
-        exact_change = any(item.delta_eur != 0 for item in deltas)
-        declaration_change = any(
-            item.category == "declaration" and item.changed_at_cent_precision
-            for item in deltas
-        )
+        current = current_values
+        current_valid = current is not None
         integrity_blocked = bool(
             baseline is not None and baseline.integrity_status != "verified"
         )
+        reference_complete = baseline is not None and baseline.values is not None
+        compared = current_bound and current_valid and reference_complete and not integrity_blocked
+        comparison_error = None
+        try:
+            deltas = self._deltas(baseline.values, current) if compared else []
+        except TaxFilingSnapshotError as exc:
+            compared = False
+            deltas = []
+            comparison_error = str(exc)
+        exact_change = any(item.delta_eur != 0 for item in deltas) if compared else None
+        declaration_change = any(item.category == "declaration" and item.changed_at_cent_precision for item in deltas) if compared else None
         amendment_review = bool(
             baseline is not None
             and (
                 baseline.state == "submitted"
                 or baseline.filing_usage_confirmed
             )
-            and declaration_change
+            and (declaration_change if compared else True)
         )
         confirmation_required = bool(
             baseline is not None
@@ -477,6 +508,10 @@ class TaxFilingSnapshotService:
                 "Den verwendeten Jahresstand als Referenz archivieren. Erst nach Abgleich "
                 "mit der tatsaechlich uebermittelten Erklaerung als eingereicht bestaetigen."
             )
+        elif not compared:
+            status = "comparison_unavailable"
+            headline = "Jahresaggregate nicht belastbar verglichen"
+            next_action = "Referenzbindung und aktuellen gespeicherten Berechnungsstand pruefen."
         elif confirmation_required:
             status = "reference_confirmation_required"
             headline = "Historisches Paket gefunden, Abgabebestaetigung offen"
@@ -486,21 +521,8 @@ class TaxFilingSnapshotService:
             )
         elif amendment_review:
             status = "changed_review_required"
-            headline = (
-                "Verwendeter Abgabestand weicht vom aktuellen Stand ab"
-                if submission_timestamp_required
-                else "Aktueller Stand weicht von der Abgabe ab"
-            )
-            next_action = (
-                "Deltas je Einkunftsart mit den uebermittelten Formularwerten und Belegen "
-                "abgleichen. Bei moeglicher Steuerverkuerzung die Berichtigungsfrage nach "
-                "§ 153 AO unverzueglich fachlich pruefen."
-                + (
-                    " Den tatsaechlichen ELSTER-Uebermittlungszeitpunkt getrennt nachtragen."
-                    if submission_timestamp_required
-                    else ""
-                )
-            )
+            headline = "Gespeicherte Jahresaggregate weichen vom Abgabestand ab"
+            next_action = "Abweichungen und Belege getrennt fachlich pruefen; keine automatische Korrekturentscheidung."
         elif submission_timestamp_required:
             status = "submission_timestamp_required"
             headline = "Paketverwendung bestaetigt, Uebermittlungszeitpunkt offen"
@@ -510,15 +532,26 @@ class TaxFilingSnapshotService:
             )
         else:
             status = "unchanged"
-            headline = (
-                "Abgabewerte stimmen auf Cent-Ebene mit dem aktuellen Stand ueberein"
-                if not declaration_change
-                else "Nur nicht eintragungsrelevante Nachweise haben sich geaendert"
-            )
+            headline = "Kein deklarationsrelevantes Cent-Delta in den verglichenen Jahresaggregaten"
             next_action = (
-                "Snapshot und Belegpaket unveraendert aufbewahren; neue Quellenimporte "
-                "weiterhin gegen diesen Stand vergleichen."
+                "Gleiche Aggregate belegen keine gleichen Ereignisse oder Lots; Detailabgleich bleibt offen."
             )
+
+        next_action += (
+            (" Jahresaggregate wurden verglichen. " if compared else " Jahresaggregate wurden nicht verglichen. ")
+            + "Ereignisse, Lots und "
+            "Tax-Lines sowie die Bindung und Abstimmung ihrer Details wurden nicht "
+            "geprueft. Eine Einzelpositionsparitaet ist nicht nachgewiesen."
+        )
+        if baseline is not None and not reference_complete:
+            next_action += (
+                " Referenz-Summary fehlt, ist ungueltig oder stimmt nicht mit dem "
+                "hashgeprueften Paket ueberein."
+            )
+        if not current_valid:
+            next_action += " Aktuelle Jahreswerte sind unvollstaendig oder gehoeren zu einem anderen Jahr."
+        if comparison_error:
+            next_action += " " + comparison_error
 
         return TaxFilingSnapshotComparison(
             year=year,
@@ -530,6 +563,21 @@ class TaxFilingSnapshotService:
             usage_confirmed_reference=usage_confirmed_reference,
             current_values=current,
             deltas=deltas,
+            comparison_scope=TaxFilingSnapshotComparisonScope(
+                aggregate_status="different" if exact_change else "equal" if compared else "not_compared",
+                reference_aggregate_binding="verified_archive" if reference_complete and not integrity_blocked else "not_verified",
+                current_aggregate_binding="read_transaction" if current_bound and current_valid else "not_verified",
+                explanation=(
+                    ("Die sechs gespeicherten Jahresaggregate stammen aus einer gemeinsamen "
+                     "DB-Lesetransaktion; die Referenzwerte aus dem hashgeprueften Archiv. " if compared else
+                     "Die Voraussetzungen fuer einen gebundenen Aggregatvergleich fehlen. ")
+                    + "Die Aktualitaet der gespeicherten Berechnung zu allen Inputs ist nicht nachgewiesen. "
+                    "Ereignisse, Lots und Tax-Lines sowie ihre Abstimmung und die "
+                    "Hashbindung von Referenz- und aktuellen Detaildaten wurden nicht "
+                    "verglichen oder geprueft. Aggregatgleichheit belegt keine "
+                    "Einzelpositionsparitaet."
+                ),
+            ),
             exact_change_detected=exact_change,
             declaration_change_detected=declaration_change,
             amendment_review_required=amendment_review,
@@ -555,7 +603,8 @@ class TaxFilingSnapshotService:
                 "Verglichen wird vorrangig die neueste als eingereicht bestaetigte Revision, "
                 "sonst die neueste Referenz. Deklarationsaenderungen werden je Einkunftsart "
                 "getrennt auf Cent-Ebene beurteilt; Verluste und Einkuenfte werden nicht "
-                "rechtswidrig oder irrefuehrend miteinander saldiert."
+                "rechtswidrig oder irrefuehrend miteinander saldiert. Ereignisse, Lots "
+                "und Tax-Lines werden nicht verglichen."
             ),
         )
 
@@ -660,12 +709,8 @@ class TaxFilingSnapshotService:
                         "Das Jahresmanifest fehlt im Belegpaket."
                     )
                 manifest_bytes = package.read(manifest_path)
-                manifest = json.loads(manifest_bytes.decode("utf-8"))
-                if not isinstance(manifest, dict):
-                    raise TaxFilingSnapshotError(
-                        "Das Jahresmanifest muss ein JSON-Objekt sein."
-                    )
-                if int(manifest.get("year", -1)) != year:
+                manifest = self._json_object(manifest_bytes)
+                if type(manifest.get("year")) is not int or manifest["year"] != year:
                     raise TaxFilingSnapshotError(
                         "Das Manifest gehoert zu einem anderen Steuerjahr."
                     )
@@ -682,12 +727,8 @@ class TaxFilingSnapshotService:
                     raise TaxFilingSnapshotError(
                         "Die jahresbezogene Filing-Summary fehlt im Belegpaket."
                     )
-                summary = json.loads(package.read(summary_path).decode("utf-8"))
-                if not isinstance(summary, dict):
-                    raise TaxFilingSnapshotError(
-                        "Die Filing-Summary muss ein JSON-Objekt sein."
-                    )
-                if int(summary.get("year", -1)) != year:
+                summary = self._json_object(package.read(summary_path))
+                if type(summary.get("year")) is not int or summary["year"] != year:
                     raise TaxFilingSnapshotError(
                         "Die Filing-Summary gehoert zu einem anderen Steuerjahr."
                     )
@@ -697,12 +738,16 @@ class TaxFilingSnapshotService:
                     raise TaxFilingSnapshotError(
                         "Das Jahresmanifest enthaelt keine manifestierten Dateien."
                     )
+                manifested_paths: set[str] = set()
                 for item in manifest_files:
                     if not isinstance(item, dict):
                         raise TaxFilingSnapshotError(
                             "Ein Dateieintrag im Jahresmanifest ist ungueltig."
                         )
                     path = str(item.get("path", ""))
+                    if path in manifested_paths:
+                        raise TaxFilingSnapshotError("Doppelter Dateipfad im Jahresmanifest.")
+                    manifested_paths.add(path)
                     if not path or path not in names:
                         raise TaxFilingSnapshotError(
                             f"Manifestierte Datei fehlt: {path or '<leer>'}"
@@ -713,7 +758,10 @@ class TaxFilingSnapshotService:
                         raise TaxFilingSnapshotError(
                             f"Dateihash stimmt nicht: {path}"
                         )
-                    if len(content) != int(item.get("size_bytes", -1)):
+                    if (
+                        type(item.get("size_bytes")) is not int
+                        or len(content) != item["size_bytes"]
+                    ):
                         raise TaxFilingSnapshotError(
                             f"Dateigroesse stimmt nicht: {path}"
                         )
@@ -725,7 +773,23 @@ class TaxFilingSnapshotService:
                             source_endpoint=item.get("source_endpoint"),
                         )
                     )
-        except (zipfile.BadZipFile, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                if summary_path not in manifested_paths:
+                    raise TaxFilingSnapshotError("Die Filing-Summary ist nicht manifestiert.")
+                values = self._values_from_mapping(summary)
+                for field in AGGREGATE_FIELDS:
+                    amount = getattr(values, field)
+                    if amount.copy_abs() >= Decimal("1e20"):
+                        raise TaxFilingSnapshotError("Referenzbetrag ausserhalb des speicherbaren DECIMAL(38,18)-Bereichs.")
+                    with localcontext() as arithmetic:
+                        arithmetic.prec = 80
+                        if amount.quantize(Decimal("1e-18")) != amount:
+                            raise TaxFilingSnapshotError("Referenzbetrag hat nicht speicherbare Nachkommastellen.")
+        except TaxFilingSnapshotError:
+            raise
+        except (
+            zipfile.BadZipFile, UnicodeError, ValueError, TypeError,
+            ArithmeticError, RuntimeError,
+        ) as exc:
             raise TaxFilingSnapshotError(
                 "Das Belegpaket ist kein gueltiges Steuerreport-Jahres-ZIP."
             ) from exc
@@ -734,7 +798,7 @@ class TaxFilingSnapshotService:
             "manifest": manifest,
             "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
             "summary": summary,
-            "values": self._values_from_mapping(summary),
+            "values": values,
             "files": files,
         }
 
@@ -849,17 +913,32 @@ class TaxFilingSnapshotService:
     ) -> TaxFilingSnapshot:
         path = (self.store.path.parent / str(row["archive_relative_path"])).resolve()
         integrity = "missing"
-        if path.is_file():
+        archive_bytes = None
+        if path.is_relative_to(self.store.path.parent.resolve()) and path.is_file():
             try:
+                archive_bytes = path.read_bytes()
                 integrity = (
                     "verified"
-                    if hashlib.sha256(path.read_bytes()).hexdigest()
+                    if hashlib.sha256(archive_bytes).hexdigest()
                     == str(row["package_sha256"])
                     else "mismatch"
                 )
             except OSError:
                 integrity = "missing"
-        values = self._values_from_mapping(json.loads(str(row["summary_json"])))
+        values = None
+        if integrity == "verified" and archive_bytes is not None:
+            try:
+                registered_summary = self._json_object(str(row["summary_json"]))
+                validated = self._validate_package(int(row["year"]), archive_bytes)
+                self._values_from_mapping(registered_summary)
+                if (
+                    registered_summary == validated["summary"]
+                    and validated["manifest_sha256"] == str(row["manifest_sha256"])
+                ):
+                    # Read amounts from the same bytes whose package hash was verified.
+                    values = validated["values"]
+            except (OSError, ValueError, TypeError, KeyError, ArithmeticError):
+                values = None
         metadata = json.loads(str(row.get("metadata_json") or "{}"))
         package_generated_at = self._iso(row["package_generated_at"])
         created_at = self._iso(row["created_at"])
@@ -1002,8 +1081,17 @@ class TaxFilingSnapshotService:
         for key, label, category in definitions:
             filed_value = Decimal(getattr(filed, key))
             current_value = Decimal(getattr(current, key))
-            delta = current_value - filed_value
-            changed_at_cent = self._cents(delta) != Decimal("0.00")
+            precision = max(
+                28, max(filed_value.adjusted(), current_value.adjusted(), 0)
+                - min(filed_value.as_tuple().exponent, current_value.as_tuple().exponent, -2) + 3,
+            )
+            if precision > MAX_COMPARISON_DECIMAL_DIGITS:
+                raise TaxFilingSnapshotError("Aggregatvergleich ausserhalb des technischen Praezisionsbereichs; keine Deltas ermittelt.")
+            with localcontext() as arithmetic:
+                arithmetic.prec = precision
+                delta = current_value - filed_value
+                rounded_delta = self._cents(current_value) - self._cents(filed_value)
+            changed_at_cent = rounded_delta != 0
             direction = "increase" if delta > 0 else "decrease" if delta < 0 else "unchanged"
             requires_review = bool(category == "declaration" and changed_at_cent)
             if direction == "unchanged":
@@ -1026,6 +1114,7 @@ class TaxFilingSnapshotService:
                     filed_value_eur=filed_value,
                     current_value_eur=current_value,
                     delta_eur=delta,
+                    rounded_amount_delta_eur=rounded_delta,
                     direction=direction,
                     changed_at_cent_precision=changed_at_cent,
                     requires_review=requires_review,
@@ -1054,29 +1143,53 @@ class TaxFilingSnapshotService:
 
     @staticmethod
     def _values_from_mapping(payload: dict[str, object]) -> TaxFilingValues:
-        return TaxFilingValues(
-            generated_at=str(payload.get("generated_at") or ""),
-            export_ready=bool(payload.get("export_ready", False)),
-            taxable_private_disposals_eur=Decimal(
-                str(payload.get("taxable_private_disposals_eur", "0"))
-            ),
-            taxable_disposal_proceeds_eur=Decimal(
-                str(payload.get("taxable_disposal_proceeds_eur", "0"))
-            ),
-            acquisition_cost_eur=Decimal(
-                str(payload.get("acquisition_cost_eur", "0"))
-            ),
-            rewards_mining_staking_income_eur=Decimal(
-                str(payload.get("rewards_mining_staking_income_eur", "0"))
-            ),
-            derivative_pnl_eur=Decimal(
-                str(payload.get("derivative_pnl_eur", "0"))
-            ),
-            tax_free_private_disposals_eur=Decimal(
-                str(payload.get("tax_free_private_disposals_eur", "0"))
-            ),
-            tax_free_lines_count=int(payload.get("tax_free_lines_count", 0)),
+        try:
+            if not isinstance(payload, dict):
+                raise ValueError("Summary ist kein Objekt.")
+            amounts = {}
+            for field in AGGREGATE_FIELDS:
+                raw = payload[field]
+                if type(raw) not in (str, int, Decimal):
+                    raise ValueError(f"Ungueltiger Geldwert: {field}")
+                amount = Decimal(raw)
+                if not amount.is_finite():
+                    raise ValueError(f"Nicht endlicher Geldwert: {field}")
+                amounts[field] = amount
+            if type(payload["export_ready"]) is not bool:
+                raise ValueError("export_ready ist kein Wahrheitswert.")
+            if not isinstance(payload["generated_at"], str):
+                raise ValueError("generated_at ist kein Zeitpunkt.")
+            TaxFilingSnapshotService._parse_datetime(payload["generated_at"])
+            return TaxFilingValues(
+                generated_at=payload["generated_at"],
+                export_ready=payload["export_ready"],
+                tax_free_lines_count=payload["tax_free_lines_count"],
+                **amounts,
+            )
+        except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+            raise TaxFilingSnapshotError("Die Filing-Summary ist unvollstaendig oder ungueltig.") from exc
+
+    @staticmethod
+    def _json_object(content: str | bytes) -> dict[str, object]:
+        def unique_keys(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise TaxFilingSnapshotError(f"Doppelter JSON-Schluessel: {key}")
+                result[key] = value
+            return result
+
+        def invalid_constant(value):
+            raise TaxFilingSnapshotError(f"Ungueltige JSON-Zahl: {value}")
+
+        # Preserve fractional JSON tokens exactly instead of rounding through float.
+        payload = json.loads(
+            content, parse_float=str, parse_constant=invalid_constant,
+            object_pairs_hook=unique_keys,
         )
+        if not isinstance(payload, dict):
+            raise TaxFilingSnapshotError("JSON-Inhalt muss ein Objekt sein.")
+        return payload
 
     @staticmethod
     def _fetch_dicts(con, sql: str, params: list[object]) -> list[dict[str, object]]:
@@ -1108,4 +1221,6 @@ class TaxFilingSnapshotService:
 
     @staticmethod
     def _cents(value: Decimal) -> Decimal:
-        return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        with localcontext() as arithmetic:
+            arithmetic.prec = max(28, value.adjusted() + 4)
+            return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

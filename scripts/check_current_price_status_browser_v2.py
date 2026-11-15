@@ -1,4 +1,5 @@
 """Isolierter Browsernachweis der lesenden Portfolio-Auftragsauskunft."""
+import argparse
 import json
 from pathlib import Path
 import subprocess
@@ -8,6 +9,9 @@ from playwright.sync_api import expect, sync_playwright
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     harness = '''import React from "react";
 import {createRoot} from "react-dom/client";
@@ -19,7 +23,8 @@ const result=await build({{stdin:{{contents:{json.dumps(harness)},resolveDir:pro
 process.stdout.write(result.outputFiles[0].text);'''
     bundle = subprocess.check_output(["node", "--input-type=module", "-e", code], cwd=root / "frontend", text=True)
     styles = (root / "frontend/src/styles.css").read_text() + (root / "frontend/src/workspace/workspace.css").read_text()
-    output = Path(tempfile.mkdtemp(prefix="steuerreport-price-status-browser-"))
+    output = args.output or Path(tempfile.mkdtemp(prefix="steuerreport-price-status-browser-"))
+    output.mkdir(parents=True, exist_ok=True)
     calls = []
     state = ["recorded"]
     request_id = "11111111-1111-4111-8111-111111111111"

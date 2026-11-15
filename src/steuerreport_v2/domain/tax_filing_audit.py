@@ -83,9 +83,11 @@ class TaxFilingAuditService:
     ) -> TaxFilingAuditReport:
         queried_at = (query_time or datetime.now(timezone.utc)).astimezone(timezone.utc)
         comparison = self.snapshots.comparison(year)
+        baseline = comparison.baseline
+        if baseline is not None and baseline.values is None:
+            raise TaxFilingAuditError("Referenz-Summary ist nicht an das Archiv gebunden.")
         current_summary = TaxYearService(self.store).filing_summary(year)
         current_values = self.snapshots._values_from_summary(current_summary)
-        baseline = comparison.baseline
 
         reference_package: dict[str, Any] | None = None
         reference_tax_lines: list[dict[str, Any]] = []

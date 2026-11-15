@@ -2161,26 +2161,90 @@ Archivinhalt blockiert die Bestaetigung.
 
 `GET /api/v1/tax-years/{year}/filing-snapshot-comparison`
 
-Vergleicht vorrangig die neueste bestaetigte Abgabe, danach ein ausdruecklich
-als verwendet bestaetigtes Referenzpaket und erst sonst die neueste reine
-Referenz mit der aktuellen Jahresberechnung. Private Veraeusserungen,
-Rewards/Mining/Staking und Derivate bleiben getrennte deklarationsrelevante
-Kategorien. Erloese, Anschaffungskosten und steuerfreie Veraeusserungen werden
-als Nachweiswerte separat ausgewiesen. `amendment_review_required=true` ist
-eine Korrekturpruefung, keine automatische rechtliche Feststellung und keine
-automatische Aenderung von Steuerdaten.
+Waehlt vorrangig die neueste bestaetigte Abgabe, danach ein ausdruecklich als
+verwendet bestaetigtes Referenzpaket und erst sonst die neueste reine Referenz.
+Der gespeicherte Summary-Inhalt wird mit dem manifestierten Summary im anhand
+des Paket-SHA-256 verifizierten ZIP verglichen; fehlende, ungueltige oder
+abweichende Referenzwerte ergeben `baseline.values=null`, keine Nullwerte.
+Das ZIP selbst bleibt unveraendert. Die Pruefung bindet nicht die historischen
+Eingaben oder Methoden an die aktuelle Berechnung.
+Die Werte stammen aus denselben einmal gelesenen ZIP-Bytes, deren Paket-Hash
+geprueft wurde, nicht aus den numerischen Registerspalten. Zusaetzlich muessen
+Manifest-Hash und Summary-Inhalt zum Register passen. Summary-Jahr und
+Manifest-Jahr muessen exakt dem angefragten ganzzahligen Steuerjahr entsprechen;
+die Summary muss genau einmal manifestiert und mit Dateihash und Groesse
+abgesichert sein. Mehrdeutige JSON-Schluessel und Manifestpfade werden abgewiesen.
+Alle sechs Geldwerte und `tax_free_lines_count` sind explizit erforderlich;
+fehlend ist nicht Null. Neue Pakete mit unvollstaendigen oder ungueltigen
+Werten werden vor Archiv-/Registerschreibzugriffen abgelehnt. Bei bereits
+registrierten Altarchiven werden die Werte stattdessen als `null` ausgegeben.
+Dezimalzahlen werden ohne Float-Zwischenschritt gelesen, nicht endliche Zahlen
+und ungueltige Zaehler abgewiesen. `integrity_status=verified` bezeichnet
+weiterhin nur die Paket-Hashpruefung und kann mit `values=null` zusammentreffen.
+Die im Register gespeicherten Hashes sind keine externe Signatur; gleichzeitige
+Manipulation von Archiv und allen Register-Ankern wird dadurch nicht bewiesen
+oder ausgeschlossen. Neue ZIP-Ressourcenlimits sind nicht Teil dieses Fixes.
+
+Der aktuelle Vergleich liest die sechs gespeicherten Jahresaggregate mit
+einem frischen Service innerhalb derselben DuckDB-READ-ONLY-Transaktion wie
+das Referenzregister. Er verwendet keinen 60-Sekunden-Summarycache und keine
+Erklaerungsbeilage oder Wallet-Preview-Dateicaches. Die Aggregatberechnung
+verwendet den bestehenden `_status_for_year`-Rechenweg; keine neue Fachmethode.
+`current_aggregate_binding=read_transaction` und
+`reference_aggregate_binding=verified_archive` kennzeichnen diese Grenzen.
+`aggregate_status=equal|different` und sechs Deltazeilen bezeichnen nur diese
+Zahlen. Die Aktualitaet der gespeicherten Berechnung zu allen Ursprungsdaten
+und die Vollstaendigkeit der Daten sind damit nicht nachgewiesen.
+`current_values.export_ready` ist keine finale Jahresfreigabe.
+
+Zugereichte externe/cached Summaries bleiben ungebunden. Bei fehlender
+Vergleichsvoraussetzung gilt `not_compared`, leere Deltas und nullable
+Aenderungsflags statt `false`. Ein Summary mit falschem Jahr oder fehlenden
+Geldfeldern ergibt `current_values=null`. Bei bestaetigter Abgabe bleibt dann
+manuelle Pruefung erforderlich, ohne eine Abweichung oder Korrekturentscheidung
+zu behaupten. `comparison_unavailable` muss von Clients konservativ behandelt
+werden. `comparison_scope` ist fuer alte Antworten optional; fehlend ist nicht
+gleichbedeutend mit Paritaet.
+
+`comparison_scope.events`, `lots`, `tax_lines` und `detail_reconciliation`
+stehen derzeit immer auf `not_compared`; `reference_detail_binding` und
+`current_detail_binding` auf `not_verified`. Das Paket kann hashverifiziert
+sein, ohne dass die Einzelpositionen oder die Bindung aktueller Detaildaten
+geprueft wurden. Es werden keine Positionsdeltas erfunden. Ein vollstaendiger
+hashgebundener Detailabgleich inklusive exakter Abstimmung und
+`reconciliation_failed` bleibt offen. Der separate Auditdienst ist kein
+Nachweis der Bindung des aktuellen Datenbankstands; ein ungueltiges Referenz-
+Summary blockiert ihn. Bestaetigte Referenzen mit ungebundenen Werten sperren
+im Methodikdienst konservativ das betroffene Jahr; ein aelterer Stand wird
+nicht still als Ersatz verwendet.
+
+Die Cent-Pruefung vergleicht separat mit ROUND_HALF_UP gerundete alte und neue
+Betraege. `delta_eur` bleibt das exakte Delta; `rounded_amount_delta_eur`
+ist die Differenz der einzeln gerundeten Betraege und kann davon abweichen.
+Der technische Praezisionsbereich des Deltaabgleichs betraegt maximal 256
+Stellen; darueber bleibt der Vergleich mit Erklaerung offen. Neue Referenz-
+Geldwerte muessen in DECIMAL(38,18) exakt speicherbar sein; keine stille Rundung.
+
+JSON, HTML und CSV verwenden den transaktionsgebundenen Aggregatpfad. CSV
+ergaenzt `Comparison_Status`, `Aggregate_Status`, `Detail_Reconciliation` und
+`Rounded_Amount_Delta_EUR`;
+bei fehlendem Vergleich wird eine explizite Statuszeile mit leeren Geldfeldern
+statt einer erfundenen Null geschrieben. HTML und Webansicht kennzeichnen
+unbekannte Vergleiche statt fehlender Cent-Abweichung. Der bisherige CSV-
+Gegenfall ist kein xfail mehr. Browserabnahme der gesamten UI bleibt erforderlich.
 
 `submission_timestamp_required=true` kennzeichnet eine bestaetigte
 Paketnutzung ohne belegten ELSTER-Zeitpunkt. `baseline_selection` lautet in
 diesem Fall `confirmed_used_reference`. Dieser Zustand aktiviert bei
-deklarationsrelevanten Deltas die Korrekturpruefung, behauptet aber noch keine
+unbekanntem Vergleich die manuelle Pruefung, behauptet aber noch keine
 vollstaendig verifizierte Uebermittlung.
 
 `GET /api/v1/tax-years/{year}/filing-snapshot-comparison.html`
 
-Liefert dieselbe Korrekturpruefungsakte als lesbare, druckbare Webseite.
+Liefert die Korrekturpruefungsakte als lesbare, druckbare Webseite, mit der oben
+dokumentierten offenen Statusdarstellung.
 `GET /api/v1/export/tax-years/{year}/filing-snapshot-comparison.csv` liefert
-die Deltas verlustfrei als CSV.
+die bisherigen Deltaspalten; ein expliziter Nichtvergleichsstatus fehlt noch.
 
 `GET /api/v1/tax-filing-snapshots/{snapshot_id}/package.zip`
 
