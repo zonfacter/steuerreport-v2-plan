@@ -7,16 +7,19 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 
-from steuerreport_v2.contracts.common import ApiResponse
+from steuerreport_v2.contracts.common import ApiMessage, ApiResponse
+from steuerreport_v2.contracts.price_import_evidence import PriceImportEvidenceReport
 from steuerreport_v2.contracts.historical_prices import (
     HistoricalPriceApply,
     HistoricalPriceContinue,
     HistoricalPriceFetch,
     HistoricalPriceQuery,
+    HistoricalPricePreviewListItem,
     ManualHistoricalPricePreviewRequest,
     PriceMapping,
 )
 from steuerreport_v2.domain.historical_prices import HistoricalPriceError, HistoricalPriceService
+from steuerreport_v2.domain.price_import_evidence import PriceImportEvidenceService
 
 
 class _PriceRoute(APIRoute):
@@ -57,8 +60,13 @@ def build_historical_prices_router(store, on_apply):
         return ApiResponse(data=service.save_mapping(request))
 
     @router.get("/previews")
-    def recent() -> ApiResponse[list[dict]]:
-        return ApiResponse(data=service.recent())
+    def recent() -> ApiResponse[list[HistoricalPricePreviewListItem]]:
+        items = service.recent()
+        partial = any(item["integrity_status"] == "unavailable" for item in items)
+        return ApiResponse(data=items, status="warning" if partial else "ok", warnings=[ApiMessage(
+            code="historical_price_recent_partial",
+            message="Einige gespeicherte Preisvorschauen sind nicht unverändert prüfbar; sie bleiben sichtbar.",
+        )] if partial else [])
 
     @router.get("/previews/{request_id}")
     def get(request_id: UUID) -> ApiResponse[dict]:
@@ -67,6 +75,17 @@ def build_historical_prices_router(store, on_apply):
     @router.get("/previews/{request_id}/status")
     def status(request_id: UUID) -> ApiResponse[dict]:
         return ApiResponse(data=service.status(request_id))
+
+    @router.get("/previews/{request_id}/prices/{price_id}/evidence")
+    def price_evidence(request_id: UUID, price_id: UUID) -> ApiResponse[PriceImportEvidenceReport]:
+        return ApiResponse(data=PriceImportEvidenceService(store).read(request_id, price_id))
+
+    @router.get("/previews/{request_id}/prices/{price_id}/evidence/{sha}")
+    def price_original(request_id: UUID, price_id: UUID, sha: str) -> Response:
+        content, filename = PriceImportEvidenceService(store).download(request_id, price_id, sha)
+        return Response(content=content, media_type="application/octet-stream", headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+        })
 
     @router.post("/previews/{request_id}/continue")
     def continue_preview(request_id: UUID, request: HistoricalPriceContinue) -> ApiResponse[dict]:

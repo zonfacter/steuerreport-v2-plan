@@ -3,6 +3,7 @@ import { Check, ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw, Sa
 import { HelpTip } from "../Help";
 import { API_BASE } from "../api-base";
 import { ManualHistoricalPriceEvidence } from "./ManualHistoricalPriceEvidence";
+import { PriceImportEvidence, type PreparedPriceBinding } from "./PriceImportEvidence";
 import { CurrentPriceRequestStatus } from "./CurrentPriceRequestStatus";
 import { ApiReadError, readApi, timestamp } from "./resource";
 import { ExactQuantity } from "./Ui";
@@ -14,7 +15,33 @@ type LookupAttempt = { provider_id?: string; search?: string | number | null; st
 type Row = { asset: string; price_date: string; event_count: number; event_types?: string[]; event_year_counts?: Record<string, number>; identity_basis?: string; asset_identity?: { network?: string; contract_address?: string }; years?: number[]; mint?: string | null; mints?: string[]; provider_id?: string; resolved_provider_id?: string | null; lookup_attempts?: LookupAttempt[]; lookup_stage?: string; status: string; fetch_state?: string; reason?: string; price_eur?: string; priced_at?: string; fx_date?: string; source?: string; evidence_sha256?: string[] };
 type YearSummary = { year: number; events_count: number; tokens_count: number; requirements_count: number; covered_count: number; fetchable_count: number; blocked_count: number; open_count?: number };
 type Plan = { plan_sha256: string; requirements_count: number; fetchable_count: number; events_count: number; max_requests: number; rows: Row[]; rows_truncated?: boolean; time_basis: string; page: number; page_size: number; year_summary: YearSummary[]; source_event_types: Record<string, number>; source_events_count: number; rows_total: number; row_offset: number; rows_limit: number; next_offset: number | null; inventory_count: number };
-type Preview = { id: string; preview_sha256: string; prices_count: number; requests_started: number; section_requests_started?: number; max_total_requests?: number | null; created_at: string; rows: Row[]; status: string; applied: boolean; manual?: boolean; block_reason?: string; pending_count?: number; open_count?: number; total_rows?: number; year_summary?: YearSummary[]; collection_complete?: boolean; parent_preview_id?: string; source_event_types?: Record<string, number>; query?: Partial<HistoricalPriceQuery>; remaining_requirements?: number; review_issues_open?: number; before_summary?: unknown; after_summary?: unknown; before_valuation_summary?: unknown; after_valuation_summary?: unknown; canonical_events_unchanged?: boolean; frozen_source_sha256?: string; tax_line_deltas?: unknown[] };
+type Preview = { price_bindings_version?: number; price_bindings?: PreparedPriceBinding[]; id: string; preview_sha256: string; prices_count: number; requests_started: number; section_requests_started?: number; max_total_requests?: number | null; created_at: string; rows: Row[]; status: string; applied: boolean; manual?: boolean; block_reason?: string; pending_count?: number; open_count?: number; total_rows?: number; year_summary?: YearSummary[]; collection_complete?: boolean; parent_preview_id?: string; source_event_types?: Record<string, number>; query?: Partial<HistoricalPriceQuery>; remaining_requirements?: number; review_issues_open?: number; before_summary?: unknown; after_summary?: unknown; before_valuation_summary?: unknown; after_valuation_summary?: unknown; canonical_events_unchanged?: boolean; frozen_source_sha256?: string; tax_line_deltas?: unknown[] };
+type RecentItem = { id: string; integrity_status: "verified" | "unavailable" | "legacy"; error_code: string | null; created_at: string | null; prices_count: number | null; applied: boolean | null };
+type RecentState = { status: "loading" | "ready" | "error"; items: RecentItem[] | null };
+const recentErrors = ["historical_price_evidence_changed", "historical_price_apply_decision_invalid", "historical_price_preview_unavailable"];
+function readRecent(value: unknown): RecentItem[] {
+  if (!Array.isArray(value) || value.length > 20) throw new Error("recent_response_invalid");
+  const ids = new Set<string>();
+  return value.map((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || typeof raw.id !== "string"
+      || raw.id.length !== 36 || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(raw.id)
+      || ids.has(raw.id)) throw new Error("recent_response_invalid");
+    ids.add(raw.id);
+    const unknown: RecentItem = { id: raw.id, integrity_status: raw.integrity_status == null ? "legacy" : "unavailable",
+      error_code: recentErrors.includes(raw.error_code) ? raw.error_code : "historical_price_preview_unavailable",
+      created_at: null, prices_count: null, applied: null };
+    if (raw.integrity_status !== "verified") return unknown;
+    if (raw.error_code != null || !["ready", "blocked", "no_prices"].includes(raw.status) || (raw.applied === true && raw.status !== "ready")
+      || (raw.status === "no_prices" && raw.prices_count !== 0)
+      || typeof raw.created_at !== "string" || !raw.created_at.includes("T") || !Number.isFinite(Date.parse(raw.created_at))
+      || typeof raw.preview_sha256 !== "string" || raw.preview_sha256.length !== 64 || !/^[a-f0-9]{64}$/.test(raw.preview_sha256)
+      || requestCount(raw.prices_count) == null || typeof raw.applied !== "boolean"
+      || [raw.pending_count, raw.open_count].some((count) => count != null && requestCount(count) == null)
+      || [raw.manual, raw.collection_complete].some((flag) => flag != null && typeof flag !== "boolean")) return { ...unknown, integrity_status: "unavailable" };
+    return { id: raw.id, integrity_status: "verified", error_code: null, created_at: raw.created_at,
+      prices_count: raw.prices_count, applied: raw.applied };
+  });
+}
 type CollectionStatus = { status: "running" | "ready" | "interrupted" | "not_found"; rows_processed: number; total_rows: number; requests_started: number; section_requests_started?: number; phase: string; preview_id: string };
 type CollectionRun = { section: number; previousRequests?: number; budget?: number };
 type CollectionRequest = { id: string; path: string; body: Record<string, unknown>; label: string };
@@ -90,6 +117,7 @@ const reasons: Record<string, string> = {
   historical_price_manual_identity_ambiguous: "Die Tokenidentität ist nicht eindeutig. Der Beleg kann nicht zugeordnet werden.",
   historical_price_manual_evidence_conflict: "Für dieselbe offene Position und denselben Originalbeleg liegt ein abweichender Wert vor.",
   historical_price_apply_decision_invalid: "Der gespeicherte Übernahmenachweis passt nicht unverändert zu dieser Preisvorschau. Keine erneute Übernahme starten; Entscheidungs- und Originalbelege prüfen.",
+  historical_price_preview_unavailable: "Diese Preisvorschau ist derzeit nicht prüfbar. Originalbelege und gespeicherten Nachweis prüfen; keine erneute Übernahme starten.",
   historical_price_manual_evidence_invalid: "Originalbeleg ist ungültig oder beschädigt. Datei und Format prüfen.",
   historical_price_manual_evidence_size_invalid: "Originalbeleg muss größer als 0 Byte und höchstens 2 MiB groß sein.",
   historical_price_manual_source_time_future: "Der manuell angegebene Erfassungszeitpunkt liegt in der Zukunft.",
@@ -124,7 +152,8 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
   const [previewIntegrityFailed, setPreviewIntegrityFailed] = useState(false);
   const [manualTarget, setManualTarget] = useState<Row>();
   const [planPage, setPlanPage] = useState(1);
-  const [recent, setRecent] = useState<Preview[]>([]), [busy, setBusy] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [recent, setRecent] = useState<RecentState>({ status: "loading", items: null });
+  const [busy, setBusy] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [external, setExternal] = useState(false), [prices, setPrices] = useState(false), [recalculate, setRecalculate] = useState(false), [actor, setActor] = useState("");
   const [mappingAsset, setMappingAsset] = useState(""), [coinId, setCoinId] = useState(""), [mintId, setMintId] = useState(""), [originalMint, setOriginalMint] = useState("");
   const [mappingNetwork, setMappingNetwork] = useState(""), [mappingContract, setMappingContract] = useState(""), [mappingDecimals, setMappingDecimals] = useState("");
@@ -134,6 +163,8 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
   const [collectionRun, setCollectionRun] = useState<CollectionRun>();
   const operation = useRef<CollectionRequest>();
   const active = useRef(false), serial = useRef(0), mounted = useRef(true);
+  const recentRequest = useRef<AbortController | null>(null), recentVersion = useRef(0);
+  const selectedPreview = useRef(preview); selectedPreview.current = preview;
   const key = JSON.stringify([year, asset, provider, limit, totalLimit, scope]);
   const query: HistoricalPriceQuery = { year: year === "all" ? null : Number(year), assets: asset.trim() ? [asset.trim()] : [], provider, max_requests: Math.min(Number(limit), Number(totalLimit)), max_total_requests: Number(totalLimit), strategy: "automatic", scope };
   const validTotalLimit = requestBudget(Number(totalLimit)) != null;
@@ -145,7 +176,24 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
   const applyBlocked = observedPreview && (preview?.collection_complete !== true || pendingCount > 0);
   const sectionRequests = progress ? requestCount(progress.section_requests_started ?? progress.requests_started) : undefined;
   const totalRequests = sectionRequests != null && collectionRun?.previousRequests != null ? collectionRun.previousRequests + sectionRequests : undefined;
-  const refreshRecent = async () => { const result = await readApi<Preview[]>(base + "/previews"); if (mounted.current) setRecent(result); };
+  const refreshRecent = async () => {
+    recentRequest.current?.abort();
+    const controller = new AbortController(), version = ++recentVersion.current;
+    recentRequest.current = controller;
+    const current = () => mounted.current && !controller.signal.aborted && version === recentVersion.current;
+    setRecent((previous) => ({ ...previous, status: "loading" }));
+    try {
+      const items = readRecent(await readApi<unknown>(base + "/previews", controller.signal));
+      if (!current()) return;
+      setRecent({ status: "ready", items });
+      if (items.some((item) => item.id === selectedPreview.current?.id && item.integrity_status === "unavailable")) {
+        setPreviewIntegrityFailed(true); setPrices(false); setRecalculate(false);
+      }
+      return items;
+    } catch (e) {
+      if (current()) { setRecent((previous) => ({ ...previous, status: "error" })); throw e; }
+    } finally { if (recentRequest.current === controller) recentRequest.current = null; }
+  };
   useEffect(() => { ++serial.current; setPlan(undefined); setPlanPage(1); setPreview(undefined); setManualTarget(undefined); setExternal(false); setPrices(false); setRecalculate(false); setError(""); setNotice(""); }, [key]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; ++serial.current; }; }, []);
   useEffect(() => {
@@ -159,7 +207,10 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
     window.addEventListener("pagehide", invalidate);
     return () => { unlisten(); window.removeEventListener("steuerreport:refresh", invalidate); window.removeEventListener("pagehide", invalidate); };
   }, []);
-  useEffect(() => { const controller = new AbortController(); void readApi<Preview[]>(base + "/previews", controller.signal).then(setRecent).catch((e) => { if (!controller.signal.aborted) setError(message(e)); }); return () => controller.abort(); }, []);
+  useEffect(() => {
+    void refreshRecent().catch(() => undefined);
+    return () => { recentRequest.current?.abort(); ++recentVersion.current; };
+  }, []);
   useEffect(() => { const controller = new AbortController(); void readApi<typeof mappings>(base + "/mappings", controller.signal).then(setMappings).catch((e) => { if (!controller.signal.aborted) setError(message(e)); }); return () => controller.abort(); }, []);
   useEffect(() => {
     if (!pollingId) return;
@@ -206,6 +257,27 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
     acceptPreview(result);
     setPlan(undefined);
   });
+  const recheckRecent = async (id: string) => {
+    if (active.current) return;
+    active.current = true; setBusy("Gespeicherten Nachweis prüfen");
+    const version = serial.current;
+    const current = () => mounted.current && version === serial.current;
+    try {
+      const result = await readApi<Preview>(base + "/previews/" + encodeURIComponent(id));
+      if (!current()) return;
+      const items = await refreshRecent();
+      if (current() && selectedPreview.current?.id === id && items?.some((item) => item.id === id && item.integrity_status === "verified")) {
+        setPreview(result); setPreviewIntegrityFailed(false);
+      }
+    } catch (e) {
+      if (current()) {
+        const code = e instanceof ApiReadError && recentErrors.includes(e.code || "") ? e.code! : "historical_price_preview_unavailable";
+        setRecent((previous) => ({ ...previous, items: previous.items?.map((item) => item.id === id
+          ? { id, integrity_status: "unavailable", error_code: code, created_at: null, prices_count: null, applied: null } : item) ?? null }));
+        if (selectedPreview.current?.id === id) { setPreviewIntegrityFailed(true); setPrices(false); setRecalculate(false); }
+      }
+    } finally { active.current = false; if (mounted.current) setBusy(""); }
+  };
   const loadPlan = (page = 1) => command("Preisbedarf planen", async () => {
     const version = serial.current;
     const result = await readApi<Plan>(base + "/plan", undefined, { ...query, page, page_size: 25 });
@@ -351,6 +423,8 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
       {preview.parent_preview_id && <p className="wsMuted">Zusammengeführte Vorschau einschließlich aller zuvor belegten Preise.</p>}
       <YearOverview summaries={preview.year_summary} selectedYear={preview.query?.year?.toString() || "all"} />
       <PreviewRows key={preview.id} preview={preview} />
+      {preview.applied && !previewIntegrityFailed && <PriceImportEvidence previewId={preview.id}
+        version={preview.price_bindings_version} bindings={preview.price_bindings} />}
       {!previewIntegrityFailed && <div className="wsActionFooter" aria-label="Preisberichte herunterladen">{([ ["zip", "Jahres-CSV und Belege als ZIP"], ["json", "Preisvorschau und Quellen als JSON"], ["md", "Preisbericht als Markdown"] ] as const).map(([extension, label]) => <a className="wsButton" key={extension} href={API_BASE + base + "/previews/" + encodeURIComponent(preview.id) + "/report." + extension} download><Download size={16} /> {label}</a>)}</div>}
       {(preview.remaining_requirements != null || preview.review_issues_open != null) && <p>Noch {preview.remaining_requirements ?? "unbekannt viele"} benötigte Preispositionen; {preview.review_issues_open ?? "unbekannt viele"} fachliche Hinweise – nicht alles Preisfehler. <a href="#review">Fachliche Hinweise prüfen</a>. Auch 0 Preispositionen bedeuten keine Vollständigkeits- oder Jahresfreigabe.</p>}
       <details className="wsTechnical"><summary>Belege und Berechnungsänderungen</summary>
@@ -382,7 +456,39 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
       </fieldset>}
       <button type="button" disabled={!!busy || !!recoveryId} onClick={() => { setPreview(undefined); setPlan(undefined); setExternal(false); setPrices(false); setRecalculate(false); rememberRequest(""); }}>Weiteren Preisabschnitt planen</button>
     </>}
-    <details className="wsTechnical"><summary>Gespeicherte Preisvorschauen</summary><button type="button" disabled={!!busy} onClick={() => void command("Vorschauen aktualisieren", refreshRecent)}><RefreshCw size={16} /> Liste aktualisieren</button>{recent.length ? recent.map((item) => <div key={item.id}><button type="button" disabled={!!busy || (!!recoveryId && item.id !== recoveryId)} onClick={() => void loadPreview(item.id)}>{timestamp(item.created_at)} · {item.prices_count} Preise · {previewIntegrityFailed && item.id === preview?.id ? "Nachweis ungeklärt" : item.applied ? "übernommen" : "Vorschau"}</button></div>) : <p>Noch keine gespeicherte Preisvorschau.</p>}</details>
+    <details className="wsTechnical"><summary>Gespeicherte Preisvorschauen</summary>
+      <div role="region" aria-label="Gespeicherte Preisvorschauen" aria-busy={recent.status === "loading"} style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+        <p>Integrität und Übernahmebindung <HelpTip label="Integrität gespeicherter Preisvorschauen">Eine erfolgreiche Integritätsprüfung bestätigt die gespeicherte Vorschau und ihre Importbindung. Sie ist keine Inhalts-, Methoden- oder Jahresfreigabe. Die Listenreihenfolge belegt kein Dokumentdatum.</HelpTip></p>
+        <button type="button" disabled={!!busy || recent.status === "loading"} title="Gespeicherte Liste erneut lesen; keine Anbieterabfrage, Übernahme oder Neuberechnung" onClick={() => void refreshRecent().catch(() => undefined)}>
+          {recent.status === "loading" ? <LoaderCircle size={16} aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />} {recent.status === "loading" ? "Liste wird gelesen" : "Liste aktualisieren"}
+        </button>
+        <div aria-live="polite">
+          {recent.status === "loading" && <p role="status">Gespeicherte Preisvorschauen werden geladen.</p>}
+          {recent.status === "error" && <p role="alert" className="wsInlineWarning">Gespeicherte Preisvorschauen konnten nicht gelesen werden. Erneut lesen; es wird keine Anbieterabfrage oder Übernahme wiederholt.</p>}
+          {recent.items !== null && recent.status !== "ready" && <p role="status" className="wsInlineWarning">Vorheriger Listenstand – nicht erneut bestätigt. Die aktuelle Anzahl und Integrität sind unbekannt.</p>}
+          {recent.status === "ready" && recent.items?.length === 0 && <p>Noch keine gespeicherte Preisvorschau.</p>}
+          {recent.status === "ready" && !!recent.items?.length && recent.items.some((item) => item.integrity_status === "unavailable") && <p role="status" className="wsInlineWarning">{recent.items.every((item) => item.integrity_status === "unavailable") ? "Keine der gespeicherten Vorschauen ist derzeit prüfbar." : "Ein Teil der gespeicherten Vorschauen ist derzeit nicht prüfbar."} Ungeklärte Einträge bleiben sichtbar; sie sind keine leere Liste.</p>}
+        </div>
+        {!!recent.items?.length && <ul aria-label="Gespeicherte Preisvorschauen" style={{ listStyle: "none", margin: "12px 0", padding: 0 }}>
+          {recent.items.map((item) => {
+            const failed = previewIntegrityFailed && item.id === preview?.id;
+            const verified = recent.status === "ready" && item.integrity_status === "verified" && !failed;
+            return <li key={item.id} aria-label={`Preisvorschau ${item.id}`} style={{ minWidth: 0, borderBottom: "1px solid #d7dde1", padding: "12px 0" }}>
+              <p><code>{item.id}</code></p>
+              <p>{verified ? "Integrität und Importbindung geprüft." : recent.status !== "ready" ? "Vorheriger Stand; Integrität nicht erneut bestätigt." : item.integrity_status === "legacy" && !failed ? "Ältere API-Antwort ohne Integritätsmarker; keine aktuelle Prüfung bestätigt." : "Nachweis nicht verfügbar."}</p>
+              {!verified && <p>Datum unbekannt · Preisanzahl unbekannt · Übernahme nicht bestätigt.</p>}
+              {!verified && recent.status === "ready" && item.integrity_status !== "legacy" && <p>{reasons[item.error_code || "historical_price_preview_unavailable"] || reasons.historical_price_preview_unavailable}</p>}
+              <button type="button" disabled={!!busy || recent.status === "loading" || (!!recoveryId && item.id !== recoveryId)}
+                aria-label={verified ? undefined : `Erneut prüfen: Preisvorschau ${item.id}${failed ? " · Nachweis ungeklärt" : ""}`}
+                title="Nur gespeicherte Belege erneut lesen; kein Preisabruf, keine Übernahme und keine Neuberechnung"
+                style={{ maxWidth: "100%", whiteSpace: "normal", textAlign: "left", overflowWrap: "anywhere" }} onClick={() => verified ? void loadPreview(item.id) : void recheckRecent(item.id)}>
+                {!verified && <RefreshCw size={16} aria-hidden="true" />} {verified ? `${timestamp(item.created_at)} · ${item.prices_count} Preise · ${item.applied ? "übernommen" : "Vorschau"}` : failed ? "Erneut prüfen · Nachweis ungeklärt" : "Erneut prüfen"}
+              </button>
+            </li>;
+          })}
+        </ul>}
+      </div>
+    </details>
     <details className="wsTechnical"><summary>Preisquellen zuordnen</summary><p>Exakte Anbieter-ID verwenden. Bei Solana-Token den Mint prüfen; gleiche Symbole beweisen keine Tokenidentität. Eine Zuordnung ist keine Eigentums- oder Spamfreigabe.</p>
       <label>Vorhandene Preiszuordnung<select disabled={!!busy || !!recoveryId} value={mappings[mappingAsset] ? mappingAsset : ""} onChange={(e) => { const asset = e.target.value; setMappingAsset(asset); setCoinId(mappings[asset]?.coingecko_id || ""); setMintId(mappings[asset]?.defillama_id || ""); setOriginalMint(mappings[asset]?.solana_mint || ""); setMappingNetwork(mappings[asset]?.network || ""); setMappingContract(mappings[asset]?.contract_address || ""); setMappingDecimals(mappings[asset]?.decimals?.toString() ?? ""); }}><option value="">Neue Zuordnung</option>{Object.keys(mappings).sort().map((asset) => <option key={asset}>{asset}</option>)}</select></label>
       <form onSubmit={(e) => { e.preventDefault(); void command("Preiszuordnung speichern", async () => {

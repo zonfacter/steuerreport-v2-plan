@@ -127,6 +127,15 @@ def price_evidence_binding(*, point: PricePoint, identity: PriceEvidenceIdentity
                             observation=observation, method=method))
 
 
+def price_point_fingerprint(point: PricePoint) -> str:
+    """Bind the stored price identity; this is not an observation or admission."""
+    normalized = _Point.model_validate(_dump(point))
+    payload = {"policy_id": "historical-price-point", "policy_version": 1,
+               "point": _document(normalized)}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                                     ensure_ascii=True, allow_nan=False).encode()).hexdigest()
+
+
 def _stored_value(value):
     if value <= 0 or value >= _LIMIT:
         return False

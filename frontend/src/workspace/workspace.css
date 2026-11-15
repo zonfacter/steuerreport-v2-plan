@@ -229,3 +229,9 @@
   .lotOriginDetails { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .lotOriginDetails dd { margin-bottom: 12px; }
 }
+.wsPriceImportOriginals { min-width: 0; padding-inline-start: 20px; }
+.wsPriceImportOriginals li { min-width: 0; margin-block: 8px; }
+.wsPriceImportOriginals .wsButton { max-width: 100%; white-space: normal; }
+.wsPriceImportOriginals .wsButton span { min-width: 0; overflow-wrap: anywhere; }
+.wsPriceImportOriginals .wsButton svg { flex-shrink: 0; }
+.wsPriceImportOriginals small { display: block; overflow-wrap: anywhere; }

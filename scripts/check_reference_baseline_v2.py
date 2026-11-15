@@ -10,6 +10,8 @@ CHECKPOINT_REVIEW_EXPECTED = "db10e6259ba1953792a66eb7a8396ccc4841810bf0818264b2
 AS_OF_TIME_EXPECTED = "06d4d1115cf1f5dfa1ff240d37a87c23709685e151d7df7902432a3fb5a3fdc8"
 BOUND_PRICE_EVIDENCE_EXPECTED = "da94ef9bc2c4b3031d640dfa12d56242ae286ba3b05d501f64e77451ff1bb325"
 BOUND_PRICE_REVIEW_EXPECTED = "841ab5bb008e8e435087118dd0c97df940090eaa9fccaf062dd555719e7d252d"
+RECENT_PRICE_EXPECTED = "d36acb12257d601c19d896d016194caf68c34b7f7200f77edb8b32fec0588f85"
+IMPORT_PRICE_EVIDENCE_EXPECTED = "164300f4355d8214fd90abb0bf9a79f5529b097687c8e63b93282f2ce6490adf"
 
 
 def main() -> int:
@@ -43,12 +45,24 @@ def main() -> int:
     if bound_review_actual != BOUND_PRICE_REVIEW_EXPECTED:
         print("independent_bound_price_review_changed")
         return 1
+    recent_probe = ROOT / "tests/unit/test_historical_price_recent_acceptance.py"
+    recent_actual = hashlib.sha256(recent_probe.read_bytes()).hexdigest()
+    if recent_actual != RECENT_PRICE_EXPECTED:
+        print("independent_recent_price_changed")
+        return 1
+    import_probe = ROOT / "tests/unit/test_price_import_evidence_acceptance.py"
+    import_actual = hashlib.sha256(import_probe.read_bytes()).hexdigest()
+    if import_actual != IMPORT_PRICE_EVIDENCE_EXPECTED:
+        print("independent_import_price_evidence_changed")
+        return 1
     print("independent_reference_baseline_verified:" + actual)
     print("independent_checkpoint_baseline_verified:" + checkpoint_actual)
     print("independent_checkpoint_review_verified:" + review_actual)
     print("independent_as_of_time_baseline_verified:" + temporal_actual)
     print("independent_bound_price_evidence_verified:" + bound_actual)
     print("independent_bound_price_review_verified:" + bound_review_actual)
+    print("independent_recent_price_verified:" + recent_actual)
+    print("independent_import_price_evidence_verified:" + import_actual)
     return 0
 
 

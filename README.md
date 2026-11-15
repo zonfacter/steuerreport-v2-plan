@@ -273,6 +273,10 @@ die positive Nicht-EUR-Belegzulassung ist noch nicht als Anwendungsablauf
 verfuegbar. Ein reiner originalgebundener Zulassungsbaustein und der korrigierte
 historische Uebernahmenachweis sind getrennt dokumentiert:
 [Belegzulassung und Nachweisgrenzen (Entwicklung)](docs/audit/ISSUE46_63_BELEGZULASSUNG_2026-11-15.md).
+Der nachfolgende Entwicklungsstand macht unpruefbare Vorschauen in der Liste
+sichtbar und verknuepft neu gebundene uebernommene Preis-IDs lesend mit ihren
+Originaldateien. Dieser Importbeleg ist keine Zeit-/Methodenzulassung.
+[Vertrag des Importbeleg-Readers](docs/audit/ISSUE46_IMPORTBELEG_READER_VERTRAG_2026-11-15.md).
 Preiszeilen/Checkpoint werden gemeinsam gespeichert, die anschliessende
 Pipeline bleibt ein getrennter Schritt. Keine automatische Wiederholung und
 keine Jahresfreigabe; der moderne historische Vorschauablauf bleibt erhalten.

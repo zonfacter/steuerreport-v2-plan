@@ -492,3 +492,19 @@ def test_base_eur_cannot_be_redefined_by_non_eur_evidence_admission(case, value)
     result = _assess(case)
     assert not result.strict_eligible
     assert "eur_identity_uses_legacy_policy" in result.reason_codes
+
+
+def test_stored_price_fingerprint_is_semantic_and_not_a_method_admission(case):
+    from steuerreport_v2.domain.price_evidence import price_point_fingerprint
+
+    point = case["point"]
+    original = price_point_fingerprint(point)
+    equivalent = point.model_copy(update={"price_eur": Decimal("100.000000000000000000"),
+        "confidence": Decimal("0.95000000"),
+        "priced_at": point.priced_at.astimezone(timezone := ZoneInfo("Europe/Berlin"))})
+    assert equivalent.priced_at.tzinfo == timezone
+    assert price_point_fingerprint(equivalent) == original
+    assert price_point_fingerprint(point.model_copy(update={"price_id": str(UUID(int=2))})) != original
+    assert price_point_fingerprint(point.model_copy(update={"source": "synthetic:other"})) != original
+    with pytest.raises(ValidationError):
+        price_point_fingerprint(point.model_copy(update={"priced_at": point.priced_at.replace(tzinfo=None)}))

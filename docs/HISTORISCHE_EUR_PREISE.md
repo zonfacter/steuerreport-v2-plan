@@ -281,7 +281,9 @@ Metainformation und kein bestaetigter Zeitstempel des Anbieters.
 - `GET/PUT /api/v1/prices/historical/mappings`: lesen / privat speichern.
 - `POST /api/v1/prices/historical/previews`: bestaetigter Abruf mit
   Request-UUID und Planhash; speichert private Belege und isolierte Vorschau.
-- `GET /api/v1/prices/historical/previews`: letzte 20 fertige Vorschauen.
+- `GET /api/v1/prices/historical/previews`: letzte 20 kanonische Vorschau-
+  Kandidaten. `integrity_status` unterscheidet pruefbar/nicht verfuegbar;
+  unpruefbare Eintraege bleiben mit unbekannten Metadaten sichtbar.
 - `GET /api/v1/prices/historical/previews/{id}`: pruefbare Vorschau.
 - `GET /api/v1/prices/historical/previews/{id}/status`: rein lesender
   Abrufstatus und zuletzt gespeicherter Fortschritt; keine neue Anbieterabfrage.
@@ -322,11 +324,37 @@ noch als nicht erneut bestaetigt und sperrt Uebernahme und Berichtslinks.
 Sie korrigiert oder loescht keine gespeicherten Belege.
 
 Der Importnachweis ist weder eine heutige Vollstaendigkeitsaussage noch eine
-Zulassung der Bewertungsmethode. Ein positiver originalgebundener
-Stichtags-Belegpfad wird getrennt entwickelt; er ist noch nicht in der
-Anwendungsoberflaeche nutzbar. Read-only-Transaktionen ersetzen auch nicht die
-noch erforderliche Abgrenzung einer moeglichen Schema-Initialisierung beim
-ersten DB-Verbindungsaufbau.
+Zulassung der Bewertungsmethode. Die menschliche Methodenannahme und ihre
+Gate-Anbindung werden weiterhin getrennt entwickelt.
+
+### Originale einer konkreten uebernommenen Preis-ID (Entwicklung)
+
+Neue Vorschauen enthalten `price_bindings_version=1` und eine gespeicherte
+Preis-ID mit semantischem Fingerprint. Alte Archive bleiben unveraendert;
+ohne diese Bindung gibt es keine ersatzweise Symbol-/Wertzuordnung.
+Nach ausdruecklicher Uebernahme: Vorschau oeffnen, Bereich
+**Originalzuordnung der uebernommenen Preise** aufklappen, Preiszeile waehlen
+und **Importbelege pruefen** ausloesen. Auswahl/Oeffnen startet keinen Abruf.
+Erfolgreiche Pruefung bestaetigt ausschliesslich diese konkrete Importbindung.
+Beobachtungs-/Veroeffentlichungszeit und Methodenfreigabe bleiben ungeprueft.
+
+- `GET /api/v1/prices/historical/previews/{id}/prices/{price_id}/evidence`:
+  Vorschauhash, Importentscheidung, aktuellen Preisfingerprint und zugeordnete
+  Originalbytes gemeinsam pruefen; `strict_eligible=false` bleibt gesetzt.
+- Derselbe Pfad mit `/{sha}` liefert ausschliesslich ein dazugehoeriges,
+  erneut geprueftes Original. Keine beliebige Datei aus derselben Vorschau.
+- Grenzen: 32 MiB Vorschau, 2 MiB je Original, insgesamt 6 MiB. Ueberschreitung
+  ist ein expliziter Lesefehler, keine fachliche Ablehnung der Quelle.
+- Der Reader verwendet nur einen bereits initialisierten App-Store und eine
+  Read-only-Transaktion ohne Schema- oder Verzeichnisinitialisierung. Das ist
+  keine allgemeine physisch schreibgeschuetzte Oeffnung unbekannter DB-Dateien.
+- Die Datenbankpraezision wird mit demselben DECIMAL-Cast nachvollzogen;
+  Originalbytes und unquantisierte Eingaben werden nicht umgeschrieben.
+
+Die gespeicherte Vorschau-Liste trennt Laden, Fehler, leeren Erfolg und
+unpruefbare Eintraege. Nach erneutem Listenfehler bleibt ein vorheriger Stand
+sichtbar, aber nicht aktuell bestaetigt. **Liste aktualisieren** startet keine
+Anbieterabfrage oder Uebernahme.
 
 ## Anbieterquellen
 

@@ -69,6 +69,16 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m pytest tests/unit/test_price_evidence_acceptance.py tests/unit/test_price_evidence_review.py -q --junitxml=reference-bound-price-evidence.xml
+      - name: Immutable independent recent price probes
+        env:
+          PYTHONPATH: src
+          STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
+        run: python -m pytest tests/unit/test_historical_price_recent_acceptance.py -q --basetemp="${RUNNER_TEMP}/reference-recent-price" --junitxml=reference-recent-price.xml
+      - name: Immutable independent import price evidence probes
+        env:
+          PYTHONPATH: src
+          STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
+        run: python -m pytest tests/unit/test_price_import_evidence_acceptance.py -q --basetemp="${RUNNER_TEMP}/reference-import-price" --junitxml=reference-import-price.xml
       - name: Original reference results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -295,6 +305,12 @@ jobs:
       - name: Historical EUR prices against isolated backend and mock providers
         working-directory: .
         run: python scripts/check_historical_prices_browser_v2.py --output "${RUNNER_TEMP}/historical-prices-browser"
+      - name: Recent historical previews with controlled responses
+        working-directory: .
+        run: python scripts/check_price_recent_browser_v2.py --output var/price-recent-browser
+      - name: Import price originals with controlled responses
+        working-directory: .
+        run: python scripts/check_price_import_evidence_browser_v2.py --output var/price-import-evidence-browser
       - name: Current price job status with controlled responses
         working-directory: .
         run: python scripts/check_current_price_status_browser_v2.py --output var/current-price-status-browser
@@ -335,6 +351,8 @@ jobs:
             ${{ runner.temp }}/historical-prices-browser/
             var/current-price-status-browser/
             var/price-checkpoint-backend-browser/
+            var/price-recent-browser/
+            var/price-import-evidence-browser/
             var/price-time-evidence-browser/
             var/price-time-backend-browser/
             var/price-time-archive-browser/

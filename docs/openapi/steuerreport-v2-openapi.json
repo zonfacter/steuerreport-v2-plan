@@ -7609,6 +7609,50 @@
         "title": "ApiResponse[PriceGapDecisionResult]",
         "type": "object"
       },
+      "ApiResponse_PriceImportEvidenceReport_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportEvidenceReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[PriceImportEvidenceReport]",
+        "type": "object"
+      },
       "ApiResponse_PriceQualityBinanceNormalizerReport_": {
         "properties": {
           "data": {
@@ -15713,6 +15757,54 @@
         "title": "ApiResponse[list[FlowEntry]]",
         "type": "object"
       },
+      "ApiResponse_list_HistoricalPricePreviewListItem__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HistoricalPricePreviewListItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[list[HistoricalPricePreviewListItem]]",
+        "type": "object"
+      },
       "ApiResponse_list_ImportBatch__": {
         "properties": {
           "data": {
@@ -16191,55 +16283,6 @@
           }
         },
         "title": "ApiResponse[list[V1ReferenceMetric]]",
-        "type": "object"
-      },
-      "ApiResponse_list_dict__": {
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          },
-          "errors": {
-            "items": {
-              "$ref": "#/components/schemas/ApiMessage"
-            },
-            "title": "Errors",
-            "type": "array"
-          },
-          "status": {
-            "default": "ok",
-            "enum": [
-              "ok",
-              "warning",
-              "error"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "trace_id": {
-            "title": "Trace Id",
-            "type": "string"
-          },
-          "warnings": {
-            "items": {
-              "$ref": "#/components/schemas/ApiMessage"
-            },
-            "title": "Warnings",
-            "type": "array"
-          }
-        },
-        "title": "ApiResponse[list[dict]]",
         "type": "object"
       },
       "ApiResponse_list_dict_str__object___": {
@@ -34667,6 +34710,160 @@
         "title": "HistoricalPriceFetch",
         "type": "object"
       },
+      "HistoricalPricePreviewListItem": {
+        "additionalProperties": false,
+        "description": "Integritaetszustand einer Vorschau, keine Inhalts- oder Methodenfreigabe.",
+        "properties": {
+          "applied": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied"
+          },
+          "collection_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Complete"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "historical_price_evidence_changed",
+                  "historical_price_apply_decision_invalid",
+                  "historical_price_preview_unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "integrity_status": {
+            "enum": [
+              "verified",
+              "unavailable"
+            ],
+            "title": "Integrity Status",
+            "type": "string"
+          },
+          "manual": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual"
+          },
+          "open_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Count"
+          },
+          "parent_preview_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Preview Id"
+          },
+          "pending_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Count"
+          },
+          "preview_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Sha256"
+          },
+          "prices_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prices Count"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "no_prices",
+              "blocked",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "integrity_status"
+        ],
+        "title": "HistoricalPricePreviewListItem",
+        "type": "object"
+      },
       "HistoricalPriceQuery": {
         "additionalProperties": false,
         "properties": {
@@ -46231,6 +46428,153 @@
           "decision_status"
         ],
         "title": "PriceGapDecisionResult",
+        "type": "object"
+      },
+      "PriceImportEvidenceReport": {
+        "additionalProperties": false,
+        "properties": {
+          "admission_status": {
+            "const": "not_reviewed",
+            "default": "not_reviewed",
+            "title": "Admission Status",
+            "type": "string"
+          },
+          "asset": {
+            "title": "Asset",
+            "type": "string"
+          },
+          "explanation": {
+            "default": "Die konkrete Preiszeile ist an Vorschau, Importentscheidung und die angegebenen Originalbytes gebunden. Keine bestaetigte Inhalts-, Beobachtungs-, Veroeffentlichungs- oder Methodenzulassung; keine Mengen-, Steuerjahres- oder Dossierfreigabe.",
+            "title": "Explanation",
+            "type": "string"
+          },
+          "format_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Format Version",
+            "type": "integer"
+          },
+          "fx_published_at": {
+            "title": "Fx Published At",
+            "type": "null"
+          },
+          "integrity_scope": {
+            "const": "selected_price_only",
+            "default": "selected_price_only",
+            "title": "Integrity Scope",
+            "type": "string"
+          },
+          "observed_at": {
+            "title": "Observed At",
+            "type": "null"
+          },
+          "originals": {
+            "items": {
+              "$ref": "#/components/schemas/PriceImportOriginalRef"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Originals",
+            "type": "array"
+          },
+          "preview_id": {
+            "format": "uuid",
+            "title": "Preview Id",
+            "type": "string"
+          },
+          "preview_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Preview Sha256",
+            "type": "string"
+          },
+          "price_eur": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price Eur",
+            "type": "string"
+          },
+          "price_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Price Fingerprint",
+            "type": "string"
+          },
+          "price_id": {
+            "format": "uuid",
+            "title": "Price Id",
+            "type": "string"
+          },
+          "price_published_at": {
+            "title": "Price Published At",
+            "type": "null"
+          },
+          "status": {
+            "const": "verified_import_binding",
+            "default": "verified_import_binding",
+            "title": "Status",
+            "type": "string"
+          },
+          "stored_reference_at": {
+            "format": "date-time",
+            "title": "Stored Reference At",
+            "type": "string"
+          },
+          "strict_eligible": {
+            "const": false,
+            "default": false,
+            "title": "Strict Eligible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "preview_id",
+          "preview_sha256",
+          "price_id",
+          "price_fingerprint",
+          "asset",
+          "price_eur",
+          "stored_reference_at",
+          "originals"
+        ],
+        "title": "PriceImportEvidenceReport",
+        "type": "object"
+      },
+      "PriceImportOriginalRef": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_length": {
+            "maximum": 2097152.0,
+            "minimum": 1.0,
+            "title": "Byte Length",
+            "type": "integer"
+          },
+          "download_url": {
+            "title": "Download Url",
+            "type": "string"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha256",
+          "byte_length",
+          "download_url"
+        ],
+        "title": "PriceImportOriginalRef",
         "type": "object"
       },
       "PriceMapping": {
@@ -95732,7 +96076,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_list_dict__"
+                  "$ref": "#/components/schemas/ApiResponse_list_HistoricalPricePreviewListItem__"
                 }
               }
             },
@@ -95998,6 +96342,127 @@
           }
         },
         "summary": "Evidence",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/prices/{price_id}/evidence": {
+      "get": {
+        "description": "Price evidence. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "price_evidence_api_v1_prices_historical_previews__request_id__prices__price_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "price_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Price Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PriceImportEvidenceReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Price Evidence",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/prices/{price_id}/evidence/{sha}": {
+      "get": {
+        "description": "Price original. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "price_original_api_v1_prices_historical_previews__request_id__prices__price_id__evidence__sha__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "price_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Price Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sha",
+            "required": true,
+            "schema": {
+              "title": "Sha",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Price Original",
         "tags": [
           "Prices"
         ],
