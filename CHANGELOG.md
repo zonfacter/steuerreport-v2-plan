@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Entwicklung #46: Gespeicherte Stichtagsreferenzzeit und belegte Kurs-/FX-Zeit
+  getrennt ausweisen. Unbelegte Same-Day-Referenzen und Tokenannahmen geben
+  das strenge Stichtags-Gate nicht frei; ungepruefte Kleinstwerte beweisen
+  keine Unwesentlichkeit. Echte EUR-Identitaet bleibt zeitlos. Alte Laeufe
+  bleiben archiviert, gelten ohne neue Zeitpolicy aber nicht als aktueller
+  Freigabenachweis. Positive Nicht-EUR-Belegzulassung weiter offen; kein
+  produktiver Methodenwechsel und keine Aenderung steuerlicher Tagesregeln.
 - Entwicklung #49: Aktuelle und historische Direktpreisauftraege erhalten
   atomar gebundene Preiszeilen/Checkpoints, getrennte Pipelinephasen und eine
   lesende Statusauskunft. Gleiche Kennungen werden persistent gesperrt; neue

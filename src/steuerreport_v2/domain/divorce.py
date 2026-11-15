@@ -34,6 +34,7 @@ from steuerreport_v2.domain.divorce_service_routes import (
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.price_time import POLICY_ID, POLICY_VERSION, assess_price_time
 from steuerreport_v2.domain.stichtag_token_valuation import (
     StichtagTokenValuationService,
 )
@@ -1238,6 +1239,7 @@ class DivorceEqualizationService:
         prior_day = 0
         stale = 0
         missing = 0
+        unverified_time = 0
         review = 0
         accepted_review = 0
         material = 0
@@ -1253,6 +1255,13 @@ class DivorceEqualizationService:
                 price_source=position.price_source,
                 valuation_at=valuation_at,
             )
+            time_assessment = assess_price_time(
+                asset=asset, price_source=position.price_source,
+                priced_at=position.priced_at, price_eur=position.price_eur,
+                valuation_at=valuation_at,
+            )
+            if time_assessment.status == "fixed_eur_identity" and time_assessment.strict_eligible:
+                price_status = "same_day"
             if price_status == "missing":
                 if diagnostics is None:
                     diagnostics = HistoricalPriceLookup(self.store)
@@ -1266,7 +1275,8 @@ class DivorceEqualizationService:
                     )
                     if age is not None and age > 0:
                         price_status = diagnostic_status
-            if price_status == "same_day" and value_eur < materiality_threshold_eur:
+            if (price_status == "same_day" and time_assessment.strict_eligible
+                    and value_eur < materiality_threshold_eur):
                 continue
             material += 1
             token_assessment = self.token_valuation_service.assessment(
@@ -1289,6 +1299,9 @@ class DivorceEqualizationService:
                     evidence_refs.add(token_assessment.accepted_decision.evidence_ref)
             if price_status == "same_day":
                 same_day += 1
+                if not time_assessment.strict_eligible:
+                    unverified_time += 1
+                    affected.add(asset)
             elif price_status == "prior_day":
                 prior_day += 1
                 affected.add(asset)
@@ -1298,7 +1311,7 @@ class DivorceEqualizationService:
             elif price_status in {"stale", "derived_event_quote"}:
                 stale += 1
                 affected.add(asset)
-        strict_ready = not any((prior_day, stale, missing, review))
+        strict_ready = not any((prior_day, stale, missing, review, unverified_time))
         findings: list[str] = []
         if prior_day:
             findings.append(
@@ -1310,6 +1323,12 @@ class DivorceEqualizationService:
             )
         if missing:
             findings.append(f"{missing} materielle Positionen besitzen keinen Preis.")
+        if unverified_time:
+            findings.append(
+                f"{unverified_time} Positionen haben einen Referenzwert am selben Tag, "
+                "aber keinen gebundenen Kurs-/FX-Zeitbeleg. Gespeicherte Referenzzeit "
+                "ist keine bestaetigte Beobachtungszeit; keine strenge Wertfreigabe."
+            )
         if review:
             findings.append(
                 f"{review} materielle Tokenpositionen sind als Risikopruefung markiert."
@@ -1321,11 +1340,14 @@ class DivorceEqualizationService:
             )
         if strict_ready:
             findings.append(
-                "Alle materiellen Positionen besitzen einen belegten Same-Day-Preis; "
-                "offene Token-Risikoflags bestehen nicht."
+                "Alle materiellen Positionen erfuellen die aktuelle Zeitbelegpruefung; "
+                "offene Token-Risikoflags bestehen nicht. Keine rechtliche Gesamtfreigabe."
+                if material else "Keine materiellen Positionen zu pruefen; keine allgemeine Abgabefreigabe."
             )
         return DivorceValuationGate(
             valuation_at=valuation_at.replace(tzinfo=timezone.utc),
+            price_time_policy_id=POLICY_ID,
+            price_time_policy_version=POLICY_VERSION,
             materiality_threshold_eur=materiality_threshold_eur,
             positions_count=len(positions),
             material_positions_count=material,
@@ -1333,6 +1355,7 @@ class DivorceEqualizationService:
             prior_day_price_count=prior_day,
             stale_price_count=stale,
             missing_price_count=missing,
+            unverified_price_time_count=unverified_time,
             review_asset_count=review,
             accepted_review_asset_count=accepted_review,
             strict_ready=strict_ready,
@@ -1399,12 +1422,14 @@ class DivorceEqualizationService:
         ):
             return (
                 "valued_risk_review_accepted",
-                "Exakter Mint und Same-Day-Preis wurden fuer diesen Stichtag beleggebunden angenommen.",
+                "Stichtagsbezogene Tokenentscheidung dokumentiert; sie ersetzt keinen "
+                "Kurs-/FX-Beobachtungs- oder Veroeffentlichungsbeleg.",
             )
         if abs(value_eur) < self.DUST_VALUE_EUR:
             return (
                 "dust_under_1_eur",
-                "Unter 1 EUR; fuer Anzeige/Portfolioanalyse als Staub behandeln.",
+                "Rechnerischer Referenzwert unter 1 EUR; nur Anzeige/Portfolioanalyse, "
+                "keine bestaetigte Materialitaets- oder Wertfreigabe.",
             )
         return "valued", None
 

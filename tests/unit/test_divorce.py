@@ -191,8 +191,10 @@ def test_divorce_equalization_summary_splits_pre_cutoff_and_direct_eur_invest(tm
     assert report.post_cutoff_all_lots.total_gain_loss_eur == Decimal(
         "-10.000000000000000000"
     )
-    assert report.cutoff_price_gate.strict_ready is True
-    assert report.valuation_price_gate.strict_ready is True
+    assert report.cutoff_price_gate.strict_ready is False
+    assert report.valuation_price_gate.strict_ready is False
+    assert report.cutoff_price_gate.unverified_price_time_count > 0
+    assert report.valuation_price_gate.unverified_price_time_count > 0
 
     capital_flows_csv = DivorceEqualizationService(store).capital_flows_csv()
     assert capital_flows_csv.startswith("row_type,flow_id,event_id,event_time")

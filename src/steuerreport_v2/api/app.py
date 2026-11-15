@@ -3547,8 +3547,17 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         return ApiResponse(data=report)
 
     @app.get("/api/v1/divorce/valuation-runs/latest")
-    def divorce_valuation_run_latest() -> ApiResponse[DivorceValuationRunReport | None]:
-        return ApiResponse(data=DivorceValuationRunService(db).latest())
+    def divorce_valuation_run_latest(include_archived: bool = False) -> ApiResponse[DivorceValuationRunReport | None]:
+        service = DivorceValuationRunService(db)
+        report = service.latest(require_current_policy=False)
+        if report is not None and not service.has_current_price_time_policy(report):
+            return ApiResponse(status="warning", data=report if include_archived else None, warnings=[ApiMessage(
+                code="valuation_price_time_policy_stale",
+                message=("Archivierter Stichtagslauf ohne aktuelle Zeitbelegpruefung; kein aktueller "
+                         "Freigabenachweis. Archiv unveraendert unter /api/v1/divorce/valuation-runs/"
+                         + report.run_id + " erreichbar. Neuen Lauf nur ausdruecklich erstellen."),
+            )])
+        return ApiResponse(data=report)
 
     @app.get("/api/v1/divorce/valuation-runs/{run_id}")
     def divorce_valuation_run_by_id(
@@ -3557,7 +3566,11 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         report = DivorceValuationRunService(db).get(run_id)
         if report is None:
             raise HTTPException(status_code=404, detail="Stichtagslauf nicht gefunden")
-        return ApiResponse(data=report)
+        warnings = [] if DivorceValuationRunService.has_current_price_time_policy(report) else [ApiMessage(
+            code="valuation_price_time_policy_archived",
+            message="Historischer Lauf ohne aktuelle Zeitbelegpruefung; gespeicherter Status ist keine heutige Freigabe.",
+        )]
+        return ApiResponse(status="warning" if warnings else "ok", data=report, warnings=warnings)
 
     @app.get("/api/v1/divorce/valuation-runs/{run_id}/evidence/{filename}")
     def divorce_valuation_run_evidence(run_id: str, filename: str) -> Response:

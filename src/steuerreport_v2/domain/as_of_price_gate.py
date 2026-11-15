@@ -31,6 +31,7 @@ from steuerreport_v2.domain.external_price_backfill import (
 )
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.price_time import assess_price_time
 from steuerreport_v2.domain.stichtag_token_valuation import (
     StichtagTokenValuationService,
 )
@@ -78,7 +79,13 @@ class AsOfPriceGateService:
         positions_by_asset: defaultdict[str, list[object]] = defaultdict(list)
         for position in portfolio.positions:
             value = abs(position.value_eur or Decimal("0"))
-            if position.price_eur is None or value >= materiality_threshold_eur:
+            time_assessment = assess_price_time(
+                asset=position.asset, price_source=position.price_source,
+                priced_at=position.priced_at, price_eur=position.price_eur,
+                valuation_at=valuation_at,
+            )
+            if (position.price_eur is None or value >= materiality_threshold_eur
+                    or not time_assessment.strict_eligible):
                 positions_by_asset[str(position.asset).upper()].append(position)
         candidates: list[AsOfPriceGateCandidate] = []
         for asset, positions in sorted(positions_by_asset.items()):
@@ -102,6 +109,10 @@ class AsOfPriceGateService:
                 price_source=price_source,
                 valuation_at=divorce_service._naive(valuation_at),
             )
+            price_time = assess_price_time(
+                asset=asset, price_source=price_source, priced_at=priced_at,
+                price_eur=price_eur, valuation_at=valuation_at,
+            )
             value_eur = sum(
                 (position.value_eur or Decimal("0") for position in positions),
                 Decimal("0"),
@@ -123,14 +134,19 @@ class AsOfPriceGateService:
             if price_status != "same_day" and provider_id:
                 status = "fetchable"
                 reason = (
-                    "Historischer Provider und USD/EUR-Tageskurs koennen den "
-                    "Stichtagspreis belegen."
+                    "Historischer Provider und USD/EUR-Referenz koennen weitere "
+                    "Bewertungskandidaten liefern, aber keine belegte Intraday-Uhrzeit ersetzen."
                 )
                 if token_review_status == "pending":
                     reason += " Danach bleibt eine stichtagsbezogene Tokenpruefung erforderlich."
             elif price_status != "same_day":
                 status = "not_configured"
                 reason = "Kein historischer Provider-Identifier konfiguriert."
+            elif not price_time.strict_eligible:
+                status = "time_review"
+                reason = price_time.explanation
+                if token_review_status == "pending":
+                    reason += " Die Tokenpruefung ist davon getrennt weiterhin offen."
             elif token_review_status == "pending":
                 status = "review_only"
                 reason = (
@@ -140,9 +156,9 @@ class AsOfPriceGateService:
             else:
                 status = "satisfied"
                 reason = (
-                    "Materielle Position besitzt einen Preis am Stichtag."
+                    price_time.explanation
                     if token_review_status == "not_required"
-                    else "Same-Day-Preis und stichtagsbezogene Tokenentscheidung sind belegt."
+                    else "Zeitbelegpruefung und getrennte stichtagsbezogene Tokenentscheidung liegen vor."
                 )
             if diagnostic_only:
                 reason += " Letzter Kurs nur zur Altersdiagnose; kein zugelassener Portfolio- oder Steuerwert."
@@ -157,6 +173,7 @@ class AsOfPriceGateService:
                     current_price_source=price_source,
                     current_price_age_days=age_days,
                     current_price_status=price_status,
+                    price_time=price_time,
                     provider_id=provider_id,
                     token_mint=token_assessment.mint,
                     token_verified=token_assessment.token_verified,
@@ -181,8 +198,9 @@ class AsOfPriceGateService:
                 {
                     "fetchable": 0,
                     "not_configured": 1,
-                    "review_only": 2,
-                    "satisfied": 3,
+                    "time_review": 2,
+                    "review_only": 3,
+                    "satisfied": 4,
                 }.get(item.status, 4),
                 -abs(item.value_eur),
                 item.asset,
@@ -199,13 +217,17 @@ class AsOfPriceGateService:
             requirements_count=sum(item.status != "satisfied" for item in candidates),
             fetchable_count=sum(item.status == "fetchable" for item in candidates),
             review_only_count=sum(item.status == "review_only" for item in candidates),
+            time_review_count=sum(item.status == "time_review" for item in candidates),
             not_configured_count=sum(
                 item.status == "not_configured" for item in candidates
             ),
             candidates=candidates,
             methodology=(
                 "Read-only Stichtagspreis-Gate aus historischen Portfolio-Positionen. Materielle Assets "
-                "benoetigen einen Preis am selben UTC-Kalendertag. Vortags-, veraltete oder aus Event-"
+                "benoetigen einen Preis am selben UTC-Kalendertag und einen davon getrennten "
+                "gebundenen Zeitbeleg. Ein gespeicherter Zeitwert oder Quellenlabel beweist keine "
+                "Beobachtungs- oder Veroeffentlichungszeit. Tagesreferenzen bleiben Vorschaukandidaten. "
+                "Vortags-, veraltete oder aus Event-"
                 "Quotes abgeleitete Preise werden nicht still akzeptiert. Tokenrisiken werden mintgenau "
                 "aus dem Jupiter-Metadatenbeleg bestimmt und benoetigen pro Stichtag eine explizite "
                 "Bewertungsentscheidung. Fetchable bedeutet nur, dass Provider-ID und FX-Pfad "

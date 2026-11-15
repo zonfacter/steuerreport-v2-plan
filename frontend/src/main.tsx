@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { externalPriceBackfillError } from "./external-price-backfill-error";
 import { newRequestId } from "./request-id";
 import { CurrentPriceRequestStatus, rememberCurrentPriceRequest, rememberHistoricalPriceRequest } from "./workspace/CurrentPriceRequestStatus";
+import { PriceTimeEvidence, type PriceTimeAssessment } from "./workspace/PriceTimeEvidence";
 import { money as exactMoney } from "./workspace/resource";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
 import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
@@ -162,6 +163,9 @@ type EvidenceHealth = {
 
 type DivorceValuationGate = {
   valuation_at: string;
+  price_time_policy_id?: string | null;
+  price_time_policy_version?: number | null;
+  unverified_price_time_count?: number;
   materiality_threshold_eur: string;
   positions_count: number;
   material_positions_count: number;
@@ -189,6 +193,7 @@ type AsOfPriceGateCandidate = {
   current_price_source?: string | null;
   current_price_age_days?: number | null;
   current_price_status: string;
+  price_time?: PriceTimeAssessment | null;
   provider_id?: string | null;
   token_mint?: string | null;
   token_verified?: boolean | null;
@@ -210,6 +215,7 @@ type AsOfPriceGateReport = {
   requirements_count: number;
   fetchable_count: number;
   review_only_count: number;
+  time_review_count?: number;
   not_configured_count: number;
   candidates: AsOfPriceGateCandidate[];
   gate: DivorceValuationGate;
@@ -1159,6 +1165,10 @@ type Snapshot = {
     adjusted_gain_loss_eur: string;
     cutoff_price_gate: DivorceValuationGate;
     valuation_price_gate: DivorceValuationGate;
+    summary?: {
+      cutoff_price_gate?: DivorceValuationGate | null;
+      valuation_price_gate?: DivorceValuationGate | null;
+    };
     fifo_checkpoints: Array<Record<string, unknown>>;
     source_registry_status: string;
     source_registry_strict_ready: boolean;
@@ -3509,7 +3519,7 @@ function App() {
             `/api/v1/divorce/equalization-summary?separation_date=${encodeURIComponent(divorceCutoffDate)}&end_asset_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`
           )
         },
-        divorceValuationRun: { key: "divorceValuationRun", label: "Stichtags-Dossier", load: () => getApi<Snapshot["divorceValuationRun"]>("/api/v1/divorce/valuation-runs/latest") },
+        divorceValuationRun: { key: "divorceValuationRun", label: "Stichtags-Dossier", load: () => getApi<Snapshot["divorceValuationRun"]>("/api/v1/divorce/valuation-runs/latest?include_archived=true") },
         asOfCutoffPriceGate: { key: "asOfCutoffPriceGate", label: "Trennungspreise", load: () => getApi<Snapshot["asOfCutoffPriceGate"]>(`/api/v1/prices/as-of-gate?as_of_date=${encodeURIComponent(divorceCutoffDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`) },
         asOfPriceGate: { key: "asOfPriceGate", label: "Endvermoegenspreise", load: () => getApi<Snapshot["asOfPriceGate"]>(`/api/v1/prices/as-of-gate?as_of_date=${encodeURIComponent(divorceValuationDate)}&materiality_threshold_eur=${encodeURIComponent(divorceMaterialityEur || "1")}`) },
         admin: { key: "admin", label: "Admin-Status", load: () => getApi<Record<string, unknown>>("/api/v1/admin/status") },
@@ -6604,8 +6614,8 @@ function Content({
   );
 }
 
-function Stack({ children }: { children: React.ReactNode }) {
-  return <div className="stack">{children}</div>;
+function Stack({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={className ? `stack ${className}` : "stack"}>{children}</div>;
 }
 
 function LegacyGate({ children, loading, failures }: { children: React.ReactNode; loading: boolean; failures: number }) {
@@ -11328,6 +11338,12 @@ function DivorceEqualizationPanel({
   const inheritanceOrigin = report?.inheritance_origin_gate;
   const inheritanceCredits = inheritanceOrigin?.inheritance_credits ?? [];
   const activePriceGate = priceGateMode === "cutoff" ? cutoffPriceGate : priceGate;
+  const timePolicyCurrent = (gate?: DivorceValuationGate | null) =>
+    gate?.price_time_policy_id === "stichtag-temporal-evidence" && gate.price_time_policy_version === 1;
+  const valuationTimePolicyCurrent = Boolean(valuationRun
+    && timePolicyCurrent(valuationRun.cutoff_price_gate) && timePolicyCurrent(valuationRun.valuation_price_gate)
+    && timePolicyCurrent(valuationRun.summary?.cutoff_price_gate) && timePolicyCurrent(valuationRun.summary?.valuation_price_gate));
+  const valuationStrictReady = Boolean(valuationRun?.strict_ready && valuationTimePolicyCurrent);
   const activePriceGateDate = priceGateMode === "cutoff" ? cutoffDate : valuationDate;
   const bankStatementTone = inheritanceOrigin?.bank_statement_status === "complete"
     ? "ok"
@@ -11408,15 +11424,16 @@ function DivorceEqualizationPanel({
     valuationRun?.evidence_files?.find((item) => item.kind === "evidence_package")?.download_url ?? ""
   );
   return (
-    <Stack>
+    <Stack className="valuationWorkspace">
       <section className="panel valuationControlPanel">
         <div className="panelToolbar">
           <strong>Stichtagsdossier festlegen</strong>
-          <span className={`statusPill ${valuationRun?.strict_ready ? "ok" : valuationRun?.status === "blocked" ? "blocked" : "warning"}`}>
-            {valuationRun ? valuationRun.status : "noch kein Lauf"}
+          <span className={`statusPill ${valuationStrictReady ? "ok" : valuationRun?.status === "blocked" ? "blocked" : "warning"}`}>
+            {valuationRun && !valuationTimePolicyCurrent ? "Zeitbelegprüfung veraltet" : valuationRun ? valuationRun.status : "noch kein Lauf"}
           </span>
         </div>
         <div className="valuationControlGrid">
+          {valuationRun && !valuationTimePolicyCurrent && <p className="wsInlineWarning" role="status" style={{ gridColumn: "1 / -1" }}>Archivierter Lauf vom {formatDateTime(valuationRun.generated_at)} ohne aktuelle Zeitbelegprüfung. Sein Download bleibt als historischer Stand verfügbar, nicht als aktuelle Freigabe. Ein neuer Lauf wird nur ausdrücklich erstellt.</p>}
           <label>
             Trennungsstichtag
             <input type="date" value={cutoffDate} onChange={(event) => onCutoffDateChange(event.target.value)} />
@@ -12076,8 +12093,8 @@ function DivorceEqualizationPanel({
             <span className="heroKicker">Nachweisstatus</span>
             <h3>Preis- und FIFO-Gates</h3>
           </div>
-          <span className={`statusPill ${valuationRun?.strict_ready ? "ok" : valuationRun?.status === "blocked" ? "blocked" : "warning"}`}>
-            {valuationRun?.strict_ready ? "stichtagsfest" : valuationRun?.status === "blocked" ? "Belege offen" : "fachliche Abnahme offen"}
+          <span className={`statusPill ${valuationStrictReady ? "ok" : valuationRun?.status === "blocked" ? "blocked" : "warning"}`}>
+            {valuationStrictReady ? "stichtagsfest" : valuationRun?.status === "blocked" ? "Belege offen" : "fachliche Abnahme offen"}
           </span>
         </div>
         <div className="valuationGateGrid">
@@ -12085,15 +12102,17 @@ function DivorceEqualizationPanel({
             <div className="valuationGateItem" key={index === 0 ? "cutoff-price-gate" : "valuation-price-gate"}>
               <div className="panelToolbar">
                 <strong>{index === 0 ? `Trennungspreise ${cutoffLabel}` : `Endvermoegenspreise ${valuationLabel}`}</strong>
-                <span className={`statusPill ${gate?.strict_ready ? "ok" : "blocked"}`}>{gate?.strict_ready ? "vollstaendig" : "offen"}</span>
+                <span className={`statusPill ${gate?.strict_ready && timePolicyCurrent(gate) ? "ok" : "blocked"}`}>{gate?.strict_ready && timePolicyCurrent(gate) ? "vollstaendig" : "offen"}</span>
               </div>
               <div className="valuationGateMetrics">
-                <Metric title="Same Day" value={String(gate?.same_day_price_count ?? 0)} />
+                <Metric title="Tagesreferenz / EUR-Identität" value={String(gate?.same_day_price_count ?? "Nicht ermittelt")} />
+                <Metric title="Zeitbeleg offen" value={timePolicyCurrent(gate) ? String(gate?.unverified_price_time_count ?? "Nicht ermittelt") : "Nicht geprüft"} />
                 <Metric title="Vortag" value={String(gate?.prior_day_price_count ?? 0)} />
                 <Metric title="veraltet" value={String(gate?.stale_price_count ?? 0)} />
                 <Metric title="ohne Preis" value={String(gate?.missing_price_count ?? 0)} />
               </div>
               <p>{(gate?.findings ?? []).join(" ") || "Preis-Gate wird geladen."}</p>
+              {gate && !timePolicyCurrent(gate) && <p className="wsInlineWarning">Archivierter Prüfstand ohne aktuelle Zeitbelegprüfung; kein aktueller Freigabenachweis.</p>}
               {(gate?.affected_assets ?? []).length > 0 ? <span>Betroffen: {(gate?.affected_assets ?? []).join(", ")}</span> : null}
             </div>
           ))}
@@ -12178,7 +12197,8 @@ function DivorceEqualizationPanel({
         <div className="priceGateActionMetrics">
           <Metric title="materielle Assets" value={String(activePriceGate?.material_assets_count ?? 0)} />
           <Metric title="fetchable" value={String(activePriceGate?.fetchable_count ?? 0)} />
-          <Metric title="Tokenreview offen" value={String(activePriceGate?.review_only_count ?? 0)} />
+          <Metric title="Tokenreview offen" value={String(activePriceGate ? activePriceGate.candidates.filter((candidate) => candidate.token_review_status === "pending").length : "Nicht ermittelt")} />
+          <Metric title="Kurs-/FX-Zeitbeleg offen" value={String(activePriceGate?.time_review_count ?? "Nicht ermittelt")} />
           <Metric title="Tokenreview belegt" value={String(activePriceGate?.gate.accepted_review_asset_count ?? 0)} />
           <Metric title="nicht konfiguriert" value={String(activePriceGate?.not_configured_count ?? 0)} />
         </div>
@@ -12189,7 +12209,7 @@ function DivorceEqualizationPanel({
           </button>
           <button type="button" onClick={() => onRunPriceGateBackfill(false, activePriceGateDate)} disabled={priceGateLoading || !activePriceGate?.fetchable_count}>
             <Database size={16} />
-            Belegte Preise importieren
+            Tagesreferenzen abrufen
           </button>
           <button
             type="button"
@@ -12205,8 +12225,8 @@ function DivorceEqualizationPanel({
         rows={(activePriceGate?.candidates ?? []).filter((candidate) => candidate.status !== "satisfied").map((candidate) => ({
           asset: candidate.asset,
           konten: Array.isArray(candidate.accounts) ? candidate.accounts.map(String).map(shortAccount).join(" | ") : "",
-          wert: `${formatCurrency(candidate.value_eur)} EUR`,
-          bisheriger_preisstand: candidate.current_priced_at ? formatDateTime(candidate.current_priced_at) : "fehlt",
+          wert: candidate.current_price_eur == null ? "Nicht bewertet" : `${formatCurrency(candidate.value_eur)} EUR (Referenzwert)`,
+          gespeicherte_referenzzeit: candidate.price_time?.status === "fixed_eur_identity" ? "Zeitlose EUR-Identität" : candidate.current_priced_at ? formatDateTime(candidate.current_priced_at) : "fehlt",
           preisalter_tage: candidate.current_price_age_days ?? "-",
           preisstatus: equalizationPriceStatusLabel(String(candidate.current_price_status ?? "missing")),
           provider: candidate.provider_id ?? "-",
@@ -12214,11 +12234,16 @@ function DivorceEqualizationPanel({
           aktion: candidate.status,
           grund: candidate.reason
         }))}
-        footer="Der Import schreibt ausschliesslich belegte Price-Ledger-Punkte. Eine Tokenentscheidung gilt nur fuer den ausgewaehlten Stichtag und veraendert weder FIFO noch Steuerdaten."
+        footer="Der Abruf speichert Tagesreferenzen als Kandidaten, keine bestaetigten Intraday-Kurse. Eine Tokenentscheidung ersetzt keinen Kurs-/FX-Zeitbeleg und veraendert weder FIFO noch Steuerdaten."
         compact
       />
+      <details>
+        <summary>Zeitbelege der Stichtagsreferenzen</summary>
+        {(activePriceGate?.candidates ?? []).map((candidate) => <div key={candidate.asset}><h4>{candidate.asset}</h4><PriceTimeEvidence assessment={candidate.price_time} /></div>)}
+        {!activePriceGate && <p role="status">Zeitbelege werden noch ermittelt.</p>}
+      </details>
       <TablePanel
-        title="Freigabebereite Tokenbewertungen"
+        title="Getrennte Tokenbewertungen"
         rows={(activePriceGate?.candidates ?? [])
           .filter((candidate) => candidate.token_review_status === "pending" && candidate.current_price_status === "same_day")
           .map((candidate) => ({
@@ -12237,7 +12262,7 @@ function DivorceEqualizationPanel({
             onClick: (row) => onAcceptTokenValuation(String(row.asset ?? ""), activePriceGateDate)
           }
         ]}
-        footer="Die Annahme bestaetigt nur Mint und Same-Day-Preis fuer diesen Stichtag. Bestand, Ledger, FIFO, Steuerzeilen und Tokenmenge bleiben unveraendert."
+        footer="Die Annahme dokumentiert die stichtagsbezogene Tokenentscheidung, nicht die Beobachtungs- oder Veroeffentlichungszeit des Kurses. Ein offener Zeitbeleg bleibt offen. Bestand, Ledger, FIFO, Steuerzeilen und Tokenmenge bleiben unveraendert."
         compact
       />
 
