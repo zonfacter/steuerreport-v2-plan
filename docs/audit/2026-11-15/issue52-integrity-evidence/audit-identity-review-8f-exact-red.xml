@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="12" skipped="0" tests="14" time="0.112" timestamp="2026-11-15T20:36:05.083909+00:00" hostname="ai-control"><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Source_Event_ID-event_id-absent]" time="0.003"><failure message="AssertionError: assert None == '11111111-1111-4111-8111-111111111111'">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x78817301a950&gt;
+canonical_at = None, csv_field = 'Source_Event_ID', parsed_field = 'event_id'
+
+    @pytest.mark.parametrize("canonical_at", [None, DISPOSED], ids=["absent", "conflict"])
+    @pytest.mark.parametrize(
+        ("csv_field", "parsed_field"),
+        [
+            ("Source_Event_ID", "event_id"),
+            ("Lot_ID", "lot_id"),
+            ("Anschaffungs_Event_ID", "acquisition_event_id"),
+        ],
+    )
+    def test_reference_parser_preserves_explicit_csv_identity(
+        service, canonical_at, csv_field, parsed_field
+    ):
+        rows = service._reference_tax_lines(
+            _package(identities=IDENTITIES, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed_field] == IDENTITIES[csv_field]
+E       AssertionError: assert None == '11111111-1111-4111-8111-111111111111'
+
+tests/unit/test_tax_filing_audit_identity_review.py:120: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Source_Event_ID-event_id-conflict]" time="0.001"><failure message="AssertionError: assert '22222222-222...-222222222222' == '11111111-111...-111111111111'&#10;  &#10;  - 11111111-1111-4111-8111-111111111111&#10;  + 22222222-2222-4222-8222-222222222222">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788173076f50&gt;
+canonical_at = '2025-06-13T12:00:00+00:00', csv_field = 'Source_Event_ID'
+parsed_field = 'event_id'
+
+    @pytest.mark.parametrize("canonical_at", [None, DISPOSED], ids=["absent", "conflict"])
+    @pytest.mark.parametrize(
+        ("csv_field", "parsed_field"),
+        [
+            ("Source_Event_ID", "event_id"),
+            ("Lot_ID", "lot_id"),
+            ("Anschaffungs_Event_ID", "acquisition_event_id"),
+        ],
+    )
+    def test_reference_parser_preserves_explicit_csv_identity(
+        service, canonical_at, csv_field, parsed_field
+    ):
+        rows = service._reference_tax_lines(
+            _package(identities=IDENTITIES, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed_field] == IDENTITIES[csv_field]
+E       AssertionError: assert '22222222-222...-222222222222' == '11111111-111...-111111111111'
+E         
+E         - 11111111-1111-4111-8111-111111111111
+E         + 22222222-2222-4222-8222-222222222222
+
+tests/unit/test_tax_filing_audit_identity_review.py:120: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Lot_ID-lot_id-absent]" time="0.001"><failure message="AssertionError: assert None == '33333333-3333-4333-8333-333333333333'">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788173077bd0&gt;
+canonical_at = None, csv_field = 'Lot_ID', parsed_field = 'lot_id'
+
+    @pytest.mark.parametrize("canonical_at", [None, DISPOSED], ids=["absent", "conflict"])
+    @pytest.mark.parametrize(
+        ("csv_field", "parsed_field"),
+        [
+            ("Source_Event_ID", "event_id"),
+            ("Lot_ID", "lot_id"),
+            ("Anschaffungs_Event_ID", "acquisition_event_id"),
+        ],
+    )
+    def test_reference_parser_preserves_explicit_csv_identity(
+        service, canonical_at, csv_field, parsed_field
+    ):
+        rows = service._reference_tax_lines(
+            _package(identities=IDENTITIES, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed_field] == IDENTITIES[csv_field]
+E       AssertionError: assert None == '33333333-3333-4333-8333-333333333333'
+
+tests/unit/test_tax_filing_audit_identity_review.py:120: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Lot_ID-lot_id-conflict]" time="0.001"><failure message="AssertionError: assert None == '33333333-3333-4333-8333-333333333333'">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788173024c10&gt;
+canonical_at = '2025-06-13T12:00:00+00:00', csv_field = 'Lot_ID'
+parsed_field = 'lot_id'
+
+    @pytest.mark.parametrize("canonical_at", [None, DISPOSED], ids=["absent", "conflict"])
+    @pytest.mark.parametrize(
+        ("csv_field", "parsed_field"),
+        [
+            ("Source_Event_ID", "event_id"),
+            ("Lot_ID", "lot_id"),
+            ("Anschaffungs_Event_ID", "acquisition_event_id"),
+        ],
+    )
+    def test_reference_parser_preserves_explicit_csv_identity(
+        service, canonical_at, csv_field, parsed_field
+    ):
+        rows = service._reference_tax_lines(
+            _package(identities=IDENTITIES, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed_field] == IDENTITIES[csv_field]
+E       AssertionError: assert None == '33333333-3333-4333-8333-333333333333'
+
+tests/unit/test_tax_filing_audit_identity_review.py:120: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Anschaffungs_Event_ID-acquisition_event_id-absent]" time="0.001"><failure message="AssertionError: assert None == '44444444-4444-4444-8444-444444444444'">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7881730565d0&gt;
+canonical_at = None, csv_field = 'Anschaffungs_Event_ID'
+parsed_field = 'acquisition_event_id'
+
+    @pytest.mark.parametrize("canonical_at", [None, DISPOSED], ids=["absent", "conflict"])
+    @pytest.mark.parametrize(
+        ("csv_field", "parsed_field"),
+        [
+            ("Source_Event_ID", "event_id"),
+            ("Lot_ID", "lot_id"),
+            ("Anschaffungs_Event_ID", "acquisition_event_id"),
+        ],
+    )
+    def test_reference_parser_preserves_explicit_csv_identity(
+        service, canonical_at, csv_field, parsed_field
+    ):
+        rows = service._reference_tax_lines(
+            _package(identities=IDENTITIES, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed_field] == IDENTITIES[csv_field]
+E       AssertionError: assert None == '44444444-4444-4444-8444-444444444444'
+
+tests/unit/test_tax_filing_audit_identity_review.py:120: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Anschaffungs_Event_ID-acquisition_event_id-conflict]" time="0.001"><failure message="AssertionError: assert None == '44444444-4444-4444-8444-444444444444'">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788173076050&gt;
+canonical_at = '2025-06-13T12:00:00+00:00', csv_field = 'Anschaffungs_Event_ID'
+parsed_field = 'acquisition_event_id'
+
+    @pytest.mark.parametrize("canonical_at", [None, DISPOSED], ids=["absent", "conflict"])
+    @pytest.mark.parametrize(
+        ("csv_field", "parsed_field"),
+        [
+            ("Source_Event_ID", "event_id"),
+            ("Lot_ID", "lot_id"),
+            ("Anschaffungs_Event_ID", "acquisition_event_id"),
+        ],
+    )
+    def test_reference_parser_preserves_explicit_csv_identity(
+        service, canonical_at, csv_field, parsed_field
+    ):
+        rows = service._reference_tax_lines(
+            _package(identities=IDENTITIES, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed_field] == IDENTITIES[csv_field]
+E       AssertionError: assert None == '44444444-4444-4444-8444-444444444444'
+
+tests/unit/test_tax_filing_audit_identity_review.py:120: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_never_inherit_canonical_identity_by_time[columns-2025-06-13T12:00:00+00:00]" time="0.001"><failure message="AssertionError: assert '22222222-2222-4222-8222-222222222222' in (None, '')">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788173049b90&gt;
+canonical_at = '2025-06-13T12:00:00+00:00', missing = 'columns'
+
+    @pytest.mark.parametrize("canonical_at", [DISPOSED, "2025-06-13T09:00:00+00:00"])
+    @pytest.mark.parametrize("missing", ["columns", "values"])
+    def test_missing_ids_never_inherit_canonical_identity_by_time(
+        service, canonical_at, missing
+    ):
+        identities = {} if missing == "columns" else dict.fromkeys(IDENTITIES, "")
+        rows = service._reference_tax_lines(
+            _package(identities=identities, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0]["event_id"] in (None, "")
+E       AssertionError: assert '22222222-2222-4222-8222-222222222222' in (None, '')
+
+tests/unit/test_tax_filing_audit_identity_review.py:134: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_never_inherit_canonical_identity_by_time[columns-2025-06-13T09:00:00+00:00]" time="0.001"><failure message="AssertionError: assert '22222222-2222-4222-8222-222222222222' in (None, '')">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788173027690&gt;
+canonical_at = '2025-06-13T09:00:00+00:00', missing = 'columns'
+
+    @pytest.mark.parametrize("canonical_at", [DISPOSED, "2025-06-13T09:00:00+00:00"])
+    @pytest.mark.parametrize("missing", ["columns", "values"])
+    def test_missing_ids_never_inherit_canonical_identity_by_time(
+        service, canonical_at, missing
+    ):
+        identities = {} if missing == "columns" else dict.fromkeys(IDENTITIES, "")
+        rows = service._reference_tax_lines(
+            _package(identities=identities, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0]["event_id"] in (None, "")
+E       AssertionError: assert '22222222-2222-4222-8222-222222222222' in (None, '')
+
+tests/unit/test_tax_filing_audit_identity_review.py:134: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_never_inherit_canonical_identity_by_time[values-2025-06-13T12:00:00+00:00]" time="0.001"><failure message="AssertionError: assert '22222222-2222-4222-8222-222222222222' in (None, '')">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788173030cd0&gt;
+canonical_at = '2025-06-13T12:00:00+00:00', missing = 'values'
+
+    @pytest.mark.parametrize("canonical_at", [DISPOSED, "2025-06-13T09:00:00+00:00"])
+    @pytest.mark.parametrize("missing", ["columns", "values"])
+    def test_missing_ids_never_inherit_canonical_identity_by_time(
+        service, canonical_at, missing
+    ):
+        identities = {} if missing == "columns" else dict.fromkeys(IDENTITIES, "")
+        rows = service._reference_tax_lines(
+            _package(identities=identities, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0]["event_id"] in (None, "")
+E       AssertionError: assert '22222222-2222-4222-8222-222222222222' in (None, '')
+
+tests/unit/test_tax_filing_audit_identity_review.py:134: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_never_inherit_canonical_identity_by_time[values-2025-06-13T09:00:00+00:00]" time="0.001"><failure message="AssertionError: assert '22222222-2222-4222-8222-222222222222' in (None, '')">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788172ff7dd0&gt;
+canonical_at = '2025-06-13T09:00:00+00:00', missing = 'values'
+
+    @pytest.mark.parametrize("canonical_at", [DISPOSED, "2025-06-13T09:00:00+00:00"])
+    @pytest.mark.parametrize("missing", ["columns", "values"])
+    def test_missing_ids_never_inherit_canonical_identity_by_time(
+        service, canonical_at, missing
+    ):
+        identities = {} if missing == "columns" else dict.fromkeys(IDENTITIES, "")
+        rows = service._reference_tax_lines(
+            _package(identities=identities, canonical_at=canonical_at), 2025
+        )
+    
+        assert len(rows) == 1
+&gt;       assert rows[0]["event_id"] in (None, "")
+E       AssertionError: assert '22222222-2222-4222-8222-222222222222' in (None, '')
+
+tests/unit/test_tax_filing_audit_identity_review.py:134: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_different_explicit_event_ids_are_removed_added_never_changed[2025-06-13T12:00:00+00:00]" time="0.001"><failure message="AssertionError: Unterschiedliche belegte Event-IDs sind keine gleiche Position&#10;assert [({'event_id'...e.utc), ...})] == []&#10;  &#10;  Left contains one more item: ({'event_id': '11111111-1111-4111-8111-111111111111', 'asset': 'BTC', 'disposed_at': datetime.datetime(2025, 6, 13, 12...tzinfo=datetime.timezone.utc), 'acquired_at': datetime.datetime(2025, 1, 2, 10, 0, tzinfo=datetime.timezone.utc), ...})&#10;  Use -v to get more diff">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x78817307c310&gt;
+new_at = '2025-06-13T12:00:00+00:00'
+
+    @pytest.mark.parametrize("new_at", [DISPOSED, "2025-06-13T15:00:00+00:00"])
+    def test_different_explicit_event_ids_are_removed_added_never_changed(service, new_at):
+        old = _position(EVENT_ID, DISPOSED)
+        new = _position(OTHER_EVENT_ID, new_at)
+        new["gain"] = Decimal("30")
+    
+        pairs, removed, added = service._pair_positions([old], [new])
+    
+&gt;       assert pairs == [], "Unterschiedliche belegte Event-IDs sind keine gleiche Position"
+E       AssertionError: Unterschiedliche belegte Event-IDs sind keine gleiche Position
+E       assert [({'event_id'...e.utc), ...})] == []
+E         
+E         Left contains one more item: ({'event_id': '11111111-1111-4111-8111-111111111111', 'asset': 'BTC', 'disposed_at': datetime.datetime(2025, 6, 13, 12...tzinfo=datetime.timezone.utc), 'acquired_at': datetime.datetime(2025, 1, 2, 10, 0, tzinfo=datetime.timezone.utc), ...})
+E         Use -v to get more diff
+
+tests/unit/test_tax_filing_audit_identity_review.py:164: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_different_explicit_event_ids_are_removed_added_never_changed[2025-06-13T15:00:00+00:00]" time="0.001"><failure message="AssertionError: Unterschiedliche belegte Event-IDs sind keine gleiche Position&#10;assert [({'event_id'...e.utc), ...})] == []&#10;  &#10;  Left contains one more item: ({'event_id': '11111111-1111-4111-8111-111111111111', 'asset': 'BTC', 'disposed_at': datetime.datetime(2025, 6, 13, 12...tzinfo=datetime.timezone.utc), 'acquired_at': datetime.datetime(2025, 1, 2, 10, 0, tzinfo=datetime.timezone.utc), ...})&#10;  Use -v to get more diff">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x788173024950&gt;
+new_at = '2025-06-13T15:00:00+00:00'
+
+    @pytest.mark.parametrize("new_at", [DISPOSED, "2025-06-13T15:00:00+00:00"])
+    def test_different_explicit_event_ids_are_removed_added_never_changed(service, new_at):
+        old = _position(EVENT_ID, DISPOSED)
+        new = _position(OTHER_EVENT_ID, new_at)
+        new["gain"] = Decimal("30")
+    
+        pairs, removed, added = service._pair_positions([old], [new])
+    
+&gt;       assert pairs == [], "Unterschiedliche belegte Event-IDs sind keine gleiche Position"
+E       AssertionError: Unterschiedliche belegte Event-IDs sind keine gleiche Position
+E       assert [({'event_id'...e.utc), ...})] == []
+E         
+E         Left contains one more item: ({'event_id': '11111111-1111-4111-8111-111111111111', 'asset': 'BTC', 'disposed_at': datetime.datetime(2025, 6, 13, 12...tzinfo=datetime.timezone.utc), 'acquired_at': datetime.datetime(2025, 1, 2, 10, 0, tzinfo=datetime.timezone.utc), ...})
+E         Use -v to get more diff
+
+tests/unit/test_tax_filing_audit_identity_review.py:164: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_matching_explicit_event_id_remains_pairable" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_without_canonical_rows_remain_unknown" time="0.001" /></testsuite></testsuites>

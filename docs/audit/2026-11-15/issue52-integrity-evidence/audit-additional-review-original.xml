@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="9" skipped="0" tests="28" time="1.196" timestamp="2026-11-15T20:39:06.776538+00:00" hostname="ai-control"><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_missing_event_id_never_overrides_conflicting_explicit_lot_identity[lot_id-33333333-3333-4333-8333-333333333333]" time="0.002"><failure message="AssertionError: Fehlende Event-ID legitimiert keinen Lot-ID-Widerspruch&#10;assert [({'event_id'...SYNTH', ...})] == []&#10;  &#10;  Left contains one more item: ({'event_id': None, 'lot_id': '22222222-2222-4222-8222-222222222222', 'acquisition_event_id': '44444444-4444-4444-8444...3-3333-4333-8333-333333333333', 'acquisition_event_id': '44444444-4444-4444-8444-444444444444', 'asset': 'SYNTH', ...})&#10;  Use -v to get more diff">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dae4ef10&gt;
+field = 'lot_id', other = '33333333-3333-4333-8333-333333333333'
+
+    @pytest.mark.parametrize(
+        ("field", "other"),
+        [("lot_id", LOT_B), ("acquisition_event_id", OTHER_ACQUISITION)],
+    )
+    def test_missing_event_id_never_overrides_conflicting_explicit_lot_identity(
+        service, field, other
+    ):
+        old = _position(event_id=None)
+        new = dict(old, **{field: other})
+    
+        pairs, removed, added = service._pair_positions([old], [new])
+    
+&gt;       assert pairs == [], "Fehlende Event-ID legitimiert keinen Lot-ID-Widerspruch"
+E       AssertionError: Fehlende Event-ID legitimiert keinen Lot-ID-Widerspruch
+E       assert [({'event_id'...SYNTH', ...})] == []
+E         
+E         Left contains one more item: ({'event_id': None, 'lot_id': '22222222-2222-4222-8222-222222222222', 'acquisition_event_id': '44444444-4444-4444-8444...3-3333-4333-8333-333333333333', 'acquisition_event_id': '44444444-4444-4444-8444-444444444444', 'asset': 'SYNTH', ...})
+E         Use -v to get more diff
+
+tests/unit/test_tax_filing_audit_additional_review.py:88: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_missing_event_id_never_overrides_conflicting_explicit_lot_identity[acquisition_event_id-55555555-5555-4555-8555-555555555555]" time="0.001"><failure message="AssertionError: Fehlende Event-ID legitimiert keinen Lot-ID-Widerspruch&#10;assert [({'event_id'...SYNTH', ...})] == []&#10;  &#10;  Left contains one more item: ({'event_id': None, 'lot_id': '22222222-2222-4222-8222-222222222222', 'acquisition_event_id': '44444444-4444-4444-8444...2-2222-4222-8222-222222222222', 'acquisition_event_id': '55555555-5555-4555-8555-555555555555', 'asset': 'SYNTH', ...})&#10;  Use -v to get more diff">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dacb2dd0&gt;
+field = 'acquisition_event_id', other = '55555555-5555-4555-8555-555555555555'
+
+    @pytest.mark.parametrize(
+        ("field", "other"),
+        [("lot_id", LOT_B), ("acquisition_event_id", OTHER_ACQUISITION)],
+    )
+    def test_missing_event_id_never_overrides_conflicting_explicit_lot_identity(
+        service, field, other
+    ):
+        old = _position(event_id=None)
+        new = dict(old, **{field: other})
+    
+        pairs, removed, added = service._pair_positions([old], [new])
+    
+&gt;       assert pairs == [], "Fehlende Event-ID legitimiert keinen Lot-ID-Widerspruch"
+E       AssertionError: Fehlende Event-ID legitimiert keinen Lot-ID-Widerspruch
+E       assert [({'event_id'...SYNTH', ...})] == []
+E         
+E         Left contains one more item: ({'event_id': None, 'lot_id': '22222222-2222-4222-8222-222222222222', 'acquisition_event_id': '44444444-4444-4444-8444...2-2222-4222-8222-222222222222', 'acquisition_event_id': '55555555-5555-4555-8555-555555555555', 'asset': 'SYNTH', ...})
+E         Use -v to get more diff
+
+tests/unit/test_tax_filing_audit_additional_review.py:88: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_multiple_lots_for_one_event_pair_only_their_own_identity" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_duplicate_identity_never_gets_arbitrary_occurrence_pair" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_missing_reference_amount_must_not_become_a_measured_zero[Anschaffungskosten_EUR-acquisition_cost-missing-column]" time="0.001"><failure message="AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0&#10;assert Decimal('0') is None">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dae89910&gt;
+column = 'Anschaffungskosten_EUR', parsed = 'acquisition_cost', blank = False
+
+    @pytest.mark.parametrize("blank", [False, True], ids=["missing-column", "empty-cell"])
+    @pytest.mark.parametrize(
+        ("column", "parsed"),
+        [
+            ("Anschaffungskosten_EUR", "acquisition_cost"),
+            ("Veraeusserungserloes_EUR", "proceeds"),
+            ("Gewinn_Verlust_EUR", "gain"),
+        ],
+    )
+    def test_missing_reference_amount_must_not_become_a_measured_zero(
+        service, column, parsed, blank
+    ):
+        try:
+            rows = service._reference_tax_lines(_tax_package(column, blank), 2025)
+        except (TaxFilingAuditError, ValueError):
+            return
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed] is None, "Fehlender archivierter Betrag ist unbekannt, nicht 0"
+E       AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0
+E       assert Decimal('0') is None
+
+tests/unit/test_tax_filing_audit_additional_review.py:170: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_missing_reference_amount_must_not_become_a_measured_zero[Anschaffungskosten_EUR-acquisition_cost-empty-cell]" time="0.001"><failure message="AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0&#10;assert Decimal('0') is None">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dae22c50&gt;
+column = 'Anschaffungskosten_EUR', parsed = 'acquisition_cost', blank = True
+
+    @pytest.mark.parametrize("blank", [False, True], ids=["missing-column", "empty-cell"])
+    @pytest.mark.parametrize(
+        ("column", "parsed"),
+        [
+            ("Anschaffungskosten_EUR", "acquisition_cost"),
+            ("Veraeusserungserloes_EUR", "proceeds"),
+            ("Gewinn_Verlust_EUR", "gain"),
+        ],
+    )
+    def test_missing_reference_amount_must_not_become_a_measured_zero(
+        service, column, parsed, blank
+    ):
+        try:
+            rows = service._reference_tax_lines(_tax_package(column, blank), 2025)
+        except (TaxFilingAuditError, ValueError):
+            return
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed] is None, "Fehlender archivierter Betrag ist unbekannt, nicht 0"
+E       AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0
+E       assert Decimal('0') is None
+
+tests/unit/test_tax_filing_audit_additional_review.py:170: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_missing_reference_amount_must_not_become_a_measured_zero[Veraeusserungserloes_EUR-proceeds-missing-column]" time="0.001"><failure message="AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0&#10;assert Decimal('0') is None">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dae91050&gt;
+column = 'Veraeusserungserloes_EUR', parsed = 'proceeds', blank = False
+
+    @pytest.mark.parametrize("blank", [False, True], ids=["missing-column", "empty-cell"])
+    @pytest.mark.parametrize(
+        ("column", "parsed"),
+        [
+            ("Anschaffungskosten_EUR", "acquisition_cost"),
+            ("Veraeusserungserloes_EUR", "proceeds"),
+            ("Gewinn_Verlust_EUR", "gain"),
+        ],
+    )
+    def test_missing_reference_amount_must_not_become_a_measured_zero(
+        service, column, parsed, blank
+    ):
+        try:
+            rows = service._reference_tax_lines(_tax_package(column, blank), 2025)
+        except (TaxFilingAuditError, ValueError):
+            return
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed] is None, "Fehlender archivierter Betrag ist unbekannt, nicht 0"
+E       AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0
+E       assert Decimal('0') is None
+
+tests/unit/test_tax_filing_audit_additional_review.py:170: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_missing_reference_amount_must_not_become_a_measured_zero[Veraeusserungserloes_EUR-proceeds-empty-cell]" time="0.001"><failure message="AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0&#10;assert Decimal('0') is None">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dae75090&gt;
+column = 'Veraeusserungserloes_EUR', parsed = 'proceeds', blank = True
+
+    @pytest.mark.parametrize("blank", [False, True], ids=["missing-column", "empty-cell"])
+    @pytest.mark.parametrize(
+        ("column", "parsed"),
+        [
+            ("Anschaffungskosten_EUR", "acquisition_cost"),
+            ("Veraeusserungserloes_EUR", "proceeds"),
+            ("Gewinn_Verlust_EUR", "gain"),
+        ],
+    )
+    def test_missing_reference_amount_must_not_become_a_measured_zero(
+        service, column, parsed, blank
+    ):
+        try:
+            rows = service._reference_tax_lines(_tax_package(column, blank), 2025)
+        except (TaxFilingAuditError, ValueError):
+            return
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed] is None, "Fehlender archivierter Betrag ist unbekannt, nicht 0"
+E       AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0
+E       assert Decimal('0') is None
+
+tests/unit/test_tax_filing_audit_additional_review.py:170: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_missing_reference_amount_must_not_become_a_measured_zero[Gewinn_Verlust_EUR-gain-missing-column]" time="0.001"><failure message="AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0&#10;assert Decimal('0') is None">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dacbc350&gt;
+column = 'Gewinn_Verlust_EUR', parsed = 'gain', blank = False
+
+    @pytest.mark.parametrize("blank", [False, True], ids=["missing-column", "empty-cell"])
+    @pytest.mark.parametrize(
+        ("column", "parsed"),
+        [
+            ("Anschaffungskosten_EUR", "acquisition_cost"),
+            ("Veraeusserungserloes_EUR", "proceeds"),
+            ("Gewinn_Verlust_EUR", "gain"),
+        ],
+    )
+    def test_missing_reference_amount_must_not_become_a_measured_zero(
+        service, column, parsed, blank
+    ):
+        try:
+            rows = service._reference_tax_lines(_tax_package(column, blank), 2025)
+        except (TaxFilingAuditError, ValueError):
+            return
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed] is None, "Fehlender archivierter Betrag ist unbekannt, nicht 0"
+E       AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0
+E       assert Decimal('0') is None
+
+tests/unit/test_tax_filing_audit_additional_review.py:170: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_missing_reference_amount_must_not_become_a_measured_zero[Gewinn_Verlust_EUR-gain-empty-cell]" time="0.001"><failure message="AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0&#10;assert Decimal('0') is None">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dacd3bd0&gt;
+column = 'Gewinn_Verlust_EUR', parsed = 'gain', blank = True
+
+    @pytest.mark.parametrize("blank", [False, True], ids=["missing-column", "empty-cell"])
+    @pytest.mark.parametrize(
+        ("column", "parsed"),
+        [
+            ("Anschaffungskosten_EUR", "acquisition_cost"),
+            ("Veraeusserungserloes_EUR", "proceeds"),
+            ("Gewinn_Verlust_EUR", "gain"),
+        ],
+    )
+    def test_missing_reference_amount_must_not_become_a_measured_zero(
+        service, column, parsed, blank
+    ):
+        try:
+            rows = service._reference_tax_lines(_tax_package(column, blank), 2025)
+        except (TaxFilingAuditError, ValueError):
+            return
+    
+        assert len(rows) == 1
+&gt;       assert rows[0][parsed] is None, "Fehlender archivierter Betrag ist unbekannt, nicht 0"
+E       AssertionError: Fehlender archivierter Betrag ist unbekannt, nicht 0
+E       assert Decimal('0') is None
+
+tests/unit/test_tax_filing_audit_additional_review.py:170: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_unknown_archived_taxability_does_not_prove_reclassification" time="0.001"><failure message="AssertionError: assert 'holding_peri...lassification' == 'unknown'&#10;  &#10;  - unknown&#10;  + holding_period_classification">service = &lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7ed2dae6c1d0&gt;
+
+    def test_unknown_archived_taxability_does_not_prove_reclassification(service):
+        old = _position(taxable=None)
+        new = _position(taxable=True)
+    
+        cause, _ = service._classify_cause(old, new, "changed", "tax_line")
+    
+&gt;       assert cause == "unknown"
+E       AssertionError: assert 'holding_peri...lassification' == 'unknown'
+E         
+E         - unknown
+E         + holding_period_classification
+
+tests/unit/test_tax_filing_audit_additional_review.py:179: AssertionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_decimal_delta_keeps_smallest_db_fraction_and_caller_context" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_decimal_reconciliation_preserves_exact_fraction" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_additional_review" name="test_build_uses_snapshot_child_and_materializes_only_after_exit" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Source_Event_ID-event_id-absent]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Source_Event_ID-event_id-conflict]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Lot_ID-lot_id-absent]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Lot_ID-lot_id-conflict]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Anschaffungs_Event_ID-acquisition_event_id-absent]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_reference_parser_preserves_explicit_csv_identity[Anschaffungs_Event_ID-acquisition_event_id-conflict]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_never_inherit_canonical_identity_by_time[columns-2025-06-13T12:00:00+00:00]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_never_inherit_canonical_identity_by_time[columns-2025-06-13T09:00:00+00:00]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_never_inherit_canonical_identity_by_time[values-2025-06-13T12:00:00+00:00]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_never_inherit_canonical_identity_by_time[values-2025-06-13T09:00:00+00:00]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_different_explicit_event_ids_are_removed_added_never_changed[2025-06-13T12:00:00+00:00]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_different_explicit_event_ids_are_removed_added_never_changed[2025-06-13T15:00:00+00:00]" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_matching_explicit_event_id_remains_pairable" time="0.001" /><testcase classname="tests.unit.test_tax_filing_audit_identity_review" name="test_missing_ids_without_canonical_rows_remain_unknown" time="0.001" /></testsuite></testsuites>

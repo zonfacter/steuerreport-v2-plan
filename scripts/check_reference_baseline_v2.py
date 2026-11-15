@@ -21,6 +21,13 @@ ADMISSION_RESULTS = (
     ("reference-price-admission-v2.xml", 92),
     ("reference-price-admission-identity.xml", 3),
 )
+AUDIT_PROBES = (
+    ("test_tax_filing_audit_independent_review.py", "df62c3379bf5464abe7c3fef6f052b629715bc1e7d072c5c0e7469890c7f31bf"),
+    ("test_tax_filing_audit_identity_review.py", "7f500d2d8a253819c70a7837016e54c565bd70d97d29acbbeacaf2f9399f2142"),
+    ("test_tax_filing_audit_additional_review.py", "1d6255f969e8b9e90275caa80ef4a8516e10693deff55680fb5a75e82a4a8ff9"),
+    ("test_tax_filing_audit_io_review.py", "26cf95f5758fa3972b0ab6a4e598bcc7687564baf7cb9cb02dff722682af648e"),
+)
+AUDIT_RESULTS = (("reference-filing-audit.xml", 35),)
 ADMISSION_HARNESS_LINES = (
     b'        current = _data(client.get("/api/v1/prices/as-of-gate", params={"as_of_date": VALUATION}))\n',
     b'        other = _data(client.get("/api/v1/prices/as-of-gate", params={"as_of_date": "2025-06-13T01:00:00.123457Z"}))\n',
@@ -42,8 +49,8 @@ def admission_harness_matches(original: bytes, corrected: bytes) -> bool:
     return head + marker + tail == corrected
 
 
-def check_admission_results(directory: Path) -> int:
-    for filename, count in ADMISSION_RESULTS:
+def _check_results(directory: Path, expected_results, prefix: str) -> int:
+    for filename, count in expected_results:
         try:
             root = ElementTree.parse(directory / filename).getroot()
             suites = list(root.iter("testsuite"))
@@ -58,9 +65,31 @@ def check_admission_results(directory: Path) -> int:
             if any(list(root.iter(tag)) for tag in ("failure", "error", "skipped")):
                 raise ValueError("nonpassing_case")
         except (OSError, ElementTree.ParseError, ValueError):
-            print("independent_price_admission_results_invalid:" + filename)
+            print(prefix + "_results_invalid:" + filename)
             return 1
-    print("independent_price_admission_results_verified:92+3")
+    print(prefix + "_results_verified:" + "+".join(str(count) for _, count in expected_results))
+    return 0
+
+
+def check_admission_results(directory: Path) -> int:
+    return _check_results(directory, ADMISSION_RESULTS, "independent_price_admission")
+
+
+def check_audit_results(directory: Path) -> int:
+    return _check_results(directory, AUDIT_RESULTS, "independent_filing_audit")
+
+
+def check_audit_probes() -> int:
+    for filename, expected in AUDIT_PROBES:
+        try:
+            content = (ROOT / "tests/unit" / filename).read_bytes()
+        except OSError:
+            print("independent_audit_probe_unavailable:" + filename)
+            return 1
+        if hashlib.sha256(content).hexdigest() != expected:
+            print("independent_audit_probe_changed:" + filename)
+            return 1
+    print("independent_audit_probes_verified:" + str(len(AUDIT_PROBES)))
     return 0
 
 
@@ -140,6 +169,13 @@ def main() -> int:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--admission-results", type=Path, help="Pruefe beide unveraenderten Admission-JUnit-Dateien.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--admission-results", type=Path, help="Pruefe beide unveraenderten Admission-JUnit-Dateien.")
+    mode.add_argument("--audit-probes", action="store_true", help="Pruefe die unveraenderten Audit-Gegenproben.")
+    mode.add_argument("--audit-results", type=Path, help="Pruefe35 Audit-JUnit-Faelle ohne Skip/Fehler.")
     args = parser.parse_args()
-    raise SystemExit(check_admission_results(args.admission_results) if args.admission_results is not None else main())
+    raise SystemExit(
+        check_admission_results(args.admission_results) if args.admission_results is not None
+        else check_audit_results(args.audit_results) if args.audit_results is not None
+        else check_audit_probes() if args.audit_probes else main()
+    )

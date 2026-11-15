@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="2.687" timestamp="2026-11-15T20:50:20.045241+00:00" hostname="ai-control"><testcase classname="tests.unit.test_tax_filing_audit_io_review" name="test_archive_root_file_conflict_is_domain_error_and_preserves_original" time="0.493"><failure message="NotADirectoryError: [Errno 20] Not a directory: '/tmp/pytest-of-root/pytest-267/test_archive_root_file_conflic0/tax_filing_audit_archive/2025'">prepared_audit = (&lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7305df5ff290&gt;, TaxFilingAuditReport(schema...gelt und ohne Gegenbeleg als pending_review ausgewiesen. Materiale Aenderungen benoetigen eine menschliche Freigabe.'))
+
+    def test_archive_root_file_conflict_is_domain_error_and_preserves_original(prepared_audit):
+        service, report = prepared_audit
+        path = service.archive_root
+        path.write_bytes(b"synthetic existing bytes must not be altered\n")
+        before = path.read_bytes()
+        inode = path.stat().st_ino
+        try:
+            with pytest.raises(TaxFilingAuditError):
+&gt;               service._materialize(report)
+
+tests/unit/test_tax_filing_audit_io_review.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../steuerreport-issue46-time-evidence-20261115/src/steuerreport_v2/domain/tax_filing_audit.py:428: in _materialize
+    root.mkdir(parents=True, exist_ok=True)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/tmp/pytest-of-root/pytest-267/test_archive_root_file_conflic0/tax_filing_audit_archive/2025')
+mode = 511, parents = True, exist_ok = True
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           NotADirectoryError: [Errno 20] Not a directory: '/tmp/pytest-of-root/pytest-267/test_archive_root_file_conflic0/tax_filing_audit_archive/2025'
+
+/usr/lib/python3.11/pathlib.py:1117: NotADirectoryError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_io_review" name="test_exact_archive_directory_creation_failure_is_domain_error[permission]" time="0.412"><failure message="PermissionError: [Errno 13] synthetic directory creation failure: '/tmp/pytest-of-root/pytest-267/test_exact_archive_directory_c0/tax_filing_audit_archive/2025'">prepared_audit = (&lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7305df374550&gt;, TaxFilingAuditReport(schema...gelt und ohne Gegenbeleg als pending_review ausgewiesen. Materiale Aenderungen benoetigen eine menschliche Freigabe.'))
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7305df310450&gt;
+error_number = 13
+
+    @pytest.mark.parametrize("error_number", [errno.EACCES, errno.ENOSPC], ids=["permission", "no_space"])
+    def test_exact_archive_directory_creation_failure_is_domain_error(
+        prepared_audit, monkeypatch, error_number,
+    ):
+        service, report = prepared_audit
+        root = service.archive_root / str(report.year)
+        original_mkdir = Path.mkdir
+        attempts = []
+    
+        def fail_exact_root(path, *args, **kwargs):
+            if path == root:
+                attempts.append(path)
+                raise OSError(error_number, "synthetic directory creation failure", str(path))
+            return original_mkdir(path, *args, **kwargs)
+    
+        monkeypatch.setattr(Path, "mkdir", fail_exact_root)
+        try:
+            with pytest.raises(TaxFilingAuditError):
+&gt;               service._materialize(report)
+
+tests/unit/test_tax_filing_audit_io_review.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../steuerreport-issue46-time-evidence-20261115/src/steuerreport_v2/domain/tax_filing_audit.py:428: in _materialize
+    root.mkdir(parents=True, exist_ok=True)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-root/pytest-267/test_exact_archive_directory_c0/tax_filing_audit_archive/2025')
+args = (), kwargs = {'parents': True, 'exist_ok': True}
+
+    def fail_exact_root(path, *args, **kwargs):
+        if path == root:
+            attempts.append(path)
+&gt;           raise OSError(error_number, "synthetic directory creation failure", str(path))
+E           PermissionError: [Errno 13] synthetic directory creation failure: '/tmp/pytest-of-root/pytest-267/test_exact_archive_directory_c0/tax_filing_audit_archive/2025'
+
+tests/unit/test_tax_filing_audit_io_review.py:58: PermissionError</failure></testcase><testcase classname="tests.unit.test_tax_filing_audit_io_review" name="test_exact_archive_directory_creation_failure_is_domain_error[no_space]" time="0.444"><failure message="OSError: [Errno 28] synthetic directory creation failure: '/tmp/pytest-of-root/pytest-267/test_exact_archive_directory_c1/tax_filing_audit_archive/2025'">prepared_audit = (&lt;steuerreport_v2.domain.tax_filing_audit.TaxFilingAuditService object at 0x7305df3ff150&gt;, TaxFilingAuditReport(schema...gelt und ohne Gegenbeleg als pending_review ausgewiesen. Materiale Aenderungen benoetigen eine menschliche Freigabe.'))
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7305df356350&gt;
+error_number = 28
+
+    @pytest.mark.parametrize("error_number", [errno.EACCES, errno.ENOSPC], ids=["permission", "no_space"])
+    def test_exact_archive_directory_creation_failure_is_domain_error(
+        prepared_audit, monkeypatch, error_number,
+    ):
+        service, report = prepared_audit
+        root = service.archive_root / str(report.year)
+        original_mkdir = Path.mkdir
+        attempts = []
+    
+        def fail_exact_root(path, *args, **kwargs):
+            if path == root:
+                attempts.append(path)
+                raise OSError(error_number, "synthetic directory creation failure", str(path))
+            return original_mkdir(path, *args, **kwargs)
+    
+        monkeypatch.setattr(Path, "mkdir", fail_exact_root)
+        try:
+            with pytest.raises(TaxFilingAuditError):
+&gt;               service._materialize(report)
+
+tests/unit/test_tax_filing_audit_io_review.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../steuerreport-issue46-time-evidence-20261115/src/steuerreport_v2/domain/tax_filing_audit.py:428: in _materialize
+    root.mkdir(parents=True, exist_ok=True)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-root/pytest-267/test_exact_archive_directory_c1/tax_filing_audit_archive/2025')
+args = (), kwargs = {'parents': True, 'exist_ok': True}
+
+    def fail_exact_root(path, *args, **kwargs):
+        if path == root:
+            attempts.append(path)
+&gt;           raise OSError(error_number, "synthetic directory creation failure", str(path))
+E           OSError: [Errno 28] synthetic directory creation failure: '/tmp/pytest-of-root/pytest-267/test_exact_archive_directory_c1/tax_filing_audit_archive/2025'
+
+tests/unit/test_tax_filing_audit_io_review.py:58: OSError</failure></testcase></testsuite></testsuites>

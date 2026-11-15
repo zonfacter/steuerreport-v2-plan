@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import csv
 import hashlib
 import io
 import json
-import os
 from pathlib import Path
 from typing import Any
 import zipfile
@@ -27,6 +26,9 @@ from steuerreport_v2.contracts.tax_filing_audit import (
     TaxFilingAuditReport,
 )
 from steuerreport_v2.db.duckdb_store import DuckDbStore
+from steuerreport_v2.domain.audit_artifacts import (
+    ArtifactIntegrityError, artifact_lock, read_json_object, read_regular_bytes, write_once,
+)
 from steuerreport_v2.domain.derivatives import DerivativesManager
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.tax import TaxService
@@ -50,6 +52,7 @@ ENDPOINT_TEMPLATES = (
     "gain-evidence-price-deltas",
 )
 BERLIN = ZoneInfo("Europe/Berlin")
+MAX_AUDIT_ARTIFACT_BYTES = 64 * 1024 * 1024
 PRIMARY_SOURCE_NAMES = frozenset(
     {
         "binance",
@@ -82,12 +85,24 @@ class TaxFilingAuditService:
         materialize: bool = True,
     ) -> TaxFilingAuditReport:
         queried_at = (query_time or datetime.now(timezone.utc)).astimezone(timezone.utc)
-        comparison = self.snapshots.comparison(year)
+        try:
+            with self.store.read_initialized_snapshot() as snapshot, localcontext() as context:
+                context.prec = 80
+                report = TaxFilingAuditService(snapshot)._build_snapshot(year, queried_at)
+        except RuntimeError as exc:
+            if str(exc) == "database_store_not_initialized":
+                raise TaxFilingAuditError("Datenbank ist nicht initialisiert; Einrichtung pruefen.") from exc
+            raise
+        return self._materialize(report) if materialize else report
+
+    def _build_snapshot(self, year: int, queried_at: datetime) -> TaxFilingAuditReport:
+        current_values = TaxYearService(self.store).filing_aggregate_values(year)
+        comparison = self.snapshots._comparison_from_values(
+            year, current_values=current_values, current_bound=True,
+        )
         baseline = comparison.baseline
         if baseline is not None and baseline.values is None:
             raise TaxFilingAuditError("Referenz-Summary ist nicht an das Archiv gebunden.")
-        current_summary = TaxYearService(self.store).filing_summary(year)
-        current_values = self.snapshots._values_from_summary(current_summary)
 
         reference_package: dict[str, Any] | None = None
         reference_tax_lines: list[dict[str, Any]] = []
@@ -95,6 +110,10 @@ class TaxFilingAuditService:
         reference_derivatives: list[dict[str, Any]] = []
         reference_files: list[dict[str, Any]] = []
         open_points: list[str] = []
+        open_points.append(
+            "Der Detailvergleich ist partiell: archivierte CSVs ersetzen keinen vollstaendigen "
+            "gebundenen Ereignis-/Ursprungslot-/Preisbelegvergleich."
+        )
         if baseline is not None:
             if baseline.integrity_status != "verified":
                 open_points.append(
@@ -116,8 +135,17 @@ class TaxFilingAuditService:
                         dict(item)
                         for item in reference_package["manifest"].get("files", [])
                     ]
-                except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
-                    open_points.append(f"Referenzpaket konnte nicht gelesen werden: {exc}")
+                    for suffix in ("tax-lines.csv", "tax-income-guide.csv", "derivative-lines.csv"):
+                        if self._member(reference_package["members"], suffix) is None:
+                            open_points.append(
+                                f"Referenzexport {suffix} fehlt; eine leere Positionsliste "
+                                "beweist hier keine vollstaendige Detailabdeckung."
+                            )
+                except (OSError, KeyError, ValueError, ArithmeticError, csv.Error, zipfile.BadZipFile) as exc:
+                    raise TaxFilingAuditError(
+                        "Referenzdetails sind nicht vollstaendig lesbar; kein Auditvergleich "
+                        "mit vermeintlich leeren Positionen moeglich."
+                    ) from exc
         else:
             open_points.append("Kein unveraenderlicher Referenzstand fuer das Steuerjahr vorhanden.")
         if reference_tax_lines and all(item.get("lot_id") is None for item in reference_tax_lines):
@@ -153,6 +181,12 @@ class TaxFilingAuditService:
         )
 
         current_runtime_sha, current_runtime = self.snapshots._runtime_fingerprint()
+        from steuerreport_v2.domain.ai_changes import _fingerprint
+
+        with self.store.connect() as con:
+            current_runtime["input_content_sha256"] = _fingerprint(con)
+        current_runtime["fingerprint_scope"] = "stored_database_and_runtime_configuration_v1"
+        current_runtime_sha = self._fingerprint(current_runtime)
         current_input_fingerprint = self._fingerprint(
             {
                 "year": year,
@@ -243,7 +277,11 @@ class TaxFilingAuditService:
         reconciliation_failed = any(
             item.status == "reconciliation_failed" for item in reconciliation
         )
-        tax_count_reference = len(reference_tax_lines) if baseline is not None else None
+        tax_count_reference = (
+            len(reference_tax_lines)
+            if reference_package and self._member(reference_package["members"], "tax-lines.csv")
+            else None
+        )
         reproducibility_differences: list[str] = []
         snapshot_hashes_identical = False
         tax_line_count_identical = False
@@ -258,12 +296,12 @@ class TaxFilingAuditService:
             tax_line_count_identical = tax_count_reference == len(current_tax_lines)
             delta_list_identical = not deltas
             if not snapshot_hashes_identical:
-                reproducibility_differences.append("snapshot_hashes")
+                reproducibility_differences.append("snapshot_formats_not_comparable")
             if not tax_line_count_identical:
                 reproducibility_differences.append("tax_line_count")
             if not delta_list_identical:
                 reproducibility_differences.append("delta_list")
-            if baseline.method_version != __version__:
+            if baseline.method_version != METHOD_VERSION:
                 reproducibility_differences.append("method_version")
             if baseline.software_version != __version__:
                 reproducibility_differences.append("software_version")
@@ -301,15 +339,22 @@ class TaxFilingAuditService:
         reproducibility = TaxAuditReproducibility(
             snapshot_hashes_identical=snapshot_hashes_identical,
             tax_line_count_identical=tax_line_count_identical,
-            sums_identical=not reconciliation_failed,
+            sums_identical=baseline is not None and all(
+                item.status == "reconciled" and item.aggregate_delta_eur == 0
+                for item in reconciliation
+            ),
             delta_list_identical=delta_list_identical,
-            status="not_reproducible" if reproducibility_failed else "reproducible",
+            status=(
+                "not_verifiable" if baseline is None or not snapshot_hashes_identical
+                else "not_reproducible" if reproducibility_failed else "reproducible"
+            ),
             reference_input_fingerprint=reference_input_fingerprint,
             current_input_fingerprint=current_input_fingerprint,
             differences=reproducibility_differences,
         )
         report = TaxFilingAuditReport(
             year=year,
+            detail_comparison_status="partial" if reference_package else "not_available",
             report_id="pending",
             generated_at_utc=queried_at.isoformat(),
             generated_at_europe_berlin=queried_at.astimezone(BERLIN).isoformat(),
@@ -352,8 +397,6 @@ class TaxFilingAuditService:
                 "markdown_artifact_endpoint": f"/api/v1/tax-years/{year}/filing-audit-report.md",
             }
         )
-        if materialize:
-            report = self._materialize(report)
         return report
 
     def read_artifact(self, year: int, suffix: str) -> tuple[TaxFilingAuditReport, bytes]:
@@ -365,71 +408,101 @@ class TaxFilingAuditService:
         else:
             raise TaxFilingAuditError("Unbekanntes Auditformat.")
         try:
-            content = path.read_bytes()
-        except OSError as exc:
-            raise TaxFilingAuditError(f"Auditdatei fehlt: {path}") from exc
+            content = read_regular_bytes(path, MAX_AUDIT_ARTIFACT_BYTES)
+            expected = (
+                self._report_json(report) if suffix == ".json"
+                else self._markdown(report).encode("utf-8")
+            )
+            if content != expected:
+                raise TaxFilingAuditError("Auditartefakt wurde nach der Pruefung veraendert.")
+        except ArtifactIntegrityError as exc:
+            raise TaxFilingAuditError("Auditdatei fehlt oder ist nicht integritaetsverifiziert.") from exc
         return report, content
 
     def _materialize(self, report: TaxFilingAuditReport) -> TaxFilingAuditReport:
+        expected_hash = self._fingerprint(self._stable_payload(report.model_dump(mode="json")))
+        if (
+            report.schema_version != "tax-filing-audit-v3"
+            or report.report_content_sha256 != expected_hash
+            or report.report_id != f"tax-filing-audit-{report.year}-{expected_hash[:24]}"
+        ):
+            raise TaxFilingAuditError("Auditinhalt ist nicht an seine Inhalts-ID gebunden.")
         root = self.archive_root / str(report.year)
-        root.mkdir(parents=True, exist_ok=True)
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            with artifact_lock(root / ".materialize.lock"):
+                return self._materialize_locked(report, root)
+        except (ArtifactIntegrityError, OSError, ValueError) as exc:
+            if isinstance(exc, TaxFilingAuditError):
+                raise
+            raise TaxFilingAuditError("Auditartefakt ist nicht vollstaendig integritaetsverifiziert.") from exc
+
+    @staticmethod
+    def _report_json(report: TaxFilingAuditReport) -> bytes:
+        return (
+            json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False)
+            + "\n"
+        ).encode("utf-8")
+
+    def _materialize_locked(self, report: TaxFilingAuditReport, root: Path) -> TaxFilingAuditReport:
         json_path = root / f"{report.report_id}.json"
         markdown_path = root / f"{report.report_id}.md"
-        if json_path.exists() or markdown_path.exists():
-            if not json_path.is_file() or not markdown_path.is_file():
-                raise TaxFilingAuditError("Auditartefakt ist unvollstaendig und wird nicht ueberschrieben.")
-            try:
-                return TaxFilingAuditReport.model_validate_json(json_path.read_text("utf-8"))
-            except Exception as exc:
-                raise TaxFilingAuditError("Vorhandenes Audit-JSON ist nicht lesbar.") from exc
+        seal_path = root / f"{report.report_id}.integrity.json"
+        if any(path.exists() or path.is_symlink() for path in (json_path, markdown_path, seal_path)):
+            json_bytes = read_regular_bytes(json_path, MAX_AUDIT_ARTIFACT_BYTES)
+            markdown = read_regular_bytes(markdown_path, MAX_AUDIT_ARTIFACT_BYTES)
+            stored = TaxFilingAuditReport.model_validate(read_json_object(json_bytes))
+            core_hash = self._fingerprint(self._stable_payload(stored.model_dump(mode="json")))
+            if (
+                stored.report_id != report.report_id or stored.year != report.year
+                or stored.report_content_sha256 != core_hash
+                or core_hash != report.report_content_sha256
+                or self._report_json(stored) != json_bytes
+                or hashlib.sha256(markdown).hexdigest() != stored.markdown_content_sha256
+                or self._markdown(stored).encode("utf-8") != markdown
+                or read_regular_bytes(seal_path, 16384) != self._artifact_seal(stored, json_bytes, markdown)
+            ):
+                raise TaxFilingAuditError("Vorhandenes Auditartefakt weicht vom gebundenen Inhalt ab.")
+            return stored
 
         markdown = self._markdown(report)
         markdown_hash = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
         report = report.model_copy(update={"markdown_content_sha256": markdown_hash})
-        json_bytes = (
-            json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True)
-            + "\n"
-        ).encode("utf-8")
+        json_bytes = self._report_json(report)
+        if max(len(json_bytes), len(markdown.encode("utf-8"))) > MAX_AUDIT_ARTIFACT_BYTES:
+            raise TaxFilingAuditError("Auditdatei ueberschreitet die maximale Groesse von 64 MiB.")
         self._write_once(json_path, json_bytes, mode=0o444)
         self._write_once(markdown_path, markdown.encode("utf-8"), mode=0o444)
+        self._write_once(seal_path, self._artifact_seal(report, json_bytes, markdown.encode("utf-8")), mode=0o444)
         return report
 
     @staticmethod
+    def _artifact_seal(report: TaxFilingAuditReport, content: bytes, markdown: bytes) -> bytes:
+        return TaxFilingAuditService._canonical_json({
+            "schema_version": "audit-artifact-integrity-v1",
+            "year": report.year, "report_id": report.report_id,
+            "json_sha256": hashlib.sha256(content).hexdigest(),
+            "markdown_sha256": hashlib.sha256(markdown).hexdigest(),
+        })
+
+    @staticmethod
     def _write_once(path: Path, content: bytes, *, mode: int) -> None:
-        if path.exists():
-            if path.read_bytes() != content:
-                raise TaxFilingAuditError(f"Unveraenderliches Auditartefakt abweichend: {path}")
-            return
-        temporary = path.with_suffix(f".{os.getpid()}.tmp")
         try:
-            with temporary.open("xb") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            temporary.replace(path)
-            try:
-                path.chmod(mode)
-            except OSError:
-                pass
-        finally:
-            if temporary.exists():
-                temporary.unlink()
+            write_once(path, content, mode)
+        except ArtifactIntegrityError as exc:
+            raise TaxFilingAuditError("Unveraenderliches Auditartefakt konnte nicht publiziert werden.") from exc
 
     def _read_reference_package(self, snapshot_id: str) -> dict[str, Any]:
         snapshot = self.snapshots.get(snapshot_id)
         content = self.snapshots.read_package(snapshot_id)
+        validated = self.snapshots._validate_package(snapshot.year, content)
+        manifest = validated["manifest"]
         with zipfile.ZipFile(io.BytesIO(content)) as package:
-            members = {name: package.read(name) for name in package.namelist()}
-        manifest_name = next(
-            (name for name in members if name.endswith("year-evidence-manifest.json")),
-            None,
-        )
-        if manifest_name is None:
-            raise TaxFilingAuditError("Referenzmanifest fehlt.")
+            members = {item["path"]: package.read(item["path"]) for item in manifest["files"]}
         return {
             "snapshot": snapshot,
             "members": members,
-            "manifest": json.loads(members[manifest_name].decode("utf-8")),
+            "manifest": manifest,
         }
 
     @staticmethod
@@ -454,7 +527,9 @@ class TaxFilingAuditService:
             if disposed_at is None or reporting_tax_year(disposed_at) != year:
                 continue
             asset = str(row.get("Asset") or "").upper()
-            event = self._match_reference_event(canonical, asset, disposed_at)
+            event_id = row.get("Source_Event_ID") or None
+            candidates = [item for item in canonical if event_id and item["event_id"] == event_id]
+            event = candidates[0] if len(candidates) == 1 else None
             rows.append(
                 {
                     "asset": asset,
@@ -462,16 +537,16 @@ class TaxFilingAuditService:
                     "acquisition_cost": self._decimal(row.get("Anschaffungskosten_EUR")),
                     "proceeds": self._decimal(row.get("Veraeusserungserloes_EUR")),
                     "gain": self._decimal(row.get("Gewinn_Verlust_EUR")),
-                    "holding_days": self._int(row.get("Haltedauer_Tage")),
+                    "holding_days": self._int(row["Haltedauer_Tage"]) if row.get("Haltedauer_Tage", "").strip() else None,
                     "taxable": self._archived_taxable(row.get("Steuerpflichtig")),
                     "classification_policy": row.get("Frist_Methodenversion") or "archived_report_label",
                     "disposed_at": disposed_at,
                     "acquired_at": self._parse_event_time(row.get("Datum_Kauf")),
-                    "event_id": event.get("event_id") if event else None,
+                    "event_id": event_id,
                     "source": event.get("source") if event else None,
                     "source_ref": event.get("source_ref") if event else None,
-                    "lot_id": None,
-                    "acquisition_event_id": None,
+                    "lot_id": row.get("Lot_ID") or None,
+                    "acquisition_event_id": row.get("Anschaffungs_Event_ID") or None,
                     "filename": name,
                     "file_hash": manifest_file.get("sha256") if manifest_file else hashlib.sha256(members[name]).hexdigest(),
                     "row_number": row_number,
@@ -558,36 +633,21 @@ class TaxFilingAuditService:
         old_by_key = defaultdict(list)
         new_by_key = defaultdict(list)
         for item in old:
-            old_by_key[self._stable_position_key(item)].append(item)
+            old_by_key[self._base_stable_key(item)].append(item)
         for item in new:
-            new_by_key[self._stable_position_key(item)].append(item)
+            new_by_key[self._base_stable_key(item)].append(item)
         pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
         remaining_old: list[dict[str, Any]] = []
         remaining_new: list[dict[str, Any]] = []
         for key in sorted(set(old_by_key) | set(new_by_key)):
             left = old_by_key[key]
             right = new_by_key[key]
-            pair_count = min(len(left), len(right))
+            pair_count = 1 if len(left) == len(right) == 1 else 0
             pairs.extend(zip(left[:pair_count], right[:pair_count], strict=False))
             remaining_old.extend(left[pair_count:])
             remaining_new.extend(right[pair_count:])
 
-        old_by_shape = defaultdict(list)
-        new_by_shape = defaultdict(list)
-        for item in remaining_old:
-            old_by_shape[self._shape_key(item)].append(item)
-        for item in remaining_new:
-            new_by_shape[self._shape_key(item)].append(item)
-        removed: list[dict[str, Any]] = []
-        added: list[dict[str, Any]] = []
-        for key in sorted(set(old_by_shape) | set(new_by_shape)):
-            left = sorted(old_by_shape[key], key=self._position_sort_key)
-            right = sorted(new_by_shape[key], key=self._position_sort_key)
-            pair_count = min(len(left), len(right))
-            pairs.extend(zip(left[:pair_count], right[:pair_count], strict=False))
-            removed.extend(left[pair_count:])
-            added.extend(right[pair_count:])
-        return pairs, removed, added
+        return pairs, remaining_old, remaining_new
 
     def _delta_from_position(
         self,
@@ -596,11 +656,17 @@ class TaxFilingAuditService:
         change_kind: str,
         position_kind: str,
     ) -> TaxAuditDelta:
+        with localcontext() as context:
+            context.prec = 80
+            return self._delta_values(old, new, change_kind, position_kind)
+
+    def _delta_values(
+        self, old: dict[str, Any] | None, new: dict[str, Any] | None,
+        change_kind: str, position_kind: str,
+    ) -> TaxAuditDelta:
         item = new or old or {}
         cause, explanation = self._classify_cause(old, new, change_kind, position_kind)
         stable_key = self._stable_position_key(item)
-        if old and new and old.get("event_id") and new.get("event_id"):
-            stable_key = f"{new['event_id']}#{new.get('occurrence', 1)}"
         return TaxAuditDelta(
             position_kind=position_kind,
             change_kind=change_kind,
@@ -659,20 +725,16 @@ class TaxFilingAuditService:
         if position_kind == "reward_income_position":
             return "rewards_mining_staking", "Die Position stammt aus der getrennten Reward-/Mining-/Staking-Klassifikation."
         if change_kind == "added":
-            if new and new.get("filename") and new.get("file_hash"):
-                return "new_import", "Die aktuelle Position ist in der Referenzposition nicht enthalten und stammt aus einem aktuellen Import."
-            return "previously_unconsidered_source", "Die aktuelle Position hat keine passende Referenzquelle."
+            return "unknown", "Keine eindeutig zugeordnete Referenzposition; ein neuer Import oder eine zuvor fehlende Quelle ist damit noch nicht belegt."
         if change_kind == "removed":
             return "unknown", "Die Referenzposition ist aktuell nicht auffindbar; eine Korrektur oder Loeschung ist nicht belegt."
         if old and new:
-            if old.get("lot_id") != new.get("lot_id") or old.get("acquisition_event_id") != new.get("acquisition_event_id"):
+            if any(old.get(key) and new.get(key) and old[key] != new[key] for key in ("lot_id", "acquisition_event_id")):
                 return "fifo_lot_assignment", "FIFO-Lot oder Anschaffungs-Event ist zwischen den Staenden anders zugeordnet."
-            if old.get("holding_days") != new.get("holding_days") or old.get("taxable") != new.get("taxable"):
+            if any(old.get(key) is not None and new.get(key) is not None and old[key] != new[key] for key in ("holding_days", "taxable")):
                 return "holding_period_classification", "Haltedauer oder steuerliche Haltefristklassifikation hat sich geaendert."
-            if old.get("source") != new.get("source"):
-                return "previously_unconsidered_source", "Die Positionsquelle hat sich zwischen Referenz und aktueller Auswertung geaendert."
             if any(old.get(key) != new.get(key) for key in ("acquisition_cost", "proceeds", "gain")):
-                return "price_or_fx_change", "Ereignis und Lot bleiben strukturell gleich, aber mindestens ein EUR-Wert ist anders."
+                return "unknown", "Mindestens ein EUR-Wert weicht ab; ohne gebundene Preis-/FX- und Methodenbelege ist die Ursache nicht nachgewiesen."
         return "unknown", "Die Position ist geaendert, aber die vorhandenen Daten belegen keine spezifischere Ursache."
 
     def _compare_reward_positions(
@@ -757,6 +819,15 @@ class TaxFilingAuditService:
         current_values: Any,
         deltas: list[TaxAuditDelta],
     ) -> list[TaxAuditAggregateReconciliation]:
+        with localcontext() as context:
+            context.prec = 80
+            return self._reconciliation_values(
+                baseline_values=baseline_values, current_values=current_values, deltas=deltas,
+            )
+
+    def _reconciliation_values(
+        self, *, baseline_values: Any, current_values: Any, deltas: list[TaxAuditDelta],
+    ) -> list[TaxAuditAggregateReconciliation]:
         result: list[TaxAuditAggregateReconciliation] = []
         definitions = (
             ("private_disposals", "Private Veraeusserungen", "taxable_private_disposals_eur"),
@@ -767,9 +838,9 @@ class TaxFilingAuditService:
             ("acquisition_costs", "Anschaffungskosten", "acquisition_cost_eur"),
         )
         for key, label, value_key in definitions:
-            reference = Decimal(getattr(baseline_values, value_key)) if baseline_values else Decimal("0")
+            reference = Decimal(getattr(baseline_values, value_key)) if baseline_values else None
             current = Decimal(getattr(current_values, value_key))
-            aggregate_delta = current - reference
+            aggregate_delta = current - reference if reference is not None else None
             if key == "private_disposals":
                 individual = self._line_delta(deltas, taxable=True)
             elif key == "tax_free_disposals":
@@ -786,8 +857,11 @@ class TaxFilingAuditService:
                 individual = sum((item.value_delta_eur or Decimal("0") for item in deltas if item.position_kind == "reward_income_position"), Decimal("0"))
             else:
                 individual = sum((item.value_delta_eur or Decimal("0") for item in deltas if item.position_kind == "derivative_line"), Decimal("0"))
-            residual = individual - aggregate_delta
-            status = "reconciled" if residual == 0 else "reconciliation_failed"
+            residual = individual - aggregate_delta if aggregate_delta is not None else None
+            status = (
+                "not_available" if reference is None
+                else "reconciled" if residual == 0 else "reconciliation_failed"
+            )
             result.append(
                 TaxAuditAggregateReconciliation(
                     key=key,
@@ -800,7 +874,9 @@ class TaxFilingAuditService:
                     status=status,
                     source="reference snapshot summary + current V2 tax lines/income/derivatives",
                     explanation=(
-                        "Einzelpositionen leiten exakt auf die Aggregatdifferenz ueber."
+                        "Kein Referenzwert vorhanden; Differenz und Rest sind unbekannt."
+                        if status == "not_available"
+                        else "Einzelpositionen leiten exakt auf die Aggregatdifferenz ueber."
                         if status == "reconciled"
                         else "Die Differenz zwischen Einzelpositionen und Aggregat ist nicht null; fachliche Klaerung erforderlich."
                     ),
@@ -881,7 +957,7 @@ class TaxFilingAuditService:
         payloads: dict[str, Any] = {
             "filing-snapshot-comparison": comparison,
             "filing-snapshots": self.snapshots.list(year=year),
-            "methodology": TaxMethodologyService(self.store).report(year),
+            "methodology": TaxMethodologyService(self.store).report(year, shared_preview_cache=False),
             "drivers": tax_year.driver_report(year, limit=50),
             "turnover-audit": tax_year.turnover_audit(year, limit=50),
             "gain-evidence-event-deltas": tax_year.gain_evidence_event_delta_review(year, limit=200),
@@ -1388,12 +1464,26 @@ class TaxFilingAuditService:
     @staticmethod
     def _base_stable_key(item: dict[str, Any]) -> str:
         if item.get("event_id"):
-            return str(item["event_id"])
+            lot_key = TaxFilingAuditService._fingerprint({
+                "event_id": item["event_id"],
+                "lot_id": item.get("lot_id"),
+                "acquisition_event_id": item.get("acquisition_event_id"),
+                "asset": item.get("asset"),
+            })
+            return f"{item['event_id']}:{lot_key}"
         return TaxFilingAuditService._fingerprint(
             {
                 "asset": item.get("asset"),
-                "disposed_at": TaxFilingAuditService._iso(item.get("disposed_at")),
+                "disposed_at": TaxFilingAuditService._iso(item.get("disposed_at") or item.get("event_time")),
+                "acquired_at": TaxFilingAuditService._iso(item.get("acquired_at")),
                 "quantity": str(item.get("quantity", "")),
+                "source": item.get("source"),
+                "source_ref": item.get("source_ref"),
+                "lot_id": item.get("lot_id"),
+                "acquisition_event_id": item.get("acquisition_event_id"),
+                "acquisition_cost": str(item.get("acquisition_cost", "")),
+                "proceeds": str(item.get("proceeds", "")),
+                "gain": str(item.get("gain", "")),
             }
         )[:32]
 
@@ -1427,6 +1517,11 @@ class TaxFilingAuditService:
             "lot_id",
             "acquisition_event_id",
             "taxable",
+            "disposed_at",
+            "event_time",
+            "acquired_at",
+            "source",
+            "source_ref",
         )
         return all(old.get(key) == new.get(key) for key in keys)
 
@@ -1445,7 +1540,10 @@ class TaxFilingAuditService:
 
     @staticmethod
     def _member(members: dict[str, bytes], suffix: str) -> str | None:
-        return next((name for name in members if name.endswith(suffix)), None)
+        matches = [name for name in members if name.endswith(suffix)]
+        if len(matches) > 1:
+            raise TaxFilingAuditError(f"Mehrdeutiger Referenzexport: {suffix}")
+        return matches[0] if matches else None
 
     @staticmethod
     def _manifest_file(manifest: dict[str, Any], name: str) -> dict[str, Any] | None:
@@ -1458,13 +1556,16 @@ class TaxFilingAuditService:
     @staticmethod
     def _decimal(value: Any) -> Decimal:
         if value is None or str(value).strip() == "":
-            return Decimal("0")
+            raise TaxFilingAuditError("Betrag oder Menge fehlt im Referenzexport.")
         text = str(value).strip().replace(" ", "")
         if "," in text and "." in text:
             text = text.replace(".", "").replace(",", ".")
         elif "," in text:
             text = text.replace(",", ".")
-        return Decimal(text)
+        result = Decimal(text)
+        if not result.is_finite():
+            raise TaxFilingAuditError("Nicht endlicher Betrag im Referenzexport.")
+        return result
 
     @staticmethod
     def _int(value: Any) -> int:
@@ -1550,6 +1651,8 @@ class TaxFilingAuditService:
             "",
             f"- Report-ID: {report.report_id}",
             f"- Status: {report.status}",
+            f"- Detailabdeckung: {report.detail_comparison_status}",
+            "- Summengleichheit, erklaerte Differenz und vollstaendige Detailparitaet sind getrennte Aussagen.",
             f"- API-Abfrage UTC: {report.generated_at_utc}",
             f"- API-Abfrage Europe/Berlin: {report.generated_at_europe_berlin}",
             f"- JSON-Inhaltsfingerprint: {report.report_content_sha256}",

@@ -2490,14 +2490,14 @@ class TaxMethodologyService:
         return self._status_from_report(self.report(year))
 
     def report(
-        self, year: int, *, include_gain_evidence: bool = True
+        self, year: int, *, include_gain_evidence: bool = True, shared_preview_cache: bool = True,
     ) -> TaxMethodologyReport:
         generated_at = self._now()
         policy = self.policy()
         detail = self.tax_years.detail(year)
         external = self.tax_years.external_inflow_report(year, limit=1)
         counts = self._year_counts(year)
-        wallet_fifo_service = WalletFifoPreviewService(self.store)
+        wallet_fifo_service = WalletFifoPreviewService(self.store, shared_preview_cache=shared_preview_cache)
         wallet_fifo = wallet_fifo_service.preview(year=year)
         (
             wallet_fifo_exchange_sequencing_count,
