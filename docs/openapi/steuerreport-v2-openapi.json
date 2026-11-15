@@ -7389,6 +7389,50 @@
         "title": "ApiResponse[PortfolioWalletHistoryImportResult]",
         "type": "object"
       },
+      "ApiResponse_PriceAdmissionReport_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceAdmissionReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[PriceAdmissionReport]",
+        "type": "object"
+      },
       "ApiResponse_PriceCoverageReport_": {
         "properties": {
           "data": {
@@ -12361,6 +12405,50 @@
         "title": "ApiResponse[Union[LegalResearchFreshnessReport, NoneType]]",
         "type": "object"
       },
+      "ApiResponse_Union_PriceAdmissionReport__NoneType__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceAdmissionReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[Union[PriceAdmissionReport, NoneType]]",
+        "type": "object"
+      },
       "ApiResponse_Union_SourceRegistryRunReport__NoneType__": {
         "properties": {
           "data": {
@@ -16653,6 +16741,16 @@
               }
             ],
             "title": "Current Priced At"
+          },
+          "price_admission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceAdmissionReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "price_time": {
             "$ref": "#/components/schemas/PriceTimeAssessment"
@@ -33109,6 +33207,12 @@
       },
       "DivorceValuationGate": {
         "properties": {
+          "accepted_price_time_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Accepted Price Time Count",
+            "type": "integer"
+          },
           "accepted_review_asset_count": {
             "default": 0,
             "title": "Accepted Review Asset Count",
@@ -33155,6 +33259,18 @@
             "default": 0,
             "title": "Positions Count",
             "type": "integer"
+          },
+          "price_admission_state_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Admission State Sha256"
           },
           "price_time_policy_id": {
             "anyOf": [
@@ -44183,6 +44299,17 @@
             ],
             "title": "Price Eur"
           },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          },
           "price_source": {
             "anyOf": [
               {
@@ -46086,6 +46213,463 @@
         "title": "PresetWrite",
         "type": "object"
       },
+      "PriceAdmissionApply": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledge_original_verified": {
+            "title": "Acknowledge Original Verified",
+            "type": "boolean"
+          },
+          "acknowledge_scope_limited": {
+            "title": "Acknowledge Scope Limited",
+            "type": "boolean"
+          },
+          "draft_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Draft Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_sha256",
+          "acknowledge_original_verified",
+          "acknowledge_scope_limited"
+        ],
+        "title": "PriceAdmissionApply",
+        "type": "object"
+      },
+      "PriceAdmissionDraftRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Actor",
+            "type": "string"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/PriceEvidenceIdentity"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PriceEvidenceMethod"
+          },
+          "method_original": {
+            "$ref": "#/components/schemas/PriceMethodOriginal"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/PriceAdmissionObservationInput"
+          },
+          "preview_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Preview Sha256",
+            "type": "string"
+          },
+          "price_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Price Fingerprint",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "valuation_at": {
+            "format": "date-time",
+            "title": "Valuation At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preview_sha256",
+          "price_fingerprint",
+          "valuation_at",
+          "identity",
+          "observation",
+          "method",
+          "actor",
+          "rationale",
+          "request_id",
+          "method_original"
+        ],
+        "title": "PriceAdmissionDraftRequest",
+        "type": "object"
+      },
+      "PriceAdmissionFxInput": {
+        "additionalProperties": false,
+        "properties": {
+          "base": {
+            "enum": [
+              "USD",
+              "EUR"
+            ],
+            "title": "Base",
+            "type": "string"
+          },
+          "evidence_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Evidence Sha256",
+            "type": "string"
+          },
+          "locator": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Locator",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "quote": {
+            "enum": [
+              "USD",
+              "EUR"
+            ],
+            "title": "Quote",
+            "type": "string"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Rate"
+          },
+          "reference_at": {
+            "format": "date-time",
+            "title": "Reference At",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base",
+          "quote",
+          "rate",
+          "reference_at",
+          "published_at",
+          "evidence_sha256",
+          "locator",
+          "source"
+        ],
+        "title": "PriceAdmissionFxInput",
+        "type": "object"
+      },
+      "PriceAdmissionObservationInput": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Evidence Sha256",
+            "type": "string"
+          },
+          "fx": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceAdmissionFxInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "$ref": "#/components/schemas/PriceEvidenceIdentity"
+          },
+          "kind": {
+            "enum": [
+              "observed_quote",
+              "daily_reference"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "locator": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Locator",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "quote_currency": {
+            "enum": [
+              "EUR",
+              "USD"
+            ],
+            "title": "Quote Currency",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "identity",
+          "quote_currency",
+          "value",
+          "kind",
+          "published_at",
+          "evidence_sha256",
+          "locator",
+          "source"
+        ],
+        "title": "PriceAdmissionObservationInput",
+        "type": "object"
+      },
+      "PriceAdmissionReport": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Actor",
+            "type": "string"
+          },
+          "assessment": {
+            "$ref": "#/components/schemas/PriceEvidenceAdmission"
+          },
+          "can_apply": {
+            "title": "Can Apply",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "draft_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Draft Sha256",
+            "type": "string"
+          },
+          "explanation": {
+            "default": "Menschlich bestaetigte Zuordnung nur dieser Preis-ID, Methode und dieses Bewertungszeitpunkts. Keine automatische Echtheits-, Token-, Steuerjahres- oder Rechtsfreigabe; bestehende Preiswahl und weitere Gates bleiben getrennt.",
+            "title": "Explanation",
+            "type": "string"
+          },
+          "format_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Format Version",
+            "type": "integer"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/PriceEvidenceIdentity"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PriceEvidenceMethod"
+          },
+          "method_original": {
+            "$ref": "#/components/schemas/PriceImportOriginalRef"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/PriceEvidenceObservation"
+          },
+          "originals": {
+            "items": {
+              "$ref": "#/components/schemas/PriceImportOriginalRef"
+            },
+            "title": "Originals",
+            "type": "array"
+          },
+          "preview_id": {
+            "format": "uuid",
+            "title": "Preview Id",
+            "type": "string"
+          },
+          "price_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Price Fingerprint",
+            "type": "string"
+          },
+          "price_id": {
+            "format": "uuid",
+            "title": "Price Id",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "revocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "prepared",
+              "blocked",
+              "human_approved",
+              "revoked",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "validation_policy_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Validation Policy Sha256",
+            "type": "string"
+          },
+          "valuation_at": {
+            "format": "date-time",
+            "title": "Valuation At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "request_id",
+          "preview_id",
+          "price_id",
+          "draft_sha256",
+          "price_fingerprint",
+          "created_at",
+          "validation_policy_sha256",
+          "valuation_at",
+          "identity",
+          "observation",
+          "method",
+          "actor",
+          "rationale",
+          "assessment",
+          "can_apply",
+          "method_original",
+          "originals"
+        ],
+        "title": "PriceAdmissionReport",
+        "type": "object"
+      },
+      "PriceAdmissionRevoke": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledge_revocation": {
+            "title": "Acknowledge Revocation",
+            "type": "boolean"
+          },
+          "actor": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Actor",
+            "type": "string"
+          },
+          "draft_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Draft Sha256",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_sha256",
+          "actor",
+          "rationale",
+          "acknowledge_revocation"
+        ],
+        "title": "PriceAdmissionRevoke",
+        "type": "object"
+      },
       "PriceBackfillCheckpoint": {
         "additionalProperties": false,
         "properties": {
@@ -46349,6 +46933,400 @@
           "deleted"
         ],
         "title": "PriceDeleteResult",
+        "type": "object"
+      },
+      "PriceEvidenceAdmission": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Binding Sha256",
+            "type": "string"
+          },
+          "decision_id": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "evidence_origin": {
+            "enum": [
+              "operator_confirmed",
+              "unverified"
+            ],
+            "title": "Evidence Origin",
+            "type": "string"
+          },
+          "original_integrity_verified": {
+            "title": "Original Integrity Verified",
+            "type": "boolean"
+          },
+          "policy_id": {
+            "const": "stichtag-price-evidence-admission",
+            "default": "stichtag-price-evidence-admission",
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "default": 1,
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "human_approved",
+              "not_approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "strict_eligible": {
+            "title": "Strict Eligible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "strict_eligible",
+          "binding_sha256",
+          "original_integrity_verified",
+          "evidence_origin"
+        ],
+        "title": "PriceEvidenceAdmission",
+        "type": "object"
+      },
+      "PriceEvidenceFx": {
+        "additionalProperties": false,
+        "properties": {
+          "base": {
+            "enum": [
+              "USD",
+              "EUR"
+            ],
+            "title": "Base",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "evidence_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Evidence Sha256",
+            "type": "string"
+          },
+          "locator": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Locator",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "quote": {
+            "enum": [
+              "USD",
+              "EUR"
+            ],
+            "title": "Quote",
+            "type": "string"
+          },
+          "rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Rate",
+            "type": "string"
+          },
+          "reference_at": {
+            "format": "date-time",
+            "title": "Reference At",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base",
+          "quote",
+          "rate",
+          "reference_at",
+          "published_at",
+          "captured_at",
+          "evidence_sha256",
+          "locator",
+          "source"
+        ],
+        "title": "PriceEvidenceFx",
+        "type": "object"
+      },
+      "PriceEvidenceIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Asset",
+            "type": "string"
+          },
+          "contract": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Contract",
+            "type": "string"
+          },
+          "decimals": {
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Decimals",
+            "type": "integer"
+          },
+          "network": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Network",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset",
+          "network",
+          "contract",
+          "decimals"
+        ],
+        "title": "PriceEvidenceIdentity",
+        "type": "object"
+      },
+      "PriceEvidenceMethod": {
+        "additionalProperties": false,
+        "properties": {
+          "availability_rule": {
+            "enum": [
+              "available_at_cutoff",
+              "retrospective_daily_reference"
+            ],
+            "title": "Availability Rule",
+            "type": "string"
+          },
+          "daily_statistic": {
+            "anyOf": [
+              {
+                "enum": [
+                  "daily_mean",
+                  "daily_fixed_time",
+                  "daily_close"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Statistic"
+          },
+          "daily_time": {
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Time"
+          },
+          "evidence_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Evidence Sha256",
+            "type": "string"
+          },
+          "fx_max_age_days": {
+            "anyOf": [
+              {
+                "maximum": 7.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Max Age Days"
+          },
+          "kind": {
+            "enum": [
+              "observed_quote",
+              "daily_reference"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "method_id": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Method Id",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "method_id",
+          "version",
+          "kind",
+          "timezone",
+          "availability_rule",
+          "evidence_sha256"
+        ],
+        "title": "PriceEvidenceMethod",
+        "type": "object"
+      },
+      "PriceEvidenceObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "evidence_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Evidence Sha256",
+            "type": "string"
+          },
+          "fx": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceEvidenceFx"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "$ref": "#/components/schemas/PriceEvidenceIdentity"
+          },
+          "kind": {
+            "enum": [
+              "observed_quote",
+              "daily_reference"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "locator": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Locator",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "quote_currency": {
+            "enum": [
+              "EUR",
+              "USD"
+            ],
+            "title": "Quote Currency",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "quote_currency",
+          "value",
+          "kind",
+          "published_at",
+          "captured_at",
+          "evidence_sha256",
+          "locator",
+          "source"
+        ],
+        "title": "PriceEvidenceObservation",
         "type": "object"
       },
       "PriceGapDecisionCreate": {
@@ -46666,6 +47644,36 @@
           "asset"
         ],
         "title": "PriceMapping",
+        "type": "object"
+      },
+      "PriceMethodOriginal": {
+        "additionalProperties": false,
+        "properties": {
+          "content_base64": {
+            "maxLength": 2800000,
+            "minLength": 4,
+            "title": "Content Base64",
+            "type": "string"
+          },
+          "filename": {
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "media_type": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Media Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "media_type",
+          "content_base64"
+        ],
+        "title": "PriceMethodOriginal",
         "type": "object"
       },
       "PricePoint": {
@@ -96346,6 +97354,426 @@
           "Prices"
         ],
         "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/prices/{price_id}/admission-previews": {
+      "post": {
+        "description": "Prepare admission. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "prepare_admission_api_v1_prices_historical_previews__request_id__prices__price_id__admission_previews_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "price_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Price Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceAdmissionDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PriceAdmissionReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Prepare Admission",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/prices/{price_id}/admission-previews/{draft_id}": {
+      "get": {
+        "description": "Get admission preview. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "get_admission_preview_api_v1_prices_historical_previews__request_id__prices__price_id__admission_previews__draft_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "price_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Price Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PriceAdmissionReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admission Preview",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/prices/{price_id}/admission-previews/{draft_id}/apply": {
+      "post": {
+        "description": "Apply admission. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "apply_admission_api_v1_prices_historical_previews__request_id__prices__price_id__admission_previews__draft_id__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "price_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Price Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceAdmissionApply"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PriceAdmissionReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Admission",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/prices/{price_id}/admission-previews/{draft_id}/method-original": {
+      "get": {
+        "description": "Admission method original. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "admission_method_original_api_v1_prices_historical_previews__request_id__prices__price_id__admission_previews__draft_id__method_original_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "price_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Price Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admission Method Original",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/prices/{price_id}/admissions": {
+      "get": {
+        "description": "Get admission. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "get_admission_api_v1_prices_historical_previews__request_id__prices__price_id__admissions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "price_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Price Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "valuation_at",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Valuation At",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Union_PriceAdmissionReport__NoneType__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admission",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
+        "x-long-running": false,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/historical/previews/{request_id}/prices/{price_id}/admissions/{draft_id}/revoke": {
+      "post": {
+        "description": "Revoke admission. Der Aufruf kann Daten, Entscheidungen, Jobs oder Belegartefakte schreiben. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "revoke_admission_api_v1_prices_historical_previews__request_id__prices__price_id__admissions__draft_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "price_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Price Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceAdmissionRevoke"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PriceAdmissionReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Admission",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "write",
         "x-long-running": false,
         "x-mobile-surface": "expert-or-internal"
       }

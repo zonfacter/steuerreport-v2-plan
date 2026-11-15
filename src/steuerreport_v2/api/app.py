@@ -828,6 +828,12 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         openapi_tags=OPENAPI_TAGS,
         servers=[{"url": "/", "description": "Aktueller Steuerreport-V2-API-Host"}],
     )
+    from steuerreport_v2.domain.price_admissions import PriceAdmissionError
+
+    @app.exception_handler(PriceAdmissionError)
+    async def price_admission_failure(_request: Request, exc: PriceAdmissionError):
+        return JSONResponse(status_code=exc.http_status, content={"status": "error", "data": None,
+            "errors": [{"code": exc.code, "message": exc.code}]})
     cors_origins = [value.strip() for value in os.environ.get("STEUERREPORT_CORS_ORIGINS", "").split(",") if value.strip()]
     app.add_middleware(
         CORSMiddleware,
@@ -3550,10 +3556,10 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     def divorce_valuation_run_latest(include_archived: bool = False) -> ApiResponse[DivorceValuationRunReport | None]:
         service = DivorceValuationRunService(db)
         report = service.latest(require_current_policy=False)
-        if report is not None and not service.has_current_price_time_policy(report):
+        if report is not None and not service.has_current_price_time_policy(report, store=db):
             return ApiResponse(status="warning", data=report if include_archived else None, warnings=[ApiMessage(
                 code="valuation_price_time_policy_stale",
-                message=("Archivierter Stichtagslauf ohne aktuelle Zeitbelegpruefung; kein aktueller "
+                message=("Archivierter Stichtagslauf ohne aktuelle Zeit-/Methodenbelegpruefung; kein aktueller "
                          "Freigabenachweis. Archiv unveraendert unter /api/v1/divorce/valuation-runs/"
                          + report.run_id + " erreichbar. Neuen Lauf nur ausdruecklich erstellen."),
             )])
@@ -3566,9 +3572,9 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         report = DivorceValuationRunService(db).get(run_id)
         if report is None:
             raise HTTPException(status_code=404, detail="Stichtagslauf nicht gefunden")
-        warnings = [] if DivorceValuationRunService.has_current_price_time_policy(report) else [ApiMessage(
+        warnings = [] if DivorceValuationRunService.has_current_price_time_policy(report, store=db) else [ApiMessage(
             code="valuation_price_time_policy_archived",
-            message="Historischer Lauf ohne aktuelle Zeitbelegpruefung; gespeicherter Status ist keine heutige Freigabe.",
+            message="Historischer Lauf ohne aktuelle Zeit-/Methodenbelegpruefung; gespeicherter Status ist keine heutige Freigabe.",
         )]
         return ApiResponse(status="warning" if warnings else "ok", data=report, warnings=warnings)
 
@@ -3981,6 +3987,11 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
     def add_review_decision(
         payload: ReviewDecisionCreate,
     ) -> ApiResponse[ReviewDecision]:
+        from steuerreport_v2.domain.price_admissions import RESERVED_TYPES
+        if payload.decision_type in RESERVED_TYPES:
+            code = "price_admission_dedicated_workflow_required"
+            return JSONResponse(status_code=409, content={"detail": code, "status": "error", "data": None,
+                "errors": [{"code": code, "message": code}]})
         decision = db.add_review_decision(payload)
         clear_response_cache()
         return ApiResponse(data=decision)

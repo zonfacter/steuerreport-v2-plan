@@ -268,15 +268,20 @@ Unveroeffentlichte Weiterentwicklung fuer direkte Preisauftraege:
 [Speicherbeleg und Ausgang nach einem Abbruch pruefen](docs/ISSUE_49_AKTUELLE_PORTFOLIOPREISE.md).
 Ebenfalls unveroeffentlicht: [Stichtagsreferenz und Kurs-/FX-Zeitbeleg
 auseinanderhalten](docs/STICHTAG_ZEITBELEGE.md). Ein Tagesanker oder eine
-Tokenannahme ersetzt keinen Beobachtungs- oder Veroeffentlichungsnachweis;
-die positive Nicht-EUR-Belegzulassung ist noch nicht als Anwendungsablauf
-verfuegbar. Ein reiner originalgebundener Zulassungsbaustein und der korrigierte
+Tokenannahme ersetzt keinen Beobachtungs- oder Veroeffentlichungsnachweis.
+Ein reiner originalgebundener Zulassungsbaustein und der korrigierte
 historische Uebernahmenachweis sind getrennt dokumentiert:
 [Belegzulassung und Nachweisgrenzen (Entwicklung)](docs/audit/ISSUE46_63_BELEGZULASSUNG_2026-11-15.md).
 Der nachfolgende Entwicklungsstand macht unpruefbare Vorschauen in der Liste
 sichtbar und verknuepft neu gebundene uebernommene Preis-IDs lesend mit ihren
 Originaldateien. Dieser Importbeleg ist keine Zeit-/Methodenzulassung.
 [Vertrag des Importbeleg-Readers](docs/audit/ISSUE46_IMPORTBELEG_READER_VERTRAG_2026-11-15.md).
+Darauf aufbauend bietet der aktuelle Entwicklungszweig eine zweistufige
+menschliche Preiszeit-/Methodenbestaetigung mit gebundenen Originalen und
+ausdruecklichem append-only Widerruf. Keine KI, automatische Zustimmung oder
+steuerliche Jahresfreigabe. Status und Grenzen:
+[Vertrag](docs/audit/ISSUE46_MENSCHLICHE_PREISBESTAETIGUNG_VERTRAG_2026-11-15.md),
+[Integrationsnachweis](docs/audit/ISSUE46_MENSCHLICHE_PREISBESTAETIGUNG_2026-11-15.md).
 Preiszeilen/Checkpoint werden gemeinsam gespeichert, die anschliessende
 Pipeline bleibt ein getrennter Schritt. Keine automatische Wiederholung und
 keine Jahresfreigabe; der moderne historische Vorschauablauf bleibt erhalten.
@@ -374,7 +379,11 @@ vorhandene Steuerstaende bleiben davon unberuehrt.
 
 ## Native Installation
 
-Python ab 3.11.0 und Node.js werden vorausgesetzt. Das Runtime-Lockfile
+Python ab 3.11.0 und fuer den Frontendbau Node.js 22 (wie in Docker und CI)
+werden vorausgesetzt. Die Frontend-Abhaengigkeiten benoetigen mindestens
+Node.js 20.19.0; Node 18 ist keine unterstuetzte Build-Baseline. Bei Nutzung
+des fertigen Docker-Images sind Python und Node.js auf dem Host nicht erforderlich.
+Das Runtime-Lockfile
 enthaelt fuer diese Untergrenze `soupsieve==2.10`: Version 3.0.4 verlangt
 Python 3.11.5. Der aeltere Pin verzichtet auf spaetere Aenderungen von Soup
 Sieve; laut PyPI meldet 2.10 derzeit keine Advisories, waehrend 2.8.3 vier

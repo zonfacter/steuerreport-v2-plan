@@ -31,6 +31,7 @@ from steuerreport_v2.domain.external_price_backfill import (
 )
 from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
+from steuerreport_v2.domain.price_admissions import PriceAdmissionError, PriceAdmissionService
 from steuerreport_v2.domain.price_time import assess_price_time
 from steuerreport_v2.domain.stichtag_token_valuation import (
     StichtagTokenValuationService,
@@ -77,6 +78,7 @@ class AsOfPriceGateService:
         valuation_date = divorce_service._local_date(valuation_at)
         provider_sources = self._provider_sources(resolve_project_path(config_path))
         positions_by_asset: defaultdict[str, list[object]] = defaultdict(list)
+        position_admissions = {}
         for position in portfolio.positions:
             value = abs(position.value_eur or Decimal("0"))
             time_assessment = assess_price_time(
@@ -84,8 +86,16 @@ class AsOfPriceGateService:
                 priced_at=position.priced_at, price_eur=position.price_eur,
                 valuation_at=valuation_at,
             )
+            admission = (
+                divorce_service._selected_price_admission(position, valuation_at)
+                if not time_assessment.strict_eligible else None
+            )
+            position_admissions[id(position)] = admission
+            time_eligible = time_assessment.strict_eligible or divorce_service._price_admission_eligible(
+                admission, position, valuation_at,
+            )
             if (position.price_eur is None or value >= materiality_threshold_eur
-                    or not time_assessment.strict_eligible):
+                    or not time_eligible):
                 positions_by_asset[str(position.asset).upper()].append(position)
         candidates: list[AsOfPriceGateCandidate] = []
         for asset, positions in sorted(positions_by_asset.items()):
@@ -112,6 +122,14 @@ class AsOfPriceGateService:
             price_time = assess_price_time(
                 asset=asset, price_source=price_source, priced_at=priced_at,
                 price_eur=price_eur, valuation_at=valuation_at,
+            )
+            price_admission = position_admissions.get(id(latest)) if latest is not None and not diagnostic_only else None
+            admitted = (
+                latest is not None and not diagnostic_only
+                and divorce_service._price_admission_eligible(price_admission, latest, valuation_at)
+                and all(divorce_service._price_admission_eligible(
+                    position_admissions.get(id(position)), position, valuation_at,
+                ) for position in positions)
             )
             value_eur = sum(
                 (position.value_eur or Decimal("0") for position in positions),
@@ -142,7 +160,7 @@ class AsOfPriceGateService:
             elif price_status != "same_day":
                 status = "not_configured"
                 reason = "Kein historischer Provider-Identifier konfiguriert."
-            elif not price_time.strict_eligible:
+            elif not (price_time.strict_eligible or admitted):
                 status = "time_review"
                 reason = price_time.explanation
                 if token_review_status == "pending":
@@ -156,7 +174,9 @@ class AsOfPriceGateService:
             else:
                 status = "satisfied"
                 reason = (
-                    price_time.explanation
+                    "Menschliche Preiszeit-/Methodenbestaetigung fuer die ausgewaehlte Preis-ID und diesen Stichtag; "
+                    "keine Token-, Jahres- oder Rechtsfreigabe."
+                    if admitted else price_time.explanation
                     if token_review_status == "not_required"
                     else "Zeitbelegpruefung und getrennte stichtagsbezogene Tokenentscheidung liegen vor."
                 )
@@ -174,6 +194,7 @@ class AsOfPriceGateService:
                     current_price_age_days=age_days,
                     current_price_status=price_status,
                     price_time=price_time,
+                    price_admission=price_admission,
                     provider_id=provider_id,
                     token_mint=token_assessment.mint,
                     token_verified=token_assessment.token_verified,
@@ -206,6 +227,8 @@ class AsOfPriceGateService:
                 item.asset,
             )
         )
+        if PriceAdmissionService(self.store).state_fingerprint(valuation_at) != gate.price_admission_state_sha256:
+            raise PriceAdmissionError("price_admission_state_changed", http_status=409)
         return AsOfPriceGateReport(
             generated_at=datetime.now(timezone.utc),
             as_of=valuation_at,
@@ -226,7 +249,7 @@ class AsOfPriceGateService:
                 "Read-only Stichtagspreis-Gate aus historischen Portfolio-Positionen. Materielle Assets "
                 "benoetigen einen Preis am selben UTC-Kalendertag und einen davon getrennten "
                 "gebundenen Zeitbeleg. Ein gespeicherter Zeitwert oder Quellenlabel beweist keine "
-                "Beobachtungs- oder Veroeffentlichungszeit. Tagesreferenzen bleiben Vorschaukandidaten. "
+                "Beobachtungs- oder Veroeffentlichungszeit. Unbestaetigte Tagesreferenzen bleiben Vorschaukandidaten. "
                 "Vortags-, veraltete oder aus Event-"
                 "Quotes abgeleitete Preise werden nicht still akzeptiert. Tokenrisiken werden mintgenau "
                 "aus dem Jupiter-Metadatenbeleg bestimmt und benoetigen pro Stichtag eine explizite "

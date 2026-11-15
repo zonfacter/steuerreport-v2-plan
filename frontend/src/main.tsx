@@ -3,7 +3,9 @@ import { createRoot } from "react-dom/client";
 import { externalPriceBackfillError } from "./external-price-backfill-error";
 import { newRequestId } from "./request-id";
 import { CurrentPriceRequestStatus, rememberCurrentPriceRequest, rememberHistoricalPriceRequest } from "./workspace/CurrentPriceRequestStatus";
-import { PriceTimeEvidence, type PriceTimeAssessment } from "./workspace/PriceTimeEvidence";
+import type { PriceTimeAssessment } from "./workspace/PriceTimeEvidence";
+import { PriceAdmissionEvidence } from "./workspace/PriceAdmissionEvidence";
+import type { PriceAdmissionReport } from "./workspace/PriceAdmission";
 import { money as exactMoney } from "./workspace/resource";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
 import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
@@ -194,6 +196,7 @@ type AsOfPriceGateCandidate = {
   current_price_age_days?: number | null;
   current_price_status: string;
   price_time?: PriceTimeAssessment | null;
+  price_admission?: PriceAdmissionReport | null;
   provider_id?: string | null;
   token_mint?: string | null;
   token_verified?: boolean | null;
@@ -12239,7 +12242,8 @@ function DivorceEqualizationPanel({
       />
       <details>
         <summary>Zeitbelege der Stichtagsreferenzen</summary>
-        {(activePriceGate?.candidates ?? []).map((candidate) => <div key={candidate.asset}><h4>{candidate.asset}</h4><PriceTimeEvidence assessment={candidate.price_time} /></div>)}
+        {(activePriceGate?.candidates ?? []).map((candidate) => <div key={candidate.asset}><h4>{candidate.asset}</h4><PriceAdmissionEvidence
+          admission={candidate.price_admission} legacy={candidate.price_time} asset={candidate.asset} valuationAt={activePriceGate?.as_of} /></div>)}
         {!activePriceGate && <p role="status">Zeitbelege werden noch ermittelt.</p>}
       </details>
       <TablePanel

@@ -11,6 +11,7 @@ class PortfolioPosition(BaseModel):
     account: str
     asset: str
     quantity: Decimal
+    price_id: str | None = None
     price_eur: Decimal | None = None
     value_eur: Decimal | None = None
     price_source: str | None = None

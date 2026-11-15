@@ -33,6 +33,8 @@ from steuerreport_v2.domain.divorce_inheritance import (
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
 from steuerreport_v2.domain.price_time import POLICY_ID, POLICY_VERSION
+from steuerreport_v2.domain.price_admissions import PriceAdmissionError, PriceAdmissionService
+from steuerreport_v2.domain.portfolio import PortfolioService
 from steuerreport_v2.domain.source_registry import SourceRegistryService
 from steuerreport_v2.domain.solana_staking_position import (
     SolanaStakingPositionReconciliationService,
@@ -298,6 +300,8 @@ class DivorceValuationRunService:
             ),
             summary=summary,
         )
+        if not self.has_current_price_time_policy(report, store=self.store):
+            raise PriceAdmissionError("price_admission_state_changed", http_status=409)
         content = json.dumps(
             report.model_dump(mode="json"), indent=2, ensure_ascii=False
         ).encode("utf-8")
@@ -306,12 +310,57 @@ class DivorceValuationRunService:
         return report
 
     @staticmethod
-    def has_current_price_time_policy(report: DivorceValuationRunReport) -> bool:
-        return all(
+    def has_current_price_time_policy(
+        report: DivorceValuationRunReport, store: DuckDbStore | None = None,
+    ) -> bool:
+        gates = (report.cutoff_price_gate, report.valuation_price_gate,
+                 report.summary.cutoff_price_gate, report.summary.valuation_price_gate)
+        if not all(
             gate.price_time_policy_id == POLICY_ID and gate.price_time_policy_version == POLICY_VERSION
-            for gate in (report.cutoff_price_gate, report.valuation_price_gate,
-                         report.summary.cutoff_price_gate, report.summary.valuation_price_gate)
-        )
+            for gate in gates
+        ):
+            return False
+        cutoff = DivorceValuationRunService._naive(report.cutoff_at)
+        valuation = DivorceValuationRunService._naive(report.valuation_at)
+        if (DivorceValuationRunService._naive(report.summary.cutoff_at) != cutoff
+                or DivorceValuationRunService._naive(report.summary.valuation_at) != valuation):
+            return False
+        for outer, inner, expected_at in ((gates[0], gates[2], cutoff), (gates[1], gates[3], valuation)):
+            if (DivorceValuationRunService._naive(outer.valuation_at) != expected_at
+                    or DivorceValuationRunService._naive(inner.valuation_at) != expected_at
+                    or outer.price_admission_state_sha256 != inner.price_admission_state_sha256
+                    or outer.accepted_price_time_count != inner.accepted_price_time_count):
+                return False
+        if any(gate.accepted_price_time_count and gate.price_admission_state_sha256 is None for gate in gates):
+            return False
+        if store is None:
+            # Backward-compatible legacy checks cannot confirm admission-backed runs.
+            return all(gate.price_admission_state_sha256 is None for gate in gates)
+        try:
+            resolver = PriceAdmissionService(store)
+            current = {instant: resolver.state_fingerprint(instant.replace(tzinfo=timezone.utc))
+                       for instant in {cutoff, valuation}}
+        except Exception:
+            return False
+        if not all(gate.price_admission_state_sha256 == current[expected_at]
+                   for gate, expected_at in zip(gates, (cutoff, valuation, cutoff, valuation))):
+            return False
+        if any(gate.price_admission_state_sha256 is not None for gate in gates):
+            # The bound original can remain intact while a different price is
+            # now selected. Recheck the actual read-only gate, not just receipts.
+            try:
+                with store.read_initialized_snapshot() as snapshot:
+                    portfolio = PortfolioService(snapshot)
+                    service = DivorceEqualizationService(snapshot)
+                    for archived, nested, instant in ((gates[0], gates[2], cutoff), (gates[1], gates[3], valuation)):
+                        positions = portfolio.as_of_snapshot(instant).positions
+                        fresh = service._valuation_gate(positions, instant, report.materiality_threshold_eur)
+                        expected = fresh.model_dump(exclude={"valuation_at"})
+                        if any(copy.model_dump(exclude={"valuation_at"}) != expected for copy in (archived, nested)):
+                            return False
+            except Exception:
+                return False
+        return True
 
     def latest(self, *, require_current_policy: bool = True) -> DivorceValuationRunReport | None:
         path = self.artifact_root / "latest_valuation_gate.json"
@@ -321,7 +370,7 @@ class DivorceValuationRunService:
             )
             # Archived bytes remain unchanged and accessible by ID; a legacy
             # positive result is not a current temporal-evidence assessment.
-            if require_current_policy and not self.has_current_price_time_policy(report):
+            if require_current_policy and not self.has_current_price_time_policy(report, store=self.store):
                 return None
             return report
         except (OSError, ValueError):

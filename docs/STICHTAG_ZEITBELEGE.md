@@ -60,19 +60,56 @@ erzeugt einen neuen Stand; Lesen startet ihn nicht.
 Die Policykennung ist keine allgemeine Zusage, dass alte Daten inzwischen
 vollstaendig oder mit dem aktuellen Datenstand identisch sind.
 
-## Noch offener nutzbarer Belegablauf
+## Menschliche Bestaetigung im Entwicklungszweig
 
-Dieser Schritt prueft heutige Legacy-Referenzen konservativ. Er implementiert
-noch keine positive Zulassung echter Nicht-EUR-Intradaybelege oder einer
-fachlich freigegebenen Tagesmethode. Dafuer werden strukturierte und
-unveraenderlich gebundene Originalantworten mit Asset-/FX-Identitaet,
-Beobachtungszeit bzw. Periode und erforderlicher Veroeffentlichungs-/
-Verfuegbarkeitszeit benoetigt. Vorhandene manuelle Preisvorschauen oder
-Archivdateien ersetzen diese Zulassungspruefung nicht automatisch.
+Voraussetzung ist eine neue, ausdruecklich uebernommene historische
+Preisvorschau mit Preis-ID-Bindung und intakten Originalen. Alte Archive
+erhalten keine erfundenen Bindungen. Ohne geeignete Originalunterlagen
+bleibt die Bestaetigung gesperrt.
 
-Das bleibt ausdruecklich Arbeit aus #44/#46 vor einer solchen Produktfreigabe.
-Die bisherigen Steuer-/FIFO-Zahlen, Tagespreisregeln und Quellenentscheidungen
-werden durch diese reine Stichtags-Zeitdiagnose nicht automatisch korrigiert.
+1. Im Preisarbeitsbereich die gespeicherte Vorschau und deren uebernommene
+   Preiszeilen oeffnen. **Originalbindung pruefen** lesen und Originale
+   herunterladen. Dieser Schritt schreibt nichts und ruft keinen Anbieter ab.
+2. **Preiszeit und Methode menschlich bestaetigen** oeffnen. Netzwerk,
+   Contract, Dezimalstellen und den exakten Bewertungszeitpunkt in UTC angeben.
+   Es werden keine Uhrzeiten aus einem Quellenlabel ergaenzt.
+3. Beobachteten Kurs oder eine dokumentierte Tagesperiode, Preiswaehrung,
+   Publikationszeit, Originalhash/Fundstelle und Quelle erfassen. Bei USD ist
+   der historische FX-Kurs mit Richtung, Referenz- und Publikationszeit sowie
+   Originalbezug zusaetzlich erforderlich. Eine Tagesreferenz ist kein
+   beobachteter Ausfuehrungskurs. Methodenzeitzone und Verfuegbarkeitsregel
+   muessen zu den Originalen passen.
+4. Das eigene Methodendokument (1 Byte bis 2 MiB), Person und Begruendung
+   angeben. **Technische Vorschau vorbereiten** speichert ausschliesslich
+   gebundene Belegartefakte. Es ist noch keine Bestaetigung gespeichert.
+5. Die technische Vorschau und alle Originale pruefen. Nur bei korrektem
+   Inhalt beide Erklaerungen bewusst aktivieren und **Menschliche Bestaetigung
+   speichern** waehlen. Fehlende oder widerspruechliche Nachweise lassen
+   sich damit nicht uebergehen. Das freie Personenfeld authentifiziert
+   keine Identitaet; der API-Zugang braucht weiterhin LAN/VPN oder ein
+   vorgeschaltetes authentifiziertes TLS-Gateway.
+6. Status erneut lesen und den gewuenschten Stichtag pruefen. Eine gueltige
+   Bestaetigung gilt nur fuer genau diese Preis-ID, Methode und diesen
+   UTC-Zeitpunkt. Sie erzwingt keine andere Preiswahl. Same-Day-, Tokenrisiko-
+   und weitere Dossier-Gates bleiben unabhaengig erforderlich.
+7. Fehler nicht durch Aendern der alten Entscheidung korrigieren:
+   **Bestaetigung ausdruecklich widerrufen**, Person/Grund/Erklaerung angeben
+   und bewusst widerrufen. Die alte Entscheidung bleibt erhalten. Eine
+   Korrektur erfordert eine neue Vorlage und erneute ausdrueckliche Zustimmung.
+
+Server-Erfassungszeit, menschlich angegebene Publikationszeit und
+Zustimmungszeit bleiben getrennt. Ein Hash belegt die Bindung der Bytes,
+nicht deren inhaltliche Echtheit. Keine automatische KI-, Rechts- oder
+Jahresfreigabe. Lesen startet weder Import noch Neuberechnung.
+
+Wenn Originale, aktuelle Assetidentitaet, Preiszeile oder verwendete
+Zulassungsregeln nicht mehr passen, wird die Bestaetigung nicht mehr als
+aktuell positiv verwendet. Archivierte Dossierlaeufe bleiben unveraendert;
+ihre fruehere Zustimmung ist keine aktuelle Freigabe. Die bisherigen
+Steuer-/FIFO-Zahlen und Tagespreisregeln werden nicht automatisch korrigiert.
+
+Vertrag und Grenzen:
+[Menschliche Preisbestaetigung](audit/ISSUE46_MENSCHLICHE_PREISBESTAETIGUNG_VERTRAG_2026-11-15.md).
 
 [Vertrag](audit/ISSUE46_ZEITBELEG_VERTRAG_2026-11-15.md) und
 [Integrationsnachweise](audit/ISSUE46_ZEITBELEG_INTEGRATION_2026-11-15.md).

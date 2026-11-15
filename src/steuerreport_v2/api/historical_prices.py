@@ -8,6 +8,10 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 
 from steuerreport_v2.contracts.common import ApiMessage, ApiResponse
+from steuerreport_v2.contracts.price_admissions import (
+    PriceAdmissionApply, PriceAdmissionDraftRequest, PriceAdmissionReport, PriceAdmissionRevoke,
+)
+from steuerreport_v2.contracts.price_evidence import EvidenceDatetime
 from steuerreport_v2.contracts.price_import_evidence import PriceImportEvidenceReport
 from steuerreport_v2.contracts.historical_prices import (
     HistoricalPriceApply,
@@ -20,6 +24,7 @@ from steuerreport_v2.contracts.historical_prices import (
 )
 from steuerreport_v2.domain.historical_prices import HistoricalPriceError, HistoricalPriceService
 from steuerreport_v2.domain.price_import_evidence import PriceImportEvidenceService
+from steuerreport_v2.domain.price_admissions import PriceAdmissionError, PriceAdmissionService
 
 
 class _PriceRoute(APIRoute):
@@ -38,6 +43,8 @@ class _PriceRoute(APIRoute):
                 return error("historical_price_request_invalid", 422)
             except HistoricalPriceError as exc:
                 return error(str(exc), 404 if str(exc).endswith("not_found") else 409)
+            except PriceAdmissionError as exc:
+                return error(exc.code, exc.http_status)
             except Exception:
                 return error("historical_price_service_unavailable", 503)
         return safe
@@ -46,6 +53,7 @@ class _PriceRoute(APIRoute):
 def build_historical_prices_router(store, on_apply):
     router = APIRouter(prefix="/api/v1/prices/historical", tags=["Prices"], route_class=_PriceRoute)
     service = HistoricalPriceService(store)
+    admissions = PriceAdmissionService(store)
 
     @router.post("/plan")
     def plan(request: HistoricalPriceQuery) -> ApiResponse[dict]:
@@ -83,6 +91,40 @@ def build_historical_prices_router(store, on_apply):
     @router.get("/previews/{request_id}/prices/{price_id}/evidence/{sha}")
     def price_original(request_id: UUID, price_id: UUID, sha: str) -> Response:
         content, filename = PriceImportEvidenceService(store).download(request_id, price_id, sha)
+        return Response(content=content, media_type="application/octet-stream", headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+        })
+
+    @router.post("/previews/{request_id}/prices/{price_id}/admission-previews")
+    def prepare_admission(request_id: UUID, price_id: UUID, request: PriceAdmissionDraftRequest) -> ApiResponse[PriceAdmissionReport]:
+        return ApiResponse(data=admissions.prepare(request_id, price_id, request))
+
+    @router.get("/previews/{request_id}/prices/{price_id}/admission-previews/{draft_id}")
+    def get_admission_preview(request_id: UUID, price_id: UUID, draft_id: UUID) -> ApiResponse[PriceAdmissionReport]:
+        return ApiResponse(data=admissions.get(request_id, price_id, draft_id))
+
+    @router.post("/previews/{request_id}/prices/{price_id}/admission-previews/{draft_id}/apply")
+    def apply_admission(request_id: UUID, price_id: UUID, draft_id: UUID,
+                        request: PriceAdmissionApply) -> ApiResponse[PriceAdmissionReport]:
+        result = admissions.apply(request_id, price_id, draft_id, request)
+        on_apply()
+        return ApiResponse(data=result)
+
+    @router.get("/previews/{request_id}/prices/{price_id}/admissions")
+    def get_admission(request_id: UUID, price_id: UUID,
+                      valuation_at: EvidenceDatetime) -> ApiResponse[PriceAdmissionReport | None]:
+        return ApiResponse(data=admissions.read_admission(request_id, price_id, valuation_at))
+
+    @router.post("/previews/{request_id}/prices/{price_id}/admissions/{draft_id}/revoke")
+    def revoke_admission(request_id: UUID, price_id: UUID, draft_id: UUID,
+                         request: PriceAdmissionRevoke) -> ApiResponse[PriceAdmissionReport]:
+        result = admissions.revoke(request_id, price_id, draft_id, request)
+        on_apply()
+        return ApiResponse(data=result)
+
+    @router.get("/previews/{request_id}/prices/{price_id}/admission-previews/{draft_id}/method-original")
+    def admission_method_original(request_id: UUID, price_id: UUID, draft_id: UUID) -> Response:
+        content, filename = admissions.method_original(request_id, price_id, draft_id)
         return Response(content=content, media_type="application/octet-stream", headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
         })

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import nullcontext
 from decimal import Decimal, InvalidOperation, localcontext
 import json
 import re
@@ -86,14 +87,17 @@ def identity_from_payload(payload: dict, *, role: str, source: str,
 
 
 class AssetIdentityIndex:
-    def __init__(self, store: DuckDbStore) -> None:
+    def __init__(self, store: DuckDbStore, *, connection=None, asset: str | None = None) -> None:
         self.identities: dict[str, TokenIdentity] = {}
         self.problems: dict[str, str] = {}
         candidates: dict[str, list[TokenIdentity]] = {}
-        with store.connect() as con:
-            rows = con.execute("""select e.asset,e.quantity,e.quote_asset,e.quote_quantity,
+        with (nullcontext(connection) if connection is not None else store.connect()) as con:
+            predicate = " where upper(e.asset)=? or upper(e.quote_asset)=? or upper(e.fee_asset)=?" if asset else ""
+            query = """select e.asset,e.quantity,e.quote_asset,e.quote_quantity,
                 e.fee_asset,e.fee_quantity,e.source,r.payload_json from canonical_events e
-                join raw_objects r on r.raw_object_id=e.raw_object_id order by e.event_id""").fetchall()
+                join raw_objects r on r.raw_object_id=e.raw_object_id""" + predicate + " order by e.event_id"
+            cursor = con.execute(query, [asset.upper()] * 3) if asset else con.execute(query)
+            rows = cursor.fetchall()
         for asset, quantity, quote, quote_quantity, fee, fee_quantity, source, raw in rows:
             try:
                 payload = json.loads(raw)

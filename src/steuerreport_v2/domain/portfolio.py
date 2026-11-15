@@ -331,6 +331,7 @@ class PortfolioService:
                 account=account,
                 asset=asset,
                 quantity=quantity,
+                price_id=price.price_id,
                 price_eur=price.price_eur,
                 value_eur=value,
                 price_source=price.source,

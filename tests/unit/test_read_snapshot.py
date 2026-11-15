@@ -88,6 +88,21 @@ def test_initialized_snapshot_never_recreates_a_removed_database(tmp_path):
     assert not store.path.exists()
 
 
+def test_initialized_snapshot_borrows_existing_readonly_transaction(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "nested.duckdb")
+    point = store.add_price_point(price("2"))
+    with store.read_snapshot() as outer:
+        with monkeypatch.context() as guard:
+            guard.setattr(duckdb, "connect", lambda *_a, **_k: pytest.fail("Nested reader opened a second database"))
+            with outer.read_initialized_snapshot() as inner:
+                assert inner is outer
+                assert [row.price_id for row in inner.list_price_points()] == [point.price_id]
+            assert [row.price_id for row in outer.list_price_points()] == [point.price_id]
+    with pytest.raises(RuntimeError, match="read_snapshot_closed"):
+        with outer.read_initialized_snapshot():
+            pytest.fail("Expired snapshot was admitted")
+
+
 def test_initialized_snapshot_is_read_only_without_directory_or_schema_work(tmp_path, monkeypatch):
     from pathlib import Path
 
