@@ -413,6 +413,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         }
     )
 
+    current_price_started = False
     try:
         report["binance_price_evidence"] = _run_json(
             [
@@ -465,6 +466,7 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         else:
             report["jup_native_backfill"] = {"status": "not_required", "target_changed": False}
 
+        current_price_started = True
         current_price = ExternalPriceBackfillService(DuckDbStore(db_path)).run_current_portfolio(
             config_path=str(PRICE_CONFIG),
             provider="coingecko",
@@ -475,7 +477,9 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             dry_run=False,
         )
         report["spcxx_current_price"] = current_price.model_dump(mode="json")
-        if current_price.failed or current_price.imported_prices != 1:
+        if (current_price.failed or current_price.imported_prices != 1
+                or current_price.pipeline_status == "failed"
+                or current_price.result_journal_status != "recorded"):
             raise RuntimeError(
                 f"spcxx_current_price_failed:imported={current_price.imported_prices}:failed={current_price.failed}"
             )
@@ -577,10 +581,15 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         report["target_changed"] = True
         exit_code = 0
     except Exception as exc:
-        shutil.copy2(backup, db_path)
-        report["status"] = "rolled_back"
-        report["error"] = f"{type(exc).__name__}: {exc}"
-        report["restored_state"] = _state(db_path)
+        if current_price_started:
+            report["status"] = "partial_or_unknown"
+            report["target_changed"] = None
+            report["error"] = "Aktueller Preisbackfill oder Folgeschritt unvollstaendig; Zustand vor Wiederholung pruefen."
+        else:
+            shutil.copy2(backup, db_path)
+            report["status"] = "rolled_back"
+            report["error"] = f"{type(exc).__name__}: {exc}"
+            report["restored_state"] = _state(db_path)
         exit_code = 2
 
     output_dir = Path(args.output_dir)

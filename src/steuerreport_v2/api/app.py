@@ -274,6 +274,8 @@ from steuerreport_v2.contracts.prices import (
     AsOfTokenValuationDecisionResult,
     CurrentPortfolioPriceBackfillRequest,
     CurrentPortfolioPriceBackfillResult,
+    CurrentPortfolioPriceBackfillStatus,
+    CurrentPortfolioPriceBackfillStatusRequest,
     ExternalPriceBackfillRequest,
     ExternalPriceBackfillResult,
     ExternalPriceBackfillStorageUnknown,
@@ -545,11 +547,16 @@ from steuerreport_v2.domain.fairspot_staking import (
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
 from steuerreport_v2.domain.external_price_backfill import (
+    CurrentBackfillReplayBlocked,
+    CurrentBackfillProviderContextFailed,
+    CurrentBackfillReservationUnknown,
+    CurrentBackfillStorageUnknown,
     ExternalPriceBackfillService,
     HistoricalBackfillStorageUnknown,
     backfill_result_warnings,
 )
 from steuerreport_v2.domain.flows import FlowService
+from steuerreport_v2.domain.request_limits import RequestCancelled, RequestDeadlineExceeded
 from steuerreport_v2.domain.import_coverage import ImportCoverageService
 from steuerreport_v2.domain.import_policy import ImportPolicyService
 from steuerreport_v2.domain.import_assistant import (
@@ -2277,24 +2284,73 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         return ApiResponse(status="warning" if warnings else ("ok" if result.dry_run or result.imported_prices else "warning"),
                            data=result, warnings=warnings)
 
-    @app.post("/api/v1/prices/backfill/current-portfolio")
+    @app.post("/api/v1/prices/backfill/current-portfolio", responses={
+        500: {"model": ApiResponse[ExternalPriceBackfillStorageUnknown], "description": "Speicherzustand unbekannt"},
+        409: {"description": "Auftrag bereits reserviert; keine Wiederholung ausgefuehrt"},
+        503: {"description": "Auftrag gestoppt oder Reservierung nicht nachgewiesen"},
+    })
     def backfill_current_portfolio_prices(
         payload: CurrentPortfolioPriceBackfillRequest,
     ) -> ApiResponse[CurrentPortfolioPriceBackfillResult]:
-        result = ExternalPriceBackfillService(db).run_current_portfolio(
-            config_path=payload.config_path,
-            provider=payload.provider,
-            assets_filter=payload.assets,
-            max_requests=payload.max_requests,
-            timeout_seconds=payload.timeout_seconds,
-            confidence=payload.confidence,
-            dry_run=payload.dry_run,
-        )
+        try:
+            result = ExternalPriceBackfillService(db).run_current_portfolio(
+                config_path=payload.config_path,
+                provider=payload.provider,
+                assets_filter=payload.assets,
+                max_requests=payload.max_requests,
+                timeout_seconds=payload.timeout_seconds,
+                confidence=payload.confidence,
+                dry_run=payload.dry_run,
+                request_id=str(payload.request_id) if payload.request_id else None,
+            )
+        except CurrentBackfillStorageUnknown as exc:
+            clear_response_cache()
+            return JSONResponse(status_code=500, content=ApiResponse[ExternalPriceBackfillStorageUnknown](
+                status="error", data=ExternalPriceBackfillStorageUnknown(),
+                errors=[ApiMessage(code="price_backfill_storage_unknown", message="Speicherzustand unbekannt; vor Wiederholung pruefen.")],
+                warnings=exc.warnings,
+            ).model_dump(mode="json"))
+        except CurrentBackfillReplayBlocked:
+            return JSONResponse(status_code=409, content=ApiResponse[dict](status="error",
+                data={"previous_storage_status": "unknown", "previous_pipeline_status": "unknown"},
+                errors=[ApiMessage(code="current_backfill_replay_blocked", message="Auftrag bereits reserviert; vor einem neuen Auftrag Zustand pruefen.")],
+            ).model_dump(mode="json"))
+        except (CurrentBackfillReservationUnknown, CurrentBackfillProviderContextFailed, RequestCancelled, RequestDeadlineExceeded):
+            return JSONResponse(status_code=503, content=ApiResponse[dict](status="error",
+                data={"storage_status": "not_started", "pipeline_status": "not_started"},
+                errors=[ApiMessage(code="current_backfill_stopped", message="Auftrag gestoppt oder Reservierung unklar; keine Preisoperation dieses Aufrufs begonnen.")],
+            ).model_dump(mode="json"))
+        except Exception:
+            clear_response_cache()
+            return JSONResponse(status_code=500, content=ApiResponse[dict](status="error",
+                data={"storage_status": "unknown", "pipeline_status": "unknown"},
+                errors=[ApiMessage(code="current_backfill_unknown", message="Zustand unbekannt; vor Wiederholung pruefen.")],
+            ).model_dump(mode="json"))
         if result.imported_prices:
             clear_response_cache()
         warnings = backfill_result_warnings(result)
+        if result.pipeline_status == "failed":
+            warnings.append(ApiMessage(code="price_backfill_pipeline_failed", message="Preise gespeichert, Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise. Vor Wiederholung Zustand pruefen."))
+        if result.result_journal_status == "unknown":
+            warnings.append(ApiMessage(code="current_backfill_journal_unknown", message="Auftragsergebnis nicht sicher dokumentiert; keine automatische Wiederholung. Zustand pruefen."))
         return ApiResponse(status="warning" if warnings else ("ok" if result.dry_run or result.imported_prices else "warning"),
                            data=result, warnings=warnings)
+
+    @app.post("/api/v1/prices/backfill/current-portfolio/status")
+    def current_portfolio_price_request_status(
+        payload: CurrentPortfolioPriceBackfillStatusRequest,
+    ) -> ApiResponse[CurrentPortfolioPriceBackfillStatus]:
+        try:
+            result = ExternalPriceBackfillService(db).current_portfolio_request_status(str(payload.request_id))
+        except Exception:
+            return JSONResponse(status_code=500, content=ApiResponse[dict](
+                status="error", data={"status": "unknown"},
+                errors=[ApiMessage(code="current_backfill_status_unknown", message="Gespeicherter Auftragsstatus konnte nicht sicher gelesen werden. Keine Wiederholung starten.")],
+            ).model_dump(mode="json"))
+        warnings = backfill_result_warnings(result.result) if result.result is not None else []
+        if result.result is not None and result.result.pipeline_status == "failed":
+            warnings.append(ApiMessage(code="price_backfill_pipeline_failed", message="Pipeline damals fehlgeschlagen; Folgen unbekannt oder teilweise. Vor Wiederholung Zustand pruefen."))
+        return ApiResponse(status="ok" if result.status == "recorded" and not warnings else "warning", data=result, warnings=warnings)
 
     @app.get("/api/v1/prices/as-of-gate")
     def prices_as_of_gate(

@@ -327,6 +327,14 @@ class DuckDbStore:
             )
             """
         )
+        con.execute("""
+            create table if not exists current_price_backfill_requests (
+                request_hash varchar primary key,
+                reserved_at timestamp not null,
+                result_json varchar
+            )
+        """)
+        con.execute("alter table current_price_backfill_requests add column if not exists result_json varchar")
         con.execute(
             """
             create table if not exists flow_ledger (
@@ -1235,6 +1243,30 @@ class DuckDbStore:
 
     def add_price_point(self, payload: PricePointCreate) -> PricePoint:
         return self.add_price_points([payload])[0]
+
+    def reserve_current_price_backfill(self, request_hash: str) -> bool:
+        with self.connect() as con:
+            return con.execute(
+                "insert into current_price_backfill_requests (request_hash, reserved_at) values (?, current_timestamp) "
+                "on conflict do nothing returning request_hash",
+                [request_hash],
+            ).fetchone() is not None
+
+    def record_current_price_backfill(self, request_hash: str, result_json: str) -> None:
+        with self.connect() as con:
+            row = con.execute(
+                "update current_price_backfill_requests set result_json=? "
+                "where request_hash=? and result_json is null returning request_hash",
+                [result_json, request_hash],
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("current_price_result_not_recorded")
+
+    def current_price_backfill_record(self, request_hash: str) -> tuple[str | None] | None:
+        with self.connect() as con:
+            return con.execute(
+                "select result_json from current_price_backfill_requests where request_hash=?", [request_hash],
+            ).fetchone()
 
     def add_price_points(self, payloads: list[PricePointCreate]) -> list[PricePoint]:
         if not payloads:

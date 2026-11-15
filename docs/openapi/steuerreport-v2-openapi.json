@@ -4485,6 +4485,50 @@
         "title": "ApiResponse[CurrentPortfolioPriceBackfillResult]",
         "type": "object"
       },
+      "ApiResponse_CurrentPortfolioPriceBackfillStatus_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentPortfolioPriceBackfillStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[CurrentPortfolioPriceBackfillStatus]",
+        "type": "object"
+      },
       "ApiResponse_DemoSeedResult_": {
         "properties": {
           "data": {
@@ -29640,6 +29684,19 @@
             "title": "Provider",
             "type": "string"
           },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Eindeutige Kennung fuer einen bewusst neuen Apply; Wiederholungen derselben Kennung werden blockiert.",
+            "title": "Request Id"
+          },
           "timeout_seconds": {
             "default": 20,
             "title": "Timeout Seconds",
@@ -29698,6 +29755,26 @@
               }
             ]
           },
+          "pipeline_effects": {
+            "default": "not_started",
+            "enum": [
+              "not_started",
+              "completed",
+              "unknown_or_partial"
+            ],
+            "title": "Pipeline Effects",
+            "type": "string"
+          },
+          "pipeline_status": {
+            "default": "not_started",
+            "enum": [
+              "not_started",
+              "completed",
+              "failed"
+            ],
+            "title": "Pipeline Status",
+            "type": "string"
+          },
           "planned_jobs": {
             "title": "Planned Jobs",
             "type": "integer"
@@ -29711,9 +29788,27 @@
             "title": "Priced At",
             "type": "string"
           },
+          "result_journal_status": {
+            "default": "not_started",
+            "enum": [
+              "not_started",
+              "recorded",
+              "unknown"
+            ],
+            "title": "Result Journal Status",
+            "type": "string"
+          },
           "skipped": {
             "title": "Skipped",
             "type": "integer"
+          },
+          "stored_price_ids": {
+            "description": "Bei Rueckkehr des Speicheraufrufs bestaetigte IDs; kein spaeterer Bestandsnachweis",
+            "items": {
+              "type": "string"
+            },
+            "title": "Stored Price Ids",
+            "type": "array"
           }
         },
         "required": [
@@ -29730,6 +29825,53 @@
           "jobs"
         ],
         "title": "CurrentPortfolioPriceBackfillResult",
+        "type": "object"
+      },
+      "CurrentPortfolioPriceBackfillStatus": {
+        "properties": {
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentPortfolioPriceBackfillResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "recorded",
+              "unknown_or_running",
+              "not_found"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "explanation"
+        ],
+        "title": "CurrentPortfolioPriceBackfillStatus",
+        "type": "object"
+      },
+      "CurrentPortfolioPriceBackfillStatusRequest": {
+        "properties": {
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "CurrentPortfolioPriceBackfillStatusRequest",
         "type": "object"
       },
       "DemoSeedResult": {
@@ -94560,6 +94702,67 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "description": "Auftrag bereits reserviert; keine Wiederholung ausgefuehrt"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ExternalPriceBackfillStorageUnknown_"
+                }
+              }
+            },
+            "description": "Speicherzustand unbekannt"
+          },
+          "503": {
+            "description": "Auftrag gestoppt oder Reservierung nicht nachgewiesen"
+          }
+        },
+        "summary": "Backfill Current Portfolio Prices",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "write",
+        "x-long-running": true,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/backfill/current-portfolio/status": {
+      "post": {
+        "description": "Current portfolio price request status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "current_portfolio_price_request_status_api_v1_prices_backfill_current_portfolio_status_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentPortfolioPriceBackfillStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CurrentPortfolioPriceBackfillStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -94571,11 +94774,11 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Backfill Current Portfolio Prices",
+        "summary": "Current Portfolio Price Request Status",
         "tags": [
           "Prices"
         ],
-        "x-data-effect": "write",
+        "x-data-effect": "read-only",
         "x-long-running": true,
         "x-mobile-surface": "expert-or-internal"
       }
