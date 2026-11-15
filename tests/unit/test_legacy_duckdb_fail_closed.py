@@ -159,9 +159,12 @@ def test_direct_helper_propagates_cancellation_after_prior_steps(name, signal, t
         monkeypatch.setattr(module, "_import_wallet_month", lambda *a: {})
         monkeypatch.setattr(module, "_apply_opening_balance", lambda *a: {})
         monkeypatch.setattr(module, "_backfill_prices", abort)
-        call = lambda: module._run_full_import(tmp_path / "unused", v1_db=tmp_path / "v1",
-                                               wallet_month_csv=tmp_path / "wallet",
-                                               price_config=tmp_path / "config", max_year=2024)
+        def call():
+            return module._run_full_import(
+                tmp_path / "unused", v1_db=tmp_path / "v1",
+                wallet_month_csv=tmp_path / "wallet",
+                price_config=tmp_path / "config", max_year=2024,
+            )
     else:
         monkeypatch.setattr(module, "DuckDbStore", lambda path: object())
         monkeypatch.setattr(module, "_delete_existing_jup_batches", lambda *a: effects.append("prior_write"))
@@ -170,7 +173,8 @@ def test_direct_helper_propagates_cancellation_after_prior_steps(name, signal, t
         monkeypatch.setattr(module, "PipelineService", lambda store: SimpleNamespace(rebuild_all=lambda: object()))
         monkeypatch.setattr(module, "ExternalPriceBackfillService", lambda store: SimpleNamespace(run=abort))
         monkeypatch.setattr(module, "PortfolioService", no_restore)
-        call = lambda: module._apply(tmp_path / "unused", wallet="synthetic", rows=[], fx_db=tmp_path / "fx")
+        def call():
+            return module._apply(tmp_path / "unused", wallet="synthetic", rows=[], fx_db=tmp_path / "fx")
     with pytest.raises(signal):
         call()
     assert effects == ["prior_write"]
