@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Entwicklung #49: Aktuelle und historische Direktpreisauftraege erhalten
+  atomar gebundene Preiszeilen/Checkpoints, getrennte Pipelinephasen und eine
+  lesende Statusauskunft. Gleiche Kennungen werden persistent gesperrt; neue
+  Kennungen sind bewusste neue Auftraege, keine automatische Recovery.
+  Vorhandene historische Vorschau und fachliche Freigaben bleiben getrennt.
+- Entwicklung #11/#53: Vorhandenen portablen Backup-/Restore-Operator mit
+  nativer Prozess-Lesesperre, Katalog-/Vaultpruefung und eindeutiger
+  Ressourcenbereinigung integriert. Synthetischer Docker-Vollrestore in CI
+  belegt, echter Betreiberrestore/Rollback und Legacy-Paritaet weiter offen.
+- Kein produktives Update, keine Aktivierung einer Methode und kein neuer
+  Release durch diese Entwicklungsstaende.
+
 ## 0.2.0rc40 - 2026-10-30 (Releasekandidat)
 
 - GitHub #22: `Fee Deducted In` wird im Bitget-CSV-Profil nur noch als

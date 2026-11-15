@@ -5057,6 +5057,50 @@
         "title": "ApiResponse[ExternalPriceBackfillResult]",
         "type": "object"
       },
+      "ApiResponse_ExternalPriceBackfillStatus_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalPriceBackfillStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ApiMessage"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "ApiResponse[ExternalPriceBackfillStatus]",
+        "type": "object"
+      },
       "ApiResponse_ExternalPriceBackfillStorageUnknown_": {
         "properties": {
           "data": {
@@ -29735,6 +29779,7 @@
             "type": "integer"
           },
           "imported_prices": {
+            "minimum": 0.0,
             "title": "Imported Prices",
             "type": "integer"
           },
@@ -29744,6 +29789,12 @@
             },
             "title": "Jobs",
             "type": "array"
+          },
+          "operation_kind": {
+            "const": "current_portfolio",
+            "default": "current_portfolio",
+            "title": "Operation Kind",
+            "type": "string"
           },
           "pipeline": {
             "anyOf": [
@@ -29829,6 +29880,28 @@
       },
       "CurrentPortfolioPriceBackfillStatus": {
         "properties": {
+          "checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceBackfillCheckpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkpoint_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Sha256"
+          },
           "explanation": {
             "title": "Explanation",
             "type": "string"
@@ -29846,6 +29919,7 @@
           "status": {
             "enum": [
               "recorded",
+              "checkpointed",
               "unknown_or_running",
               "not_found"
             ],
@@ -33840,6 +33914,19 @@
             "title": "Provider",
             "type": "string"
           },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Kennung fuer einen bewusst neuen historischen Apply; Wiederholungen werden blockiert.",
+            "title": "Request Id"
+          },
           "timeout_seconds": {
             "default": 20,
             "title": "Timeout Seconds",
@@ -33883,6 +33970,7 @@
             "type": "integer"
           },
           "imported_prices": {
+            "minimum": 0.0,
             "title": "Imported Prices",
             "type": "integer"
           },
@@ -33892,6 +33980,12 @@
             },
             "title": "Jobs",
             "type": "array"
+          },
+          "operation_kind": {
+            "const": "historical",
+            "default": "historical",
+            "title": "Operation Kind",
+            "type": "string"
           },
           "pipeline": {
             "anyOf": [
@@ -33931,6 +34025,16 @@
             "title": "Requirements Count",
             "type": "integer"
           },
+          "result_journal_status": {
+            "default": "not_started",
+            "enum": [
+              "not_started",
+              "recorded",
+              "unknown"
+            ],
+            "title": "Result Journal Status",
+            "type": "string"
+          },
           "skipped": {
             "title": "Skipped",
             "type": "integer"
@@ -33957,6 +34061,76 @@
           "jobs"
         ],
         "title": "ExternalPriceBackfillResult",
+        "type": "object"
+      },
+      "ExternalPriceBackfillStatus": {
+        "properties": {
+          "checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceBackfillCheckpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkpoint_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Sha256"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalPriceBackfillResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "recorded",
+              "checkpointed",
+              "unknown_or_running",
+              "not_found"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "explanation"
+        ],
+        "title": "ExternalPriceBackfillStatus",
+        "type": "object"
+      },
+      "ExternalPriceBackfillStatusRequest": {
+        "properties": {
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "ExternalPriceBackfillStatusRequest",
         "type": "object"
       },
       "ExternalPriceBackfillStorageUnknown": {
@@ -45677,6 +45851,56 @@
           "confirmation"
         ],
         "title": "PresetWrite",
+        "type": "object"
+      },
+      "PriceBackfillCheckpoint": {
+        "additionalProperties": false,
+        "properties": {
+          "format_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Format Version",
+            "type": "integer"
+          },
+          "operation_kind": {
+            "enum": [
+              "current_portfolio",
+              "historical"
+            ],
+            "title": "Operation Kind",
+            "type": "string"
+          },
+          "pipeline_status": {
+            "enum": [
+              "not_started",
+              "running_or_interrupted",
+              "completed",
+              "failed"
+            ],
+            "title": "Pipeline Status",
+            "type": "string"
+          },
+          "stored_at": {
+            "format": "date-time",
+            "title": "Stored At",
+            "type": "string"
+          },
+          "stored_price_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Stored Price Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operation_kind",
+          "stored_at",
+          "stored_price_ids",
+          "pipeline_status"
+        ],
+        "title": "PriceBackfillCheckpoint",
         "type": "object"
       },
       "PriceCoverageReport": {
@@ -94950,6 +95174,9 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "description": "Historischer Auftrag bereits reserviert; keine Wiederholung"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -94969,6 +95196,9 @@
               }
             },
             "description": "Speicherzustand unbekannt; vor Wiederholung pruefen"
+          },
+          "503": {
+            "description": "Auftrag gestoppt; Speicher- und Pipelinephase beachten"
           }
         },
         "summary": "Backfill External Prices",
@@ -94976,6 +95206,51 @@
           "Prices"
         ],
         "x-data-effect": "write",
+        "x-long-running": true,
+        "x-mobile-surface": "expert-or-internal"
+      }
+    },
+    "/api/v1/prices/backfill/external/status": {
+      "post": {
+        "description": "Historical price request status. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
+        "operationId": "historical_price_request_status_api_v1_prices_backfill_external_status_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalPriceBackfillStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ExternalPriceBackfillStatus_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Historical Price Request Status",
+        "tags": [
+          "Prices"
+        ],
+        "x-data-effect": "read-only",
         "x-long-running": true,
         "x-mobile-surface": "expert-or-internal"
       }

@@ -15,6 +15,8 @@ zentralen Dateien verwendet; Unklarheiten vor Implementierung melden.
 - Die ganze Pipeline wird NICHT als atomar behauptet. Ihr Start wird vor dem
   Aufruf festgeschrieben. Abbruch danach bedeutet laufend/unterbrochen oder
   unbekannt, niemals unbestaetigt abgeschlossen.
+  Der Marker `running_or_interrupted` belegt eine festgeschriebene Startabsicht,
+  weder einen derzeit lebenden Worker noch sicher den Eintritt in den Call.
 - Keine automatische Providerwiederholung, kein Keywechsel und keine
   automatische steuerliche Korrektur. Eine neue Kennung ist ein bewusst neuer
   Auftrag, nicht die Wiederholung desselben Auftrags. Gleichzeitige Applys mit
@@ -83,6 +85,13 @@ Bedingungen. Kein blindes Ueberschreiben, kein automatisches Entfernen alter IDs
 - Statusmodelle fuer beide Typen: `status` = `recorded`, `checkpointed`,
   `unknown_or_running`, `not_found`; optional typisiertes `result`, optional
   `checkpoint`, optional `checkpoint_sha256`, deutsche `explanation`.
+- Die Optionen sind zustandsabhaengig, nicht beliebig kombinierbar: `recorded`
+  verlangt ein Resultat; `checkpointed` verlangt Checkpoint und SHA ohne finales
+  Resultat und nur Phase `not_started` oder `running_or_interrupted`.
+  `unknown_or_running`/`not_found` enthalten keine positiven Belegfelder.
+  Resultat und Checkpoint muessen bei gemeinsamem Auftreten in Typ, IDs,
+  Preisanzahl und Pipelinephase uebereinstimmen. Widersprueche werden als nicht
+  sicher lesbar behandelt, nicht als positive Teilfreigabe.
 - Current-Statuspfad bleibt unveraendert. Zusaetzlich rein lesender POST
   `/api/v1/prices/backfill/external/status` mit UUID im Body, nicht in der URL.
   Keine Provider-/Pipelineaufrufe beim Lesen, keine internen Pfade/Secrets ausgeben.

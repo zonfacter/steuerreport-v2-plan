@@ -347,6 +347,9 @@ class DuckDbStore:
             )
         """)
         con.execute("alter table current_price_backfill_requests add column if not exists result_json varchar")
+        con.execute("alter table current_price_backfill_requests add column if not exists "
+                    "operation_kind varchar default 'current_portfolio'")
+        con.execute("alter table current_price_backfill_requests add column if not exists checkpoint_json varchar")
         con.execute(
             """
             create table if not exists flow_ledger (
@@ -1257,30 +1260,177 @@ class DuckDbStore:
         return self.add_price_points([payload])[0]
 
     def reserve_current_price_backfill(self, request_hash: str) -> bool:
+        return self._reserve_price_backfill(request_hash, "current_portfolio")
+
+    def reserve_historical_price_backfill(self, request_hash: str) -> bool:
+        return self._reserve_price_backfill(request_hash, "historical")
+
+    def _reserve_price_backfill(self, request_hash: str, operation_kind: str) -> bool:
         with self.connect() as con:
             return con.execute(
-                "insert into current_price_backfill_requests (request_hash, reserved_at) values (?, current_timestamp) "
+                "insert into current_price_backfill_requests (request_hash, reserved_at, operation_kind) "
+                "values (?, current_timestamp, ?) "
                 "on conflict do nothing returning request_hash",
-                [request_hash],
+                [request_hash, operation_kind],
             ).fetchone() is not None
 
+    def prepare_price_backfill(self, request_hash: str, operation_kind: str,
+                               payloads: list[PricePointCreate]) -> list[PricePoint]:
+        from steuerreport_v2.contracts.prices import PriceBackfillCheckpoint
+
+        if (operation_kind not in {"current_portfolio", "historical"}
+                or len(payloads) > (250 if operation_kind == "current_portfolio" else 1000)):
+            raise ValueError("price_backfill_prepare_invalid")
+        with self.connect() as con:
+            con.execute("BEGIN TRANSACTION")
+            try:
+                reservation = con.execute(
+                    "select result_json, checkpoint_json from current_price_backfill_requests "
+                    "where request_hash=? and operation_kind=?", [request_hash, operation_kind],
+                ).fetchone()
+                if reservation != (None, None):
+                    raise RuntimeError("price_backfill_not_unprepared")
+                prices = self._insert_price_points(con, payloads)
+                checkpoint = PriceBackfillCheckpoint(
+                    operation_kind=operation_kind, stored_at=datetime.now(timezone.utc),
+                    stored_price_ids=[price.price_id for price in prices], pipeline_status="not_started",
+                )
+                updated = con.execute(
+                    "update current_price_backfill_requests set checkpoint_json=? "
+                    "where request_hash=? and operation_kind=? and result_json is null "
+                    "and checkpoint_json is null returning request_hash",
+                    [checkpoint.model_dump_json(), request_hash, operation_kind],
+                ).fetchone()
+                if updated is None:
+                    raise RuntimeError("price_backfill_prepare_not_recorded")
+                con.execute("COMMIT")
+            except BaseException:
+                try:
+                    con.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+        return prices
+
+    def mark_price_backfill_pipeline_started(self, request_hash: str, operation_kind: str) -> None:
+        from steuerreport_v2.contracts.prices import PriceBackfillCheckpoint
+
+        with self.connect() as con:
+            con.execute("BEGIN TRANSACTION")
+            try:
+                row = con.execute(
+                    "select checkpoint_json from current_price_backfill_requests "
+                    "where request_hash=? and operation_kind=? and result_json is null",
+                    [request_hash, operation_kind],
+                ).fetchone()
+                if row is None or row[0] is None:
+                    raise RuntimeError("price_backfill_checkpoint_missing")
+                checkpoint = PriceBackfillCheckpoint.model_validate_json(row[0])
+                if (checkpoint.operation_kind != operation_kind or checkpoint.pipeline_status != "not_started"
+                        or not checkpoint.stored_price_ids):
+                    raise RuntimeError("price_backfill_pipeline_start_invalid")
+                updated_checkpoint = checkpoint.model_copy(update={"pipeline_status": "running_or_interrupted"})
+                updated = con.execute(
+                    "update current_price_backfill_requests set checkpoint_json=? where request_hash=? "
+                    "and operation_kind=? and result_json is null and checkpoint_json=? returning request_hash",
+                    [updated_checkpoint.model_dump_json(), request_hash, operation_kind, row[0]],
+                ).fetchone()
+                if updated is None:
+                    raise RuntimeError("price_backfill_pipeline_start_not_recorded")
+                con.execute("COMMIT")
+            except BaseException:
+                try:
+                    con.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+
     def record_current_price_backfill(self, request_hash: str, result_json: str) -> None:
+        self._record_price_backfill_result(request_hash, "current_portfolio", result_json)
+
+    def record_historical_price_backfill(self, request_hash: str, result_json: str) -> None:
+        self._record_price_backfill_result(request_hash, "historical", result_json)
+
+    def _record_price_backfill_result(self, request_hash: str, operation_kind: str, result_json: str) -> None:
+        from steuerreport_v2.contracts.prices import (
+            CurrentPortfolioPriceBackfillResult, ExternalPriceBackfillResult, PriceBackfillCheckpoint,
+        )
+
+        model = CurrentPortfolioPriceBackfillResult if operation_kind == "current_portfolio" else ExternalPriceBackfillResult
+        result = model.model_validate_json(result_json)
+        with self.connect() as con:
+            con.execute("BEGIN TRANSACTION")
+            try:
+                row = con.execute(
+                    "select checkpoint_json from current_price_backfill_requests "
+                    "where request_hash=? and operation_kind=? and result_json is null",
+                    [request_hash, operation_kind],
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError("price_backfill_result_not_recorded")
+                checkpoint_json = row[0]
+                if checkpoint_json is not None:
+                    checkpoint = PriceBackfillCheckpoint.model_validate_json(checkpoint_json)
+                    if (checkpoint.operation_kind != operation_kind
+                            or checkpoint.stored_price_ids != result.stored_price_ids
+                            or result.imported_prices != len(checkpoint.stored_price_ids) or result.dry_run
+                            or result.result_journal_status != "recorded"
+                            or (result.pipeline_status == "not_started" and checkpoint.stored_price_ids)
+                            or (result.pipeline_status == "completed"
+                                and (result.pipeline is None or result.pipeline_effects != "completed"))
+                            or (result.pipeline_status == "failed"
+                                and (result.pipeline is not None or result.pipeline_effects != "unknown_or_partial"))
+                            or (result.pipeline_status == "not_started"
+                                and (result.pipeline is not None or result.pipeline_effects != "not_started"))
+                            or (result.pipeline_status in {"completed", "failed"}
+                                and checkpoint.pipeline_status != "running_or_interrupted")):
+                        raise RuntimeError("price_backfill_result_checkpoint_mismatch")
+                    checkpoint_json = checkpoint.model_copy(
+                        update={"pipeline_status": result.pipeline_status},
+                    ).model_dump_json()
+                updated = con.execute(
+                    "update current_price_backfill_requests set result_json=?, checkpoint_json=? "
+                    "where request_hash=? and operation_kind=? and result_json is null "
+                    "and checkpoint_json is not distinct from ? returning request_hash",
+                    [result_json, checkpoint_json, request_hash, operation_kind, row[0]],
+                ).fetchone()
+                if updated is None:
+                    raise RuntimeError("price_backfill_result_not_recorded")
+                con.execute("COMMIT")
+            except BaseException:
+                try:
+                    con.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+
+    def price_backfill_operation_record(self, request_hash: str, operation_kind: str) -> tuple[str | None, str | None] | None:
         with self.connect() as con:
             row = con.execute(
-                "update current_price_backfill_requests set result_json=? "
-                "where request_hash=? and result_json is null returning request_hash",
-                [result_json, request_hash],
+                "select result_json, checkpoint_json, operation_kind from current_price_backfill_requests "
+                "where request_hash=?", [request_hash],
             ).fetchone()
             if row is None:
-                raise RuntimeError("current_price_result_not_recorded")
+                return None
+            if row[2] != operation_kind:
+                raise RuntimeError("price_backfill_record_kind_mismatch")
+            return row[0], row[1]
 
     def current_price_backfill_record(self, request_hash: str) -> tuple[str | None] | None:
         with self.connect() as con:
             return con.execute(
-                "select result_json from current_price_backfill_requests where request_hash=?", [request_hash],
+                "select result_json from current_price_backfill_requests "
+                "where request_hash=? and operation_kind='current_portfolio'", [request_hash],
             ).fetchone()
 
     def add_price_points(self, payloads: list[PricePointCreate]) -> list[PricePoint]:
+        if not payloads:
+            return []
+        with self.connect() as con:
+            return self._insert_price_points(con, payloads)
+
+    @staticmethod
+    def _insert_price_points(con, payloads: list[PricePointCreate]) -> list[PricePoint]:
         if not payloads:
             return []
         created_at = datetime.now(timezone.utc)
@@ -1296,20 +1446,12 @@ class DuckDbStore:
             )
             for payload in payloads
         ]
-        with self.connect() as con:
-            frame = pd.DataFrame(
-                rows,
-                columns=[
-                    "price_id",
-                    "asset",
-                    "price_eur",
-                    "priced_at",
-                    "source",
-                    "confidence",
-                    "created_at",
-                ],
-            )
-            con.register("price_points_to_insert", frame)
+        frame = pd.DataFrame(
+            rows,
+            columns=["price_id", "asset", "price_eur", "priced_at", "source", "confidence", "created_at"],
+        )
+        con.register("price_points_to_insert", frame)
+        try:
             con.execute(
                 """
                 insert into price_ledger (
@@ -1327,6 +1469,7 @@ class DuckDbStore:
                 from price_points_to_insert
                 """
             )
+        finally:
             con.unregister("price_points_to_insert")
         return [
             PricePoint(

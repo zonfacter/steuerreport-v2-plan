@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from steuerreport_v2.paths import configured_import_path
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from steuerreport_v2.contracts.divorce import DivorceValuationGate
 from steuerreport_v2.contracts.pipeline import PipelineResult
@@ -139,6 +139,7 @@ class ExternalPriceBackfillRequest(BaseModel):
     timeout_seconds: int = 20
     confidence: Decimal = Decimal("1.0")
     dry_run: bool = True
+    request_id: UUID | None = Field(default=None, description="Kennung fuer einen bewusst neuen historischen Apply; Wiederholungen werden blockiert.")
 
 
 class ExternalPriceBackfillJob(BaseModel):
@@ -154,12 +155,13 @@ class ExternalPriceBackfillJob(BaseModel):
 
 
 class ExternalPriceBackfillResult(BaseModel):
+    operation_kind: Literal["historical"] = "historical"
     requirements_count: int
     configured_assets: list[str]
     asset_filter: list[str]
     planned_jobs: int
     attempted: int
-    imported_prices: int
+    imported_prices: int = Field(ge=0, strict=True)
     skipped: int
     failed: int
     dry_run: bool
@@ -168,6 +170,7 @@ class ExternalPriceBackfillResult(BaseModel):
     stored_price_ids: list[str] = Field(default_factory=list, description="Beim erfolgreichen Speichern zurueckgegebene Preis-IDs, kein spaeterer Bestandsnachweis")
     pipeline_status: Literal["not_started", "completed", "failed"] = "not_started"
     pipeline_effects: Literal["not_started", "completed", "unknown_or_partial"] = "not_started"
+    result_journal_status: Literal["not_started", "recorded", "unknown"] = "not_started"
 
 
 class ExternalPriceBackfillStorageUnknown(BaseModel):
@@ -197,12 +200,13 @@ class CurrentPortfolioPriceBackfillJob(BaseModel):
 
 
 class CurrentPortfolioPriceBackfillResult(BaseModel):
+    operation_kind: Literal["current_portfolio"] = "current_portfolio"
     portfolio_assets_count: int
     configured_assets: list[str]
     asset_filter: list[str]
     planned_jobs: int
     attempted: int
-    imported_prices: int
+    imported_prices: int = Field(ge=0, strict=True)
     skipped: int
     failed: int
     dry_run: bool
@@ -219,9 +223,76 @@ class CurrentPortfolioPriceBackfillStatusRequest(BaseModel):
     request_id: UUID
 
 
+class PriceBackfillCheckpoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    format_version: Literal[1] = 1
+    operation_kind: Literal["current_portfolio", "historical"]
+    stored_at: datetime
+    stored_price_ids: list[str] = Field(max_length=1000)
+    pipeline_status: Literal["not_started", "running_or_interrupted", "completed", "failed"]
+
+    @field_validator("format_version", mode="before")
+    @classmethod
+    def strict_version(cls, value):
+        if type(value) is not int or value != 1:
+            raise ValueError("checkpoint_format_version_invalid")
+        return value
+
+    @field_validator("stored_at")
+    @classmethod
+    def utc_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None or value.utcoffset().total_seconds() != 0:
+            raise ValueError("checkpoint_timestamp_not_utc")
+        return value.astimezone(UTC)
+
+    @field_validator("stored_at", mode="before")
+    @classmethod
+    def timestamp_type(cls, value):
+        if not isinstance(value, (str, datetime)):
+            raise ValueError("checkpoint_timestamp_invalid")
+        return value
+
+    @field_validator("stored_price_ids")
+    @classmethod
+    def canonical_unique_ids(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("checkpoint_price_ids_not_unique")
+        for value in values:
+            try:
+                canonical = str(UUID(value))
+            except ValueError:
+                raise ValueError("checkpoint_price_id_invalid") from None
+            if value != canonical:
+                raise ValueError("checkpoint_price_id_not_canonical")
+        return values
+
+    @model_validator(mode="after")
+    def operation_limit(self):
+        if self.operation_kind == "current_portfolio" and len(self.stored_price_ids) > 250:
+            raise ValueError("current_checkpoint_price_limit_exceeded")
+        if not self.stored_price_ids and self.pipeline_status != "not_started":
+            raise ValueError("empty_checkpoint_pipeline_invalid")
+        return self
+
+
 class CurrentPortfolioPriceBackfillStatus(BaseModel):
-    status: Literal["recorded", "unknown_or_running", "not_found"]
+    status: Literal["recorded", "checkpointed", "unknown_or_running", "not_found"]
     result: CurrentPortfolioPriceBackfillResult | None = None
+    checkpoint: PriceBackfillCheckpoint | None = None
+    checkpoint_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    explanation: str
+
+
+class ExternalPriceBackfillStatusRequest(BaseModel):
+    request_id: UUID
+
+
+class ExternalPriceBackfillStatus(BaseModel):
+    status: Literal["recorded", "checkpointed", "unknown_or_running", "not_found"]
+    result: ExternalPriceBackfillResult | None = None
+    checkpoint: PriceBackfillCheckpoint | None = None
+    checkpoint_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     explanation: str
 
 

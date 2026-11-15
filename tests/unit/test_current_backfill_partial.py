@@ -114,12 +114,12 @@ def test_cancel_or_deadline_stops_before_price_write_and_pipeline(current, monke
 @pytest.mark.parametrize("insert_before_failure", [False, True])
 def test_storage_failure_unknown_before_and_after_write_blocks_repeat(current, monkeypatch, caplog, insert_before_failure):
     store, payload, calls = current
-    original = store.add_price_points
-    def fail(prices):
+    original = store.prepare_price_backfill
+    def fail(key, kind, prices):
         if insert_before_failure:
-            original(prices)
+            original(key, kind, prices)
         raise RuntimeError("SYNTHETIC_STORAGE_SECRET")
-    monkeypatch.setattr(store, "add_price_points", fail)
+    monkeypatch.setattr(store, "prepare_price_backfill", fail)
     monkeypatch.setattr(PipelineService, "rebuild_all", lambda self: pytest.fail("pipeline must not run"))
     caplog.set_level(logging.ERROR)
     client = TestClient(create_app(store))
@@ -248,9 +248,9 @@ def test_status_does_not_turn_missing_or_incomplete_request_into_success(current
     client = TestClient(create_app(store))
     query = {"request_id": payload["request_id"]}
     assert client.post("/api/v1/prices/backfill/current-portfolio/status", json=query).json()["data"]["status"] == "not_found"
-    def fail(prices):
+    def fail(*args):
         raise RuntimeError("synthetic storage failure")
-    monkeypatch.setattr(store, "add_price_points", fail)
+    monkeypatch.setattr(store, "prepare_price_backfill", fail)
     assert client.post("/api/v1/prices/backfill/current-portfolio", json=payload).status_code == 500
     status = client.post("/api/v1/prices/backfill/current-portfolio/status", json=query).json()["data"]
     assert status["status"] == "unknown_or_running" and status["result"] is None
@@ -274,7 +274,8 @@ def test_journal_failure_is_unknown_and_never_retries_price_operation(current, m
     assert any(w["code"] == "current_backfill_journal_unknown" for w in response.json()["warnings"])
     assert "SYNTHETIC_JOURNAL_SECRET" not in response.text + caplog.text
     status = client.post("/api/v1/prices/backfill/current-portfolio/status", json={"request_id": payload["request_id"]}).json()["data"]
-    assert status["status"] == ("recorded" if write_first else "unknown_or_running")
+    assert status["status"] == ("recorded" if write_first else "checkpointed")
+    assert set(status["checkpoint"]["stored_price_ids"]) == {price.price_id for price in store.list_price_points()}
     assert client.post("/api/v1/prices/backfill/current-portfolio", json=payload).status_code == 409
     assert len(store.list_price_points()) == 2 and calls == ["coin", "defi"]
 

@@ -1,4 +1,93 @@
-# Issue 49: Aktueller Portfolio-Backfill, isolierter Teilfix
+# Issue 49: Preisauftraege und Speicherbelege
+
+## Entwicklungsstand vom 15.11.2026
+
+Noch kein Release oder produktiver Lauf. Grundlage ist Draft #60,
+`7397c63fd32750b42003189f12937a3252656223`. Dieser neue Schritt erweitert den
+unten historisch dokumentierten Teilfix; dessen damalige Grenzen und
+Testzahlen werden nicht als aktuelle Gesamtbelege ausgegeben.
+
+Aktuelle und historische **Direktbackfills** reservieren vor einem externen
+Abruf einen Auftrag. Preiszeilen und Speicherbeleg werden danach gemeinsam in
+einer DuckDB-Transaktion gespeichert. Die ganze anschliessende Pipeline ist
+weiterhin keine atomare Operation. Ein verlorenes Commit-Acknowledgement ist
+im ausloesenden HTTP-Aufruf unklar; die lesende Statusauskunft kann den
+tatsaechlich dauerhaft vorhandenen Beleg wiederfinden. Keine automatische
+Providerwiederholung, Rueckkopie oder steuerliche Korrektur.
+
+| Statusauskunft | Bedeutung |
+| --- | --- |
+| `recorded` | Finale damalige Antwort gespeichert; bei neuem Format mit passendem Speicherbeleg |
+| `checkpointed` | Preis-IDs dauerhaft belegt; finales Auftragsergebnis fehlt |
+| `unknown_or_running` | Nur Reservierung bekannt; kein Ausfuehrungsnachweis |
+| `not_found` | Keine passende Kennung gespeichert; kein positiver Abschlussnachweis |
+
+Der Beleg enthaelt UTC-Zeit, Operationstyp, eindeutige Preis-IDs und
+Pipelinephase; sein SHA256 bezieht sich auf die gespeicherten JSON-Bytes.
+`running_or_interrupted` ist eine **Startabsicht** vor dem Pipelineaufruf,
+kein Nachweis eines aktuell lebenden Workers. `completed`/`failed` werden
+nur mit passendem finalem Ergebnis gespeichert. Widersprueche, beschaedigte
+Belege oder ein falscher Operationstyp werden als unklar behandelt.
+Ein Preis-Checkpoint bleibt auch nach einer spaeteren expliziten Preisloeschung
+ein historischer Nachweis und wird nicht als heutiger Bestand ausgegeben.
+
+### Ohne KI den Ausgang pruefen
+
+1. Nach Timeout oder Abbruch keinen neuen Abruf starten.
+2. Unter Portfolio -> EUR-Preise ermitteln den gespeicherten
+   Portfolio-Preisauftrag mit seiner UUID lesen. Fuer aeltere historische
+   Direktabrufe steht ein getrenntes Expertenfeld bereit.
+3. Finale Antwort, Checkpoint, Preis-IDs, Phase und Warnungen pruefen.
+   Eine unbekannte oder unlesbare Antwort ist weder Nullbestand noch Erfolg.
+4. Wenn ausdruecklich eine Neuberechnung des aktuellen Datenstands gewollt
+   ist, den vorhandenen Befehl **Pipeline neu berechnen** verwenden. Dieser
+   ruft keine Preisprovider erneut ab; er kann aber aktuelle Canonical-/Ledger-/
+   FIFO-/Reviewwerte neu schreiben. Ein neuer Lauf bestaetigt nicht rueckwirkend
+   das alte Auftragsergebnis. Fachliche Quellen-/Methoden-/Jahresfreigaben
+   bleiben davon getrennt.
+
+Die moderne historische Sammlung mit Plan, isolierter Vorschau und gesonderter
+Uebernahme bleibt der normale Ablauf und besitzt **ein anderes Journal**:
+[Historische EUR-Preise](HISTORISCHE_EUR_PREISE.md). Die Statusauskunft fuer
+historische Direktbackfills ersetzt keine Vorschau und nimmt keine Preise an.
+Sessionkeys fuer Sammlung, Current-Direktabruf und Historical-Direktabruf sind
+getrennt. Die Direktabrufkomponente merkt pro Typ genau eine UUID, keine
+Finanzantworten, Secrets oder unbegrenzte Historie.
+
+### API und Migration
+
+- Aktuelle Kennung: `POST /api/v1/prices/backfill/current-portfolio/status`.
+- Historische Direktabrufkennung: `POST /api/v1/prices/backfill/external/status`.
+- Body jeweils `{"request_id":"<UUID>"}`, keine Kennung oder Zugangsdaten in
+  der URL. Beide Pfade lesen, ohne Provider oder Pipeline zu starten.
+  Ein kalter Store kann wie bei bestehenden Endpunkten Schema initialisieren.
+- Direktbackfills akzeptieren beim Apply eine optionale UUID. Gleiche
+  Kennungen werden nach Neustart und isoliertem Restore blockiert.
+- Altclients ohne UUID erhalten eine dauerhafte Parametersperre. Ein anderer
+  Parameter oder eine neue UUID ist ein neuer Auftrag, keine automatische
+  Fortsetzung. Der lesende UI-Status ist UUID-basiert; implizite Altauftraege
+  werden nicht zu nachtraeglich erfundenen UUIDs umgeschrieben.
+- In der vorhandenen Tabelle `current_price_backfill_requests` kommen
+  `operation_kind` und `checkpoint_json` additiv hinzu. Alte Ergebnisbytes und
+  Reservierungen bleiben bestehen. Kein neues Preis-DB-System und keine
+  automatische Loeschung von Reservierungen. Schemahauptversion bleibt 3;
+  daraus folgt keine sichere In-Place-Downgradefreigabe.
+- Historische Batches bleiben bis 1000, Current-Batches bis 250 Preiszeilen
+  moeglich. HTTP-Limits und tatsaechliche Anzahl von Requests sind getrennt.
+
+Gleiche Kennung ist gegen doppelte Ausfuehrung geschuetzt, nicht jede moegliche
+andere Anfrage oder jeder andere Schreibweg. Das Same-Store-Gate serialisiert
+die Pipelineabschnitte dieses Wegs; externe Anfragen laufen nicht unter dem
+DB-Gate. Es gibt keine neue Mehrprozess-/Mehrhostkoordination. Bei einer langen
+Pipeline koennen andere DB-Abfragen bis zur Freigabe dieses Gates warten.
+Aufbewahrung, vollstaendige koordinierte Recovery und produktive Datenparitaet
+bleiben getrennte Aufgaben. Kein technischer Status ist eine Fachfreigabe.
+
+Vertrag und aktuelle Nachweise:
+[Checkpointvertrag](audit/ISSUE49_CHECKPOINT_VERTRAG_2026-11-15.md) und
+[Integrationsbericht mit Original-Testhashes](audit/ISSUE49_CHECKPOINT_INTEGRATION_2026-11-15.md).
+
+## Historischer isolierter Teilfix
 
 Basis `7f9ba86`; kein produktiver Lauf und keine fachliche Freigabe. Der
 historische und der Stichtags-Backfill sind nicht Gegenstand dieses Teilfixes.

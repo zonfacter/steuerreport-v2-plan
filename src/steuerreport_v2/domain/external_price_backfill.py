@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal, DecimalException, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 from steuerreport_v2.domain.external_http import managed_client
@@ -21,9 +22,12 @@ from steuerreport_v2.contracts.prices import (
     CurrentPortfolioPriceBackfillStatus,
     ExternalPriceBackfillJob,
     ExternalPriceBackfillResult,
+    ExternalPriceBackfillStatus,
+    PriceBackfillCheckpoint,
     PricePointCreate,
 )
 from steuerreport_v2.contracts.common import ApiMessage
+from steuerreport_v2.contracts.pipeline import PipelineResult
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.pipeline import PipelineService
 from steuerreport_v2.domain.request_limits import RequestCancelled, RequestDeadlineExceeded
@@ -97,6 +101,52 @@ class CurrentBackfillStorageUnknown(RuntimeError):
         self.warnings = warnings
 
 
+class HistoricalBackfillReplayBlocked(HistoricalBackfillIncompleteError):
+    pass
+
+
+class HistoricalBackfillReservationUnknown(HistoricalBackfillIncompleteError):
+    pass
+
+
+class CurrentBackfillStatusUnknown(RuntimeError):
+    pass
+
+
+class HistoricalBackfillStatusUnknown(HistoricalBackfillIncompleteError):
+    pass
+
+
+class HistoricalBackfillJournalUnknown(HistoricalBackfillIncompleteError):
+    def __init__(self, stored_price_ids: list[str] | None = None) -> None:
+        super().__init__("Historisches Auftragsergebnis nicht sicher dokumentiert; vor Fortsetzung pruefen.")
+        self.stored_price_ids = list(stored_price_ids or [])
+
+
+class CurrentBackfillPipelineInterrupted(RuntimeError):
+    def __init__(self, stored_price_ids: list[str]) -> None:
+        super().__init__("Pipeline unterbrochen; Preise gespeichert, Pipelinefolgen unklar.")
+        self.stored_price_ids = list(stored_price_ids)
+
+
+class HistoricalBackfillPipelineInterrupted(HistoricalBackfillIncompleteError):
+    def __init__(self, stored_price_ids: list[str]) -> None:
+        super().__init__("Historische Pipeline unterbrochen; Preise gespeichert, Pipelinefolgen unklar.")
+        self.stored_price_ids = list(stored_price_ids)
+
+
+class CurrentBackfillPipelineStartUnknown(RuntimeError):
+    def __init__(self, stored_price_ids: list[str]) -> None:
+        super().__init__("Pipelinebeginn unklar; Preise gespeichert, Zustand vor Fortsetzung pruefen.")
+        self.stored_price_ids = list(stored_price_ids)
+
+
+class HistoricalBackfillPipelineStartUnknown(HistoricalBackfillIncompleteError):
+    def __init__(self, stored_price_ids: list[str]) -> None:
+        super().__init__("Historischer Pipelinebeginn unklar; Preise gespeichert, Zustand vor Fortsetzung pruefen.")
+        self.stored_price_ids = list(stored_price_ids)
+
+
 @contextmanager
 def _current_price_client(timeout: int):
     try:
@@ -116,6 +166,8 @@ def require_backfill_pipeline_success(result: ExternalPriceBackfillResult) -> No
         raise HistoricalBackfillPipelineFailed(result.stored_price_ids)
     if result.failed:
         raise HistoricalBackfillJobsFailed(result.stored_price_ids)
+    if getattr(result, "result_journal_status", "not_started") == "unknown":
+        raise HistoricalBackfillJournalUnknown(result.stored_price_ids)
 
 
 def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
@@ -196,7 +248,15 @@ class ExternalPriceBackfillService:
         timeout_seconds: int,
         confidence: Decimal,
         dry_run: bool,
+        request_id: str | None = None,
     ) -> ExternalPriceBackfillResult:
+        request_hash = None
+        if not dry_run:
+            request_hash = self._reserve_historical_backfill(
+                request_id=request_id, config_path=config_path, v1_fx_db_path=v1_fx_db_path,
+                provider=provider, assets_filter=assets_filter, max_requests=max_requests,
+                timeout_seconds=timeout_seconds, confidence=confidence,
+            )
         assets = self._load_assets(config_path)
         alias_map = self._alias_map(assets)
         requirements = PriceCoverageService(self.store).requirements().requirements
@@ -360,9 +420,9 @@ class ExternalPriceBackfillService:
         stored_price_ids: list[str] = []
         pipeline_status = "not_started"
         pipeline_effects = "not_started"
-        if prices:
+        if request_hash is not None:
             try:
-                stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
+                stored_price_ids = self._prepare_prices(request_hash, "historical", prices)
             except Exception:
                 logger.error("Historical price backfill storage failed; storage state unknown")
                 stored_price_ids = None
@@ -373,15 +433,10 @@ class ExternalPriceBackfillService:
                         f"{failed} Preisjobs sind vor dem Speicherfehler fehlgeschlagen."
                     )))
                 raise HistoricalBackfillStorageUnknown(warnings)
-            try:
-                pipeline = PipelineService(self.store).rebuild_all()
-            except Exception:
-                logger.error("Historical price backfill pipeline failed after price storage")
-                pipeline_status = "failed"
-                pipeline_effects = "unknown_or_partial"
-            else:
-                pipeline_status = "completed"
-                pipeline_effects = "completed"
+        if stored_price_ids:
+            pipeline, pipeline_status, pipeline_effects = self._pipeline_after_prepare(
+                request_hash, "historical", stored_price_ids,
+            )
         visible_jobs = jobs[:200]
         tracked_reasons = (FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED, PRICE_OUT_OF_RANGE,
                            FX_SOURCE_UNREADABLE, PRICE_PROVIDER_ERROR)
@@ -392,7 +447,7 @@ class ExternalPriceBackfillService:
                                   if visible_jobs[i].reason not in tracked_reasons
                                   or counts[visible_jobs[i].reason] > 1)
                 visible_jobs[replace_at] = next(job for job in jobs if job.reason == reason)
-        return ExternalPriceBackfillResult(
+        result = ExternalPriceBackfillResult(
             requirements_count=len(requirements),
             configured_assets=sorted({asset.symbol for asset in assets}),
             asset_filter=requested_assets,
@@ -408,6 +463,16 @@ class ExternalPriceBackfillService:
             pipeline_status=pipeline_status,
             pipeline_effects=pipeline_effects,
         )
+        if request_hash is not None:
+            result.result_journal_status = "recorded"
+            try:
+                self.store.record_historical_price_backfill(request_hash, result.model_dump_json())
+            except (RequestCancelled, RequestDeadlineExceeded):
+                raise HistoricalBackfillPipelineInterrupted(stored_price_ids) from None
+            except Exception:
+                logger.error("Historical price result journal failed")
+                result.result_journal_status = "unknown"
+        return result
 
     def run_current_portfolio(
         self,
@@ -615,9 +680,9 @@ class ExternalPriceBackfillService:
         stored_price_ids: list[str] | None = []
         pipeline_status = "not_started"
         pipeline_effects = "not_started"
-        if prices:
+        if request_hash is not None:
             try:
-                stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
+                stored_price_ids = self._prepare_prices(request_hash, "current_portfolio", prices)
             except Exception:
                 logger.error("Current portfolio price storage failed; storage state unknown")
                 stored_price_ids = None
@@ -626,15 +691,10 @@ class ExternalPriceBackfillService:
                 if failed:
                     warnings.append(ApiMessage(code="price_backfill_partial_failure", message=f"{failed} Preisjobs sind vor dem Speicherfehler fehlgeschlagen."))
                 raise CurrentBackfillStorageUnknown(warnings)
-            try:
-                pipeline = PipelineService(self.store).rebuild_all()
-            except Exception:
-                logger.error("Current portfolio price pipeline failed after price storage")
-                pipeline_status = "failed"
-                pipeline_effects = "unknown_or_partial"
-            else:
-                pipeline_status = "completed"
-                pipeline_effects = "completed"
+        if stored_price_ids:
+            pipeline, pipeline_status, pipeline_effects = self._pipeline_after_prepare(
+                request_hash, "current_portfolio", stored_price_ids,
+            )
         result = CurrentPortfolioPriceBackfillResult(
             portfolio_assets_count=len(portfolio_assets),
             configured_assets=sorted({asset.symbol for asset in assets}),
@@ -656,6 +716,8 @@ class ExternalPriceBackfillService:
             result.result_journal_status = "recorded"
             try:
                 self.store.record_current_price_backfill(request_hash, result.model_dump_json())
+            except (RequestCancelled, RequestDeadlineExceeded):
+                raise CurrentBackfillPipelineInterrupted(stored_price_ids) from None
             except Exception:
                 logger.error("Current portfolio price result journal failed")
                 result.result_journal_status = "unknown"
@@ -668,20 +730,207 @@ class ExternalPriceBackfillService:
         ).encode()).hexdigest()
 
     def current_portfolio_request_status(self, request_id: str) -> CurrentPortfolioPriceBackfillStatus:
-        row = self.store.current_price_backfill_record(self._explicit_current_request_hash(request_id))
-        if row is None:
-            return CurrentPortfolioPriceBackfillStatus(
-                status="not_found", explanation="Kein Auftrag zu dieser Kennung gespeichert; kein Ausfuehrungsnachweis.",
-            )
-        if row[0] is None:
-            return CurrentPortfolioPriceBackfillStatus(
-                status="unknown_or_running",
-                explanation="Auftrag reserviert; Ausgang nicht dokumentiert oder noch in Arbeit. Vor Wiederholung Zustand pruefen.",
-            )
-        return CurrentPortfolioPriceBackfillStatus(
-            status="recorded", result=CurrentPortfolioPriceBackfillResult.model_validate_json(row[0]),
-            explanation="Gespeicherte Antwort dieses Auftrags; kein Nachweis des heutigen Preis- oder Pipelinebestands.",
-        )
+        return self._request_status(self._explicit_current_request_hash(request_id), "current_portfolio")
+
+    @staticmethod
+    def _explicit_historical_request_hash(request_id: str) -> str:
+        return hashlib.sha256(json.dumps(
+            {"operation_kind": "historical", "request_id": str(UUID(str(request_id)))},
+            sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+
+    def historical_request_status(self, request_id: str) -> ExternalPriceBackfillStatus:
+        try:
+            key = self._explicit_historical_request_hash(request_id)
+        except (ValueError, TypeError, AttributeError):
+            raise HistoricalBackfillStatusUnknown("Historischer Auftragsstatus nicht sicher lesbar.") from None
+        return self._request_status(key, "historical")
+
+    def _request_status(self, request_hash: str, operation_kind: str):
+        status_model = (CurrentPortfolioPriceBackfillStatus if operation_kind == "current_portfolio"
+                        else ExternalPriceBackfillStatus)
+        result_model = (CurrentPortfolioPriceBackfillResult if operation_kind == "current_portfolio"
+                        else ExternalPriceBackfillResult)
+        error = CurrentBackfillStatusUnknown if operation_kind == "current_portfolio" else HistoricalBackfillStatusUnknown
+        try:
+            with self.store.read_snapshot() as snapshot:
+                row = snapshot.price_backfill_operation_record(request_hash, operation_kind)
+                if row is None:
+                    return status_model(status="not_found", explanation=(
+                        "Kein Auftrag zu dieser Kennung gespeichert; kein Ausfuehrungsnachweis."
+                    ))
+                if not isinstance(row, tuple) or len(row) != 2:
+                    raise ValueError("operation_record_invalid")
+                result_json, checkpoint_json = row
+                checkpoint = None
+                checkpoint_sha256 = None
+                if checkpoint_json is not None:
+                    payload = self._stored_object(checkpoint_json)
+                    if set(payload) != set(PriceBackfillCheckpoint.model_fields):
+                        raise ValueError("checkpoint_fields_invalid")
+                    checkpoint = PriceBackfillCheckpoint.model_validate(payload)
+                    if checkpoint.operation_kind != operation_kind:
+                        raise ValueError("checkpoint_operation_mismatch")
+                    checkpoint_sha256 = hashlib.sha256(checkpoint_json.encode("utf-8")).hexdigest()
+                result = None
+                if result_json is not None:
+                    payload = self._stored_object(result_json)
+                    result = result_model.model_validate(payload)
+                    self._validate_status_result(result)
+                    if checkpoint is not None:
+                        if (result.operation_kind != checkpoint.operation_kind
+                                or result.stored_price_ids != checkpoint.stored_price_ids
+                                or result.imported_prices != len(checkpoint.stored_price_ids)
+                                or result.pipeline_status != checkpoint.pipeline_status
+                                or result.dry_run or result.result_journal_status != "recorded"
+                                or (result.stored_price_ids and result.pipeline_status == "not_started")):
+                            raise ValueError("result_checkpoint_mismatch")
+                if result is not None:
+                    explanation = ("Gespeicherte Antwort mit damaligem Speicherbeleg; kein Nachweis des heutigen "
+                                   "Preisbestands oder einer aktuellen fachlichen Freigabe.") if checkpoint else (
+                        "Fruehere gespeicherte Antwort ohne Checkpointbeleg; kein nachtraeglicher Speicher-, "
+                        "Bestands- oder Freigabenachweis."
+                    )
+                    return status_model(status="recorded", result=result, checkpoint=checkpoint,
+                                        checkpoint_sha256=checkpoint_sha256, explanation=explanation)
+                if checkpoint is not None:
+                    if checkpoint.pipeline_status in {"completed", "failed"}:
+                        raise ValueError("final_checkpoint_without_result")
+                    return status_model(status="checkpointed", checkpoint=checkpoint,
+                        checkpoint_sha256=checkpoint_sha256, explanation=(
+                            "Damals gespeicherte Preis-IDs belegt; kein finales Auftragsergebnis. "
+                            "Pipelinebeginn oder -abschluss nur gemaess Checkpoint, kein heutiger Bestandsnachweis."
+                        ))
+                return status_model(status="unknown_or_running", explanation=(
+                    "Auftrag reserviert; Ausgang nicht dokumentiert oder noch in Arbeit. "
+                    "Vor Wiederholung Zustand pruefen."
+                ))
+        except (RequestCancelled, RequestDeadlineExceeded):
+            raise error("Auftragsstatus nicht sicher lesbar; keine Wiederholung starten.") from None
+        except Exception:
+            logger.error("Price backfill operation status could not be validated")
+            raise error("Auftragsstatus nicht sicher lesbar; keine Wiederholung starten.") from None
+
+    @staticmethod
+    def _stored_object(raw: str) -> dict:
+        if not isinstance(raw, str) or len(raw.encode("utf-8")) > 2 * 1024 * 1024:
+            raise ValueError("operation_json_invalid")
+
+        def unique_object(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    raise ValueError("operation_json_duplicate_key")
+                value[key] = item
+            return value
+
+        def invalid_constant(value):
+            raise ValueError("operation_json_constant_invalid")
+
+        value = json.loads(raw, object_pairs_hook=unique_object, parse_constant=invalid_constant)
+        if not isinstance(value, dict):
+            raise ValueError("operation_json_invalid")
+        return value
+
+    @staticmethod
+    def _validate_status_result(result) -> None:
+        reasons = {FX_REFERENCE_INVALID, FX_REFERENCE_UNVERIFIED, PRICE_CANDIDATE_OUT_OF_RANGE,
+                   PRICE_OUT_OF_RANGE, FX_SOURCE_UNREADABLE, PRICE_PROVIDER_ERROR,
+                   "asset_not_configured", "token_risk_spam_review", "asset_usd_missing", "asset_eur_missing"}
+        for job in result.jobs:
+            if (job.status not in {"planned", "imported", "skipped", "failed"}
+                    or job.reason is not None and job.reason not in reasons
+                    or any(reason not in reasons for reason in getattr(job, "additional_reasons", []))):
+                raise ValueError("operation_job_status_invalid")
+        if (result.pipeline_status == "completed" and (result.pipeline is None or result.pipeline_effects != "completed")
+                or result.pipeline_status == "failed"
+                and (result.pipeline is not None or result.pipeline_effects != "unknown_or_partial")
+                or result.pipeline_status == "not_started"
+                and (result.pipeline is not None or result.pipeline_effects != "not_started")):
+            raise ValueError("operation_pipeline_status_invalid")
+
+    def _mark_pipeline_started(self, request_hash: str, operation_kind: str, stored_price_ids: list[str]) -> None:
+        interrupted = (CurrentBackfillPipelineInterrupted if operation_kind == "current_portfolio"
+                       else HistoricalBackfillPipelineInterrupted)
+        unknown = (CurrentBackfillPipelineStartUnknown if operation_kind == "current_portfolio"
+                   else HistoricalBackfillPipelineStartUnknown)
+        try:
+            self.store.mark_price_backfill_pipeline_started(request_hash, operation_kind)
+        except (RequestCancelled, RequestDeadlineExceeded):
+            raise interrupted(stored_price_ids) from None
+        except Exception:
+            logger.error("Price backfill pipeline start marker could not be confirmed")
+            raise unknown(stored_price_ids) from None
+
+    def _pipeline_after_prepare(self, request_hash: str, operation_kind: str,
+                                stored_price_ids: list[str]) -> tuple[PipelineResult | None, str, str]:
+        interrupted = (CurrentBackfillPipelineInterrupted if operation_kind == "current_portfolio"
+                       else HistoricalBackfillPipelineInterrupted)
+        unknown = (CurrentBackfillPipelineStartUnknown if operation_kind == "current_portfolio"
+                   else HistoricalBackfillPipelineStartUnknown)
+        try:
+            # Same-store RLock only: no provider calls under this gate, and no
+            # claim of a cross-process transaction over the whole pipeline.
+            with self.store.exclusive_access():
+                self._mark_pipeline_started(request_hash, operation_kind, stored_price_ids)
+                try:
+                    pipeline = PipelineResult.model_validate(PipelineService(self.store).rebuild_all())
+                except (RequestCancelled, RequestDeadlineExceeded):
+                    raise interrupted(stored_price_ids) from None
+                except Exception:
+                    message = ("Current portfolio price pipeline failed after price storage"
+                               if operation_kind == "current_portfolio" else
+                               "Historical price backfill pipeline failed after price storage")
+                    logger.error(message)
+                    return None, "failed", "unknown_or_partial"
+                return pipeline, "completed", "completed"
+        except (CurrentBackfillPipelineInterrupted, HistoricalBackfillPipelineInterrupted,
+                CurrentBackfillPipelineStartUnknown, HistoricalBackfillPipelineStartUnknown):
+            raise
+        except (RequestCancelled, RequestDeadlineExceeded):
+            raise interrupted(stored_price_ids) from None
+        except Exception:
+            logger.error("Price backfill pipeline gate could not be confirmed")
+            raise unknown(stored_price_ids) from None
+
+    def _prepare_prices(self, request_hash: str, operation_kind: str, prices: list[PricePointCreate]) -> list[str]:
+        created = self.store.prepare_price_backfill(request_hash, operation_kind, prices)
+        identifiers = [price.price_id for price in created]
+        if len(identifiers) != len(prices):
+            raise ValueError("price_backfill_prepare_count_mismatch")
+        PriceBackfillCheckpoint.canonical_unique_ids(identifiers)
+        return identifiers
+
+    def _reserve_historical_backfill(self, *, request_id: str | None, config_path: str, v1_fx_db_path: str,
+                                    provider: str, assets_filter: list[str], max_requests: int,
+                                    timeout_seconds: int, confidence: Decimal) -> str:
+        try:
+            if request_id:
+                key = self._explicit_historical_request_hash(request_id)
+            else:
+                with localcontext() as arithmetic:
+                    arithmetic.prec = max(28, len(confidence.as_tuple().digits))
+                    canonical_confidence = str(confidence.normalize())
+                identity = {
+                    "operation_kind": "historical", "config_path": str(resolve_project_path(config_path)),
+                    "v1_fx_db_path": str(resolve_project_path(v1_fx_db_path)),
+                    "provider": provider if provider in {"auto", "coingecko", "defillama"} else "auto",
+                    "assets": sorted({asset.strip().upper() for asset in assets_filter if asset.strip()}),
+                    "max_requests": max(0, min(max_requests, 1000)),
+                    "timeout_seconds": max(3, min(timeout_seconds, 60)), "confidence": canonical_confidence,
+                }
+                key = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            reserved = self.store.reserve_historical_price_backfill(key)
+        except (RequestCancelled, RequestDeadlineExceeded):
+            raise
+        except Exception:
+            logger.error("Historical price backfill reservation failed")
+            raise HistoricalBackfillReservationUnknown("Historische Auftragsreservierung unklar; kein Preisabruf begonnen.") from None
+        if reserved is not True:
+            if reserved is False:
+                raise HistoricalBackfillReplayBlocked("Historischer Auftrag bereits reserviert; keine Wiederholung ausgefuehrt.")
+            raise HistoricalBackfillReservationUnknown("Historische Auftragsreservierung unklar; kein Preisabruf begonnen.")
+        return key
 
     def _reserve_current_backfill(self, *, request_id: str | None, config_path: str, provider: str,
                                   assets_filter: list[str], max_requests: int, timeout_seconds: int,

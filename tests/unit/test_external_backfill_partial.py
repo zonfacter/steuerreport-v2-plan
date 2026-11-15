@@ -73,9 +73,9 @@ def test_storage_unknown_preserves_prior_safe_warnings_without_ids(tmp_path, mon
             raise RuntimeError("SYNTHETIC_PROVIDER_CANARY")
         return Decimal("100"), "synthetic"
     monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", fetch)
-    def fail_store(prices):
+    def fail_store(*args):
         raise RuntimeError("SYNTHETIC_STORAGE_CANARY")
-    monkeypatch.setattr(store, "add_price_points", fail_store)
+    monkeypatch.setattr(store, "prepare_price_backfill", fail_store)
     caplog.set_level(logging.ERROR)
     response = TestClient(create_app(store)).post("/api/v1/prices/backfill/external", json={
         "config_path": str(config), "v1_fx_db_path": str(tmp_path / "unused"), "dry_run": False,
@@ -160,7 +160,7 @@ def test_pipeline_exception_does_not_disclose_canary_in_api_or_log(tmp_path, mon
     assert "Traceback" not in caplog.text
 
 
-def test_partial_pipeline_and_repeat_are_observable_not_idempotent(tmp_path, monkeypatch):
+def test_partial_pipeline_is_observable_and_identical_repeat_is_blocked(tmp_path, monkeypatch):
     store = DuckDbStore(tmp_path / "isolated.duckdb")
     store.add_canonical_event(CanonicalEventCreate(
         source="synthetic", source_ref="reward", event_time=datetime(2024, 1, 1, 12, tzinfo=timezone.utc),
@@ -214,13 +214,13 @@ def test_partial_pipeline_and_repeat_are_observable_not_idempotent(tmp_path, mon
         assert con.execute("select count(*) from canonical_events").fetchone()[0] == events_before
         assert con.execute("select count(*) from synthetic_pipeline_effect").fetchone()[0] == 1
 
-    second = client.post("/api/v1/prices/backfill/external", json=payload).json()["data"]
-    assert second["pipeline_status"] == "failed"
-    assert set(second["stored_price_ids"]).isdisjoint(result["stored_price_ids"])
+    second = client.post("/api/v1/prices/backfill/external", json=payload)
+    assert second.status_code == 409
+    assert second.json()["errors"][0]["code"] == "historical_backfill_replay_blocked"
     with store.connect() as con:
-        assert con.execute("select count(*) from price_ledger where asset='SYNTH'").fetchone()[0] == 2
-        assert con.execute("select count(*) from synthetic_pipeline_effect").fetchone()[0] == 2
-    assert calls == ["2024-01-01", "2024-01-01"]
+        assert con.execute("select count(*) from price_ledger where asset='SYNTH'").fetchone()[0] == 1
+        assert con.execute("select count(*) from synthetic_pipeline_effect").fetchone()[0] == 1
+    assert calls == ["2024-01-01"]
 
 
 def test_pipeline_completed_and_no_work_contract(tmp_path, monkeypatch):
@@ -254,7 +254,12 @@ def test_pipeline_completed_and_no_work_contract(tmp_path, monkeypatch):
     assert result["data"]["pipeline_status"] == result["data"]["pipeline_effects"] == "completed"
     with store.connect() as con:
         assert con.execute("select price_id from price_ledger").fetchone()[0] == result["data"]["stored_price_ids"][0]
-    repeated = client.post("/api/v1/prices/backfill/external", json={**payload, "dry_run": False}).json()["data"]
+    repeated_response = client.post("/api/v1/prices/backfill/external", json={**payload, "dry_run": False})
+    assert repeated_response.status_code == 409
+    from uuid import uuid4
+    repeated = client.post("/api/v1/prices/backfill/external", json={
+        **payload, "dry_run": False, "request_id": str(uuid4()),
+    }).json()["data"]
     assert repeated["stored_price_ids"] == []
     assert repeated["pipeline_status"] == "not_started"
     assert calls == ["2024-01-01"]
@@ -274,15 +279,15 @@ def test_store_exception_has_unknown_state_without_canary(tmp_path, monkeypatch,
         Decimal("1"), date(2023, 12, 31), "USD", "EUR", Decimal("1"), "synthetic",
     ))
     monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_price_usd", lambda self, **kwargs: (Decimal("2"), "synthetic"))
-    original_add = store.add_price_points
+    original_add = store.prepare_price_backfill
     requirements = PriceCoverageService(store).requirements()
     monkeypatch.setattr(PriceCoverageService, "requirements", lambda self: requirements)
     canary = "SYNTHETIC_STORAGE_SECRET_CANARY_49"
-    def fail_store(prices):
+    def fail_store(key, kind, prices):
         if insert_before_failure:
-            original_add(prices)
+            original_add(key, kind, prices)
         raise RuntimeError(f"/private/synthetic-receipt-456 token={canary}")
-    monkeypatch.setattr(store, "add_price_points", fail_store)
+    monkeypatch.setattr(store, "prepare_price_backfill", fail_store)
     monkeypatch.setattr(PipelineService, "rebuild_all", lambda self: (_ for _ in ()).throw(AssertionError("unexpected pipeline")))
     caplog.set_level(logging.ERROR)
     with store.connect() as con:
