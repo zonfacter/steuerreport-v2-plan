@@ -1,0 +1,18 @@
+{
+  "schema_version": "audit-source-hash-review-v1",
+  "gitleaks_version": "8.30.1",
+  "download_sha256": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+  "scope": "tracked source directory snapshot, no git history audit",
+  "source_hash_reference_commit": "d4ffd5ef82d29a926c9560b417f3a91ce8cde60d",
+  "source_freeze_sha256": "3bdca26a2dcb1a9221b13c14f26b8cfb59c6bfbd4b69559e324f4c081b7dc163",
+  "source_file_hashes_individually_verified_against_git": 460,
+  "raw_findings": 80,
+  "existing_exact_review_entries": 52,
+  "new_source_hash_occurrences": 28,
+  "new_exact_review_entries": 14,
+  "unreviewed_findings": 0,
+  "private_default_violations": 0,
+  "scanner_rules_changed": false,
+  "broad_allowlist_added": false,
+  "review_list_sha256": "9bd3ecd9e888270d25d95080b50609d9cca049901f8e0ab8b19a8c9ce676b22c"
+}

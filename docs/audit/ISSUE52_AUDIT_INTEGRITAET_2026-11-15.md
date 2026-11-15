@@ -7,6 +7,8 @@ Nachtrag I/O-Fehlerguard und35-Pflichtreferenzen:
 `d4ffd5ef82d29a926c9560b417f3a91ce8cde60d`.
 Letzter begrenzter Nachtrag gegen scheinbare Nullpositionen bei unlesbaren
 Referenzdetails: `10c5667b747fe56b7469e5a9ef5f4e43b5ac639e`.
+Sicherheitsnachweise und reine, exakt gebundene Hash-Fundfreigaben:
+`e1b8d1938b50c7fc91d4f9ce0fb39fe8aae425f9`.
 Basis: `8f3681d2d12be430cbb627ed731091bf0ba77a3f` (Draft #66).
 Diff: `git diff 8f3681d2d12be430cbb627ed731091bf0ba77a3f 10c5667b747fe56b7469e5a9ef5f4e43b5ac639e`.
 Vertrag: `ISSUE52_AUDIT_INTEGRITAET_VERTRAG_2026-11-15.md`.
@@ -202,5 +204,31 @@ Verzeichnispruefung einer isolierten Kopie der verfolgten Quellstanddateien mit
 Zwischenstand:52 Rohfunde, alle52 exakt durch vorhandene individuelle
 Quellzeilen-SHA freigegebene Test-/Beispielwerte;0 ungepruefte Funde,
 0 private Kontodefaults. Kein neues pauschales Allowlisting.
-Abschliessende Artefaktpruefung wird nach dem letzten Nachweiskopiervorgang
-ergänzt. Kein Image gebaut, kein Release oder Deployment ausgelöst.
+Abschliessend80 Rohfunde: Die28 neuen Treffer sind14 jeweils zweimal
+protokollierte Quellzeilen-SHA im460-Dateien-Freeze-Beleg, keine Zugangswerte.
+Saemtliche460 Werte wurden mit den tatsaechlichen Git-Blobs von d4ffd5e
+neu berechnet und abgeglichen. Fuer diese14 exakten Zeilen-/Regel-/Dateiwerte
+wurde die vorhandene Einzelfreigabeliste ergaenzt; die bisherigen52 Eintraege
+und Scannerregeln bleiben unveraendert. Keine Pfad- oder Regelpauschalausnahme.
+Resultat:0 ungepruefte Funde und0 private Kontodefaults.
+Prueflisten-SHA: `9bd3ecd9e888270d25d95080b50609d9cca049901f8e0ab8b19a8c9ce676b22c`.
+Die Aenderung betrifft keine Steuerformel; sie erweitert die konservative
+Laufzeit-Konfigurationsbindung. Nach diesem Sicherheitsnachtrag nochmals71
+Release-/Referenzguard- und16 Publikationsproben bestanden. Kein erneuter
+vollstaendiger4985-Testlauf auf diesem Nachtrag behauptet.
+Kein Image gebaut, kein Release oder Deployment ausgeloest.
+
+## Bedienbarkeit und Speicher
+
+Gesonderte Nachinventur: `ISSUE19_WORKFLOW_NACHINVENTUR_2026-11-15.md`.
+Keine neue Frontendansicht in diesem Diff, daher kein neuer Browsernachweis
+behauptet. Der fehlende normale Detailaudit-Bedienweg bleibt in #52 offen.
+
+Vorhandene Pythonumgebung wiederverwendet; keine Docker-Builds oder neuen
+Venvs/Node-Installationen. Eigene beendete synthetische Testverzeichnisse wurden
+nach Sicherung der Original-JUnit-Dateien entfernt, einschliesslich der rund
+1GiB abgebrochenen und1.5GiB abgeschlossenen Unit-DB-Kopien. Keine produktiven
+DBs, Originalimporte, alten globalen Belegordner oder Docker-Volumes geloescht.
+Die Quellen-/Nachweisablage im Repo ist klein; grosse JUnit-Dateien liegen
+verlustfrei gzip-komprimiert vor. Gemeinsame historische Testroutinen mit
+festem /tmp-Root bleiben eine separate #30-Aufgabe, kein pauschales Prune.
