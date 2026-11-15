@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from collections import defaultdict
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -94,6 +94,7 @@ from steuerreport_v2.contracts.tax_years import (
     TaxYearsSummary,
     TaxYearStatus,
 )
+from steuerreport_v2.contracts.tax_filing_snapshots import TaxFilingValues
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.derivatives import DerivativesManager
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
@@ -1021,6 +1022,21 @@ class TaxYearService:
     @staticmethod
     def _fmt_eur(value: Decimal) -> str:
         return f"{value.quantize(Decimal('0.01'))} EUR"
+
+    def filing_aggregate_values(self, year: int) -> TaxFilingValues:
+        """Read the same six stored aggregates without guide/closure artifact caches."""
+        status = self._status_for_year(year)
+        return TaxFilingValues(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            export_ready=not status.export_blocked,
+            taxable_private_disposals_eur=status.realized_gain_loss_eur,
+            taxable_disposal_proceeds_eur=status.taxable_disposal_proceeds_eur,
+            acquisition_cost_eur=status.acquisition_cost_eur,
+            rewards_mining_staking_income_eur=status.rewards_income_eur,
+            derivative_pnl_eur=status.derivative_pnl_eur,
+            tax_free_private_disposals_eur=status.tax_free_gain_loss_eur,
+            tax_free_lines_count=status.tax_free_lines_count,
+        )
 
     def filing_summary(self, year: int) -> TaxYearFilingSummary:
         status = self._status_for_year(year)
@@ -6999,6 +7015,12 @@ class TaxYearService:
         return sorted(years)
 
     def _tax_totals_by_year(self) -> dict[int, dict[str, Decimal | int]]:
+        # DECIMAL(38,18) rows plus a BIGINT-sized row count fit within 80 digits.
+        with localcontext() as arithmetic:
+            arithmetic.prec = 80
+            return self._precise_tax_totals_by_year()
+
+    def _precise_tax_totals_by_year(self) -> dict[int, dict[str, Decimal | int]]:
         if self._tax_totals_cache is not None:
             return self._tax_totals_cache
         totals: dict[int, dict[str, Decimal | int]] = defaultdict(
@@ -9105,6 +9127,11 @@ class TaxYearService:
         return self._fees_cache
 
     def _derivatives_by_year(self) -> dict[int, dict[str, Decimal | int]]:
+        with localcontext() as arithmetic:
+            arithmetic.prec = 80
+            return self._precise_derivatives_by_year()
+
+    def _precise_derivatives_by_year(self) -> dict[int, dict[str, Decimal | int]]:
         if self._derivatives_cache is not None:
             return self._derivatives_cache
         totals: dict[int, dict[str, Decimal | int]] = defaultdict(

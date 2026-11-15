@@ -14,13 +14,13 @@ TaxFilingSnapshotIntegrity = Literal["verified", "missing", "mismatch"]
 class TaxFilingValues(BaseModel):
     generated_at: str
     export_ready: bool
-    taxable_private_disposals_eur: Decimal = Decimal("0")
-    taxable_disposal_proceeds_eur: Decimal = Decimal("0")
-    acquisition_cost_eur: Decimal = Decimal("0")
-    rewards_mining_staking_income_eur: Decimal = Decimal("0")
-    derivative_pnl_eur: Decimal = Decimal("0")
-    tax_free_private_disposals_eur: Decimal = Decimal("0")
-    tax_free_lines_count: int = 0
+    taxable_private_disposals_eur: Decimal = Field(allow_inf_nan=False)
+    taxable_disposal_proceeds_eur: Decimal = Field(allow_inf_nan=False)
+    acquisition_cost_eur: Decimal = Field(allow_inf_nan=False)
+    rewards_mining_staking_income_eur: Decimal = Field(allow_inf_nan=False)
+    derivative_pnl_eur: Decimal = Field(allow_inf_nan=False)
+    tax_free_private_disposals_eur: Decimal = Field(allow_inf_nan=False)
+    tax_free_lines_count: int = Field(strict=True, ge=0)
 
 
 class TaxFilingSnapshotFile(BaseModel):
@@ -58,7 +58,9 @@ class TaxFilingSnapshot(BaseModel):
     filing_usage_confirmation_statement: str | None = None
     note: str | None = None
     integrity_status: TaxFilingSnapshotIntegrity
-    values: TaxFilingValues
+    values: TaxFilingValues | None = Field(
+        description="Nur vollstaendige, endliche Werte aus der hashgebundenen Archiv-Summary; sonst null."
+    )
     files_count: int = 0
     files: list[TaxFilingSnapshotFile] = Field(default_factory=list)
     package_download_endpoint: str
@@ -111,9 +113,36 @@ class TaxFilingSnapshotDelta(BaseModel):
     filed_value_eur: Decimal
     current_value_eur: Decimal
     delta_eur: Decimal
+    rounded_amount_delta_eur: Decimal | None = Field(
+        default=None, description="Differenz der separat auf Cent gerundeten Werte; nicht das gerundete exakte Delta."
+    )
     direction: Literal["increase", "decrease", "unchanged"]
     changed_at_cent_precision: bool
     requires_review: bool
+    explanation: str
+
+
+class TaxFilingSnapshotComparisonScope(BaseModel):
+    aggregate_status: Literal["equal", "different", "not_compared"] = Field(
+        description=(
+            "Exakter Vergleich der sechs archivgebundenen und transaktionsgebundenen gespeicherten Aggregate."
+        )
+    )
+    aggregate_precision: Literal["exact"] = "exact"
+    reference_aggregate_binding: Literal["verified_archive", "not_verified"] = "not_verified"
+    current_aggregate_binding: Literal["read_transaction", "not_verified"] = "not_verified"
+    events: Literal["not_compared"] = Field(default="not_compared", description="Ereignisparitaet unbekannt.")
+    lots: Literal["not_compared"] = Field(default="not_compared", description="Lotparitaet unbekannt.")
+    tax_lines: Literal["not_compared"] = Field(default="not_compared", description="Tax-Line-Paritaet unbekannt.")
+    detail_reconciliation: Literal["not_compared"] = Field(
+        default="not_compared", description="Einzeldeltas wurden nicht mit Aggregatdeltas abgestimmt."
+    )
+    reference_detail_binding: Literal["not_verified"] = Field(
+        default="not_verified", description="Hashbindung der Referenzdetails nicht geprueft."
+    )
+    current_detail_binding: Literal["not_verified"] = Field(
+        default="not_verified", description="Hashbindung der aktuellen Details nicht geprueft."
+    )
     explanation: str
 
 
@@ -130,10 +159,11 @@ class TaxFilingSnapshotComparison(BaseModel):
     latest_reference: TaxFilingSnapshot | None = None
     unconfirmed_reference: TaxFilingSnapshot | None = None
     usage_confirmed_reference: TaxFilingSnapshot | None = None
-    current_values: TaxFilingValues
+    current_values: TaxFilingValues | None
     deltas: list[TaxFilingSnapshotDelta] = Field(default_factory=list)
-    exact_change_detected: bool = False
-    declaration_change_detected: bool = False
+    comparison_scope: TaxFilingSnapshotComparisonScope | None = None
+    exact_change_detected: bool | None = None
+    declaration_change_detected: bool | None = None
     amendment_review_required: bool = False
     submission_confirmation_required: bool = False
     submission_timestamp_required: bool = False
@@ -145,6 +175,7 @@ class TaxFilingSnapshotComparison(BaseModel):
         "unchanged",
         "changed_review_required",
         "integrity_blocked",
+        "comparison_unavailable",
     ]
     headline: str
     next_action: str

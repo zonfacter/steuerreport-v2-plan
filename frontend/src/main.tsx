@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { externalPriceBackfillError } from "./external-price-backfill-error";
 import { newRequestId } from "./request-id";
 import { rememberCurrentPriceRequest } from "./workspace/CurrentPriceRequestStatus";
+import { money as exactMoney } from "./workspace/resource";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
 import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
 import { ConnectorSetupSettings } from "./ConnectorSetupSettings";
@@ -464,7 +465,7 @@ type TaxFilingSnapshotRecord = {
     derivative_pnl_eur: string;
     tax_free_private_disposals_eur: string;
     tax_free_lines_count: number;
-  };
+  } | null;
   files_count: number;
   package_download_endpoint: string;
 };
@@ -485,13 +486,15 @@ type TaxFilingSnapshotComparison = {
     filed_value_eur: string;
     current_value_eur: string;
     delta_eur: string;
+    rounded_amount_delta_eur?: string | null;
     direction: "increase" | "decrease" | "unchanged";
     changed_at_cent_precision: boolean;
     requires_review: boolean;
     explanation: string;
   }>;
-  exact_change_detected: boolean;
-  declaration_change_detected: boolean;
+  comparison_scope?: { aggregate_status: "equal" | "different" | "not_compared"; explanation: string } | null;
+  exact_change_detected: boolean | null;
+  declaration_change_detected: boolean | null;
   amendment_review_required: boolean;
   submission_confirmation_required: boolean;
   submission_timestamp_required: boolean;
@@ -14248,7 +14251,7 @@ function BitgetStrategyBasisDecisionPanel({
   );
 }
 
-function TaxFilingSnapshotPanel({
+export function TaxFilingSnapshotPanel({
   year,
   initialReport,
   onDownload
@@ -14396,26 +14399,29 @@ function TaxFilingSnapshotPanel({
 
   const baseline = report.baseline;
   const candidate = report.unconfirmed_reference;
+  const aggregatesCompared = report.comparison_scope?.aggregate_status === "equal" || report.comparison_scope?.aggregate_status === "different";
   const tone = report.integrity_blocked
     ? "blocked"
     : report.amendment_review_required || candidate
       ? "warning"
-      : report.status === "unchanged"
+      : report.status === "unchanged" && aggregatesCompared
         ? "ok"
         : "neutral";
-  const changedRows = report.deltas.filter((item) => item.changed_at_cent_precision);
+  const changedRows = aggregatesCompared ? report.deltas.filter((item) => item.changed_at_cent_precision) : [];
 
   return (
     <section className={`filingSnapshotPanel ${tone}`}>
       <div className="filingSnapshotHeader">
         <div>
           <span className="heroKicker">Revisionssicherer Abgabestand</span>
-          <h2>{report.headline}</h2>
+          <h2>{!aggregatesCompared && !report.integrity_blocked ? "Jahresaggregate nicht belastbar verglichen" : report.headline}</h2>
           <p>{report.next_action}</p>
         </div>
         <span className={`statusPill ${tone === "neutral" ? "warning" : tone}`}>
           {report.integrity_blocked
             ? "Integritaet blockiert"
+            : !aggregatesCompared
+              ? "Vergleich offen"
             : report.amendment_review_required
               ? "Korrektur pruefen"
               : report.submission_timestamp_required
@@ -14446,27 +14452,27 @@ function TaxFilingSnapshotPanel({
         </div>
         <div>
           <span>Eintragungsrelevante Deltas</span>
-          <strong>{report.deltas.filter((item) => item.requires_review).length}</strong>
-          <em>{report.declaration_change_detected ? "je Einkunftsart pruefen" : "keine Cent-Abweichung"}</em>
+          <strong>{aggregatesCompared ? report.deltas.filter((item) => item.requires_review).length : "Nicht verglichen"}</strong>
+          <em>{!aggregatesCompared ? "Keine Aussage zu Gleichheit oder Differenz" : report.declaration_change_detected ? "je Einkunftsart pruefen" : "keine Cent-Abweichung der deklarationsrelevanten Beträge"}</em>
         </div>
       </div>
 
       {changedRows.length > 0 ? (
         <div className="filingSnapshotDeltaTable">
           <div className="filingSnapshotDeltaHead">
-            <span>Bereich</span><span>Abgabestand</span><span>Aktuell</span><span>Delta</span>
+            <span>Bereich</span><span>Abgabestand</span><span>Aktuell</span><span>Cent-Delta</span>
           </div>
           {changedRows.map((item) => (
             <div className={item.requires_review ? "review" : ""} key={item.key}>
               <span><strong>{item.label}</strong><em>{item.category === "declaration" ? "eintragungsrelevant" : "Nachweiswert"}</em></span>
-              <span>{formatCurrency(item.filed_value_eur)} EUR</span>
-              <span>{formatCurrency(item.current_value_eur)} EUR</span>
-              <span className={parseNumber(item.delta_eur) > 0 ? "positiveDelta" : "negativeDelta"}>{formatCurrency(item.delta_eur)} EUR</span>
+              <span>{exactMoney(item.filed_value_eur)}</span>
+              <span>{exactMoney(item.current_value_eur)}</span>
+              <span title={`Exaktes Delta: ${item.delta_eur} EUR; angezeigt wird die Differenz der einzeln gerundeten Beträge.`} className={parseNumber(item.delta_eur) > 0 ? "positiveDelta" : "negativeDelta"}>{exactMoney(item.rounded_amount_delta_eur)}</span>
             </div>
           ))}
         </div>
       ) : (
-        <p className="filingSnapshotNoDelta">Keine Abweichung auf Cent-Ebene zum registrierten Vergleichsstand.</p>
+        <p className="filingSnapshotNoDelta">{aggregatesCompared ? "Keine Abweichung der Jahresaggregate auf Cent-Ebene. Ereignisse und Lots sind damit nicht abgeglichen." : "Kein belastbarer Aggregatvergleich verfügbar; keine Aussage zu Gleichheit oder Differenz."}</p>
       )}
 
       {candidate ? (
@@ -21564,4 +21570,5 @@ function isDisplayNumericColumn(column?: string): boolean {
   ].some((token) => normalized.includes(token));
 }
 
-createRoot(document.getElementById("root") as HTMLElement).render(<App />);
+const applicationRoot = document.getElementById("root");
+if (applicationRoot) createRoot(applicationRoot).render(<App />);
