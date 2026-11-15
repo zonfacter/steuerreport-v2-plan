@@ -141,8 +141,11 @@ class TaxFilingAuditService:
                                 f"Referenzexport {suffix} fehlt; eine leere Positionsliste "
                                 "beweist hier keine vollstaendige Detailabdeckung."
                             )
-                except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
-                    open_points.append(f"Referenzpaket konnte nicht gelesen werden: {exc}")
+                except (OSError, KeyError, ValueError, ArithmeticError, csv.Error, zipfile.BadZipFile) as exc:
+                    raise TaxFilingAuditError(
+                        "Referenzdetails sind nicht vollstaendig lesbar; kein Auditvergleich "
+                        "mit vermeintlich leeren Positionen moeglich."
+                    ) from exc
         else:
             open_points.append("Kein unveraenderlicher Referenzstand fuer das Steuerjahr vorhanden.")
         if reference_tax_lines and all(item.get("lot_id") is None for item in reference_tax_lines):
