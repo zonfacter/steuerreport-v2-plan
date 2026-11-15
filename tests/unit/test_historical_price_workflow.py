@@ -863,6 +863,91 @@ def test_manual_eur_preview_preserves_original_and_writes_only_after_confirmed_a
     assert len(workflow.store.list_review_decisions()) == 1
 
 
+@pytest.mark.parametrize("after_apply", [False, True])
+@pytest.mark.parametrize("mutation", [
+    "preview_hash", "decision_id", "decision_type", "scope", "evidence_ref",
+    "updated_at", "updated_column", "created_at", "malformed_json", "extra_payload",
+])
+def test_apply_status_requires_exact_stored_decision_binding(workflow, after_apply, mutation):
+    seed(workflow)
+    preview = data(workflow.client.post(BASE + "/manual-previews", json=manual_price_request(workflow)))
+    decision_id = "historical-price:" + preview["id"]
+    if after_apply:
+        data(workflow.client.post(BASE + f"/previews/{preview['id']}/apply", json=approval(preview)))
+        with workflow.store.connect() as con:
+            stored, = con.execute("select payload_json from review_decisions where id=?", [decision_id]).fetchone()
+        decision = json.loads(stored)
+    else:
+        decision = {
+            "decision_id": decision_id, "decision_type": "historical_price_import",
+            "scope": "historical_prices:" + preview["id"], "title": "Synthetic decision",
+            "rationale": "Synthetic binding regression, not an actual approval.", "actor": "synthetic-user",
+            "evidence_ref": "api:" + BASE + "/previews/" + preview["id"],
+            "payload": {"preview_sha256": preview["preview_sha256"]},
+            "created_at": AT.isoformat(),
+        }
+    if mutation == "preview_hash":
+        decision["payload"]["preview_sha256"] = "0" * 64
+    elif mutation == "updated_at":
+        decision["updated_at"] = "2026-11-15T11:00:00Z"
+    elif mutation == "created_at":
+        decision["created_at"] = "2023-01-01T00:00:00Z"
+    elif mutation == "updated_column":
+        pass
+    elif mutation == "extra_payload":
+        decision["payload"]["another_preview"] = "synthetic"
+    elif mutation != "malformed_json":
+        decision[mutation] = "synthetic-wrong-binding"
+    serialized = "{" if mutation == "malformed_json" else json.dumps(decision)
+    with workflow.store.connect() as con:
+        if after_apply:
+            con.execute("update review_decisions set payload_json=?, updated_at=? where id=?",
+                        [serialized, AT if mutation == "updated_column" else None, decision_id])
+        else:
+            con.execute("insert into review_decisions values (?, ?, ?, ?)",
+                        [decision_id, serialized, AT, AT if mutation == "updated_column" else None])
+        stored_before = con.execute("select * from review_decisions order by id").fetchall()
+    prices_before = workflow.store.list_price_points()
+    sources_before = source_snapshot(workflow)
+    callbacks_before = len(workflow.applied_callbacks)
+
+    error(workflow.client.get(BASE + f"/previews/{preview['id']}"), "historical_price_apply_decision_invalid")
+    error(workflow.client.post(BASE + f"/previews/{preview['id']}/apply", json=approval(preview)),
+          "historical_price_apply_decision_invalid")
+    assert workflow.store.list_price_points() == prices_before
+    assert source_snapshot(workflow) == sources_before
+    with workflow.store.connect() as con:
+        assert con.execute("select * from review_decisions order by id").fetchall() == stored_before
+    assert not workflow.calls and len(workflow.applied_callbacks) == callbacks_before
+
+
+@pytest.mark.parametrize("mutation", ["decision_id", "prices_count", "applied", "symlink"])
+def test_apply_status_rejects_conflicting_local_receipt(workflow, mutation):
+    seed(workflow)
+    preview = data(workflow.client.post(BASE + "/manual-previews", json=manual_price_request(workflow)))
+    result = data(workflow.client.post(BASE + f"/previews/{preview['id']}/apply", json=approval(preview)))
+    receipt = workflow.service._directory(preview["id"]) / "applied.json"
+    if mutation == "symlink":
+        target = receipt.with_name("synthetic-receipt-original.json")
+        receipt.rename(target)
+        receipt.symlink_to(target)
+    else:
+        damaged = dict(result)
+        damaged[mutation] = False if mutation == "applied" else 123 if mutation == "prices_count" else "other"
+        receipt.chmod(0o600)
+        receipt.write_text(json.dumps(damaged))
+    prices_before = workflow.store.list_price_points()
+    with workflow.store.connect() as con:
+        decisions_before = con.execute("select * from review_decisions order by id").fetchall()
+    error(workflow.client.get(BASE + f"/previews/{preview['id']}"), "historical_price_evidence_changed")
+    error(workflow.client.post(BASE + f"/previews/{preview['id']}/apply", json=approval(preview)),
+          "historical_price_evidence_changed")
+    assert workflow.store.list_price_points() == prices_before
+    with workflow.store.connect() as con:
+        assert con.execute("select * from review_decisions order by id").fetchall() == decisions_before
+    assert len(workflow.applied_callbacks) == 1 and not workflow.calls
+
+
 @pytest.mark.parametrize(
     "base,quote,rate,expected",
     [("USD", "EUR", "0.9", "90"), ("EUR", "USD", "1.25", "80")],

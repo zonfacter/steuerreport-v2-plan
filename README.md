@@ -269,7 +269,10 @@ Unveroeffentlichte Weiterentwicklung fuer direkte Preisauftraege:
 Ebenfalls unveroeffentlicht: [Stichtagsreferenz und Kurs-/FX-Zeitbeleg
 auseinanderhalten](docs/STICHTAG_ZEITBELEGE.md). Ein Tagesanker oder eine
 Tokenannahme ersetzt keinen Beobachtungs- oder Veroeffentlichungsnachweis;
-die positive Nicht-EUR-Belegzulassung ist noch nicht implementiert.
+die positive Nicht-EUR-Belegzulassung ist noch nicht als Anwendungsablauf
+verfuegbar. Ein reiner originalgebundener Zulassungsbaustein und der korrigierte
+historische Uebernahmenachweis sind getrennt dokumentiert:
+[Belegzulassung und Nachweisgrenzen (Entwicklung)](docs/audit/ISSUE46_63_BELEGZULASSUNG_2026-11-15.md).
 Preiszeilen/Checkpoint werden gemeinsam gespeichert, die anschliessende
 Pipeline bleibt ein getrennter Schritt. Keine automatische Wiederholung und
 keine Jahresfreigabe; der moderne historische Vorschauablauf bleibt erhalten.

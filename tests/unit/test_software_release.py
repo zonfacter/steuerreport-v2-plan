@@ -43,6 +43,8 @@ def test_release_excludes_case_work_runtime_and_originals():
         "docs/audit/ISSUE49_CHECKPOINT_INTEGRATION_2026-11-15.md",
         "docs/audit/ISSUE46_ZEITBELEG_VERTRAG_2026-11-15.md",
         "docs/audit/ISSUE46_ZEITBELEG_INTEGRATION_2026-11-15.md",
+        "docs/audit/ISSUE46_POSITIVER_BELEGPFAD_VERTRAG_2026-11-15.md",
+        "docs/audit/ISSUE46_63_BELEGZULASSUNG_2026-11-15.md",
         "docs/STICHTAG_ZEITBELEGE.md",
         "docs/ISSUE_49_AKTUELLE_PORTFOLIOPREISE.md",
         "scripts/docker_state_v2.py", "src/steuerreport_v2/db/offline_snapshot.py",

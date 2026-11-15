@@ -70,7 +70,9 @@ oder ein bestandener Hashvergleich ist keine steuerliche/rechtliche Abnahme.
 4. Beobachtete Direktkurse stimmen mit Zeitpunkt und Wert des ausgewaehlten
    Preisobjekts ueberein. Direkte EUR-Werte stimmen exakt ueberein; USD/FX
    muessen nach dokumentierter DECIMAL(38,18)-Quantisierung denselben Wert
-   ergeben. Nicht endliche, nicht positive oder nicht darstellbare Werte sperren.
+   ergeben (explizit `ROUND_HALF_EVEN`, keine Abhaengigkeit vom globalen
+   Decimal-Kontext). Nicht endliche, nicht positive oder nicht darstellbare
+   Werte sperren.
 5. Alle benoetigten Originalbytes werden gegen ihre SHA256 geprueft. Fehlende,
    geaenderte oder mehrdeutige Inputs sperren. Keine Suche nach einem guenstigeren
    Ersatzbeleg und keine automatische Anerkennung der methodischen Entscheidung.
@@ -135,8 +137,9 @@ nicht unterschiedliche Schreibweisen desselben Zahlen-/Zeitwerts.
 - `PriceEvidenceApproval`: `decision_id`,
   `decision_type="stichtag_price_time_admission"`, `binding_sha256`, `actor`,
   `rationale`, `approved_at`, `updated_at=None`,
-  `acknowledge_original_verified=True`, `acknowledge_scope_limited=True`.
-  Bestaetigungen muessen echte Booleans sein. Eine nachtraeglich veraenderte
+  `acknowledge_original_verified`, `acknowledge_scope_limited` (beide
+  erforderliche Eingaben, kein automatisch bestaetigender Default).
+  Nur echte Booleans `True` gelten als Zustimmung. Eine nachtraeglich veraenderte
   Entscheidung wird nicht als unveraenderte Zustimmung verwendet.
 - `PriceEvidenceAdmission`: eigene Policy-ID/-Version, `status`,
   `strict_eligible`, `binding_sha256`, `decision_id`, `reason_codes`,
@@ -155,3 +158,16 @@ der dokumentierten DB-UTC-Semantik normalisiert. Die Funktion selbst akzeptiert
 keine naiven Datetimes. Erfassungszeit ist nicht automatisch historische
 Verfuegbarkeit. Approval darf nach dem historischen Stichtag erfolgen, aber
 nicht vor Erfassung der von ihr bestaetigten Originale.
+
+Die Tagesperiode ist `[Start, naechste lokale Mitternacht)`. Eine
+lokal doppelte Mitternacht beginnt bei ihrer ersten Instanz; eine
+Mitternachtsluecke bei der ersten gueltigen lokalen Tageszeit. Der gesamte
+lokale Kalendertag muss enthalten sein, nicht pauschal 24 Stunden.
+Fuer das Basisasset `EUR` bleibt ausschliesslich die vorhandene EUR-
+Identitaetspolicy zustaendig; dieser Nicht-EUR-Belegpfad darf es nicht durch
+menschliche Zustimmung auf einen anderen EUR-Eigenwert umdefinieren.
+Eine
+Veroeffentlichung kann nicht vor der behaupteten Quote-/FX-Beobachtung liegen.
+Bei Tagesmittel/-schluss nicht vor Ende der Periode; bei Tageszeit nicht vor
+dem dokumentierten lokalen Messzeitpunkt. Das ist eine Konsistenzpruefung
+der eingereichten Angaben, keine automatisch belegte Originalzeit.

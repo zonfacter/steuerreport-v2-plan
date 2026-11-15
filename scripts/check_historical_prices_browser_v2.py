@@ -379,6 +379,69 @@ def main():
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), ("auto-fallback", width)
                 page.evaluate("window.scrollTo(0, 0)")
                 page.screenshot(path=str(args.output / f"auto-fallback-{width}.png"), full_page=True)
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            saved = region.locator("summary").filter(has_text="Gespeicherte Preisvorschauen")
+            if not saved.evaluate("node => node.parentElement.open"):
+                saved.click()
+            saved_applied = region.get_by_role("button", name=re.compile("übernommen")).first
+            saved_applied.click()
+            expect(region.get_by_role("heading", name="Preisübernahme abgeschlossen", exact=True)).to_be_visible()
+            with store.connect() as con:
+                decision_id, raw_decision = con.execute(
+                    "select id, payload_json from review_decisions where starts_with(id, 'historical-price:')"
+                ).fetchone()
+                damaged = json.loads(raw_decision)
+                damaged["payload"]["preview_sha256"] = "0" * 64
+                con.execute("update review_decisions set payload_json=? where id=?", [json.dumps(damaged), decision_id])
+                decision_before = con.execute("select * from review_decisions order by id").fetchall()
+            prices_before = store.list_price_points()
+            calls_before, provider_before = len(calls), len(provider_calls)
+            saved_applied.click()
+            expect(region.get_by_role("alert")).to_contain_text("Übernahmenachweis passt nicht unverändert")
+            integrity_heading = region.get_by_role("heading", name="Prüfstand nicht mehr bestätigt", exact=True)
+            expect(integrity_heading).to_be_visible()
+            expect(region.get_by_role("heading", name="Preisübernahme abgeschlossen", exact=True)).to_have_count(0)
+            expect(region.get_by_role("button", name=re.compile("Nachweis ungeklärt"))).to_be_visible()
+            expect(region.get_by_role("link", name="Jahres-CSV und Belege als ZIP", exact=True)).to_have_count(0)
+            assert all(call["method"] == "GET" for call in calls[calls_before:])
+            assert len(provider_calls) == provider_before and store.list_price_points() == prices_before
+            with store.connect() as con:
+                assert con.execute("select * from review_decisions order by id").fetchall() == decision_before
+            for width in (390, 768, 1280, 1440):
+                page.set_viewport_size({"width": width, "height": 1000})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), ("apply-binding", width)
+                integrity_heading.scroll_into_view_if_needed()
+                page.screenshot(path=str(args.output / f"apply-binding-{width}.png"), full_page=True)
+            # Only the disposable fixture is restored; the application must re-read, not repair it.
+            with store.connect() as con:
+                con.execute("update review_decisions set payload_json=? where id=?", [raw_decision, decision_id])
+            region.get_by_role("button", name=re.compile("Nachweis ungeklärt")).click()
+            expect(region.get_by_role("heading", name="Preisübernahme abgeschlossen", exact=True)).to_be_visible()
+            expect(region.get_by_role("link", name="Jahres-CSV und Belege als ZIP", exact=True)).to_be_visible()
+            region.get_by_role("button", name=re.compile(rf" · {final['prices_count']} Preise · Vorschau$")).first.click()
+            expect(region.get_by_role("heading", name="Gespeicherte Preisvorschau", exact=True)).to_be_visible()
+            region.get_by_label("Freigebende Person", exact=True).fill("Synthetische Bindungspruefung")
+            region.get_by_role("checkbox", name="Die ausgewiesenen EUR-Preise", exact=False).check()
+            region.get_by_role("checkbox", name="Die gezeigte Neuberechnung", exact=False).check()
+            apply_button = region.get_by_role("button", name="Preise und Neuberechnung übernehmen", exact=True)
+            expect(apply_button).to_be_enabled()
+            fake_id = "historical-price:" + final["id"]
+            damaged.update(decision_id=fake_id, scope="historical_prices:" + final["id"],
+                           evidence_ref="api:/api/v1/prices/historical/previews/" + final["id"])
+            with store.connect() as con:
+                con.execute("insert into review_decisions values (?, ?, ?, ?)",
+                            [fake_id, json.dumps(damaged), datetime.fromisoformat(damaged["created_at"]), None])
+                decision_before = con.execute("select * from review_decisions order by id").fetchall()
+            calls_before = len(calls)
+            apply_button.click()
+            expect(region.get_by_role("heading", name="Prüfstand nicht mehr bestätigt", exact=True)).to_be_visible()
+            expect(apply_button).to_be_disabled()
+            expect(region.get_by_label("Freigebende Person", exact=True)).to_be_disabled()
+            expect(region.get_by_role("checkbox", name="Die ausgewiesenen EUR-Preise", exact=False)).not_to_be_checked()
+            assert sum(call["method"] == "POST" for call in calls[calls_before:]) == 1
+            assert len(provider_calls) == provider_before and store.list_price_points() == prices_before
+            with store.connect() as con:
+                assert con.execute("select * from review_decisions order by id").fetchall() == decision_before
             page.wait_for_load_state("networkidle")
             assert not external and not errors, (external, errors)
             context.close()
@@ -389,7 +452,12 @@ def main():
                   "initial_events": 29, "additional_native_sol_fee_events": fee_count,
                   "automatic_fallback": {"scope": "tax_required", "strategy": "automatic", "section_budget": 2, "total_budget": 10,
                       "sections": 2, "http_requests": 3, "fx_requests": 1, "resolved_provider_id": "coingecko:solana", "auto_applied": False},
-                  "viewports": [390, 768, 1280, 1440], "screenshots": 12,
+                  "viewports": [390, 768, 1280, 1440], "screenshots": 16,
+                  "apply_binding_guard": {"read_error_visible": True, "previous_success_label_removed": True,
+                      "read_case_post_requests": 0, "provider_requests": 0,
+                      "reads_preserve_test_decisions": True, "price_rows_unchanged": True,
+                      "successful_revalidation_restores_status": True, "unapplied_controls_blocked": True,
+                      "unapplied_case_rejected_post_requests": 1},
                   "checks": ["loading_not_empty", "all_observed_transfers_and_fee_independent", "planning_and_pagination_read_only", "collection_not_limited_to_visible_page", "three_years", "fixed_eur_coverage", "original_mint_binding", "explicit_external_consent", "preview_isolated", "manual_sections_opt_out", "limited_section_and_cumulative_continue", "two_approvals_required", "complete_year_zip", "reload_status_no_refetch", "atomic_apply", "reload_year_and_saved_preview", "mapping_ui_roundtrip_preserves_original_mint", "year_url_roundtrip", "automatic_tax_required_pending_continue", "primary_missing_nearby_native_sol_fallback", "actual_resolved_provider_visible", "continue_reuses_fx", "no_automatic_apply", "raw_and_canonical_preserved", "auto_fallback_four_widths_no_overflow"], "browser_errors": errors}
         (args.output / "result.json").write_text(json.dumps(report, indent=2) + "\n")
         print(json.dumps(report))

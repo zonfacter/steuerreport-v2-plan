@@ -89,6 +89,7 @@ const reasons: Record<string, string> = {
   historical_price_manual_evidence_blocked: "Manueller Nachweis ist blockiert. FX, Zeit, Identität und Originalbelege prüfen.",
   historical_price_manual_identity_ambiguous: "Die Tokenidentität ist nicht eindeutig. Der Beleg kann nicht zugeordnet werden.",
   historical_price_manual_evidence_conflict: "Für dieselbe offene Position und denselben Originalbeleg liegt ein abweichender Wert vor.",
+  historical_price_apply_decision_invalid: "Der gespeicherte Übernahmenachweis passt nicht unverändert zu dieser Preisvorschau. Keine erneute Übernahme starten; Entscheidungs- und Originalbelege prüfen.",
   historical_price_manual_evidence_invalid: "Originalbeleg ist ungültig oder beschädigt. Datei und Format prüfen.",
   historical_price_manual_evidence_size_invalid: "Originalbeleg muss größer als 0 Byte und höchstens 2 MiB groß sein.",
   historical_price_manual_source_time_future: "Der manuell angegebene Erfassungszeitpunkt liegt in der Zukunft.",
@@ -120,6 +121,7 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
   const [totalLimit, setTotalLimit] = useState("200"), [autoContinue, setAutoContinue] = useState(true);
   const [scope, setScope] = useState<HistoricalPriceQuery["scope"]>("all_observed");
   const [plan, setPlan] = useState<Plan>(), [preview, setPreview] = useState<Preview>();
+  const [previewIntegrityFailed, setPreviewIntegrityFailed] = useState(false);
   const [manualTarget, setManualTarget] = useState<Row>();
   const [planPage, setPlanPage] = useState(1);
   const [recent, setRecent] = useState<Preview[]>([]), [busy, setBusy] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
@@ -184,10 +186,17 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
   const command = async (name: string, fn: () => Promise<void>) => {
     if (active.current) return; active.current = true; setBusy(name); setError(""); setNotice("");
     const version = serial.current;
-    try { await fn(); } catch (e) { if (mounted.current && version === serial.current) setError(message(e)); } finally { active.current = false; if (mounted.current) setBusy(""); }
+    try { await fn(); } catch (e) {
+      if (mounted.current && version === serial.current) {
+        if (e instanceof ApiReadError && ["historical_price_apply_decision_invalid", "historical_price_evidence_changed"].includes(e.code || "")) {
+          setPreviewIntegrityFailed(true); setPrices(false); setRecalculate(false);
+        }
+        setError(message(e));
+      }
+    } finally { active.current = false; if (mounted.current) setBusy(""); }
   };
   const acceptPreview = (result: Preview) => {
-    setPreview(result); setManualTarget(undefined); setPrices(false); setRecalculate(false); setExternal(false);
+    setPreview(result); setPreviewIntegrityFailed(false); setManualTarget(undefined); setPrices(false); setRecalculate(false); setExternal(false);
     setRecoveryId(""); setProgress(undefined); setCollectionRun(undefined); operation.current = undefined; rememberRequest(result.id);
   };
   const loadPreview = (id: string) => command("Vorschau laden", async () => {
@@ -332,7 +341,8 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
       }}><Download size={16} /> Kurse abrufen und Vorschau berechnen</button>
     </>}
     {preview && <>
-      <h3>{preview.applied ? "Preisübernahme abgeschlossen" : preview.manual ? "Manuelle Preisvorschau" : "Gespeicherte Preisvorschau"}</h3>
+      <h3>{previewIntegrityFailed ? "Prüfstand nicht mehr bestätigt" : preview.applied ? "Preisübernahme abgeschlossen" : preview.manual ? "Manuelle Preisvorschau" : "Gespeicherte Preisvorschau"}</h3>
+      {previewIntegrityFailed && <p className="wsInlineWarning" role="status">Der zuvor geladene Stand bleibt zur Einordnung sichtbar, ist aber nicht erneut bestätigt. Übernahme und Berichtsdownloads bleiben bis zu einer erfolgreichen Belegprüfung gesperrt. Originale und Entscheidungen wurden nicht verändert.</p>}
       {preview.manual && <p>Manueller Originalbeleg · kein externer Anbieterabruf. Die Übernahme bleibt separat und benötigt Akteur sowie zwei Bestätigungen.</p>}
       {preview.block_reason && <p role="alert" className="wsInlineWarning">Vorschau blockiert: {reasons[preview.block_reason] || preview.block_reason}. Es wurde kein Preis berechnet oder übernommen.</p>}
       <p>Gespeicherter Umfang: {preview.query?.year == null ? "Alle Jahre" : preview.query.year} · {preview.query?.scope === "all_observed" ? "Alle erkannten Token" : "Steuerlicher Preisbedarf"} · {preview.query?.assets?.join(", ") || "Alle Assets"}</p>
@@ -341,7 +351,7 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
       {preview.parent_preview_id && <p className="wsMuted">Zusammengeführte Vorschau einschließlich aller zuvor belegten Preise.</p>}
       <YearOverview summaries={preview.year_summary} selectedYear={preview.query?.year?.toString() || "all"} />
       <PreviewRows key={preview.id} preview={preview} />
-      <div className="wsActionFooter" aria-label="Preisberichte herunterladen">{([ ["zip", "Jahres-CSV und Belege als ZIP"], ["json", "Preisvorschau und Quellen als JSON"], ["md", "Preisbericht als Markdown"] ] as const).map(([extension, label]) => <a className="wsButton" key={extension} href={API_BASE + base + "/previews/" + encodeURIComponent(preview.id) + "/report." + extension} download><Download size={16} /> {label}</a>)}</div>
+      {!previewIntegrityFailed && <div className="wsActionFooter" aria-label="Preisberichte herunterladen">{([ ["zip", "Jahres-CSV und Belege als ZIP"], ["json", "Preisvorschau und Quellen als JSON"], ["md", "Preisbericht als Markdown"] ] as const).map(([extension, label]) => <a className="wsButton" key={extension} href={API_BASE + base + "/previews/" + encodeURIComponent(preview.id) + "/report." + extension} download><Download size={16} /> {label}</a>)}</div>}
       {(preview.remaining_requirements != null || preview.review_issues_open != null) && <p>Noch {preview.remaining_requirements ?? "unbekannt viele"} benötigte Preispositionen; {preview.review_issues_open ?? "unbekannt viele"} fachliche Hinweise – nicht alles Preisfehler. <a href="#review">Fachliche Hinweise prüfen</a>. Auch 0 Preispositionen bedeuten keine Vollständigkeits- oder Jahresfreigabe.</p>}
       <details className="wsTechnical"><summary>Belege und Berechnungsänderungen</summary>
         <p>Vorschau-Fingerabdruck (SHA-256): <code>{preview.preview_sha256}</code></p>
@@ -353,7 +363,7 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
         <h4>Berechnung und Originalbelege</h4>
         <pre>{JSON.stringify({ before: preview.before_summary, after: preview.after_summary, changes: preview.tax_line_deltas, evidence: preview.rows.map((row) => ({ asset: row.asset, date: row.price_date, hashes: row.evidence_sha256, source: row.source })) }, null, 2)}</pre>
       </details>
-      {!preview.applied && observedPreview && (pendingCount > 0 || openCount > 0) && <fieldset disabled={!!busy || !!recoveryId}><legend>Historische Preise abschnittsweise sammeln</legend>
+      {!preview.applied && observedPreview && (pendingCount > 0 || openCount > 0) && <fieldset disabled={!!busy || !!recoveryId || previewIntegrityFailed}><legend>Historische Preise abschnittsweise sammeln</legend>
         <p>Höchstens {preview.query?.max_requests ?? limit} HTTP-Anfragen je weiterem Abschnitt.{savedBudget != null ? <> Gesamtes HTTP-Budget: {savedBudget}; davon bereits {preview.requests_started} gestartet.</> : <> Für diese ältere Vorschau ist kein Gesamtbudget hinterlegt; keine automatische Fortsetzung.</>} Bereits belegte Preise bleiben in der gemeinsamen Vorschau erhalten.</p>
         {budgetExhausted && <p className="wsInlineWarning">Gesamtes HTTP-Budget erreicht. Keine weiteren Abschnitte oder Fehler-Retries in diesem Lauf.</p>}
         <label className="checkboxLabel"><input type="checkbox" checked={external} disabled={budgetExhausted} onChange={(e) => setExternal(e.target.checked)} /> Weitere externe Preis- und gegebenenfalls Wechselkursabfragen ausdrücklich erlauben.{savedBudget != null && <> Insgesamt höchstens {savedBudget} HTTP-Anfragen einschließlich bisheriger Abschnitte.</>} {autoContinue && preview.query?.strategy === "automatic" && savedBudget != null ? "Ausstehende Abschnitte werden unter dieser Einwilligung automatisch bis zum Gesamtbudget fortgesetzt, auch nach einem bewusst gestarteten Fehler-Retry." : "Nur diesen Abschnitt starten."} Nur „Offene Abrufe erneut versuchen“ wiederholt fehlgeschlagene Abrufe. Anbieterlimits und mögliche Tarifkosten beachten. Kein automatischer Import und keine automatische Übernahme von Preisen oder Neuberechnung.</label>
@@ -361,7 +371,7 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
         {openCount > 0 && <button type="button" disabled={!external || budgetExhausted} onClick={() => continueCollection(true)}><RefreshCw size={16} /> Offene Abrufe erneut versuchen</button>}
       </fieldset>}
       {!preview.applied && applyBlocked && <p className="wsWarning">Vor der gemeinsamen Übernahme müssen die ausstehenden Abschnitte gesammelt werden. Blockierte oder fehlgeschlagene Preise bleiben offen, nicht 0 €.</p>}
-      {!preview.applied && preview.status === "ready" && <fieldset disabled={!!busy || !!recoveryId || applyBlocked}><legend>Diese Vorschau übernehmen</legend>
+      {!preview.applied && preview.status === "ready" && <fieldset disabled={!!busy || !!recoveryId || applyBlocked || previewIntegrityFailed}><legend>Diese Vorschau übernehmen</legend>
         <label>Freigebende Person<input value={actor} maxLength={100} onChange={(e) => setActor(e.target.value)} /></label>
         <label className="checkboxLabel"><input type="checkbox" checked={prices} onChange={(e) => setPrices(e.target.checked)} /> Die ausgewiesenen EUR-Preise mit ihren Belegen speichern.</label>
         <label className="checkboxLabel"><input type="checkbox" checked={recalculate} onChange={(e) => setRecalculate(e.target.checked)} /> Die gezeigte Neuberechnung ausdrücklich übernehmen. Bestehende Jahres- und Referenzsnapshots bleiben erhalten; dies ist keine fachliche Jahresfreigabe.</label>
@@ -372,7 +382,7 @@ export function PriceWorkspace({ onCurrentPrices }: { onCurrentPrices: (requests
       </fieldset>}
       <button type="button" disabled={!!busy || !!recoveryId} onClick={() => { setPreview(undefined); setPlan(undefined); setExternal(false); setPrices(false); setRecalculate(false); rememberRequest(""); }}>Weiteren Preisabschnitt planen</button>
     </>}
-    <details className="wsTechnical"><summary>Gespeicherte Preisvorschauen</summary><button type="button" disabled={!!busy} onClick={() => void command("Vorschauen aktualisieren", refreshRecent)}><RefreshCw size={16} /> Liste aktualisieren</button>{recent.length ? recent.map((item) => <div key={item.id}><button type="button" disabled={!!busy || (!!recoveryId && item.id !== recoveryId)} onClick={() => void loadPreview(item.id)}>{timestamp(item.created_at)} · {item.prices_count} Preise · {item.applied ? "übernommen" : "Vorschau"}</button></div>) : <p>Noch keine gespeicherte Preisvorschau.</p>}</details>
+    <details className="wsTechnical"><summary>Gespeicherte Preisvorschauen</summary><button type="button" disabled={!!busy} onClick={() => void command("Vorschauen aktualisieren", refreshRecent)}><RefreshCw size={16} /> Liste aktualisieren</button>{recent.length ? recent.map((item) => <div key={item.id}><button type="button" disabled={!!busy || (!!recoveryId && item.id !== recoveryId)} onClick={() => void loadPreview(item.id)}>{timestamp(item.created_at)} · {item.prices_count} Preise · {previewIntegrityFailed && item.id === preview?.id ? "Nachweis ungeklärt" : item.applied ? "übernommen" : "Vorschau"}</button></div>) : <p>Noch keine gespeicherte Preisvorschau.</p>}</details>
     <details className="wsTechnical"><summary>Preisquellen zuordnen</summary><p>Exakte Anbieter-ID verwenden. Bei Solana-Token den Mint prüfen; gleiche Symbole beweisen keine Tokenidentität. Eine Zuordnung ist keine Eigentums- oder Spamfreigabe.</p>
       <label>Vorhandene Preiszuordnung<select disabled={!!busy || !!recoveryId} value={mappings[mappingAsset] ? mappingAsset : ""} onChange={(e) => { const asset = e.target.value; setMappingAsset(asset); setCoinId(mappings[asset]?.coingecko_id || ""); setMintId(mappings[asset]?.defillama_id || ""); setOriginalMint(mappings[asset]?.solana_mint || ""); setMappingNetwork(mappings[asset]?.network || ""); setMappingContract(mappings[asset]?.contract_address || ""); setMappingDecimals(mappings[asset]?.decimals?.toString() ?? ""); }}><option value="">Neue Zuordnung</option>{Object.keys(mappings).sort().map((asset) => <option key={asset}>{asset}</option>)}</select></label>
       <form onSubmit={(e) => { e.preventDefault(); void command("Preiszuordnung speichern", async () => {
