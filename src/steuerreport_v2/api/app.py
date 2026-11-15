@@ -274,6 +274,8 @@ from steuerreport_v2.contracts.prices import (
     AsOfTokenValuationDecisionResult,
     CurrentPortfolioPriceBackfillRequest,
     CurrentPortfolioPriceBackfillResult,
+    CurrentPortfolioPriceBackfillStatus,
+    CurrentPortfolioPriceBackfillStatusRequest,
     ExternalPriceBackfillRequest,
     ExternalPriceBackfillResult,
     ExternalPriceBackfillStorageUnknown,
@@ -2329,8 +2331,26 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
         warnings = backfill_result_warnings(result)
         if result.pipeline_status == "failed":
             warnings.append(ApiMessage(code="price_backfill_pipeline_failed", message="Preise gespeichert, Pipeline fehlgeschlagen; Folgen unbekannt oder teilweise. Vor Wiederholung Zustand pruefen."))
+        if result.result_journal_status == "unknown":
+            warnings.append(ApiMessage(code="current_backfill_journal_unknown", message="Auftragsergebnis nicht sicher dokumentiert; keine automatische Wiederholung. Zustand pruefen."))
         return ApiResponse(status="warning" if warnings else ("ok" if result.dry_run or result.imported_prices else "warning"),
                            data=result, warnings=warnings)
+
+    @app.post("/api/v1/prices/backfill/current-portfolio/status")
+    def current_portfolio_price_request_status(
+        payload: CurrentPortfolioPriceBackfillStatusRequest,
+    ) -> ApiResponse[CurrentPortfolioPriceBackfillStatus]:
+        try:
+            result = ExternalPriceBackfillService(db).current_portfolio_request_status(str(payload.request_id))
+        except Exception:
+            return JSONResponse(status_code=500, content=ApiResponse[dict](
+                status="error", data={"status": "unknown"},
+                errors=[ApiMessage(code="current_backfill_status_unknown", message="Gespeicherter Auftragsstatus konnte nicht sicher gelesen werden. Keine Wiederholung starten.")],
+            ).model_dump(mode="json"))
+        warnings = backfill_result_warnings(result.result) if result.result is not None else []
+        if result.result is not None and result.result.pipeline_status == "failed":
+            warnings.append(ApiMessage(code="price_backfill_pipeline_failed", message="Pipeline damals fehlgeschlagen; Folgen unbekannt oder teilweise. Vor Wiederholung Zustand pruefen."))
+        return ApiResponse(status="ok" if result.status == "recorded" and not warnings else "warning", data=result, warnings=warnings)
 
     @app.get("/api/v1/prices/as-of-gate")
     def prices_as_of_gate(

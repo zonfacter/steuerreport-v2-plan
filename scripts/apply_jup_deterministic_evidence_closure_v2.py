@@ -477,7 +477,9 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             dry_run=False,
         )
         report["spcxx_current_price"] = current_price.model_dump(mode="json")
-        if current_price.failed or current_price.imported_prices != 1 or current_price.pipeline_status == "failed":
+        if (current_price.failed or current_price.imported_prices != 1
+                or current_price.pipeline_status == "failed"
+                or current_price.result_journal_status != "recorded"):
             raise RuntimeError(
                 f"spcxx_current_price_failed:imported={current_price.imported_prices}:failed={current_price.failed}"
             )

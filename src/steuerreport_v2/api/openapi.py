@@ -138,6 +138,8 @@ def tag_for_path(path: str) -> str:
 
 def data_effect(methods: Iterable[str], path: str) -> str:
     method_set = set(methods)
+    if method_set == {"POST"} and path == "/api/v1/prices/backfill/current-portfolio/status":
+        return "read-only"
     if path.startswith("/api/v1/export/tax-years/") and path.endswith("/evidence-package.zip"):
         return "write"  # Existing implementation persists a ZIP cache, even though it uses GET.
     if method_set == {"POST"} and path in {"/api/v1/activity/query", "/api/v1/activity/export.csv", "/api/v1/workspace/review/query"}:

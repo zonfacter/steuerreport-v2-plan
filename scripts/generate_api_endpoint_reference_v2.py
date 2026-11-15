@@ -60,6 +60,7 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 PURPOSE_OVERRIDES = {
+    ("POST", "/api/v1/prices/backfill/current-portfolio/status"): "Liest dokumentiertes Ergebnis oder unklaren Ausgang eines Preisauftrags ohne Anbieterabruf, Preisspeicherung oder Neuberechnung",
     ("POST", "/api/v1/prices/import/v1-fx-cache/preview"): "Zeigt unverbindliche V1-Cache-Kandidaten ohne Uebernahmefreigabe",
     ("POST", "/api/v1/prices/import/v1-fx-cache"): "Blockiert direkte V1-Cache-Uebernahme ohne geprueften Vertrag",
     ("POST", "/api/v1/prices/historical/plan"): "Plant historische Tagespreise lokal mit Jahresuebersicht und reiner Listenpagination",

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { externalPriceBackfillError } from "./external-price-backfill-error";
 import { newRequestId } from "./request-id";
+import { rememberCurrentPriceRequest } from "./workspace/CurrentPriceRequestStatus";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
 import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
 import { ConnectorSetupSettings } from "./ConnectorSetupSettings";
@@ -4883,6 +4884,8 @@ function App() {
     setLoading(true);
     setError(null);
     try {
+      const requestId = dryRun ? null : newRequestId();
+      if (requestId) rememberCurrentPriceRequest(requestId);
       const assetFilter = assets
         .split(",")
         .map((asset) => asset.trim().toUpperCase())
@@ -4894,7 +4897,7 @@ function App() {
           assets: assetFilter,
           max_requests: Number(maxRequests),
           dry_run: dryRun,
-          request_id: dryRun ? null : newRequestId(),
+          request_id: requestId,
           confidence: "0.95"
         },
         180_000

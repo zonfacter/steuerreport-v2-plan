@@ -9,8 +9,9 @@ blockiert. Die optionale UUID erlaubt einen bewusst neuen Auftrag; ohne UUID
 wird die normalisierte Anfrage gehasht. Die Sperre ersetzt keine umfassende
 Idempotenz, Quellenbindung oder eine fachliche Pruefung. Andere Parameter,
 neue UUIDs, Datenbank-Restore und andere Schreibwege koennen neue Zeilen
-erzeugen. Reservierungen werden nicht automatisch geloescht und liefern keine
-gespeicherte Antwort oder Recovery nach Prozessabbruch. Die Reservierung selbst
+erzeugen. Reservierungen werden nicht automatisch geloescht. Ein nachtraeglich
+gespeichertes Ergebnis kann lesend abgefragt werden; Recovery nach
+Prozessabbruch ist damit nicht belegt. Die Reservierung selbst
 ist ein dauerhafter DB-Schreibvorgang, auch wenn kein Preis gespeichert wird.
 
 Anbieterausnahmen sind fest formuliert; unabhaengige Kandidaten koennen
@@ -66,3 +67,37 @@ dieses weitere Skript ab. Vor Integration sind diese Pfade gesondert zu pruefen.
 
 Diese Nachweise sind keine unabhaengige fachliche Abnahme und kein Nachweis
 eines interaktiven Browserablaufs oder produktiven Anbieterabrufs.
+
+## Ergebnisjournal und lesende Statusauskunft
+
+Ein Rueckkehrergebnis wird nach Preis- und Pipelineoperationen separat im
+privaten Journal gespeichert. `result_journal_status` unterscheidet dies von
+der Preisspeicherung. Schlaegt die Dokumentation fehl, bleibt die Reservierung
+gesperrt; keine Wiederholung und kein Rollback werden behauptet. Die Schritte
+sind nicht atomar, daher ist eine leere Journalantwort kein Ausfuehrungsnachweis.
+Alte Reservierungen erhalten kein erfundenes Ergebnis.
+
+Die UI bietet unter den Portfolio-Kursen eine ausdrueckliche Statusabfrage mit
+UUID. Die API liefert ein dokumentiertes damaliges Ergebnis, einen unklaren
+oder noch laufenden Ausgang oder eine unbekannte Kennung. Journal-Lesefehler
+geben keine rohen Daten weiter. Kein Polling und keine Anbieter-/Pipeline-
+Operation durch diese Abfrage. Eine einzige UUID bleibt im Sitzungsspeicher;
+die Finanzantwort wird dort nicht gespeichert. Aufbewahrung, geschuetzte
+Journalintegritaet und automatische Recovery bleiben offen.
+
+43 gezielte Backendtests bestehen (Portfolio, Schema, Importbatches, Health,
+Runtimepfade), einschliesslich Journalfehler vor/nach Write und alter
+Reservierungen. Die neue Statuskomponente ist mit synthetischen Antworten und
+den bestehenden Styles in Chromium bei 390/1440 Pixeln geprueft: dokumentiert,
+unklar, unbekannte Kennung und HTTP-Fehler; kein Overflow oder externer Request.
+Der Browsernachweis ist isoliert, nicht der komplette App-/Providerablauf.
+Reproduktion: `python scripts/check_current_price_status_browser_v2.py`.
+
+Im unabhaengigen Review wurden anfangs fehlende Teilfehlerwarnungen bei der
+Statuswiederherstellung und eine falsche OpenAPI-Schreibkennzeichnung gefunden.
+Beides ist korrigiert: Warnungen und Fehler-/Skipanzahl werden wiedergegeben,
+`x-data-effect` ist `read-only`. Die 25 Portfolio-/Journaltests bestehen nach
+diesen Korrekturen. Der breitere Integrationslauf davor bestand mit 128 Tests;
+die synthetische Browserprobe wurde mit den Korrekturen erneut bestanden.
+Build und Ruff bestehen. Kein Nachweis vollstaendiger Recovery oder eines
+produktiven Anbieterabrufs.

@@ -1625,7 +1625,7 @@ Aufrufer ohne UUID verwenden einen stabilen Hash ihrer Anfrageparameter und
 werden bei identischer Wiederholung ebenfalls blockiert. Eine bewusst neue UUID
 erlaubt einen neuen Lauf und ist kein Nachweis, dass eine Wiederholung richtig
 ist. Reservierungen bleiben auch bei Abbruch oder verlorenem Ergebnis bestehen;
-es gibt kein automatisches Aufraeumen und keine Wiederherstellung des Ergebnisses.
+es gibt kein automatisches Aufraeumen oder erneutes Ausfuehren.
 Vor einem neuen Auftrag muessen Preisbestand, Pipelinefolgen und Providerkosten
 geprueft werden. Andere geaenderte Parameter bei Aufrufen ohne UUID sind eine
 neue Kennung; Wiederholungen ueber andere Wege werden nicht verhindert.
@@ -1640,6 +1640,23 @@ HTTP 409 bedeutet nur, dass der Auftrag bereits reserviert ist, nicht ob er
 geschrieben hat. Ein Fehler bei der Reservierung oder ein frueher Abbruch
 liefert HTTP 503; fuer diesen Aufruf hat das Preisschreiben nicht begonnen.
 Keine dieser Aussagen belegt Rollback, spaeteren Bestand oder Steuerfreigabe.
+
+`POST /api/v1/prices/backfill/current-portfolio/status` ist lesend mit UUID-
+`request_id` im JSON-Body. Keine Provideranfrage, Reservierung, Preisoperation
+oder Pipelineausfuehrung. `recorded` liefert die gespeicherte Antwort, nicht
+den heutigen Finanzbestand. `unknown_or_running` bedeutet Reservierung ohne
+dokumentiertes Ergebnis: laufender, abgebrochener oder vollendeter Lauf mit
+fehlender Journalbestaetigung sind nicht unterscheidbar. `not_found` beweist
+keine Ausfuehrung. Ein Lesefehler liefert HTTP 500 und
+`current_backfill_status_unknown`, keine ungepruefte Antwort.
+
+`result_journal_status=recorded|unknown|not_started` trennt Dokumentation vom
+Speicher-/Pipelinezustand. Ein Journalfehler gibt eine Warnung aus; keine
+automatische Wiederholung oder Ruecknahme bereits gespeicherter Preise.
+Die Dokumentation ist nicht atomar mit Preis-/Pipelineoperationen. Alte
+Reservierungen bleiben ohne erfundenes Ergebnis. Die UI merkt genau eine UUID
+im Sitzungsspeicher und bietet eine ausdrueckliche Statusabfrage; kein
+automatisches Polling oder Finanzdaten-Cache im Browser.
 
 `GET /api/v1/prices`
 

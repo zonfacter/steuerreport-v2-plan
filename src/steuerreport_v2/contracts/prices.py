@@ -212,6 +212,17 @@ class CurrentPortfolioPriceBackfillResult(BaseModel):
     stored_price_ids: list[str] = Field(default_factory=list, description="Bei Rueckkehr des Speicheraufrufs bestaetigte IDs; kein spaeterer Bestandsnachweis")
     pipeline_status: Literal["not_started", "completed", "failed"] = "not_started"
     pipeline_effects: Literal["not_started", "completed", "unknown_or_partial"] = "not_started"
+    result_journal_status: Literal["not_started", "recorded", "unknown"] = "not_started"
+
+
+class CurrentPortfolioPriceBackfillStatusRequest(BaseModel):
+    request_id: UUID
+
+
+class CurrentPortfolioPriceBackfillStatus(BaseModel):
+    status: Literal["recorded", "unknown_or_running", "not_found"]
+    result: CurrentPortfolioPriceBackfillResult | None = None
+    explanation: str
 
 
 class AsOfPriceGateCandidate(BaseModel):

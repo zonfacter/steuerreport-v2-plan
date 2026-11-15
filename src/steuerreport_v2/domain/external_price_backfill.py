@@ -18,6 +18,7 @@ from steuerreport_v2.domain.external_http import managed_client
 from steuerreport_v2.contracts.prices import (
     CurrentPortfolioPriceBackfillJob,
     CurrentPortfolioPriceBackfillResult,
+    CurrentPortfolioPriceBackfillStatus,
     ExternalPriceBackfillJob,
     ExternalPriceBackfillResult,
     PricePointCreate,
@@ -420,8 +421,9 @@ class ExternalPriceBackfillService:
         dry_run: bool,
         request_id: str | None = None,
     ) -> CurrentPortfolioPriceBackfillResult:
+        request_hash = None
         if not dry_run:
-            self._reserve_current_backfill(
+            request_hash = self._reserve_current_backfill(
                 request_id=request_id, config_path=config_path, provider=provider,
                 assets_filter=assets_filter, max_requests=max_requests,
                 timeout_seconds=timeout_seconds, confidence=confidence,
@@ -633,7 +635,7 @@ class ExternalPriceBackfillService:
             else:
                 pipeline_status = "completed"
                 pipeline_effects = "completed"
-        return CurrentPortfolioPriceBackfillResult(
+        result = CurrentPortfolioPriceBackfillResult(
             portfolio_assets_count=len(portfolio_assets),
             configured_assets=sorted({asset.symbol for asset in assets}),
             asset_filter=requested_assets,
@@ -650,10 +652,40 @@ class ExternalPriceBackfillService:
             pipeline_status=pipeline_status,
             pipeline_effects=pipeline_effects,
         )
+        if request_hash is not None:
+            result.result_journal_status = "recorded"
+            try:
+                self.store.record_current_price_backfill(request_hash, result.model_dump_json())
+            except Exception:
+                logger.error("Current portfolio price result journal failed")
+                result.result_journal_status = "unknown"
+        return result
+
+    @staticmethod
+    def _explicit_current_request_hash(request_id: str) -> str:
+        return hashlib.sha256(json.dumps(
+            {"request_id": request_id}, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+
+    def current_portfolio_request_status(self, request_id: str) -> CurrentPortfolioPriceBackfillStatus:
+        row = self.store.current_price_backfill_record(self._explicit_current_request_hash(request_id))
+        if row is None:
+            return CurrentPortfolioPriceBackfillStatus(
+                status="not_found", explanation="Kein Auftrag zu dieser Kennung gespeichert; kein Ausfuehrungsnachweis.",
+            )
+        if row[0] is None:
+            return CurrentPortfolioPriceBackfillStatus(
+                status="unknown_or_running",
+                explanation="Auftrag reserviert; Ausgang nicht dokumentiert oder noch in Arbeit. Vor Wiederholung Zustand pruefen.",
+            )
+        return CurrentPortfolioPriceBackfillStatus(
+            status="recorded", result=CurrentPortfolioPriceBackfillResult.model_validate_json(row[0]),
+            explanation="Gespeicherte Antwort dieses Auftrags; kein Nachweis des heutigen Preis- oder Pipelinebestands.",
+        )
 
     def _reserve_current_backfill(self, *, request_id: str | None, config_path: str, provider: str,
                                   assets_filter: list[str], max_requests: int, timeout_seconds: int,
-                                  confidence: Decimal) -> None:
+                                  confidence: Decimal) -> str:
         identity = {"request_id": str(request_id)} if request_id else {
             "config_path": config_path, "provider": provider,
             "assets": sorted({asset.strip().upper() for asset in assets_filter if asset.strip()}),
@@ -669,6 +701,7 @@ class ExternalPriceBackfillService:
             raise CurrentBackfillReservationUnknown("Auftragsreservierung unklar; keine Preisoperation begonnen.")
         if not reserved:
             raise CurrentBackfillReplayBlocked("Auftrag bereits reserviert; Zustand vor einem neuen Auftrag pruefen.")
+        return key
 
     def _load_assets(self, config_path: str) -> list[_PriceAsset]:
         path = resolve_project_path(config_path)

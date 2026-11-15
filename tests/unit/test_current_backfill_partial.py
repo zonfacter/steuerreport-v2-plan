@@ -226,3 +226,104 @@ def test_malformed_reservation_table_stops_before_provider(current, caplog):
     )
     assert response.status_code == 503 and not calls
     assert not store.list_price_points()
+
+
+def test_status_reads_persisted_result_after_restart_without_provider_or_pipeline(current, monkeypatch):
+    store, payload, calls = current
+    first = TestClient(create_app(store)).post("/api/v1/prices/backfill/current-portfolio", json=payload).json()["data"]
+    before_prices = [p.model_dump() for p in store.list_price_points()]
+    assert first["result_journal_status"] == "recorded"
+    monkeypatch.setattr(PipelineService, "rebuild_all", lambda self: pytest.fail("status must not rebuild"))
+    response = TestClient(create_app(DuckDbStore(store.path))).post(
+        "/api/v1/prices/backfill/current-portfolio/status", json={"request_id": payload["request_id"]},
+    )
+    assert response.status_code == 200 and response.json()["data"]["status"] == "recorded"
+    assert response.json()["data"]["result"] == first
+    assert [p.model_dump() for p in store.list_price_points()] == before_prices
+    assert calls == ["coin", "defi"]
+
+
+def test_status_does_not_turn_missing_or_incomplete_request_into_success(current, monkeypatch):
+    store, payload, calls = current
+    client = TestClient(create_app(store))
+    query = {"request_id": payload["request_id"]}
+    assert client.post("/api/v1/prices/backfill/current-portfolio/status", json=query).json()["data"]["status"] == "not_found"
+    def fail(prices):
+        raise RuntimeError("synthetic storage failure")
+    monkeypatch.setattr(store, "add_price_points", fail)
+    assert client.post("/api/v1/prices/backfill/current-portfolio", json=payload).status_code == 500
+    status = client.post("/api/v1/prices/backfill/current-portfolio/status", json=query).json()["data"]
+    assert status["status"] == "unknown_or_running" and status["result"] is None
+    assert calls == ["coin", "defi"]
+
+
+@pytest.mark.parametrize("write_first", [False, True])
+def test_journal_failure_is_unknown_and_never_retries_price_operation(current, monkeypatch, caplog, write_first):
+    store, payload, calls = current
+    original = store.record_current_price_backfill
+    def fail(key, result):
+        if write_first:
+            original(key, result)
+        raise RuntimeError("SYNTHETIC_JOURNAL_SECRET")
+    monkeypatch.setattr(store, "record_current_price_backfill", fail)
+    caplog.set_level(logging.ERROR)
+    client = TestClient(create_app(store))
+    response = client.post("/api/v1/prices/backfill/current-portfolio", json=payload)
+    assert response.status_code == 200 and response.json()["status"] == "warning"
+    assert response.json()["data"]["result_journal_status"] == "unknown"
+    assert any(w["code"] == "current_backfill_journal_unknown" for w in response.json()["warnings"])
+    assert "SYNTHETIC_JOURNAL_SECRET" not in response.text + caplog.text
+    status = client.post("/api/v1/prices/backfill/current-portfolio/status", json={"request_id": payload["request_id"]}).json()["data"]
+    assert status["status"] == ("recorded" if write_first else "unknown_or_running")
+    assert client.post("/api/v1/prices/backfill/current-portfolio", json=payload).status_code == 409
+    assert len(store.list_price_points()) == 2 and calls == ["coin", "defi"]
+
+
+def test_status_with_corrupt_result_is_unknown_without_disclosure(current, caplog):
+    store, payload, calls = current
+    client = TestClient(create_app(store))
+    assert client.post("/api/v1/prices/backfill/current-portfolio", json=payload).status_code == 200
+    with store.connect() as con:
+        con.execute("update current_price_backfill_requests set result_json='SYNTHETIC_CORRUPT_SECRET'")
+    response = client.post("/api/v1/prices/backfill/current-portfolio/status", json={"request_id": payload["request_id"]})
+    assert response.status_code == 500
+    assert response.json()["data"]["status"] == "unknown"
+    assert "SYNTHETIC_CORRUPT_SECRET" not in response.text + caplog.text
+    assert calls == ["coin", "defi"]
+
+
+def test_legacy_reservation_without_journal_stays_unknown_and_blocked(current):
+    store, payload, calls = current
+    service = ExternalPriceBackfillService(store)
+    key = service._explicit_current_request_hash(payload["request_id"])
+    assert store.reserve_current_price_backfill(key)
+    with store.connect() as con:
+        con.execute("alter table current_price_backfill_requests drop column result_json")
+        before = con.execute("select request_hash, reserved_at from current_price_backfill_requests").fetchall()
+    client = TestClient(create_app(DuckDbStore(store.path)))
+    response = client.post("/api/v1/prices/backfill/current-portfolio/status", json={"request_id": payload["request_id"]})
+    assert response.json()["data"]["status"] == "unknown_or_running"
+    assert client.post("/api/v1/prices/backfill/current-portfolio", json=payload).status_code == 409
+    with store.connect() as con:
+        assert con.execute("select request_hash, reserved_at from current_price_backfill_requests").fetchall() == before
+    assert calls == []
+
+
+def test_status_preserves_original_partial_price_warnings(current, monkeypatch):
+    store, payload, calls = current
+    def fail(*args):
+        raise RuntimeError("synthetic provider failure")
+    monkeypatch.setattr(ExternalPriceBackfillService, "_fetch_coingecko_simple_prices_eur", fail)
+    client = TestClient(create_app(store))
+    original = client.post("/api/v1/prices/backfill/current-portfolio", json=payload).json()
+    restored = client.post("/api/v1/prices/backfill/current-portfolio/status", json={"request_id": payload["request_id"]}).json()
+    assert restored["status"] == "warning" and restored["data"]["result"]["failed"] == 1
+    assert {w["code"] for w in restored["warnings"]} == {w["code"] for w in original["warnings"]}
+    assert {w["code"] for w in restored["warnings"]} >= {"price_provider_error", "price_backfill_partial_failure"}
+    assert calls == ["defi"]
+
+
+def test_status_contract_is_read_only(current):
+    store, _, _ = current
+    operation = create_app(store).openapi()["paths"]["/api/v1/prices/backfill/current-portfolio/status"]["post"]
+    assert operation["x-data-effect"] == "read-only"
