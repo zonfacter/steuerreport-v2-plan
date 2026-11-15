@@ -14,8 +14,10 @@ from fastapi.testclient import TestClient
 from steuerreport_v2.api.app import create_app
 from steuerreport_v2.contracts.tax_filing_snapshots import (
     TaxFilingSnapshotCaptureRequest,
+    TaxFilingSnapshotComparison,
     TaxFilingSnapshotUsageConfirmationRequest,
 )
+from steuerreport_v2.contracts.tax_years import TaxYearFilingSummary
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.tax_filing_snapshots import (
     SUBMISSION_CONFIRMATION_TEXT,
@@ -23,6 +25,8 @@ from steuerreport_v2.domain.tax_filing_snapshots import (
     TaxFilingSnapshotService,
 )
 from steuerreport_v2.domain.tax_methodology import TaxMethodologyService
+from steuerreport_v2.domain.tax_filing_audit import TaxFilingAuditError, TaxFilingAuditService
+from steuerreport_v2.domain.tax_years import TaxYearService
 
 
 def _package(
@@ -34,6 +38,7 @@ def _package(
     rewards: str = "45.44",
     derivatives: str = "0",
     tax_free: str = "-37.85",
+    omit_field: str | None = None,
 ) -> bytes:
     summary_path = f"02_Steuerliche_CSVs/tax-year-{year}-filing-summary.json"
     summary = {
@@ -48,6 +53,8 @@ def _package(
         "tax_free_private_disposals_eur": tax_free,
         "tax_free_lines_count": 2,
     }
+    if omit_field is not None:
+        del summary[omit_field]
     summary_bytes = json.dumps(summary).encode("utf-8")
     manifest = {
         "label": f"steuerreport-v2-tax-year-{year}-evidence-package",
@@ -204,15 +211,14 @@ def test_comparison_uses_submitted_baseline_and_does_not_net_tax_categories(tmp_
     )
 
     report = service.comparison(2025)
-    by_key = {item.key: item for item in report.deltas}
-
     assert report.baseline_selection == "latest_submitted"
     assert report.amendment_review_required is True
     assert report.status == "changed_review_required"
-    assert by_key["taxable_private_disposals_eur"].delta_eur == Decimal("2277.91")
-    assert by_key["rewards_mining_staking_income_eur"].delta_eur == Decimal("-45.44")
-    assert by_key["taxable_private_disposals_eur"].requires_review is True
-    assert by_key["rewards_mining_staking_income_eur"].requires_review is True
+    assert report.comparison_scope.aggregate_status == "different"
+    deltas = {row.key: row.delta_eur for row in report.deltas}
+    assert deltas["taxable_private_disposals_eur"] == Decimal("2277.91")
+    assert deltas["rewards_mining_staking_income_eur"] == Decimal("-45.44")
+    assert report.declaration_change_detected is True
 
 
 def test_usage_confirmation_is_append_only_and_keeps_used_package_as_baseline(tmp_path):
@@ -324,8 +330,58 @@ def test_archive_tampering_is_detected_and_download_is_blocked(tmp_path):
     archive_path.write_bytes(b"manipulated")
 
     assert service.get(snapshot.snapshot_id).integrity_status == "mismatch"
+    comparison = service.comparison(2025)
+    assert comparison.integrity_blocked is True
+    assert comparison.status == "integrity_blocked"
+    assert comparison.comparison_scope.aggregate_status == "not_compared"
+    assert comparison.comparison_scope.tax_lines == "not_compared"
     with pytest.raises(TaxFilingSnapshotError, match="Archivintegritaet"):
         service.read_package(snapshot.snapshot_id)
+
+
+def test_aggregate_scope_distinguishes_missing_baseline_and_supporting_delta(tmp_path):
+    service = _service(tmp_path)
+    missing = service.comparison(2025)
+    assert missing.status == "no_snapshot"
+    assert missing.comparison_scope.aggregate_status == "not_compared"
+    assert missing.comparison_scope.events == "not_compared"
+
+    package = _package(2025, private_result="0", proceeds="1", costs="0",
+                       rewards="0", derivatives="0", tax_free="0")
+    reference = service.capture_package(
+        year=2025, package_bytes=package,
+        request=TaxFilingSnapshotCaptureRequest(state="reference"), source_kind="test",
+    ).snapshot
+    submitted = service.capture_from_snapshot(
+        year=2025,
+        request=TaxFilingSnapshotCaptureRequest(
+            state="submitted", source_snapshot_id=reference.snapshot_id,
+            confirmation_text=SUBMISSION_CONFIRMATION_TEXT,
+            submitted_at="2026-07-06T10:00:00+00:00",
+        ),
+    ).snapshot
+    report = service.comparison(2025)
+    by_key = {item.key: item for item in report.deltas}
+    assert report.status == "unchanged"
+    assert report.declaration_change_detected is False
+    assert report.amendment_review_required is False
+    assert report.comparison_scope.aggregate_status == "different"
+    assert by_key["taxable_disposal_proceeds_eur"].delta_eur == Decimal("-1")
+    assert service.read_package(submitted.snapshot_id) == package
+
+
+def test_missing_reference_aggregate_does_not_become_proven_equal(tmp_path):
+    service = _service(tmp_path)
+    package = _package(
+        2025, private_result="0", proceeds="0", costs="0", rewards="0",
+        derivatives="0", tax_free="0", omit_field="acquisition_cost_eur",
+    )
+    with pytest.raises(TaxFilingSnapshotError, match="unvollstaendig oder ungueltig"):
+        service.capture_package(
+            year=2025, package_bytes=package,
+            request=TaxFilingSnapshotCaptureRequest(state="reference"), source_kind="test",
+        )
+    assert service.list().snapshots == []
 
 
 def test_package_year_and_manifest_file_hash_are_validated(tmp_path):
@@ -383,8 +439,14 @@ def test_snapshot_api_exposes_human_comparison_and_archived_package(tmp_path):
     assert listing.json()["data"]["reference_count"] == 1
     assert comparison.status_code == 200
     assert comparison.json()["data"]["submission_confirmation_required"] is True
+    scope = comparison.json()["data"]["comparison_scope"]
+    assert scope["aggregate_status"] == "different"
+    assert scope["events"] == scope["lots"] == scope["tax_lines"] == "not_compared"
+    assert scope["detail_reconciliation"] == "not_compared"
+    assert scope["reference_detail_binding"] == scope["current_detail_binding"] == "not_verified"
     assert human.status_code == 200
     assert "Abgabestand-Vergleich" in human.text
+    assert "Einzelpositionsparitaet ist nicht nachgewiesen" in human.text
     assert "Drucken / als PDF sichern" in human.text
     assert delta_csv.status_code == 200
     assert "Filed_Value_EUR,Current_Value_EUR,Delta_EUR" in delta_csv.text
@@ -398,3 +460,111 @@ def test_snapshot_api_exposes_human_comparison_and_archived_package(tmp_path):
     assert comparison_after_usage.json()["data"]["submission_timestamp_required"] is True
     assert submitted.status_code == 200
     assert submitted.json()["data"]["snapshot"]["state"] == "submitted"
+
+
+def _submitted_synthetic(service, *, private_result="0"):
+    package = _package(2025, private_result=private_result, proceeds="0", costs="0",
+                       rewards="0", derivatives="0", tax_free="0")
+    reference = service.capture_package(
+        year=2025, package_bytes=package,
+        request=TaxFilingSnapshotCaptureRequest(state="reference"), source_kind="test",
+    ).snapshot
+    submitted = service.capture_from_snapshot(
+        year=2025, request=TaxFilingSnapshotCaptureRequest(
+            state="submitted", source_snapshot_id=reference.snapshot_id,
+            confirmation_text=SUBMISSION_CONFIRMATION_TEXT,
+            submitted_at="2026-07-06T10:00:00+00:00",
+        ),
+    ).snapshot
+    return submitted, package
+
+
+def test_summary_register_mismatch_with_verified_package_is_not_compared(tmp_path):
+    service = _service(tmp_path)
+    submitted, package = _submitted_synthetic(service, private_result="100")
+    with service.store.connect() as con:
+        row = con.execute("select summary_json from tax_filing_snapshots where snapshot_id = ?", [submitted.snapshot_id]).fetchone()
+        summary = json.loads(row[0])
+        summary["taxable_private_disposals_eur"] = "0"
+        con.execute("update tax_filing_snapshots set summary_json = ? where snapshot_id = ?", [json.dumps(summary), submitted.snapshot_id])
+    assert service.read_package(submitted.snapshot_id) == package
+    report = service.comparison(2025)
+    assert report.comparison_scope.aggregate_status == "not_compared"
+    assert report.status != "unchanged"
+    assert report.baseline.values is None
+    assert report.deltas == []
+    assert report.amendment_review_required is True
+    assert 2025 not in TaxMethodologyService(service.store)._confirmed_filing_snapshot_amounts()
+    with pytest.raises(TaxFilingAuditError, match="nicht an das Archiv gebunden"):
+        TaxFilingAuditService(service.store).build(2025, materialize=False)
+
+
+@pytest.mark.parametrize("kind", ["incomplete", "wrong_year", "unbound"])
+def test_untrusted_current_summary_is_not_compared(tmp_path, kind):
+    service = _service(tmp_path)
+    _submitted_synthetic(service)
+    summary = TaxYearService(service.store).filing_summary(2025)
+    if kind == "wrong_year":
+        summary = summary.model_copy(update={"year": 2024})
+    elif kind == "incomplete":
+        data = summary.model_dump()
+        del data["acquisition_cost_eur"]
+        summary = TaxYearFilingSummary.model_validate(data)
+    report = service.comparison(2025, current_summary=summary)
+    assert report.comparison_scope.aggregate_status == "not_compared"
+    assert report.status != "unchanged"
+    assert report.amendment_review_required is True
+    assert report.declaration_change_detected is None
+    if kind != "unbound":
+        assert report.current_values is None
+
+
+@pytest.mark.parametrize("invalid", ["null", "{}", "not-json"])
+def test_invalid_stored_summary_is_not_compared_or_crashed(tmp_path, invalid):
+    service = _service(tmp_path)
+    submitted, package = _submitted_synthetic(service)
+    with service.store.connect() as con:
+        con.execute("update tax_filing_snapshots set summary_json = ? where snapshot_id = ?", [invalid, submitted.snapshot_id])
+    report = service.comparison(2025)
+    assert report.comparison_scope.aggregate_status == "not_compared"
+    assert report.status != "unchanged"
+    assert service.read_package(submitted.snapshot_id) == package
+
+
+def test_not_compared_is_explicit_in_html(tmp_path):
+    service = _service(tmp_path)
+    submitted, _ = _submitted_synthetic(service)
+    with service.store.connect() as con:
+        con.execute("update tax_filing_snapshots set summary_json='{}' where snapshot_id=?", [submitted.snapshot_id])
+    client = TestClient(create_app(service.store))
+    data = client.get("/api/v1/tax-years/2025/filing-snapshot-comparison").json()["data"]
+    assert data["comparison_scope"]["aggregate_status"] == "not_compared"
+    human = client.get("/api/v1/tax-years/2025/filing-snapshot-comparison.html")
+    assert "nicht verglichen" in human.text.lower()
+    assert "Keine Abweichung." not in human.text
+
+
+def test_not_compared_is_explicit_in_csv(tmp_path):
+    import csv
+    import io
+
+    service = _service(tmp_path)
+    submitted, _ = _submitted_synthetic(service)
+    with service.store.connect() as con:
+        con.execute("update tax_filing_snapshots set summary_json='{}' where snapshot_id=?", [submitted.snapshot_id])
+    client = TestClient(create_app(service.store))
+    csv_response = client.get("/api/v1/export/tax-years/2025/filing-snapshot-comparison.csv")
+    assert csv_response.status_code == 200
+    assert "not_compared" in csv_response.text
+    row = next(csv.DictReader(io.StringIO(csv_response.text)))
+    assert row["Aggregate_Status"] == "not_compared"
+    assert row["Delta_EUR"] == ""
+    assert "Keine Abweichung." not in csv_response.text
+
+
+def test_old_comparison_response_deserializes_without_scope(tmp_path):
+    service = _service(tmp_path)
+    old = service.comparison(2025).model_dump()
+    del old["comparison_scope"]
+    restored = TaxFilingSnapshotComparison.model_validate(old)
+    assert restored.comparison_scope is None

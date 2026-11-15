@@ -97,6 +97,18 @@ class DuckDbStore:
         finally:
             self._connection_lock.release()
 
+    @contextmanager
+    def read_snapshot(self):
+        """Keep dependent store reads on one read-only DuckDB transaction."""
+        with self.connect() as con:
+            con.execute("BEGIN TRANSACTION READ ONLY")
+            snapshot = _ReadSnapshotStore(self, con)
+            try:
+                yield snapshot
+            finally:
+                snapshot._active = False
+                con.execute("ROLLBACK")
+
     def ensure_schema(self, con: duckdb.DuckDBPyConnection) -> None:
         has_schema_meta = con.execute(
             "select count(*) from information_schema.tables "
@@ -1876,3 +1888,36 @@ class DuckDbStore:
                 """
             ).fetchall()
         return {row[0]: row[1] for row in rows}
+
+
+class _ReadSnapshotConnection:
+    def __init__(self, store):
+        self._store = store
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def close(self):
+        pass
+
+    def __getattr__(self, name):
+        if not self._store._active:
+            raise RuntimeError("read_snapshot_closed")
+        if name in {"commit", "rollback", "begin", "cursor", "duplicate"}:
+            raise RuntimeError("read_snapshot_connection_operation_not_supported")
+        return getattr(self._store._snapshot_connection, name)
+
+
+class _ReadSnapshotStore(DuckDbStore):
+    def __init__(self, source, connection):
+        super().__init__(source.path)
+        self._snapshot_connection = connection
+        self._active = True
+
+    def connect(self):
+        if not self._active:
+            raise RuntimeError("read_snapshot_closed")
+        return _ReadSnapshotConnection(self)
