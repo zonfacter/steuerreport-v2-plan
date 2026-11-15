@@ -109,6 +109,21 @@ class DuckDbStore:
                 snapshot._active = False
                 con.execute("ROLLBACK")
 
+    @contextmanager
+    def read_initialized_snapshot(self):
+        """Read an existing application store without implicitly initializing it."""
+        with self._connection_lock:
+            if not self._schema_ready:
+                raise RuntimeError("database_store_not_initialized")
+            with duckdb.connect(str(self.path), read_only=True) as con:
+                con.execute("BEGIN TRANSACTION READ ONLY")
+                snapshot = _ReadSnapshotStore(self, con)
+                try:
+                    yield snapshot
+                finally:
+                    snapshot._active = False
+                    con.execute("ROLLBACK")
+
     def ensure_schema(self, con: duckdb.DuckDBPyConnection) -> None:
         has_schema_meta = con.execute(
             "select count(*) from information_schema.tables "
@@ -2088,7 +2103,10 @@ class _ReadSnapshotConnection:
 
 class _ReadSnapshotStore(DuckDbStore):
     def __init__(self, source, connection):
-        super().__init__(source.path)
+        self.path = source.path
+        self._schema_lock = source._schema_lock
+        self._connection_lock = source._connection_lock
+        self._schema_ready = True
         self._snapshot_connection = connection
         self._active = True
 

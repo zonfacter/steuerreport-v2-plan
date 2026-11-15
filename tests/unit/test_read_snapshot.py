@@ -65,3 +65,43 @@ def test_real_filing_summary_runs_inside_read_only_snapshot(tmp_path, monkeypatc
         assert summary.year == 2025
         assert summary.taxable_private_disposals_eur == Decimal("0")
         assert "taxable_private_disposals_eur" in summary.model_fields_set
+
+
+def test_initialized_snapshot_does_not_bootstrap_missing_database(tmp_path, monkeypatch):
+    store = DuckDbStore(tmp_path / "not-initialized.duckdb")
+    monkeypatch.setattr(store, "ensure_schema", lambda *_: pytest.fail("Unexpected schema initialization"))
+    with pytest.raises(RuntimeError, match="database_store_not_initialized"):
+        with store.read_initialized_snapshot():
+            pytest.fail("Uninitialized store was admitted")
+    assert not store.path.exists()
+
+
+def test_initialized_snapshot_never_recreates_a_removed_database(tmp_path):
+    store = DuckDbStore(tmp_path / "removed.duckdb")
+    with store.connect():
+        pass
+    assert store._schema_ready
+    store.path.unlink()
+    with pytest.raises((RuntimeError, duckdb.IOException)):
+        with store.read_initialized_snapshot():
+            pytest.fail("Reader admitted a recreated empty database")
+    assert not store.path.exists()
+
+
+def test_initialized_snapshot_is_read_only_without_directory_or_schema_work(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    store = DuckDbStore(tmp_path / "existing.duckdb")
+    first = store.add_price_point(price("2"))
+    original = store.path.read_bytes()
+    monkeypatch.setattr(store, "ensure_schema", lambda *_: pytest.fail("Unexpected schema initialization"))
+    with monkeypatch.context() as guard:
+        guard.setattr(Path, "mkdir", lambda *_args, **_kwargs: pytest.fail("Reader attempted directory creation"))
+        with store.read_initialized_snapshot() as snapshot:
+            assert [p.price_id for p in snapshot.list_price_points()] == [first.price_id]
+            with pytest.raises((duckdb.TransactionException, duckdb.InvalidInputException), match="read.only"):
+                snapshot.add_price_point(price("9"))
+    assert store.path.read_bytes() == original
+    assert len(store.list_price_points()) == 1
+    with pytest.raises(RuntimeError, match="read_snapshot_closed"):
+        snapshot.list_price_points()

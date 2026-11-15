@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Entwicklung #63: Gespeicherte Preisvorschauen weisen nicht pruefbare Eintraege
+  mit unbekannten Metadaten aus, statt sie zu verschlucken. Getrennte Lade-,
+  Teilfehler-, Leer- und veraltete Listenstaende; erneutes Lesen bleibt lesend.
+- Entwicklung #46: Neu erstellte Preisvorschauen binden konkrete gespeicherte
+  Preis-IDs und Fingerprints. Ein begrenzter lesender Reader und die
+  Benutzeroberflaeche verknuepfen ausdruecklich uebernommene Preiszeilen mit
+  ihren geprueften Originalbytes. Kein Nachtragen alter Archive, keine
+  automatische Zeit-/Methodenzulassung; keine Jahresfreigabe.
 - Entwicklung #63: Historischen Preis-Uebernahmestatus an das unveraenderte
   Entscheidungsdokument und die lokale Quittung binden. Widerspruch sperrt
   auch den idempotenten Apply; keine stille Reparatur. Die Oberflaeche nimmt
@@ -10,8 +18,8 @@
   menschlich gepruefte Originalzuordnung implementiert, mit Direkt-EUR,
   USD/FX und dokumentierten Tagesmethoden. 131 unabhaengige Proben plus 15
   unabhaengige Review-Gegenproben als zusaetzliches hashgebundenes CI-Gate.
-  Noch nicht an Reader, API, Anwendungs-
-  Gates oder Benutzerfreigabe angebunden; keine echte Entscheidung gespeichert.
+  Noch nicht an Anwendungs-Gates oder die menschliche Methodenfreigabe
+  angebunden; der neue Importbeleg-Reader ist davon getrennt.
 - Entwicklung #46: Gespeicherte Stichtagsreferenzzeit und belegte Kurs-/FX-Zeit
   getrennt ausweisen. Unbelegte Same-Day-Referenzen und Tokenannahmen geben
   das strenge Stichtags-Gate nicht frei; ungepruefte Kleinstwerte beweisen

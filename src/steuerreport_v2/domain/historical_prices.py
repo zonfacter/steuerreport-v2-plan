@@ -13,22 +13,28 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 from uuid import UUID
+
+from pydantic import ValidationError
 
 from steuerreport_v2 import __version__
 from steuerreport_v2.contracts.admin import AdminSettingWrite
 from steuerreport_v2.contracts.historical_prices import (
+    HistoricalPricePreviewListItem,
     HistoricalPriceQuery,
     ManualHistoricalPricePreviewRequest,
     PriceMapping,
 )
-from steuerreport_v2.contracts.prices import PricePointCreate
+from steuerreport_v2.contracts.prices import PricePoint, PricePointCreate
 from steuerreport_v2.contracts.review import ReviewDecision
 from steuerreport_v2.domain.ai_changes import DERIVED_TABLES, _fingerprint, _summary, _tax_delta, _tax_groups, encoded
 from steuerreport_v2.domain.connections import ConnectionService
 from steuerreport_v2.domain.external_http import managed_client, outbound_scope
 from steuerreport_v2.domain.external_price_backfill import ExternalPriceBackfillService
 from steuerreport_v2.domain.pipeline import PipelineService
+from steuerreport_v2.domain.price_evidence import price_point_fingerprint
+from steuerreport_v2.domain.price_policy import as_utc
 from steuerreport_v2.domain.request_limits import RequestLimitError
 from steuerreport_v2.domain.valuation import PriceCoverageService
 from steuerreport_v2.domain.tax_time import event_reporting_year_sql, reporting_tax_year
@@ -887,9 +893,25 @@ class HistoricalPriceService:
             (directory / "calculation.prepared").chmod(0o600)
         from steuerreport_v2.db.duckdb_store import DuckDbStore
         clone = DuckDbStore(directory / "calculation.prepared")
-        clone.add_price_points(prices)
+        created = clone.add_price_points(prices)
         pipeline = PipelineService(clone).rebuild_ledgers(replay_event_corrections=False)
         with clone.connect() as con:
+            stored = con.execute(
+                "select price_id, asset, price_eur, priced_at, source, confidence from price_ledger "
+                "where price_id in (select unnest(?))", [[point.price_id for point in created]],
+            ).fetchall()
+            points = {row[0]: PricePoint(price_id=row[0], asset=row[1], price_eur=row[2],
+                                        priced_at=as_utc(row[3]), source=row[4], confidence=row[5])
+                      for row in stored}
+            if len(points) != len(created):
+                fail("historical_price_prepared_binding_invalid")
+            preview["price_bindings"] = [{"price_id": point.price_id,
+                                          "price_fingerprint": price_point_fingerprint(points[point.price_id]),
+                                          "asset": points[point.price_id].asset,
+                                          "price_eur": str(points[point.price_id].price_eur),
+                                          "stored_reference_at": points[point.price_id].priced_at.isoformat()}
+                                         for point in created]
+            preview["price_bindings_version"] = 1
             if self._source_digest(con) != preview["frozen_source_sha256"]:
                 fail("historical_price_source_changed")
             preview["canonical_events_unchanged"] = True
@@ -988,15 +1010,97 @@ class HistoricalPriceService:
         return self._path("evidence", sha + ".body").read_bytes()
 
     def recent(self):
-        if not self.root.exists():
+        root = self._path()
+        try:
+            root.stat()
+        except FileNotFoundError:
             return []
+        if not root.is_dir():
+            fail("historical_price_storage_invalid")
+
+        candidates = []
+        with os.scandir(root) as entries:
+            for entry in entries:
+                try:
+                    if str(UUID(entry.name)) != entry.name:
+                        continue
+                except ValueError:
+                    continue
+                unavailable = False
+                stamp = 0
+                try:
+                    stamp = entry.stat(follow_symlinks=False).st_mtime_ns
+                    if not entry.is_dir(follow_symlinks=False):
+                        unavailable = True
+                    else:
+                        info = (root / entry.name / "preview.json").lstat()
+                        stamp = info.st_mtime_ns
+                        unavailable = not stat.S_ISREG(info.st_mode)
+                except OSError:
+                    unavailable = True
+                candidates.append((stamp, entry.name, unavailable))
+
         results = []
-        for path in sorted(self.root.glob("*/preview.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
+        fields = set(HistoricalPricePreviewListItem.model_fields) - {"integrity_status", "error_code"}
+        allowed_codes = {
+            "historical_price_evidence_changed", "historical_price_apply_decision_invalid",
+            "historical_price_preview_unavailable",
+        }
+        for _, request_id, unavailable in sorted(candidates, reverse=True)[:20]:
+            self._path()
+            error_code = "historical_price_preview_unavailable"
             try:
-                preview = self.get(path.parent.name)
-                results.append({k: preview.get(k) for k in ("id", "created_at", "prices_count", "status", "applied", "preview_sha256", "pending_count", "open_count", "parent_preview_id", "collection_complete", "manual")})
-            except (ValueError, KeyError):
+                if unavailable:
+                    fail(error_code)
+                # Parse/canonicalize separately: document ValueErrors must not
+                # turn an unrelated database ValueError in get() into a row error.
+                try:
+                    document = self._json(self._directory(request_id) / "preview.json")
+                    if not isinstance(document, dict):
+                        fail("historical_price_evidence_changed")
+                    canonical_json(document)
+                    if any(key not in document for key in ("id", "preview_sha256", "created_at", "prices_count", "status")):
+                        fail("historical_price_evidence_changed")
+                    if not isinstance(document.get("query"), dict) or not isinstance(document.get("evidence"), list):
+                        fail("historical_price_evidence_changed")
+                    for evidence in document["evidence"]:
+                        sha = evidence.get("sha256") if isinstance(evidence, dict) else None
+                        if not isinstance(sha, str) or len(sha) != 64 or any(char not in "0123456789abcdef" for char in sha):
+                            fail("historical_price_evidence_changed")
+                    if self._uses_collection(document["query"]):
+                        if "plan_sha256" not in document:
+                            fail("historical_price_evidence_changed")
+                        plan = self._json(self._directory(request_id) / "plan.json")
+                        if not isinstance(plan, dict):
+                            fail("historical_price_evidence_changed")
+                        canonical_json(plan)
+                except HistoricalPriceError:
+                    raise
+                except (ValueError, OSError, RecursionError):
+                    fail(error_code)
+                preview = self.get(request_id)
+                if preview["id"] != request_id:
+                    fail("historical_price_evidence_changed")
+                item = HistoricalPricePreviewListItem.model_validate({
+                    **{key: preview.get(key) for key in fields},
+                    "integrity_status": "verified", "error_code": None,
+                })
+            except HistoricalPriceError as exc:
+                if str(exc) in allowed_codes:
+                    error_code = str(exc)
+            except (ValidationError, json.JSONDecodeError, UnicodeError):
+                pass
+            except OSError as exc:
+                # Only archive file failures are per-document. Database/unknown
+                # I/O failures retain their service-level failure semantics.
+                if exc.filename is None or not os.path.abspath(exc.filename).startswith(str(root.absolute()) + os.sep):
+                    raise
+            else:
+                results.append(item.model_dump())
                 continue
+            results.append(HistoricalPricePreviewListItem(
+                id=request_id, status="unavailable", integrity_status="unavailable", error_code=error_code,
+            ).model_dump())
         return results
 
     def apply(self, request_id, request):

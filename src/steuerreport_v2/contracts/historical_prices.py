@@ -256,3 +256,58 @@ class HistoricalPriceRow(BaseModel):
     fx_date: str | None = None
     source: str | None = None
     evidence_sha256: list[str] = Field(default_factory=list)
+
+
+class HistoricalPricePreviewListItem(BaseModel):
+    """Integritaetszustand einer Vorschau, keine Inhalts- oder Methodenfreigabe."""
+
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    id: str = Field(strict=True)
+    created_at: str | None = Field(default=None, strict=True)
+    prices_count: int | None = Field(default=None, strict=True, ge=0)
+    status: Literal["ready", "no_prices", "blocked", "unavailable"]
+    applied: bool | None = Field(default=None, strict=True)
+    preview_sha256: str | None = Field(default=None, strict=True, pattern=r"^[a-f0-9]{64}$")
+    pending_count: int | None = Field(default=None, strict=True, ge=0)
+    open_count: int | None = Field(default=None, strict=True, ge=0)
+    parent_preview_id: str | None = Field(default=None, strict=True)
+    collection_complete: bool | None = Field(default=None, strict=True)
+    manual: bool | None = Field(default=None, strict=True)
+    integrity_status: Literal["verified", "unavailable"]
+    error_code: Literal[
+        "historical_price_evidence_changed",
+        "historical_price_apply_decision_invalid",
+        "historical_price_preview_unavailable",
+    ] | None = None
+
+    @field_validator("id", "parent_preview_id")
+    @classmethod
+    def canonical_uuid(cls, value):
+        if value is not None and str(UUID(value)) != value:
+            raise ValueError("historical_price_preview_id_invalid")
+        return value
+
+    @field_validator("created_at")
+    @classmethod
+    def document_timestamp(cls, value):
+        if value is not None:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                raise ValueError("historical_price_preview_timestamp_invalid")
+        return value
+
+    @model_validator(mode="after")
+    def consistent_integrity(self):
+        metadata = (
+            self.created_at, self.prices_count, self.applied, self.preview_sha256,
+            self.pending_count, self.open_count, self.parent_preview_id,
+            self.collection_complete, self.manual,
+        )
+        if self.integrity_status == "unavailable":
+            if self.status != "unavailable" or self.error_code is None or any(value is not None for value in metadata):
+                raise ValueError("historical_price_preview_unavailable_metadata")
+        elif (self.status == "unavailable" or self.error_code is not None
+              or any(value is None for value in metadata[:4])):
+            raise ValueError("historical_price_preview_verified_metadata")
+        return self

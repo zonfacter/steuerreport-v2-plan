@@ -8,6 +8,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import csv
 import io
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -248,6 +249,37 @@ def main():
             expect(region.get_by_role("heading", name="Preisübernahme abgeschlossen")).to_be_visible()
             assert any(price.price_eur == Decimal("138") for price in store.list_price_points())
             assert len(provider_calls) == 4
+            # Echter preis-ID-gebundener Originalreader nach synthetischem Apply.
+            applied_preview = service.get(next(item["id"] for item in service.recent() if item["applied"]))
+            bound = applied_preview["price_bindings"][0]
+            import_start, import_provider_start = len(calls), len(provider_calls)
+            import_prices = store.list_price_points()
+            import_decisions = store.list_review_decisions()
+            region.locator("summary").filter(has_text="Originalzuordnung der übernommenen Preise").click()
+            binding_select = region.get_by_role("combobox", name="Übernommene Preiszeile", exact=True)
+            binding_select.select_option(bound["price_id"])
+            assert not [call for call in calls[import_start:] if "/prices/" in call["path"]]
+            region.get_by_role("button", name="Importbelege prüfen", exact=True).click()
+            original_group = region.get_by_role("group", name="Originalbindung der Preiszeile", exact=True)
+            expect(original_group.get_by_text("Importbindung dieser Preis-ID bestätigt.", exact=False)).to_be_visible()
+            expect(original_group.get_by_text("Beobachtungs- und Veröffentlichungszeiten: nicht geprüft.", exact=True)).to_be_visible()
+            original_href = original_group.get_by_role("link").first.get_attribute("href")
+            response = client.get(original_href)
+            assert response.status_code == 200
+            sha = original_href.rsplit("/", 1)[1]
+            assert hashlib.sha256(response.content).hexdigest() == sha
+            with page.expect_download() as downloaded:
+                original_group.get_by_role("link").first.click()
+            assert Path(downloaded.value.path()).read_bytes() == response.content
+            for width in (390, 768, 1280, 1440):
+                page.set_viewport_size({"width": width, "height": 1000})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
+                original_group.scroll_into_view_if_needed()
+                page.screenshot(path=str(args.output / f"import-original-{width}.png"), full_page=True)
+            assert not [call for call in calls[import_start:] if call["method"] != "GET"]
+            assert len(provider_calls) == import_provider_start and store.list_price_points() == import_prices
+            assert store.list_review_decisions() == import_decisions
+            page.set_viewport_size({"width": 1440, "height": 1000})
             page.reload(wait_until="domcontentloaded")
             expect(region.get_by_role("combobox", name="Jahr", exact=True)).to_have_value("all")
             region.locator("summary").filter(has_text="Gespeicherte Preisvorschauen").click()
@@ -442,6 +474,79 @@ def main():
             assert len(provider_calls) == provider_before and store.list_price_points() == prices_before
             with store.connect() as con:
                 assert con.execute("select * from review_decisions order by id").fetchall() == decision_before
+            # Recent-Proben erst nach den unveraenderten Workflow- und Bindungsfaellen.
+            # Diese Faelle benoetigen den integrierten Listenvertrag, nicht den alten Backendstand.
+            recent = region.get_by_role("region", name="Gespeicherte Preisvorschauen", exact=True)
+            recent_calls_start, recent_provider_start = len(calls), len(provider_calls)
+            recent_prices_before = store.list_price_points()
+            recent_sources_before = source_snapshot()
+            with store.connect() as con:
+                recent_decisions_before = con.execute("select * from review_decisions order by id").fetchall()
+            broken_id = "00000000-0000-4000-8000-000000000063"
+            missing_id = "00000000-0000-4000-8000-000000000064"
+            broken_directory = service._directory(broken_id)
+            broken_directory.mkdir(mode=0o700)
+            (broken_directory / "preview.json").write_bytes(b"{")
+            service._directory(missing_id).mkdir(mode=0o700)
+
+            def recent_row(identifier):
+                return recent.get_by_role("listitem", name="Preisvorschau " + identifier, exact=True)
+
+            recent.get_by_role("button", name="Liste aktualisieren", exact=True).click()
+            expect(recent.get_by_text("Ein Teil der gespeicherten Vorschauen ist derzeit nicht prüfbar.", exact=False)).to_be_visible()
+            for identifier in (final["id"], broken_id, missing_id):
+                row = recent_row(identifier)
+                expect(row.get_by_text("Preisanzahl unbekannt", exact=False)).to_be_visible()
+                expect(row.get_by_text("Übernahme nicht bestätigt", exact=False)).to_be_visible()
+                expect(row.get_by_role("button", name="Erneut prüfen", exact=False)).to_be_visible()
+                assert "0 Preise" not in row.inner_text()
+            expect(recent_row(first["id"]).get_by_role("button", name=re.compile(r" · 0 Preise · Vorschau$"))).to_be_visible()
+
+            # Ausschliesslich die disponible Fixture beschaedigen und spaeter exakt wiederherstellen.
+            recent_originals = {path: path.read_bytes() for path in service.root.glob("*/preview.json")}
+            for path in recent_originals:
+                path.chmod(0o600)
+                path.write_bytes(b"{")
+            recent.get_by_role("button", name="Liste aktualisieren", exact=True).click()
+            expect(recent.get_by_text("Keine der gespeicherten Vorschauen ist derzeit prüfbar.", exact=False)).to_be_visible()
+            expect(recent.get_by_text("Noch keine gespeicherte Preisvorschau.", exact=True)).to_have_count(0)
+            expect(recent.get_by_text("Integrität und Importbindung geprüft.", exact=True)).to_have_count(0)
+            for path, content in recent_originals.items():
+                path.write_bytes(content)
+                path.chmod(0o400)
+            recent_row(first["id"]).get_by_role("button", name="Erneut prüfen", exact=False).click()
+            expect(recent_row(first["id"]).get_by_role("button", name=re.compile(r" · 0 Preise · Vorschau$"))).to_be_visible()
+            expect(region.get_by_role("heading", name="Prüfstand nicht mehr bestätigt", exact=True)).to_be_visible()
+
+            # Globaler GET-Fehler darf den vorigen Mischbestand nicht als leere Liste ersetzen.
+            previous_count = recent.get_by_role("listitem").count()
+
+            def fail_recent(route):
+                calls.append({"method": route.request.method, "path": "/api/v1/prices/historical/previews", "body": None})
+                route.fulfill(status=503, content_type="application/json", body='{"status":"error","data":null,"errors":[]}')
+
+            page.route("**/api/v1/prices/historical/previews", fail_recent)
+            recent.get_by_role("button", name="Liste aktualisieren", exact=True).click()
+            expect(recent.get_by_role("alert")).to_contain_text("konnten nicht gelesen werden")
+            expect(recent.get_by_text("Vorheriger Listenstand", exact=False)).to_be_visible()
+            expect(recent.get_by_role("listitem")).to_have_count(previous_count)
+            expect(recent.get_by_text("Integrität und Importbindung geprüft.", exact=True)).to_have_count(0)
+            expect(recent.get_by_text("Noch keine gespeicherte Preisvorschau.", exact=True)).to_have_count(0)
+            page.unroute("**/api/v1/prices/historical/previews", fail_recent)
+            recent.get_by_role("button", name="Liste aktualisieren", exact=True).click()
+            expect(recent.get_by_role("alert")).to_have_count(0)
+            expect(recent_row(first["id"]).get_by_role("button", name=re.compile(r" · 0 Preise · Vorschau$"))).to_be_visible()
+            assert page.url.endswith("#portfolio?tab=prices&year=2024&asset=SOL")
+            assert all(call["method"] == "GET" for call in calls[recent_calls_start:])
+            assert len(provider_calls) == recent_provider_start and store.list_price_points() == recent_prices_before
+            assert source_snapshot() == recent_sources_before
+            with store.connect() as con:
+                assert con.execute("select * from review_decisions order by id").fetchall() == recent_decisions_before
+            for width in (390, 768, 1280, 1440):
+                page.set_viewport_size({"width": width, "height": 1000})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), ("recent", width)
+                recent.scroll_into_view_if_needed()
+                page.screenshot(path=str(args.output / f"recent-{width}.png"), full_page=True)
             page.wait_for_load_state("networkidle")
             assert not external and not errors, (external, errors)
             context.close()
@@ -452,7 +557,14 @@ def main():
                   "initial_events": 29, "additional_native_sol_fee_events": fee_count,
                   "automatic_fallback": {"scope": "tax_required", "strategy": "automatic", "section_budget": 2, "total_budget": 10,
                       "sections": 2, "http_requests": 3, "fx_requests": 1, "resolved_provider_id": "coingecko:solana", "auto_applied": False},
-                  "viewports": [390, 768, 1280, 1440], "screenshots": 16,
+                  "viewports": [390, 768, 1280, 1440], "screenshots": 24,
+                  "import_original_guard": {"explicit_get_only": True, "exact_original_download": True,
+                      "price_and_review_rows_unchanged": True, "time_and_method_not_admitted": True,
+                      "four_widths_no_overflow": True},
+                  "recent_guard": {"mixed_and_all_unavailable_visible": True, "missing_and_invalid_json_visible": True,
+                      "verified_zero_distinguished_from_unknown": True, "global_error_keeps_stale_list": True,
+                      "read_only_revalidation_recovers_row": True, "previous_preview_context_preserved": True,
+                      "post_requests": 0, "provider_requests": 0, "source_and_decision_rows_unchanged": True},
                   "apply_binding_guard": {"read_error_visible": True, "previous_success_label_removed": True,
                       "read_case_post_requests": 0, "provider_requests": 0,
                       "reads_preserve_test_decisions": True, "price_rows_unchanged": True,

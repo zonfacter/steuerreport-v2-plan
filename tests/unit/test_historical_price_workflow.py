@@ -948,6 +948,127 @@ def test_apply_status_rejects_conflicting_local_receipt(workflow, mutation):
     assert len(workflow.applied_callbacks) == 1 and not workflow.calls
 
 
+def prepared_original(workflow, *, applied=True):
+    seed(workflow)
+    preview = data(workflow.client.post(BASE + "/manual-previews", json=manual_price_request(workflow)))
+    assert preview["price_bindings_version"] == 1
+    binding, = preview["price_bindings"]
+    assert binding["asset"] == "TOKEN000" and Decimal(binding["price_eur"]) == Decimal("125.5")
+    if applied:
+        data(workflow.client.post(BASE + f"/previews/{preview['id']}/apply", json=approval(preview)))
+    endpoint = BASE + f"/previews/{preview['id']}/prices/{binding['price_id']}/evidence"
+    return preview, binding, endpoint
+
+
+def test_actual_import_price_id_links_original_without_admitting_time_or_method(workflow, monkeypatch):
+    from pathlib import Path
+    from steuerreport_v2.domain.price_import_evidence import PriceImportEvidenceService
+
+    preview, binding, endpoint = prepared_original(workflow)
+    before = source_snapshot(workflow)
+    prices = workflow.store.list_price_points()
+    decisions = workflow.store.list_review_decisions()
+    original = b"synthetic original price evidence"
+    sha = hashlib.sha256(original).hexdigest()
+    files = {path: path.read_bytes() for path in workflow.service.root.rglob("*") if path.is_file()}
+    reader = PriceImportEvidenceService(workflow.store)
+    with monkeypatch.context() as guard:
+        guard.setattr(Path, "read_bytes", lambda *_: pytest.fail("Unbounded reader access"))
+        guard.setattr(Path, "mkdir", lambda *_a, **_k: pytest.fail("Reader directory initialization"))
+        guard.setattr(workflow.store, "ensure_schema", lambda *_: pytest.fail("Reader schema initialization"))
+        report = reader.read(preview["id"], binding["price_id"])
+        assert reader.original(preview["id"], binding["price_id"], sha) == original
+    body = data(workflow.client.get(endpoint))
+    assert body["status"] == report.status == "verified_import_binding"
+    assert body["integrity_scope"] == "selected_price_only"
+    assert body["price_fingerprint"] == binding["price_fingerprint"]
+    assert body["strict_eligible"] is False and body["admission_status"] == "not_reviewed"
+    assert body["observed_at"] is body["price_published_at"] is body["fx_published_at"] is None
+    ref, = body["originals"]
+    assert ref["sha256"] == sha and ref["byte_length"] == len(original)
+    response = workflow.client.get(ref["download_url"])
+    assert response.status_code == 200 and response.content == original
+    assert str(workflow.store.path) not in json.dumps(body)
+    assert "source_reference" not in json.dumps(body)
+    assert source_snapshot(workflow) == before and workflow.store.list_price_points() == prices
+    assert workflow.store.list_review_decisions() == decisions
+    assert {path: path.read_bytes() for path in files} == files
+    assert not workflow.calls and len(workflow.applied_callbacks) == 1
+
+
+def test_price_binding_is_not_imported_before_explicit_apply(workflow):
+    _, _, endpoint = prepared_original(workflow, applied=False)
+    error(workflow.client.get(endpoint), "historical_price_not_applied")
+    assert not workflow.store.list_price_points() and not workflow.store.list_review_decisions()
+
+
+@pytest.mark.parametrize("field,value", [("price_eur", "999"), ("source", "synthetic-other"), ("confidence", "0.5")])
+def test_changed_live_price_cannot_reuse_original_binding(workflow, field, value):
+    _, binding, endpoint = prepared_original(workflow)
+    assert field in {"price_eur", "source", "confidence"}
+    with workflow.store.connect() as con:
+        con.execute(f"update price_ledger set {field}=? where price_id=?", [value, binding["price_id"]])
+    before = workflow.store.list_price_points()
+    error(workflow.client.get(endpoint), "historical_price_binding_invalid")
+    assert workflow.store.list_price_points() == before
+
+
+def test_another_real_price_id_cannot_claim_the_previews_original(workflow):
+    from steuerreport_v2.contracts.prices import PricePointCreate
+
+    preview, _, _ = prepared_original(workflow)
+    other = workflow.store.add_price_point(PricePointCreate(asset="TOKEN000", price_eur=Decimal("125.5"),
+        priced_at=AT, source="synthetic-other"))
+    error(workflow.client.get(BASE + f"/previews/{preview['id']}/prices/{other.price_id}/evidence"),
+          "historical_price_binding_invalid")
+
+
+@pytest.mark.parametrize("mutation", ["missing_binding", "duplicate_binding", "wrong_hash", "wrong_decision", "symlink_original", "row_without_evidence"])
+def test_import_original_reader_rejects_missing_or_corrupted_binding(workflow, mutation):
+    preview, _, endpoint = prepared_original(workflow)
+    directory = workflow.service._directory(preview["id"])
+    if mutation == "wrong_decision":
+        with workflow.store.connect() as con:
+            con.execute("update review_decisions set payload_json='{}' where id=?", ["historical-price:" + preview["id"]])
+        expected = "historical_price_apply_decision_invalid"
+    elif mutation == "symlink_original":
+        path = workflow.service._path("evidence", preview["evidence"][0]["sha256"] + ".body")
+        target = path.with_suffix(".outside-fixture")
+        path.rename(target)
+        path.symlink_to(target)
+        expected = "historical_price_evidence_changed"
+    else:
+        modified = dict(preview)
+        modified.pop("applied", None)
+        if mutation == "missing_binding":
+            modified.pop("price_bindings_version")
+            expected = "historical_price_binding_missing"
+        elif mutation == "duplicate_binding":
+            modified["price_bindings"].append(dict(modified["price_bindings"][0]))
+            expected = "historical_price_binding_invalid"
+        elif mutation == "row_without_evidence":
+            modified["rows"][0]["evidence_sha256"] = []
+            expected = "historical_price_binding_invalid"
+        else:
+            modified["price_bindings"][0]["price_fingerprint"] = "0" * 64
+            expected = "historical_price_binding_invalid"
+        modified["preview_sha256"] = module.digest({k: v for k, v in modified.items() if k != "preview_sha256"})
+        file = directory / "preview.json"
+        file.chmod(0o600)
+        file.write_text(json.dumps(modified))
+        # Bind a synthetic stored decision to the modified fixture; no real approval.
+        with workflow.store.connect() as con:
+            raw, = con.execute("select payload_json from review_decisions where id=?", ["historical-price:" + preview["id"]]).fetchone()
+            decision = json.loads(raw)
+            decision["payload"]["preview_sha256"] = modified["preview_sha256"]
+            con.execute("update review_decisions set payload_json=? where id=?", [json.dumps(decision), decision["decision_id"]])
+        receipt = directory / "applied.json"
+        receipt.unlink()
+    before = workflow.store.list_price_points()
+    error(workflow.client.get(endpoint), expected)
+    assert workflow.store.list_price_points() == before and not workflow.calls
+
+
 @pytest.mark.parametrize(
     "base,quote,rate,expected",
     [("USD", "EUR", "0.9", "90"), ("EUR", "USD", "1.25", "80")],
