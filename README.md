@@ -130,6 +130,14 @@ des Secret-Stores ersetzt weder Dateirechte noch Host-/Backup-Verschluesselung.
 Kein Schluessel, Profil oder privater Export darf in den Build-Kontext oder
 in ein Image kopiert werden. `.dockerignore` verwendet eine Positivliste.
 
+Eine einzelne Datenbankkopie ersetzt diese vollstaendige Volumesicherung nicht.
+Fuer eine bereits sauber geschlossene DuckDB steht im Entwicklungsstand ein
+explizites, nicht ueberschreibendes Offline-Werkzeug zur Verfuegung:
+`python -m steuerreport_v2.db.offline_snapshot --help`. Es prueft Kopie und
+Tabellen und verweigert vorhandene WALs oder belegte Ziele. Es stoppt keine
+Dienste und repariert keine abgestuerzte Datenbank. Anwendung, Rueckweg und
+Grenzen: [Offline-Datenbankkopie](docs/OFFLINE_DATENBANKKOPIE.md).
+
 ### Images veroeffentlichen
 
 Der Workflow `Publish GHCR Image` startet bei veroeffentlichten Releases

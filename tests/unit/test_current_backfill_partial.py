@@ -329,6 +329,34 @@ def test_status_contract_is_read_only(current):
     assert operation["x-data-effect"] == "read-only"
 
 
+def test_offline_clone_preserves_result_journal_prices_and_replay_guard(current, tmp_path):
+    from steuerreport_v2.db.offline_snapshot import clone_offline_database
+
+    store, payload, calls = current
+    original = TestClient(create_app(store)).post("/api/v1/prices/backfill/current-portfolio", json=payload).json()
+    assert original["data"]["imported_prices"] == 2
+    assert original["data"]["pipeline_status"] == "completed"
+    assert original["data"]["result_journal_status"] == "recorded"
+    with store.connect() as con:
+        journal = con.execute("select * from current_price_backfill_requests").fetchall()
+    before = store.path.read_bytes()
+    backup, restored = tmp_path / "backup.duckdb", tmp_path / "restored.duckdb"
+    proof = clone_offline_database(store.path, backup)
+    restored_proof = clone_offline_database(backup, restored, expected_sha256=proof.target_sha256)
+    assert proof.source_sha256 == restored_proof.target_sha256
+    assert store.path.read_bytes() == before == restored.read_bytes()
+    recovered = DuckDbStore(restored)
+    client = TestClient(create_app(recovered))
+    response = client.post("/api/v1/prices/backfill/current-portfolio/status", json={"request_id": payload["request_id"]})
+    assert response.status_code == 200 and response.json()["data"]["result"] == original["data"]
+    assert response.json()["warnings"] == original["warnings"]
+    assert client.post("/api/v1/prices/backfill/current-portfolio", json=payload).status_code == 409
+    assert {p.price_id for p in recovered.list_price_points()} == set(original["data"]["stored_price_ids"])
+    with recovered.connect() as con:
+        assert con.execute("select * from current_price_backfill_requests").fetchall() == journal
+    assert calls == ["coin", "defi"] and store.path.read_bytes() == before
+
+
 def test_partial_price_job_and_filing_comparison_share_state_without_reexecution(current, monkeypatch):
     import hashlib
     import io

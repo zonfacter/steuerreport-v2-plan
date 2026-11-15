@@ -79,35 +79,28 @@ def test_migration_stops_before_followup_steps(scripts, tmp_path, monkeypatch, k
 
 @pytest.mark.parametrize("which", ["jup", "migration"])
 @pytest.mark.parametrize("kind", ["storage", "pipeline", "jobs"])
-@pytest.mark.parametrize("phase", ["stage", "live"])
-def test_cli_failure_stops_without_restore(scripts, tmp_path, monkeypatch, capsys, which, kind, phase):
+@pytest.mark.parametrize("execute", [False, True])
+def test_cli_cannot_reach_unsafe_stage_or_live_even_on_backfill_failure(scripts, tmp_path, monkeypatch, capsys, which, kind, execute):
     jup, migration = scripts
     module = jup if which == "jup" else migration
-    stage = tmp_path / "stage"
     live = tmp_path / "live"
-    monkeypatch.setattr(module, "_snapshot_database", lambda *args: stage)
-    monkeypatch.setattr(module, "_backup_database", lambda *args: tmp_path / "backup")
-    monkeypatch.setattr(module.shutil, "copy2", lambda *args: pytest.fail("automatic restore must not run"))
+    monkeypatch.setattr("shutil.copy2", lambda *args: pytest.fail("automatic restore must not run"))
     error = {"storage": HistoricalBackfillStorageUnknown, "pipeline": HistoricalBackfillPipelineFailed,
              "jobs": HistoricalBackfillJobsFailed}[kind]
+    calls = []
     def run(path, **kwargs):
-        if path == (stage if phase == "stage" else live):
-            raise error() if kind == "storage" else error(["synthetic-price-id"])
-        return {"review": {"allow_export": True}, "reconciliation_rows": []}
+        calls.append(path)
+        raise error() if kind == "storage" else error(["synthetic-price-id"])
     if which == "jup":
-        monkeypatch.setattr(jup, "_fetch_balance_changes", lambda *args, **kwargs: ([{}], {}))
-        monkeypatch.setattr(jup, "_rows_from_balance_changes", lambda *args: [{}])
-        monkeypatch.setattr(jup, "_jup_reconciliation_export_ready", lambda rows: True)
+        monkeypatch.setattr(jup, "_fetch_balance_changes", lambda *args, **kwargs: pytest.fail("blocked CLI must not fetch"))
         monkeypatch.setattr(jup, "_apply", run)
     else:
         monkeypatch.setattr(migration, "_run_full_import", run)
-    monkeypatch.setattr(sys, "argv", ["script", "--execute", "--db", str(live)])
+    monkeypatch.setattr(sys, "argv", ["script", "--db", str(live)] + (["--execute"] if execute else []))
     assert module.main() == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["blocked_reason"] == ("stage_price_backfill_incomplete" if phase == "stage" else "live_price_backfill_incomplete_state_unknown_or_partial")
-    assert result["target_changed"] is (False if phase == "stage" else None)
+    assert result["blocked_reason"] == "unsafe_database_snapshot_and_restore_unavailable"
+    assert result["target_changed"] is False
+    assert result["stage_attempted"] is False and result["restore_attempted"] is False
+    assert calls == [] and not live.exists()
     assert "restored" not in result["blocked_reason"]
-    if kind != "storage":
-        assert result[f"{phase}_confirmed_backfill_price_ids"] == ["synthetic-price-id"]
-    else:
-        assert f"{phase}_confirmed_backfill_price_ids" not in result
