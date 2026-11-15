@@ -96,7 +96,8 @@ jobs:
           STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
         run: |
           python scripts/check_reference_baseline_v2.py --audit-probes
-          python -m pytest tests/unit/test_tax_filing_audit_independent_review.py tests/unit/test_tax_filing_audit_identity_review.py tests/unit/test_tax_filing_audit_additional_review.py -q --basetemp="${RUNNER_TEMP}/reference-filing-audit" --junitxml=reference-filing-audit.xml
+          python -m pytest tests/unit/test_tax_filing_audit_independent_review.py tests/unit/test_tax_filing_audit_identity_review.py tests/unit/test_tax_filing_audit_additional_review.py tests/unit/test_tax_filing_audit_io_review.py -q --basetemp="${RUNNER_TEMP}/reference-filing-audit" --junitxml=reference-filing-audit.xml
+          python scripts/check_reference_baseline_v2.py --audit-results .
       - name: Original reference results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

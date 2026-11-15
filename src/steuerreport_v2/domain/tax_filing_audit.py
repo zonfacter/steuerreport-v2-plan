@@ -425,8 +425,8 @@ class TaxFilingAuditService:
         ):
             raise TaxFilingAuditError("Auditinhalt ist nicht an seine Inhalts-ID gebunden.")
         root = self.archive_root / str(report.year)
-        root.mkdir(parents=True, exist_ok=True)
         try:
+            root.mkdir(parents=True, exist_ok=True)
             with artifact_lock(root / ".materialize.lock"):
                 return self._materialize_locked(report, root)
         except (ArtifactIntegrityError, OSError, ValueError) as exc:
