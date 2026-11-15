@@ -14,6 +14,7 @@
 .wsPage button:disabled, .wsDetailPanel button:disabled { opacity: .55; cursor: default; }
 .wsPage button:hover:not(:disabled), .wsDetailPanel button:hover:not(:disabled), .wsButton:hover { background: #edf4ef; }
 .wsPage button.wsPrimary, .wsDetailPanel button.wsPrimary { color: #fff; background: #245b45; border-color: #245b45; }
+.wsPage button.wsPrimary:hover:not(:disabled), .wsDetailPanel button.wsPrimary:hover:not(:disabled) { color: #fff; background: #1d4c3a; border-color: #1d4c3a; }
 .wsPage svg, .wsDetailPanel svg { flex-shrink: 0; }
 .wsPage .helpTipAnchor .helpTipButton, .wsDetailPanel .helpTipAnchor .helpTipButton { padding: 0; border: 0; background: transparent; width: 30px; min-height: 30px; }
 .wsPage .helpTipAnchor .helpTipButton:hover, .wsDetailPanel .helpTipAnchor .helpTipButton:hover { background: #dfede5; }

@@ -2114,3 +2114,9 @@ class _ReadSnapshotStore(DuckDbStore):
         if not self._active:
             raise RuntimeError("read_snapshot_closed")
         return _ReadSnapshotConnection(self)
+
+    @contextmanager
+    def read_initialized_snapshot(self):
+        if not self._active:
+            raise RuntimeError("read_snapshot_closed")
+        yield self

@@ -1454,6 +1454,53 @@ Zeitpunkt, Akteur, Belegreferenz und demselben semantischen Evidence-Hash ein.
 
 ## Preise
 
+### Menschliche Preiszeitbestaetigung (Entwicklungsstand)
+
+Root: `/api/v1/prices/historical/previews/{preview_id}/prices/{price_id}`.
+Diese Routen greifen weder auf Anbieter noch auf KI zu. Sie berechnen keine
+Steuern neu und aendern weder Preise noch Canonical Events oder Ledger.
+
+| Methode / Suffix | Wirkung |
+| --- | --- |
+| `POST /admission-previews` | Gebundene Vorlage und Methodendokument vorbereiten, noch keine Zustimmung |
+| `GET /admission-previews/{request_id}` | Vorlage und Originalbindung erneut lesend pruefen |
+| `POST /admission-previews/{request_id}/apply` | Zwei ausdrueckliche Bestaetigungen validieren, append-only Review speichern |
+| `GET /admissions?valuation_at=...` | Zustimmung fuer genau Preis-ID und UTC-Zeitpunkt lesen |
+| `POST /admissions/{request_id}/revoke` | Gegenentscheidung anhaengen, alte Entscheidung erhalten |
+| `GET /admission-previews/{request_id}/method-original` | Hashgepruefte Methodendokumentbytes als Download |
+
+Vorbereiten verlangt Request-UUID, Vorschau-SHA, Preisfingerprint,
+offsetbewusstes `valuation_at`, Netzwerk-/Contract-/Dezimalstellenidentitaet,
+Beobachtung oder Tagesperiode, Publikationszeit, gebundenen Originalhash,
+Fundstelle und Methode. USD verlangt gesonderte historische FX-Fakten mit
+Richtung und Referenz-/Publikationszeit. Decimal-Werte werden als Strings
+transportiert. `method_original` enthaelt Dateiname, MIME-Typ und Base64-Inhalt
+(1 Byte bis 2 MiB). Das Gesamtbudget der Originale betraegt 6 MiB.
+`captured_at` und Zustimmungszeit vergibt ausschliesslich der Server.
+
+Apply verlangt `draft_sha256`, `acknowledge_original_verified=true` und
+`acknowledge_scope_limited=true` als echte Pflichtbooleans. Widerruf verlangt
+Draft-SHA, Person, Begruendung und `acknowledge_revocation=true`. Leere,
+fehlende, numerische oder textuelle Zustimmungen sind kein Ersatz.
+Reservierte Entscheidungstypen sind im generischen Review-POST gesperrt.
+
+`PriceAdmissionReport` trennt `prepared`, `blocked`, `human_approved`,
+`revoked` und `rejected`, `can_apply`, reine Belegbewertung, Originalverweise,
+Entscheidung/Widerruf und `validation_policy_sha256`. Kein Status ist eine
+Jahres- oder Rechtsfreigabe. Fehler sind geheimnisfreie API-Fehler, etwa
+HTTP 409 bei veraenderter Bindung und 422 bei ungueltigen Eingaben.
+
+Stichtagskandidaten erhalten ein additives `price_admission` neben der
+unveraenderten Legacy-Zeitdiagnose. `PortfolioPosition.price_id` bindet im
+Stichtagssnapshot den tatsaechlich ausgewaehlten Preis. Gate-Felder
+`price_admission_state_sha256` und `accepted_price_time_count` binden den
+Entscheidungs-/Belegzustand. Alte archivierte Laeufe bleiben unveraendert;
+veraenderte Inputs oder Widerrufe duerfen nicht als aktueller positiver
+Nachweis erscheinen. Token-, Mengen-, FIFO- und Jahresgates bleiben getrennt.
+
+Details: [Vertrag](audit/ISSUE46_MENSCHLICHE_PREISBESTAETIGUNG_VERTRAG_2026-11-15.md),
+[Bedienung](STICHTAG_ZEITBELEGE.md).
+
 `GET /api/v1/prices/as-of-gate?as_of_date=YYYY-MM-DD&materiality_threshold_eur=1`
 
 Prueft alle materiellen Portfolio-Positionen an einem historischen Stichtag.

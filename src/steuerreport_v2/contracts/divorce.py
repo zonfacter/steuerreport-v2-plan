@@ -199,6 +199,8 @@ class DivorceValuationGate(BaseModel):
     valuation_at: datetime
     price_time_policy_id: str | None = None
     price_time_policy_version: int | None = None
+    price_admission_state_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    accepted_price_time_count: int = Field(default=0, strict=True, ge=0)
     materiality_threshold_eur: Decimal = Decimal("1")
     positions_count: int = 0
     material_positions_count: int = 0

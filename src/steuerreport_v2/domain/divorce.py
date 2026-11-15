@@ -33,6 +33,7 @@ from steuerreport_v2.domain.divorce_service_routes import (
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
 from steuerreport_v2.domain.portfolio import PortfolioService
+from steuerreport_v2.domain.price_admissions import PriceAdmissionError, PriceAdmissionService
 from steuerreport_v2.domain.price_lookup import HistoricalPriceLookup
 from steuerreport_v2.domain.price_time import POLICY_ID, POLICY_VERSION, assess_price_time
 from steuerreport_v2.domain.stichtag_token_valuation import (
@@ -1227,6 +1228,32 @@ class DivorceEqualizationService:
             return age_days, "prior_day"
         return age_days, "stale"
 
+    def _selected_price_admission(self, position, valuation_at):
+        price_id = getattr(position, "price_id", None)
+        value = position.price_eur
+        if (price_id is None or not isinstance(value, Decimal) or not value.is_finite() or value <= 0
+                or position.priced_at is None or not position.price_source):
+            return None
+        cutoff = self._naive(valuation_at).replace(tzinfo=timezone.utc)
+        reference = self._naive(position.priced_at).replace(tzinfo=timezone.utc)
+        if reference > cutoff or position.price_source.strip().lower().startswith("derived:"):
+            return None
+        return PriceAdmissionService(self.store).assess_selected(
+            price_id=price_id, valuation_at=cutoff, asset=position.asset,
+            price_eur=value, price_source=position.price_source, priced_at=reference,
+        )
+
+    @classmethod
+    def _price_admission_eligible(cls, report, position, valuation_at):
+        return bool(
+            report is not None and report.status == "human_approved"
+            and report.assessment.status == "human_approved" and report.assessment.strict_eligible is True
+            and report.assessment.evidence_origin == "operator_confirmed"
+            and report.decision is not None and report.revocation is None and report.can_apply is False
+            and str(report.price_id) == str(getattr(position, "price_id", None))
+            and cls._naive(report.valuation_at) == cls._naive(valuation_at)
+        )
+
     def _valuation_gate(
         self,
         positions: list[object],
@@ -1240,6 +1267,8 @@ class DivorceEqualizationService:
         stale = 0
         missing = 0
         unverified_time = 0
+        accepted_time = 0
+        admission_used = False
         review = 0
         accepted_review = 0
         material = 0
@@ -1247,6 +1276,9 @@ class DivorceEqualizationService:
         accepted_assets: set[str] = set()
         evidence_refs: set[str] = set()
         valuation_date = self._local_date(valuation_at)
+        cutoff = self._naive(valuation_at).replace(tzinfo=timezone.utc)
+        admissions = PriceAdmissionService(self.store)
+        admission_state = admissions.state_fingerprint(cutoff)
         for position in positions:
             value_eur = abs(position.value_eur or Decimal("0"))
             asset = str(position.asset).upper()
@@ -1262,6 +1294,12 @@ class DivorceEqualizationService:
             )
             if time_assessment.status == "fixed_eur_identity" and time_assessment.strict_eligible:
                 price_status = "same_day"
+            price_admission = (
+                self._selected_price_admission(position, cutoff) if not time_assessment.strict_eligible else None
+            )
+            admitted = self._price_admission_eligible(price_admission, position, cutoff)
+            admission_used = admission_used or admitted
+            time_eligible = time_assessment.strict_eligible or admitted
             if price_status == "missing":
                 if diagnostics is None:
                     diagnostics = HistoricalPriceLookup(self.store)
@@ -1275,7 +1313,7 @@ class DivorceEqualizationService:
                     )
                     if age is not None and age > 0:
                         price_status = diagnostic_status
-            if (price_status == "same_day" and time_assessment.strict_eligible
+            if (price_status == "same_day" and time_eligible
                     and value_eur < materiality_threshold_eur):
                 continue
             material += 1
@@ -1299,7 +1337,9 @@ class DivorceEqualizationService:
                     evidence_refs.add(token_assessment.accepted_decision.evidence_ref)
             if price_status == "same_day":
                 same_day += 1
-                if not time_assessment.strict_eligible:
+                if admitted:
+                    accepted_time += 1
+                if not time_eligible:
                     unverified_time += 1
                     affected.add(asset)
             elif price_status == "prior_day":
@@ -1311,6 +1351,8 @@ class DivorceEqualizationService:
             elif price_status in {"stale", "derived_event_quote"}:
                 stale += 1
                 affected.add(asset)
+        if admissions.state_fingerprint(cutoff) != admission_state or (admission_used and admission_state is None):
+            raise PriceAdmissionError("price_admission_state_changed", http_status=409)
         strict_ready = not any((prior_day, stale, missing, review, unverified_time))
         findings: list[str] = []
         if prior_day:
@@ -1338,6 +1380,11 @@ class DivorceEqualizationService:
                 f"{accepted_review} materielle Risikotokenpositionen besitzen eine "
                 "stichtagsbezogene, beleggebundene Bewertungsentscheidung."
             )
+        if accepted_time:
+            findings.append(
+                f"{accepted_time} Positionen besitzen eine ausdrueckliche menschliche Preiszeit-/Methodenbestaetigung "
+                "fuer die ausgewaehlte Preis-ID und diesen Bewertungszeitpunkt; keine Jahres- oder Rechtsfreigabe."
+            )
         if strict_ready:
             findings.append(
                 "Alle materiellen Positionen erfuellen die aktuelle Zeitbelegpruefung; "
@@ -1348,6 +1395,8 @@ class DivorceEqualizationService:
             valuation_at=valuation_at.replace(tzinfo=timezone.utc),
             price_time_policy_id=POLICY_ID,
             price_time_policy_version=POLICY_VERSION,
+            price_admission_state_sha256=admission_state,
+            accepted_price_time_count=accepted_time,
             materiality_threshold_eur=materiality_threshold_eur,
             positions_count=len(positions),
             material_positions_count=material,

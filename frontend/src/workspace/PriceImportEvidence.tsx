@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Download, FileSearch, LoaderCircle } from "lucide-react";
 import { API_BASE } from "../api-base";
 import { ExactQuantity } from "./Ui";
+import { PriceAdmission } from "./PriceAdmission";
 import { ApiReadError, canonicalDecimal, compactQuantity, readApi, timestamp } from "./resource";
 
 export type PreparedPriceBinding = { price_id: string; price_fingerprint: string; asset: string; price_eur: string; stored_reference_at: string };
 type Original = { sha256: string; byte_length: number; filename?: string | null };
-type Evidence = { status: string; integrity_scope: string; preview_id: string; price_id: string; price_fingerprint: string; asset: string; price_eur: string; stored_reference_at: string; strict_eligible: boolean; admission_status: string; originals: Original[] };
+type Evidence = { status: string; integrity_scope: string; preview_id: string; preview_sha256: string; price_id: string; price_fingerprint: string; asset: string; price_eur: string; stored_reference_at: string; strict_eligible: boolean; admission_status: string; originals: Original[] };
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const sha = /^[a-f0-9]{64}$/;
 const instant = (value: unknown) => typeof value === "string" && /(?:Z|\+00:00)$/.test(value)
@@ -52,7 +53,7 @@ export function PriceImportEvidence({ previewId, version, bindings }: { previewI
       const data = await readApi<Evidence>(`/api/v1/prices/historical/previews/${previewId}/prices/${selected}/evidence`, request.signal);
       if (request.signal.aborted || sequence !== serial.current) return;
       const binding = rows.find((row) => row.price_id === selected)!;
-      if (!data || data.preview_id !== previewId || data.price_id !== selected || data.price_fingerprint !== binding.price_fingerprint
+      if (!data || data.preview_id !== previewId || !sha.test(data.preview_sha256) || data.price_id !== selected || data.price_fingerprint !== binding.price_fingerprint
         || data.asset !== binding.asset || canonicalDecimal(data.price_eur) !== canonicalDecimal(binding.price_eur)
         || instant(data.stored_reference_at) !== instant(binding.stored_reference_at)
         || data.status !== "verified_import_binding" || data.integrity_scope !== "selected_price_only"
@@ -85,6 +86,9 @@ export function PriceImportEvidence({ previewId, version, bindings }: { previewI
         <ul className="wsPriceImportOriginals">{result.originals.map((ref) => <li key={ref.sha256}><a className="wsButton" download href={`${API_BASE}/api/v1/prices/historical/previews/${previewId}/prices/${selected}/evidence/${ref.sha256}`}>
           <Download size={16} /> <span>{ref.filename || `Original ${ref.sha256.slice(0, 12)}`}</span>
         </a><small>SHA-256: <code>{ref.sha256}</code> · {ref.byte_length} Byte</small></li>)}</ul>
+        <PriceAdmission previewId={previewId} priceId={selected} previewSha256={result.preview_sha256}
+          priceFingerprint={result.price_fingerprint} asset={result.asset} originals={result.originals}
+          priceEur={result.price_eur} storedReferenceAt={result.stored_reference_at} />
       </div>}
     </>}
   </details>;

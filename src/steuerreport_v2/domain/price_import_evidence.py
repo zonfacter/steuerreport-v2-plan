@@ -115,6 +115,10 @@ class PriceImportEvidenceService:
             raise
 
     def _within_snapshot(self, con, preview_id, price_id):
+        report, originals, _row = self._binding_context(con, preview_id, price_id)
+        return report, originals
+
+    def _binding_context(self, con, preview_id, price_id):
         preview = self._preview(preview_id)
         if type(preview.get("price_bindings_version")) is not int or preview["price_bindings_version"] != 1:
             fail("historical_price_binding_missing")
@@ -198,4 +202,4 @@ class PriceImportEvidenceService:
                 f"/api/v1/prices/historical/previews/{preview_id}/prices/{price_id}/evidence/{sha}"), filename=name))
         return PriceImportEvidenceReport(preview_id=preview_id, preview_sha256=preview["preview_sha256"], price_id=price_id,
                                          price_fingerprint=selected.price_fingerprint, asset=point.asset,
-                                         price_eur=point.price_eur, stored_reference_at=point.priced_at, originals=links), originals
+                                         price_eur=point.price_eur, stored_reference_at=point.priced_at, originals=links), originals, matches[0]

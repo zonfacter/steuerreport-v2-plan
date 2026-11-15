@@ -79,6 +79,17 @@ jobs:
           PYTHONPATH: src
           STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
         run: python -m pytest tests/unit/test_price_import_evidence_acceptance.py -q --basetemp="${RUNNER_TEMP}/reference-import-price" --junitxml=reference-import-price.xml
+      - name: Immutable independent human price admission probes
+        env:
+          PYTHONPATH: src
+          STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
+        run: |
+          set -euo pipefail
+          status=0
+          python -m pytest tests/unit/test_price_admission_acceptance_v2.py -q --basetemp="${RUNNER_TEMP}/reference-price-admission-v2" --junitxml=reference-price-admission-v2.xml || status=1
+          python -m pytest tests/unit/test_price_admission_identity_acceptance.py -q --basetemp="${RUNNER_TEMP}/reference-price-admission-identity" --junitxml=reference-price-admission-identity.xml || status=1
+          python scripts/check_reference_baseline_v2.py --admission-results . || status=1
+          exit "$status"
       - name: Original reference results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -240,7 +251,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
@@ -311,6 +322,15 @@ jobs:
       - name: Import price originals with controlled responses
         working-directory: .
         run: python scripts/check_price_import_evidence_browser_v2.py --output var/price-import-evidence-browser
+      - name: Human price admission with controlled responses
+        working-directory: .
+        run: python scripts/check_price_admission_browser_v2.py --output var/price-admission-browser
+      - name: Human price admission on actual insecure HTTP origin
+        working-directory: .
+        run: python scripts/check_price_admission_http_browser_v2.py --output var/price-admission-http-browser
+      - name: Human price admission against isolated real backend
+        working-directory: .
+        run: python scripts/check_price_admission_native_browser_v2.py --output var/price-admission-native-browser
       - name: Current price job status with controlled responses
         working-directory: .
         run: python scripts/check_current_price_status_browser_v2.py --output var/current-price-status-browser
@@ -353,6 +373,9 @@ jobs:
             var/price-checkpoint-backend-browser/
             var/price-recent-browser/
             var/price-import-evidence-browser/
+            var/price-admission-browser/
+            var/price-admission-http-browser/
+            var/price-admission-native-browser/
             var/price-time-evidence-browser/
             var/price-time-backend-browser/
             var/price-time-archive-browser/

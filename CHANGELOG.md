@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Entwicklung #46: Preisbelegformular auch auf HTTP-LAN-Origins bedienbar:
+  vorhandenen sicheren Request-ID-Helfer verwenden, SHA-256 ohne WebCrypto
+  ueber die fest gepinnte unterstuetzte Bibliothek Noble Hashes 2.4.0 berechnen.
+  WebCrypto bleibt bevorzugt. Frontend-CI auf Node 22 wie im Dockerbau;
+  keine Aenderung an Backendformeln oder Zugangsschutz.
+- Entwicklung #46: Zweistufige menschliche Bestaetigung einer importgebundenen
+  Preis-ID mit expliziten Beobachtungs-/Perioden-, Publikations-, FX- und
+  Methodenangaben. Zwei Pflichtbestaetigungen, unveraenderliche Vorlage und
+  append-only Widerruf; keine Preis-, Ledger-, Steuer- oder Jahresfreigabewriter.
+  Stichtags-Gates verwenden nur die bereits ausgewaehlte Preis-ID am exakt
+  bestaetigten UTC-Zeitpunkt. Geaenderte Belege, Methode oder Entscheidungen
+  entwerten aktuelle Laufnachweise, ohne archivierte Dateien zu aendern.
+  Unveroeffentlichter Entwicklungsstand; integrierte Abnahme separat belegen.
 - Entwicklung #63: Gespeicherte Preisvorschauen weisen nicht pruefbare Eintraege
   mit unbekannten Metadaten aus, statt sie zu verschlucken. Getrennte Lade-,
   Teilfehler-, Leer- und veraltete Listenstaende; erneutes Lesen bleibt lesend.
@@ -18,8 +31,9 @@
   menschlich gepruefte Originalzuordnung implementiert, mit Direkt-EUR,
   USD/FX und dokumentierten Tagesmethoden. 131 unabhaengige Proben plus 15
   unabhaengige Review-Gegenproben als zusaetzliches hashgebundenes CI-Gate.
-  Noch nicht an Anwendungs-Gates oder die menschliche Methodenfreigabe
-  angebunden; der neue Importbeleg-Reader ist davon getrennt.
+  Der reine Baustein und seine Referenzproben bleiben unveraendert;
+  Anwendungsanbindung und menschliche Methodenbestaetigung sind ein separater
+  nachfolgender Entwicklungsschritt, siehe oben.
 - Entwicklung #46: Gespeicherte Stichtagsreferenzzeit und belegte Kurs-/FX-Zeit
   getrennt ausweisen. Unbelegte Same-Day-Referenzen und Tokenannahmen geben
   das strenge Stichtags-Gate nicht frei; ungepruefte Kleinstwerte beweisen
