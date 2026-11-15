@@ -288,10 +288,10 @@ jobs:
         run: python scripts/check_historical_prices_browser_v2.py --output "${RUNNER_TEMP}/historical-prices-browser"
       - name: Current price job status with controlled responses
         working-directory: .
-        run: python scripts/check_current_price_status_browser_v2.py --output "${RUNNER_TEMP}/current-price-status-browser"
+        run: python scripts/check_current_price_status_browser_v2.py --output var/current-price-status-browser
       - name: Price checkpoint status against isolated backend
         working-directory: .
-        run: python scripts/check_price_checkpoint_backend_browser_v2.py --output "${RUNNER_TEMP}/price-checkpoint-backend-browser"
+        run: python scripts/check_price_checkpoint_backend_browser_v2.py --output var/price-checkpoint-backend-browser
       - name: Filing aggregate comparison with controlled responses
         working-directory: .
         run: python scripts/check_filing_comparison_browser_v2.py --output "${RUNNER_TEMP}/filing-comparison-browser"
@@ -315,8 +315,8 @@ jobs:
             ${{ runner.temp }}/history-provider-eta-browser/
             ${{ runner.temp }}/solana-limits-browser/
             ${{ runner.temp }}/historical-prices-browser/
-            ${{ runner.temp }}/current-price-status-browser/
-            ${{ runner.temp }}/price-checkpoint-backend-browser/
+            var/current-price-status-browser/
+            var/price-checkpoint-backend-browser/
             ${{ runner.temp }}/filing-comparison-browser/
             ${{ runner.temp }}/updates-browser/
             ${{ runner.temp }}/updates-backend-browser/

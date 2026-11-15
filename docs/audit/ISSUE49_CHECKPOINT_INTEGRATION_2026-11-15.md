@@ -169,6 +169,15 @@ Bekannte ungueltige / wiederholte Testaufrufe werden nicht verschwiegen:
   der unveraenderte Test. Keine Produktkorrektur dafuer vorgenommen.
 - Workflow-YAML war im Test-Venv mangels PyYAML nicht lesbar; mit dem
   bestehenden System-Python erfolgreich. Keine Zusatzinstallation.
+- Nach dem ersten Push wurde in der CI-Konfigurationspruefung erkannt:
+  `RUNNER_TEMP` liegt auf GitHub nicht notwendigerweise unter `/tmp` und
+  erfuellt dann die absichtlich strengen Ausgabepfadregeln der beiden
+  Browserprogramme nicht. Beide CI-Aufrufe und Uploadpfade verwenden nun
+  das erlaubte ignorierte `var/`. Der begonnene erste CI-Lauf wird deshalb
+  abgebrochen und nach diesem reinen Workflow-/Dokumentationsfix neu
+  gestartet. Keine Python-/TypeScript-/Referenzprobe dafuer geaendert;
+  der erste Lauf ist kein gruener Gesamtbeleg und kein reproduzierter
+  Produktfehler. Lokale Browserlaeufe hatten korrekt `/tmp` verwendet.
 
 ## Offene Aufgaben
 
