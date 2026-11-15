@@ -245,6 +245,11 @@ Vor Updates das gesamte Volume einschliesslich **beider** privaten Dateien
 `keys/vault.key` und `keys/connector-setup.token` sichern. Keine privaten Sicherungen
 an GitHub-Releases anhaengen. Neue Versionen nie mit alten Zugangsdaten im Image bauen.
 
+Ein reproduzierbarer administrativer Ablauf fuer gestoppte Quellen,
+Archivverifikation und Restore in neue Volumes steht unter
+[Docker-Backup und Restore](DOCKER_BACKUP_RESTORE.md). Der Betreiberhelfer ist
+vom Webprozess getrennt; eine Datenwiederherstellung aktiviert keinen Dienst.
+
 Fehler `secret_vault_key_missing`: Der Start wurde abgebrochen, weil bereits ein
 Profil oder eine Datenbank vorhanden ist, aber die konfigurierte Vault-Schluesseldatei
 fehlt. Den bestehenden Zustand nicht weiter starten und keinesfalls selbst einen

@@ -156,7 +156,7 @@ jobs:
             python scripts/container_release_v2.py verify --local --inspect "$proof/image-$suffix.raw.json" \
               --image "ghcr.io/$owner/steuerreport-v2" --version "$version" --sha "$revision" \
               --repository "$GITHUB_REPOSITORY" --output "$proof/image-$suffix.json"
-            docker run --detach --name "$name" --read-only --network none --cap-drop ALL \
+            docker run --detach --name "$name" --label "steuerreport.ci.synthetic=$GITHUB_RUN_ID" --read-only --network none --cap-drop ALL \
               --security-opt no-new-privileges:true --tmpfs /tmp:size=256m,mode=1777 \
               --mount type=volume,destination=/state "sr-cache-proof:$suffix"
             python scripts/container_release_v2.py smoke --container "$name" --version "$version" \
@@ -184,6 +184,8 @@ jobs:
               "sr-cache-proof:$suffix" - < scripts/check_vault_fixture_offline_v2.py)"
             test "$first_key" = "$second_key"
             printf 'synthetic encrypted vault and restart verified\n' > "$proof/vault-$suffix.txt"
+            python scripts/check_portable_state_ci_v2.py --container "$name" --run-id "$GITHUB_RUN_ID" \
+              --output "$RUNNER_TEMP/portable-state-$suffix"
             docker rm --force --volumes "$name" >/dev/null
           done
       - name: Archive sanitized layer proof
@@ -200,6 +202,8 @@ jobs:
             ${{ runner.temp }}/docker-layer-proof/user-path-*.json
             ${{ runner.temp }}/docker-layer-proof/vault-*.txt
             ${{ runner.temp }}/docker-layer-proof/offline-clone-help-*.txt
+            ${{ runner.temp }}/portable-state-a/result.json
+            ${{ runner.temp }}/portable-state-b/result.json
           if-no-files-found: warn
           retention-days: 30
 

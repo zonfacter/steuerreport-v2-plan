@@ -25,6 +25,8 @@ def test_release_excludes_case_work_runtime_and_originals():
         "frontend/public/import-vorlagen/private.xlsx",
         "configs/source_registry.json", "configs/solana_v1_ownership_scope.json",
         "src/steuerreport_v2/connector-setup.token", "frontend/public/operator.token",
+        "tests/private-backup.tar.gz", "tests/state-backup.zip", "tests/state-backup.zst",
+        "frontend/private-backup.tgz", "scripts/private-backup.tar",
     ):
         assert not builder.software_path(name), name
     for name in (
@@ -34,6 +36,10 @@ def test_release_excludes_case_work_runtime_and_originals():
         "docs/openapi/steuerreport-v2-openapi.json", ".env.example",
         "docs/RELEASE_0.2.0rc40.md", "docs/RELEASE_0.2.0rc39.md",
         "docs/STORAGE_DIAGNOSE.md", "docs/DOCKER_LAYER_CACHE.md",
+        "docs/DOCKER_BACKUP_RESTORE.md", "docs/OFFLINE_DATENBANKKOPIE.md",
+        "docs/audit/ISSUE53_OFFLINE_INTEGRATION_2026-11-15.md",
+        "docs/audit/PORTABLE_STATE_INTEGRATION_2026-11-15.md",
+        "scripts/docker_state_v2.py", "src/steuerreport_v2/db/offline_snapshot.py",
         "docs/RELEASE_0.2.0rc36.md", "docs/RELEASE_0.2.0rc35.md",
         "docs/audit/2026-10-28/acceptance_tests.py",
         "docs/audit/2026-10-28/issues/issue2-original.py",

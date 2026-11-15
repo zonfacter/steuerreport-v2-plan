@@ -138,6 +138,13 @@ Tabellen und verweigert vorhandene WALs oder belegte Ziele. Es stoppt keine
 Dienste und repariert keine abgestuerzte Datenbank. Anwendung, Rueckweg und
 Grenzen: [Offline-Datenbankkopie](docs/OFFLINE_DATENBANKKOPIE.md).
 
+Fuer den vollstaendigen persistenten Docker-Datenstand gibt es daneben den
+separaten Betreiberhelfer `scripts/docker_state_v2.py`: Backup einer bereits
+gestoppten Quelle, Archivpruefung und isolierte Wiederherstellung in neue
+Volumes. Er wird nicht von der Webanwendung ausgefuehrt und benoetigt keinen
+KI-Zugang. Ausfuehrung, Voraussetzungen und Grenzen:
+[Docker-Backup und Restore](docs/DOCKER_BACKUP_RESTORE.md).
+
 ### Images veroeffentlichen
 
 Der Workflow `Publish GHCR Image` startet bei veroeffentlichten Releases
