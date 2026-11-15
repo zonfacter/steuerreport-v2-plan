@@ -55,3 +55,13 @@ def test_v1_cache_guard_overrides_stale_endpoint_metadata():
     assert "Zeigt unverbindliche V1-Cache-Kandidaten ohne Uebernahmefreigabe" in rendered
     assert "Kandidaten ohne Finanzimport; kalter Store kann Schema initialisieren oder migrieren" in rendered
     assert "Alter Import" not in rendered and "Alte Vorschau" not in rendered
+
+
+def test_current_price_status_overrides_stale_write_metadata():
+    path = "/api/v1/prices/backfill/current-portfolio/status"
+    rendered = generator.render(generator.parse_routes(generator.APP_PATH), {
+        ("POST", path): ("Alter Status", "kann Daten oder Artefakte schreiben"),
+    }, "2000-01-01")
+    row = next(line for line in rendered.splitlines() if f"`{path}`" in line)
+    assert "read-only; kein Anbieterabruf oder Neuberechnung" in row
+    assert "kann Daten oder Artefakte schreiben" not in row

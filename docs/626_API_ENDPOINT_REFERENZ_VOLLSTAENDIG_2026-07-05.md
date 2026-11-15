@@ -187,7 +187,7 @@ Diese Referenz wird mit `scripts/generate_api_endpoint_reference_v2.py` direkt a
 | `POST` | `/api/v1/prices/as-of-gate/token-review-decisions` | Akzeptiert eine mint- und stichtagsgebundene Risikotoken-Bewertung | kann Daten oder Artefakte schreiben | `app.py:2384` `accept_as_of_token_valuation` |
 | `GET` | `/api/v1/prices/as-of-gate/token-review-decisions.csv` | Liefert die Stichtags-Risikotoken-Entscheidungen als Beleg-CSV | read-only | `app.py:2395` `as_of_token_valuation_decisions_csv` |
 | `POST` | `/api/v1/prices/backfill/current-portfolio` | Backfill current portfolio prices | kann Daten oder Artefakte schreiben | `app.py:2292` `backfill_current_portfolio_prices` |
-| `POST` | `/api/v1/prices/backfill/current-portfolio/status` | Liest dokumentiertes Ergebnis oder unklaren Ausgang eines Preisauftrags ohne Anbieterabruf, Preisspeicherung oder Neuberechnung | kann Daten oder Artefakte schreiben | `app.py:2340` `current_portfolio_price_request_status` |
+| `POST` | `/api/v1/prices/backfill/current-portfolio/status` | Liest dokumentiertes Ergebnis oder unklaren Ausgang eines Preisauftrags ohne Anbieterabruf, Preisspeicherung oder Neuberechnung | read-only; kein Anbieterabruf oder Neuberechnung; kalter Store kann Schema initialisieren | `app.py:2340` `current_portfolio_price_request_status` |
 | `POST` | `/api/v1/prices/backfill/external` | Backfill external prices | kann Daten oder Artefakte schreiben | `app.py:2248` `backfill_external_prices` |
 | `GET` | `/api/v1/prices/coverage` | Price coverage | read-only | `app.py:2414` `price_coverage` |
 | `POST` | `/api/v1/prices/coverage/decisions` | Add price gap decision | kann Daten oder Artefakte schreiben | `app.py:2609` `add_price_gap_decision` |

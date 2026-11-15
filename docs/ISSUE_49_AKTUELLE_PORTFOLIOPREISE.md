@@ -101,3 +101,13 @@ diesen Korrekturen. Der breitere Integrationslauf davor bestand mit 128 Tests;
 die synthetische Browserprobe wurde mit den Korrekturen erneut bestanden.
 Build und Ruff bestehen. Kein Nachweis vollstaendiger Recovery oder eines
 produktiven Anbieterabrufs.
+
+Der GitHub-Frontendlauf fuer den vorigen Stand zeigte einen doppelten
+Bestaetigungsdialog im Portfolio-Abruf. Die Bestaetigung ist jetzt zentral
+im Handler; beide Einstiege bestaetigen genau einmal. Danach bestand
+`PYTHONPATH=src python scripts/check_historical_prices_browser_v2.py --output ...`
+mit echtem isolierten Preisrouter, MockTransport, 390/768/1280/1440 Pixeln,
+12 Screenshots und unveraenderten synthetischen Raw-/Canonical-Daten.
+Der erste lokale Versuch ohne `PYTHONPATH=src` verwendete versehentlich den
+anderen editierbar installierten Checkout und scheiterte am Import; erst
+der obige korrigierte Aufruf ist der Nachweis fuer diesen Quellstand.

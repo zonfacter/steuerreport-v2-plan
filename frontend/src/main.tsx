@@ -4879,7 +4879,7 @@ function App() {
 
   async function backfillCurrentPortfolioPrices(maxRequests: string, dryRun: boolean, assets: string) {
     if (currentBackfillInFlight.current) return;
-    if (!dryRun && !window.confirm("Neuen Preisabruf mit neuen Preiszeilen starten? Vor einer Wiederholung Preisbestand und Pipelinefolgen pruefen.")) return;
+    if (!dryRun && !window.confirm("Kurse extern abrufen, neue Preiszeilen speichern und die Pipeline neu berechnen? Keine Jahresfreigabe. Vor einer Wiederholung Preisbestand und Pipelinefolgen pruefen. Anbieterlimits und moegliche Tarifkosten beachten.")) return;
     currentBackfillInFlight.current = true;
     setLoading(true);
     setError(null);

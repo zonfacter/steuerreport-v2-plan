@@ -264,6 +264,8 @@ def default_purpose(route: Route) -> str:
 
 
 def default_effect(route: Route) -> str:
+    if route.method == "POST" and route.path == "/api/v1/prices/backfill/current-portfolio/status":
+        return "read-only; kein Anbieterabruf oder Neuberechnung; kalter Store kann Schema initialisieren"
     if route.method == "POST" and route.path == "/api/v1/prices/import/v1-fx-cache/preview":
         return "Kandidaten ohne Finanzimport; kalter Store kann Schema initialisieren oder migrieren"
     if route.method == "POST" and route.path == "/api/v1/prices/import/v1-fx-cache":
@@ -345,6 +347,7 @@ def render(
             purpose = PURPOSE_OVERRIDES.get((route.method, route.path), purpose)
             if route.path.startswith("/api/v1/prices/historical") or route.path in {
                 "/api/v1/prices/import/v1-fx-cache", "/api/v1/prices/import/v1-fx-cache/preview",
+                "/api/v1/prices/backfill/current-portfolio/status",
             }:
                 effect = default_effect(route)
             lines.append(
