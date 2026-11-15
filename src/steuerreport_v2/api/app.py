@@ -278,6 +278,8 @@ from steuerreport_v2.contracts.prices import (
     CurrentPortfolioPriceBackfillStatusRequest,
     ExternalPriceBackfillRequest,
     ExternalPriceBackfillResult,
+    ExternalPriceBackfillStatus,
+    ExternalPriceBackfillStatusRequest,
     ExternalPriceBackfillStorageUnknown,
     PriceCsvImportRequest,
     PriceCsvImportResult,
@@ -551,8 +553,14 @@ from steuerreport_v2.domain.external_price_backfill import (
     CurrentBackfillProviderContextFailed,
     CurrentBackfillReservationUnknown,
     CurrentBackfillStorageUnknown,
+    CurrentBackfillPipelineInterrupted,
+    CurrentBackfillPipelineStartUnknown,
     ExternalPriceBackfillService,
     HistoricalBackfillStorageUnknown,
+    HistoricalBackfillReplayBlocked,
+    HistoricalBackfillReservationUnknown,
+    HistoricalBackfillPipelineInterrupted,
+    HistoricalBackfillPipelineStartUnknown,
     backfill_result_warnings,
 )
 from steuerreport_v2.domain.flows import FlowService
@@ -2244,6 +2252,8 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
 
     @app.post("/api/v1/prices/backfill/external", responses={
         500: {"model": ApiResponse[ExternalPriceBackfillStorageUnknown], "description": "Speicherzustand unbekannt; vor Wiederholung pruefen"},
+        409: {"description": "Historischer Auftrag bereits reserviert; keine Wiederholung"},
+        503: {"description": "Auftrag gestoppt; Speicher- und Pipelinephase beachten"},
     })
     def backfill_external_prices(
         payload: ExternalPriceBackfillRequest,
@@ -2258,7 +2268,16 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 timeout_seconds=payload.timeout_seconds,
                 confidence=payload.confidence,
                 dry_run=payload.dry_run,
+                request_id=str(payload.request_id) if payload.request_id else None,
             )
+        except (HistoricalBackfillPipelineInterrupted, HistoricalBackfillPipelineStartUnknown) as exc:
+            clear_response_cache()
+            return JSONResponse(status_code=503, content=ApiResponse[dict](
+                status="error", data={"storage_status": "checkpointed", "pipeline_status": "unknown_or_partial",
+                                      "stored_price_ids": exc.stored_price_ids},
+                errors=[ApiMessage(code="historical_backfill_pipeline_interrupted",
+                                   message="Preise mit Speicherbeleg festgeschrieben; Pipelineausgang unklar. Auftragsstatus lesen, nicht automatisch erneut abrufen.")],
+            ).model_dump(mode="json"))
         except HistoricalBackfillStorageUnknown as exc:
             clear_response_cache()
             return JSONResponse(
@@ -2273,9 +2292,29 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                     warnings=exc.warnings,
                 ).model_dump(mode="json"),
             )
+        except HistoricalBackfillReplayBlocked:
+            return JSONResponse(status_code=409, content=ApiResponse[dict](
+                status="error", data={"previous_storage_status": "unknown", "previous_pipeline_status": "unknown"},
+                errors=[ApiMessage(code="historical_backfill_replay_blocked",
+                                   message="Historischer Auftrag bereits reserviert; vor einem neuen Auftrag Status pruefen.")],
+            ).model_dump(mode="json"))
+        except (HistoricalBackfillReservationUnknown, RequestCancelled, RequestDeadlineExceeded):
+            return JSONResponse(status_code=503, content=ApiResponse[dict](
+                status="error", data={"storage_status": "not_started", "pipeline_status": "not_started"},
+                errors=[ApiMessage(code="historical_backfill_stopped",
+                                   message="Abruf gestoppt oder Reservierung unklar; keine Preiszeilen dieses Aufrufs gespeichert.")],
+            ).model_dump(mode="json"))
+        except Exception:
+            clear_response_cache()
+            return JSONResponse(status_code=500, content=ApiResponse[dict](
+                status="error", data={"storage_status": "unknown", "pipeline_status": "unknown"},
+                errors=[ApiMessage(code="historical_backfill_unknown", message="Zustand unbekannt; Auftragsstatus vor Wiederholung pruefen.")],
+            ).model_dump(mode="json"))
         if result.imported_prices:
             clear_response_cache()
         warnings = backfill_result_warnings(result)
+        if result.result_journal_status == "unknown":
+            warnings.append(ApiMessage(code="historical_backfill_journal_unknown", message="Auftragsergebnis nicht sicher dokumentiert; keine automatische Wiederholung. Auftragsstatus lesen."))
         if result.pipeline_status == "failed":
             warnings.append(ApiMessage(
                 code="price_backfill_pipeline_failed",
@@ -2283,6 +2322,23 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
             ))
         return ApiResponse(status="warning" if warnings else ("ok" if result.dry_run or result.imported_prices else "warning"),
                            data=result, warnings=warnings)
+
+    @app.post("/api/v1/prices/backfill/external/status")
+    def historical_price_request_status(
+        payload: ExternalPriceBackfillStatusRequest,
+    ) -> ApiResponse[ExternalPriceBackfillStatus]:
+        try:
+            result = ExternalPriceBackfillService(db).historical_request_status(str(payload.request_id))
+        except Exception:
+            return JSONResponse(status_code=500, content=ApiResponse[dict](
+                status="error", data={"status": "unknown"},
+                errors=[ApiMessage(code="historical_backfill_status_unknown",
+                                   message="Gespeicherter historischer Auftragsstatus nicht sicher lesbar; keine Wiederholung starten.")],
+            ).model_dump(mode="json"))
+        warnings = backfill_result_warnings(result.result) if result.result is not None else []
+        if result.result is not None and result.result.pipeline_status == "failed":
+            warnings.append(ApiMessage(code="price_backfill_pipeline_failed", message="Pipeline damals fehlgeschlagen; Folgen unbekannt oder teilweise. Vor Wiederholung Zustand pruefen."))
+        return ApiResponse(status="ok" if result.status == "recorded" and not warnings else "warning", data=result, warnings=warnings)
 
     @app.post("/api/v1/prices/backfill/current-portfolio", responses={
         500: {"model": ApiResponse[ExternalPriceBackfillStorageUnknown], "description": "Speicherzustand unbekannt"},
@@ -2303,6 +2359,14 @@ def create_app(store: DuckDbStore | str | Path | None = None) -> FastAPI:
                 dry_run=payload.dry_run,
                 request_id=str(payload.request_id) if payload.request_id else None,
             )
+        except (CurrentBackfillPipelineInterrupted, CurrentBackfillPipelineStartUnknown) as exc:
+            clear_response_cache()
+            return JSONResponse(status_code=503, content=ApiResponse[dict](
+                status="error", data={"storage_status": "checkpointed", "pipeline_status": "unknown_or_partial",
+                                      "stored_price_ids": exc.stored_price_ids},
+                errors=[ApiMessage(code="current_backfill_pipeline_interrupted",
+                                   message="Preise mit Speicherbeleg festgeschrieben; Pipelineausgang unklar. Auftragsstatus lesen, nicht automatisch erneut abrufen.")],
+            ).model_dump(mode="json"))
         except CurrentBackfillStorageUnknown as exc:
             clear_response_cache()
             return JSONResponse(status_code=500, content=ApiResponse[ExternalPriceBackfillStorageUnknown](

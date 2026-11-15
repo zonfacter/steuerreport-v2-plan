@@ -264,6 +264,12 @@ Installationszahlen und private Diagnoseergebnisse werden nicht veroeffentlicht.
 Details und Pruefnachweise: [Preisablauf](docs/HISTORISCHE_EUR_PREISE.md)
 und [rc32](docs/RELEASE_0.2.0rc32.md).
 
+Unveroeffentlichte Weiterentwicklung fuer direkte Preisauftraege:
+[Speicherbeleg und Ausgang nach einem Abbruch pruefen](docs/ISSUE_49_AKTUELLE_PORTFOLIOPREISE.md).
+Preiszeilen/Checkpoint werden gemeinsam gespeichert, die anschliessende
+Pipeline bleibt ein getrennter Schritt. Keine automatische Wiederholung und
+keine Jahresfreigabe; der moderne historische Vorschauablauf bleibt erhalten.
+
 ## KI-Einrichtung
 
 ### Zweck Und Grenzen

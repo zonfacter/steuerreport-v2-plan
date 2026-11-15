@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { externalPriceBackfillError } from "./external-price-backfill-error";
 import { newRequestId } from "./request-id";
-import { rememberCurrentPriceRequest } from "./workspace/CurrentPriceRequestStatus";
+import { CurrentPriceRequestStatus, rememberCurrentPriceRequest, rememberHistoricalPriceRequest } from "./workspace/CurrentPriceRequestStatus";
 import { money as exactMoney } from "./workspace/resource";
 import { InstallationSettings, DataProviderSettings } from "./InstallationSettings";
 import { UpdateIndicator, VersionUpdates } from "./VersionUpdates";
@@ -3284,6 +3284,7 @@ function App() {
   });
   const refreshRunId = useRef(0);
   const currentBackfillInFlight = useRef(false);
+  const historicalBackfillInFlight = useRef(false);
   const [sourceRefreshLoading, setSourceRefreshLoading] = useState(false);
   const [sourceRegistryRunLoading, setSourceRegistryRunLoading] = useState(false);
   const [walletFifoRunLoading, setWalletFifoRunLoading] = useState(false);
@@ -4836,9 +4837,14 @@ function App() {
   }
 
   async function backfillExternalPrices(maxRequests: string, provider: string, dryRun: boolean, assets: string) {
+    if (historicalBackfillInFlight.current) return;
+    if (!dryRun && !window.confirm("Historische Kurse extern abrufen, neue Preiszeilen speichern und die Pipeline neu berechnen? Keine Jahresfreigabe. Vor einer Wiederholung den gespeicherten Auftragsstatus prüfen. Anbieterlimits und mögliche Tarifkosten beachten.")) return;
+    historicalBackfillInFlight.current = true;
     setLoading(true);
     setError(null);
     try {
+      const requestId = dryRun ? null : newRequestId();
+      if (requestId) rememberHistoricalPriceRequest(requestId);
       const assetFilter = assets
         .split(",")
         .map((asset) => asset.trim().toUpperCase())
@@ -4850,6 +4856,7 @@ function App() {
           assets: assetFilter,
           max_requests: Number(maxRequests),
           dry_run: dryRun,
+          request_id: requestId,
           confidence: "1.0"
         },
         180_000
@@ -4877,6 +4884,8 @@ function App() {
     } catch (caught) {
       setError(externalPriceBackfillError(caught));
       setLoading(false);
+    } finally {
+      historicalBackfillInFlight.current = false;
     }
   }
 
@@ -6119,6 +6128,7 @@ function Content({
     if (portfolioViewMode === "prices") return <Stack>
       <div className="wsActionFooter"><button type="button" onClick={() => onPortfolioViewModeChange("overview")}>Portfolio-Übersicht</button><button type="button" onClick={() => onPortfolioViewModeChange("expert")}>Preisbelege / CSV im Expertenmodus</button></div>
       <PriceWorkspace onCurrentPrices={onBackfillCurrentPortfolioPrices} />
+      <details><summary>Historische Direktabrufe (Experten)</summary><CurrentPriceRequestStatus kind="historical" /></details>
     </Stack>;
     return (
       <Stack>

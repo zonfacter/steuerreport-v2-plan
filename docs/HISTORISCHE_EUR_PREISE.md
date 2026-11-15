@@ -4,6 +4,13 @@ Stand: 28.10.2026, Bedienablauf fuer 0.2.0rc32 (Releasekandidat).
 Keine steuerliche oder rechtliche Freigabe. Lokale Ergebnisse und gesonderte
 Releasebelege sind in den rc32-Releasehinweisen getrennt ausgewiesen.
 
+Entwicklungshinweis vom 15.11.2026: Dieser Vorschau-/Uebernahmeablauf bleibt
+vom Journal der aelteren direkten Preisbackfills getrennt. Die neue lesende
+Auskunft fuer historische **Direktabrufe** ist im Expertenbereich und unter
+`/api/v1/prices/backfill/external/status` vorgesehen. Ihre Kennung ist nicht
+die UUID einer hier beschriebenen Sammlung/Vorschau. Details und Grenzen:
+[Preisauftraege und Speicherbelege](ISSUE_49_AKTUELLE_PORTFOLIOPREISE.md).
+
 ## Ohne KI Bedienen
 
 Der komplette Ablauf liegt unter **Portfolio & Haltefristen -> EUR-Preise
