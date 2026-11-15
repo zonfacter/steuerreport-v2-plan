@@ -305,6 +305,29 @@ erhalten, einschliesslich seiner expliziten V1-FX-Eingabe. Die neue gefuehrte
 Oberflaeche verwendet ihn nicht. CSV-Preisbelege bleiben im Expertenmodus
 verfuegbar: `asset,price_eur,priced_at,source`, Zeitpunkt mit Zeitzone.
 
+## Gebundener Uebernahmenachweis (Entwicklung)
+
+Ein gespeicherter Importstatus wird nur dann als uebernommen angezeigt, wenn
+das unveraenderte Entscheidungsdokument zu Vorschau-ID, Vorschauhash, Typ,
+Scope, Belegreferenz und Zeitmetadaten passt. Eine vorhandene Entscheidungs-ID
+allein genuegt nicht. Eine vorhandene lokale Quittung muss denselben Vorgang
+und dieselbe Anzahl bestaetigen; sie wird bei Widerspruch nicht still ersetzt.
+Fehlt nur die Quittung nach einem bestaetigten DB-Commit, bleibt der bestehende
+Wiederanlauf ohne erneute Preisuebernahme moeglich.
+
+Bei `historical_price_apply_decision_invalid` oder geaenderten Originalbelegen
+keinen weiteren Apply versuchen. Originale, Vorschau und Review-Entscheidung
+administrativ pruefen. Die Oberflaeche zeigt einen zuvor geladenen Stand nur
+noch als nicht erneut bestaetigt und sperrt Uebernahme und Berichtslinks.
+Sie korrigiert oder loescht keine gespeicherten Belege.
+
+Der Importnachweis ist weder eine heutige Vollstaendigkeitsaussage noch eine
+Zulassung der Bewertungsmethode. Ein positiver originalgebundener
+Stichtags-Belegpfad wird getrennt entwickelt; er ist noch nicht in der
+Anwendungsoberflaeche nutzbar. Read-only-Transaktionen ersetzen auch nicht die
+noch erforderliche Abgrenzung einer moeglichen Schema-Initialisierung beim
+ersten DB-Verbindungsaufbau.
+
 ## Anbieterquellen
 
 Geprueft am 27.10.2026; kein Nachweis des individuellen Kontotarifs:

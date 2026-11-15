@@ -921,6 +921,34 @@ class HistoricalPriceService:
                 "lot_count": lots[0], "lot_cost_basis_eur": str(lots[1]),
                 "flow_count": flows[0], "unvalued_flow_count": flows[1]}
 
+    @staticmethod
+    def _applied_decision(con, request_id, preview_sha256):
+        decision_id = "historical-price:" + str(request_id)
+        row = con.execute("select payload_json, created_at, updated_at from review_decisions where id=?",
+                          [decision_id]).fetchone()
+        if row is None:
+            return False
+        try:
+            decision = ReviewDecision.model_validate_json(row[0])
+            created_at = row[1]
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            valid = (
+                decision.decision_id == decision_id
+                and decision.decision_type == "historical_price_import"
+                and decision.scope == "historical_prices:" + str(request_id)
+                and decision.evidence_ref == "api:/api/v1/prices/historical/previews/" + str(request_id)
+                and decision.payload == {"preview_sha256": preview_sha256}
+                and decision.updated_at is None and row[2] is None
+                and decision.created_at.tzinfo is not None
+                and decision.created_at == created_at
+            )
+        except (ValueError, TypeError, AttributeError):
+            valid = False
+        if not valid:
+            fail("historical_price_apply_decision_invalid")
+        return True
+
     def get(self, request_id):
         directory = self._directory(request_id)
         preview = self._json(directory / "preview.json")
@@ -934,10 +962,21 @@ class HistoricalPriceService:
             path = self._path("evidence", item["sha256"] + ".body")
             if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
                 fail("historical_price_evidence_changed")
-        with self.store.connect() as con:
-            applied = con.execute("select 1 from review_decisions where id=?", ["historical-price:" + str(request_id)]).fetchone() is not None
-        if (directory / "applied.json").exists() and not applied:
-            fail("historical_price_evidence_changed")
+        with self.store.read_snapshot() as snapshot, snapshot.connect() as con:
+            applied = self._applied_decision(con, request_id, preview["preview_sha256"])
+        receipt_path = directory / "applied.json"
+        if receipt_path.exists() or receipt_path.is_symlink():
+            expected = {"applied": True, "prices_count": preview["prices_count"],
+                        "decision_id": "historical-price:" + str(request_id)}
+            if not applied or receipt_path.is_symlink() or not receipt_path.is_file():
+                fail("historical_price_evidence_changed")
+            try:
+                receipt = self._json(receipt_path)
+            except (ValueError, OSError):
+                fail("historical_price_evidence_changed")
+            if (receipt != expected or type(receipt.get("applied")) is not bool
+                    or type(receipt.get("prices_count")) is not int):
+                fail("historical_price_evidence_changed")
         return {**preview, "applied": applied}
 
     def evidence(self, request_id, sha):
@@ -981,8 +1020,7 @@ class HistoricalPriceService:
                 fail("historical_price_evidence_changed")
             with self.store.connect() as con:
                 decision_id = "historical-price:" + str(request_id)
-                existing = con.execute("select payload_json from review_decisions where id=?", [decision_id]).fetchone()
-                if existing:
+                if self._applied_decision(con, request_id, request.preview_sha256):
                     result = {"applied": True, "prices_count": preview["prices_count"], "decision_id": decision_id}
                     self._write(directory / "applied.json", canonical_json(result).encode())
                     return result

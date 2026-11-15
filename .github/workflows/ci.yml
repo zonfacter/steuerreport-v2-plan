@@ -65,6 +65,10 @@ jobs:
           python docs/audit/2026-10-28/issues/issue2-original.py
           --expected-version "$(python -c 'from steuerreport_v2 import __version__; print(__version__)')"
           > bitget-original-reference.json
+      - name: Immutable independent bound price evidence probes
+        env:
+          PYTHONPATH: src
+        run: python -m pytest tests/unit/test_price_evidence_acceptance.py tests/unit/test_price_evidence_review.py -q --junitxml=reference-bound-price-evidence.xml
       - name: Original reference results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
