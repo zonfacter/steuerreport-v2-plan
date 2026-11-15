@@ -163,6 +163,7 @@ jobs:
               --output "$proof/smoke-$suffix.json"
             python scripts/check_container_user_path_v2.py --container "$name" --version "$version" \
               --source-sha "$revision" --output "$proof/user-path-$suffix.json"
+            docker exec "$name" python -m steuerreport_v2.db.offline_snapshot --help > "$proof/offline-clone-help-$suffix.txt"
             docker exec "$name" python -c 'import json,sys,urllib.request; payload=json.dumps({"connector_id":"binance","api_key":"synthetic-key","api_secret":"synthetic-secret"}).encode(); req=urllib.request.Request("http://127.0.0.1:8010/api/v1/admin/cex-credentials",data=payload,headers={"Content-Type":"application/json"},method="POST"); response=json.load(urllib.request.urlopen(req,timeout=30)); sys.exit(0 if response.get("status") == "ok" else 1)'
             volume="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/state"}}{{.Name}}{{end}}{{end}}' "$name")"
             [[ "$volume" =~ ^[a-f0-9]{64}$ ]]
@@ -198,6 +199,7 @@ jobs:
             ${{ runner.temp }}/docker-layer-proof/smoke-*.json
             ${{ runner.temp }}/docker-layer-proof/user-path-*.json
             ${{ runner.temp }}/docker-layer-proof/vault-*.txt
+            ${{ runner.temp }}/docker-layer-proof/offline-clone-help-*.txt
           if-no-files-found: warn
           retention-days: 30
 

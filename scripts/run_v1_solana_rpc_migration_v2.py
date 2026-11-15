@@ -6,11 +6,8 @@ from steuerreport_v2.private_settings import private_value
 import argparse
 import base64
 import json
-import shutil
 import subprocess
 import sys
-import tempfile
-from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -18,9 +15,6 @@ from typing import Any
 from steuerreport_v2.db.duckdb_store import DuckDbStore
 from steuerreport_v2.domain.external_price_backfill import (
     ExternalPriceBackfillService,
-    HistoricalBackfillIncompleteError,
-    HistoricalBackfillJobsFailed,
-    HistoricalBackfillPipelineFailed,
     require_backfill_pipeline_success,
 )
 from steuerreport_v2.domain.pipeline import PipelineService
@@ -58,82 +52,19 @@ def main() -> int:
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args()
 
-    db_path = Path(args.db)
-    stage_db = _snapshot_database(db_path, "v1_solana_full_stage")
     result: dict[str, Any] = {
         "mode": "execute" if args.execute else "dry-run",
-        "db": str(db_path),
-        "stage_db": str(stage_db),
+        "db": str(args.db),
         "v1_db": str(args.v1_db),
         "wallet_month_csv": str(args.wallet_month_csv),
         "max_year": args.max_year,
         "target_changed": False,
+        "blocked_reason": "unsafe_database_snapshot_and_restore_unavailable",
+        "stage_attempted": False,
+        "restore_attempted": False,
     }
-
-    try:
-        result["stage"] = _run_full_import(
-            stage_db,
-            v1_db=Path(args.v1_db),
-            wallet_month_csv=Path(args.wallet_month_csv),
-            price_config=Path(args.price_config),
-            max_year=args.max_year,
-        )
-    except HistoricalBackfillIncompleteError as exc:
-        result["blocked_reason"] = "stage_price_backfill_incomplete"
-        result["error"] = str(exc)
-        if isinstance(exc, (HistoricalBackfillPipelineFailed, HistoricalBackfillJobsFailed)):
-            result["stage_confirmed_backfill_price_ids"] = exc.stored_price_ids
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-    except Exception as exc:
-        result["blocked_reason"] = "stage_exception"
-        result["error"] = repr(exc)
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-
-    if not result["stage"]["review"]["allow_export"]:
-        result["blocked_reason"] = "stage_review_not_export_ready"
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-
-    if not args.execute:
-        print(json.dumps(result, indent=2, default=str))
-        return 0
-
-    backup = _backup_database(db_path)
-    result["backup"] = str(backup)
-    try:
-        result["applied"] = _run_full_import(
-            db_path,
-            v1_db=Path(args.v1_db),
-            wallet_month_csv=Path(args.wallet_month_csv),
-            price_config=Path(args.price_config),
-            max_year=args.max_year,
-        )
-    except HistoricalBackfillIncompleteError as exc:
-        result["blocked_reason"] = "live_price_backfill_incomplete_state_unknown_or_partial"
-        result["target_changed"] = None
-        result["error"] = str(exc)
-        if isinstance(exc, (HistoricalBackfillPipelineFailed, HistoricalBackfillJobsFailed)):
-            result["live_confirmed_backfill_price_ids"] = exc.stored_price_ids
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-    except Exception as exc:
-        shutil.copy2(backup, db_path)
-        result["blocked_reason"] = "live_exception_restored_from_backup"
-        result["error"] = repr(exc)
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-
-    if not result["applied"]["review"]["allow_export"]:
-        shutil.copy2(backup, db_path)
-        result["blocked_reason"] = "live_review_not_export_ready_restored_from_backup"
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-
-    result["target_changed"] = True
     print(json.dumps(result, indent=2, default=str))
-    return 0
+    return 2
 
 
 def _run_full_import(
@@ -219,22 +150,6 @@ def _backfill_prices(db_path: Path, *, v1_db: Path, price_config: Path) -> dict[
     )
     require_backfill_pipeline_success(result)
     return result.model_dump(mode="json")
-
-
-def _snapshot_database(db_path: Path, purpose: str) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = Path(tempfile.gettempdir()) / f"{db_path.stem}_{purpose}_{stamp}{db_path.suffix}"
-    shutil.copy2(db_path, target)
-    return target
-
-
-def _backup_database(db_path: Path) -> Path:
-    backup_dir = db_path.parent / "backups"
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = backup_dir / f"{db_path.stem}_before_v1_solana_full_{stamp}{db_path.suffix}"
-    shutil.copy2(db_path, target)
-    return target
 
 
 if __name__ == "__main__":
