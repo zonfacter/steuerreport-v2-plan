@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import sqlite3
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal, DecimalException, InvalidOperation, localcontext
@@ -76,6 +78,38 @@ class HistoricalBackfillJobsFailed(HistoricalBackfillIncompleteError):
         self.stored_price_ids = list(stored_price_ids or [])
 
 
+class CurrentBackfillReplayBlocked(RuntimeError):
+    pass
+
+
+class CurrentBackfillReservationUnknown(RuntimeError):
+    pass
+
+
+class CurrentBackfillProviderContextFailed(RuntimeError):
+    pass
+
+
+class CurrentBackfillStorageUnknown(RuntimeError):
+    def __init__(self, warnings: list[ApiMessage]) -> None:
+        super().__init__("Aktueller Preisbackfill: Speicherzustand unbekannt.")
+        self.warnings = warnings
+
+
+@contextmanager
+def _current_price_client(timeout: int):
+    try:
+        with managed_client(timeout=timeout, headers={"user-agent": "steuerreport-v2/0.1"}) as client:
+            yield client
+    except RequestCancelled:
+        raise RequestCancelled("request_cancelled") from None
+    except RequestDeadlineExceeded:
+        raise RequestDeadlineExceeded("request_deadline_exceeded") from None
+    except Exception:
+        logger.error("Current portfolio price provider context failed")
+        raise CurrentBackfillProviderContextFailed("Preisprovider nicht verfuegbar; keine Preise gespeichert.") from None
+
+
 def require_backfill_pipeline_success(result: ExternalPriceBackfillResult) -> None:
     if result.pipeline_status == "failed":
         raise HistoricalBackfillPipelineFailed(result.stored_price_ids)
@@ -91,7 +125,7 @@ def fx_reference_warnings(jobs: list) -> list[ApiMessage]:
         warnings.append(ApiMessage(code=FX_REFERENCE_UNVERIFIED, message=FX_REFERENCE_UNVERIFIED_MESSAGE))
     if any(job.reason == FX_SOURCE_UNREADABLE for job in jobs):
         warnings.append(ApiMessage(code=FX_SOURCE_UNREADABLE, message="Die FX-Quelle konnte nicht gelesen werden."))
-    if any(job.reason == PRICE_PROVIDER_ERROR for job in jobs):
+    if any(job.reason == PRICE_PROVIDER_ERROR or PRICE_PROVIDER_ERROR in getattr(job, "additional_reasons", []) for job in jobs):
         warnings.append(ApiMessage(code=PRICE_PROVIDER_ERROR, message="Ein Preisabruf ist fehlgeschlagen."))
     if any(job.reason == PRICE_CANDIDATE_OUT_OF_RANGE for job in jobs):
         warnings.append(ApiMessage(code=PRICE_CANDIDATE_OUT_OF_RANGE, message=(
@@ -384,7 +418,14 @@ class ExternalPriceBackfillService:
         timeout_seconds: int,
         confidence: Decimal,
         dry_run: bool,
+        request_id: str | None = None,
     ) -> CurrentPortfolioPriceBackfillResult:
+        if not dry_run:
+            self._reserve_current_backfill(
+                request_id=request_id, config_path=config_path, provider=provider,
+                assets_filter=assets_filter, max_requests=max_requests,
+                timeout_seconds=timeout_seconds, confidence=confidence,
+            )
         assets = self._load_assets(config_path)
         alias_map = self._alias_map(assets)
         portfolio_assets = sorted(
@@ -443,38 +484,46 @@ class ExternalPriceBackfillService:
         usd_eur = Decimal("0")
         fx_source_date = ""
         fx_reference = None
+        coingecko_failed = defillama_failed = fx_failed = False
         if configured and not dry_run:
-            with managed_client(
-                timeout=timeout_seconds,
-                headers={"user-agent": "steuerreport-v2/0.1"},
-            ) as client:
-                coingecko_prices = self._fetch_coingecko_simple_prices_eur(
-                    client,
-                    sorted(
-                        {
-                            asset.coingecko_id
-                            for asset in configured.values()
-                            if asset.coingecko_id
-                        }
-                    ),
-                )
-                defillama_prices_usd = self._fetch_defillama_current_prices_usd(
-                    client,
-                    sorted(
-                        {
-                            asset.defillama_id
-                            for asset in configured.values()
-                            if asset.defillama_id
-                        }
-                    ),
-                )
+            with _current_price_client(timeout_seconds) as client:
+                coingecko_ids = sorted({asset.coingecko_id for asset in configured.values() if asset.coingecko_id})
+                defillama_ids = sorted({asset.defillama_id for asset in configured.values() if asset.defillama_id})
+                if coingecko_ids:
+                    try:
+                        coingecko_prices = self._fetch_coingecko_simple_prices_eur(client, coingecko_ids)
+                    except RequestCancelled:
+                        raise RequestCancelled("request_cancelled") from None
+                    except RequestDeadlineExceeded:
+                        raise RequestDeadlineExceeded("request_deadline_exceeded") from None
+                    except Exception:
+                        logger.error("Current portfolio price provider request failed")
+                        coingecko_failed = True
+                if defillama_ids:
+                    try:
+                        defillama_prices_usd = self._fetch_defillama_current_prices_usd(client, defillama_ids)
+                    except RequestCancelled:
+                        raise RequestCancelled("request_cancelled") from None
+                    except RequestDeadlineExceeded:
+                        raise RequestDeadlineExceeded("request_deadline_exceeded") from None
+                    except Exception:
+                        logger.error("Current portfolio price provider request failed")
+                        defillama_failed = True
                 if defillama_prices_usd:
-                    usd_eur, fx_source_date = self._fetch_frankfurter_usd_eur(client)
-                    fx_reference = select_fx_reference(
-                        [{"base": "USD", "quote": "EUR", "rate": usd_eur, "date": fx_source_date}]
-                        if fx_source_date < priced_at.date().isoformat() else [],
-                        priced_at.date(),
-                    )
+                    try:
+                        usd_eur, fx_source_date = self._fetch_frankfurter_usd_eur(client)
+                        fx_reference = select_fx_reference(
+                            [{"base": "USD", "quote": "EUR", "rate": usd_eur, "date": fx_source_date}]
+                            if fx_source_date < priced_at.date().isoformat() else [],
+                            priced_at.date(),
+                        )
+                    except RequestCancelled:
+                        raise RequestCancelled("request_cancelled") from None
+                    except RequestDeadlineExceeded:
+                        raise RequestDeadlineExceeded("request_deadline_exceeded") from None
+                    except Exception:
+                        logger.error("Current portfolio FX provider request failed")
+                        fx_failed = True
 
         for asset_symbol, asset in configured.items():
             attempted += 1
@@ -499,6 +548,9 @@ class ExternalPriceBackfillService:
             fx_rejected = bool(price_usd.is_finite() and price_usd > 0 and fx_reference is None)
             used_fx = False
             price_out_of_range = False
+            provider_error = bool((asset.coingecko_id and coingecko_failed) or
+                                  (asset.defillama_id and (defillama_failed or
+                                   (fx_failed and price_usd.is_finite() and price_usd > 0))))
             if asset.defillama_id and fx_reference is not None:
                 if price_usd.is_finite() and price_usd > 0:
                     converted = checked_eur_price(price_usd, usd_eur, preserve_exact_scale=True)
@@ -528,8 +580,8 @@ class ExternalPriceBackfillService:
                         asset=asset_symbol,
                         provider_id=provider_id,
                         status="failed",
-                        reason=FX_REFERENCE_INVALID if fx_rejected else ("price_out_of_range" if price_out_of_range else "asset_eur_missing"),
-                        additional_reasons=[PRICE_OUT_OF_RANGE] if fx_rejected and price_out_of_range else [],
+                        reason=FX_REFERENCE_INVALID if fx_rejected else ("price_out_of_range" if price_out_of_range else PRICE_PROVIDER_ERROR if provider_error else "asset_eur_missing"),
+                        additional_reasons=([PRICE_OUT_OF_RANGE] if fx_rejected and price_out_of_range else []) + ([PRICE_PROVIDER_ERROR] if provider_error else []),
                         source=source_label,
                     )
                 )
@@ -551,15 +603,36 @@ class ExternalPriceBackfillService:
                     reason=(FX_REFERENCE_INVALID if fx_rejected else
                             PRICE_CANDIDATE_OUT_OF_RANGE if price_out_of_range else
                             FX_REFERENCE_UNVERIFIED if used_fx else None),
+                    additional_reasons=[PRICE_PROVIDER_ERROR] if provider_error else [],
                     price_eur=price_eur,
                     source=source_label,
                 )
             )
 
         pipeline = None
+        stored_price_ids: list[str] | None = []
+        pipeline_status = "not_started"
+        pipeline_effects = "not_started"
         if prices:
-            self.store.add_price_points(prices)
-            pipeline = PipelineService(self.store).rebuild_all()
+            try:
+                stored_price_ids = [price.price_id for price in self.store.add_price_points(prices)]
+            except Exception:
+                logger.error("Current portfolio price storage failed; storage state unknown")
+                stored_price_ids = None
+            if stored_price_ids is None:
+                warnings = fx_reference_warnings(jobs)
+                if failed:
+                    warnings.append(ApiMessage(code="price_backfill_partial_failure", message=f"{failed} Preisjobs sind vor dem Speicherfehler fehlgeschlagen."))
+                raise CurrentBackfillStorageUnknown(warnings)
+            try:
+                pipeline = PipelineService(self.store).rebuild_all()
+            except Exception:
+                logger.error("Current portfolio price pipeline failed after price storage")
+                pipeline_status = "failed"
+                pipeline_effects = "unknown_or_partial"
+            else:
+                pipeline_status = "completed"
+                pipeline_effects = "completed"
         return CurrentPortfolioPriceBackfillResult(
             portfolio_assets_count=len(portfolio_assets),
             configured_assets=sorted({asset.symbol for asset in assets}),
@@ -573,7 +646,33 @@ class ExternalPriceBackfillService:
             priced_at=priced_at,
             jobs=jobs[:250],
             pipeline=pipeline,
+            stored_price_ids=stored_price_ids,
+            pipeline_status=pipeline_status,
+            pipeline_effects=pipeline_effects,
         )
+
+    def _reserve_current_backfill(self, *, request_id: str | None, config_path: str, provider: str,
+                                  assets_filter: list[str], max_requests: int, timeout_seconds: int,
+                                  confidence: Decimal) -> None:
+        identity = {"request_id": str(request_id)} if request_id else {
+            "config_path": config_path, "provider": provider,
+            "assets": sorted({asset.strip().upper() for asset in assets_filter if asset.strip()}),
+            "max_requests": max_requests, "timeout_seconds": timeout_seconds, "confidence": str(confidence),
+        }
+        key = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        reserved = None
+        try:
+            with self.store.connect() as con:
+                con.execute("create table if not exists current_price_backfill_requests (request_hash varchar primary key, reserved_at timestamp not null)")
+                reserved = con.execute(
+                    "insert into current_price_backfill_requests values (?, current_timestamp) on conflict do nothing returning request_hash", [key],
+                ).fetchone() is not None
+        except Exception:
+            logger.error("Current portfolio price backfill reservation failed")
+        if reserved is None:
+            raise CurrentBackfillReservationUnknown("Auftragsreservierung unklar; keine Preisoperation begonnen.")
+        if not reserved:
+            raise CurrentBackfillReplayBlocked("Auftrag bereits reserviert; Zustand vor einem neuen Auftrag pruefen.")
 
     def _load_assets(self, config_path: str) -> list[_PriceAsset]:
         path = resolve_project_path(config_path)

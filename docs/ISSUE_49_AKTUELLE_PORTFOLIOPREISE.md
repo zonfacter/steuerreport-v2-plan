@@ -1,0 +1,62 @@
+# Issue 49: Aktueller Portfolio-Backfill, isolierter Teilfix
+
+Basis `7f9ba86`; kein produktiver Lauf und keine fachliche Freigabe. Der
+historische und der Stichtags-Backfill sind nicht Gegenstand dieses Teilfixes.
+
+Apply reserviert vor Providerzugriff eine dauerhafte Kennung in der DuckDB.
+Gleiche Kennungen werden auch nach Neustart vor Provider- und Preisschreibzugriff
+blockiert. Die optionale UUID erlaubt einen bewusst neuen Auftrag; ohne UUID
+wird die normalisierte Anfrage gehasht. Die Sperre ersetzt keine umfassende
+Idempotenz, Quellenbindung oder eine fachliche Pruefung. Andere Parameter,
+neue UUIDs, Datenbank-Restore und andere Schreibwege koennen neue Zeilen
+erzeugen. Reservierungen werden nicht automatisch geloescht und liefern keine
+gespeicherte Antwort oder Recovery nach Prozessabbruch. Die Reservierung selbst
+ist ein dauerhafter DB-Schreibvorgang, auch wenn kein Preis gespeichert wird.
+
+Anbieterausnahmen sind fest formuliert; unabhaengige Kandidaten koennen
+gespeichert werden, ein Teilfehler bleibt als Warnung sichtbar. Abbruch- und
+Deadline-Signale stoppen vor dem Preis-Insert. Speicherfehler koennen vor oder
+nach dem Insert auftreten: Zustand unbekannt, keine IDs behauptet. Nach
+bestaetigter Speicherung sind IDs bekannt; Pipelinefehler koennen unbekannte
+oder teilweise Nebenwirkungen haben. Nicht automatisch wiederholen. Der
+direkte JUP-Aufrufer stoppt nach Eintritt in diesen Preisweg ohne automatische
+Rueckkopie; andere fruehere Schritte und deren bestehende Restore-Logik sind
+nicht durch diesen Teilfix abgesichert.
+
+Ein HTTP-200-Warnstatus muss von Clients ausgewertet werden. Bei Zeitueberschreitung
+oder verlorener Antwort kann der Client den Ausgang nicht kennen; die gleiche
+Kennung darf nicht erneut ausgefuehrt werden. Neue Kennungen duerfen erst nach
+Pruefung bewusst vergeben werden. Die UI bestaetigt einen neuen Apply und meldet
+unbekannte Zustaende; ein Browser-Smoke ist separat erforderlich. Ein neues
+Jobjournal, zuverlaessige parallele DB-Prozesse, konkurrierende andere
+Preisimporte und vollstaendige Recovery sind nicht nachgewiesen.
+
+## Entwicklungspruefung und offene Integration
+
+Der Frontend-Auftrag nutzt `getRandomValues` statt des nur im sicheren Kontext
+verfuegbaren `randomUUID`, damit bestehende LAN-HTTP-Installationen funktionieren.
+Der Kennungsgenerator wird ohne `randomUUID` getestet; das ersetzt keinen
+interaktiven Browsernachweis des gesamten Formulars.
+
+Die Reservierungstabelle wird derzeit vom Dienst bei Bedarf angelegt. Eine
+zentrale Schema-/Migrationsintegration und ein Aufbewahrungs-/Recoveryvertrag
+fehlen. Ohne explizite Kennung ist die gleiche Anfrage dauerhaft gesperrt;
+dies ist eine Verhaltensaenderung fuer Altclients. Eine neue Kennung umgeht
+die Sperre bewusst, sie belegt keinen geprueften Vorzustand. Nicht unveraendert
+als fertig migrierten Tagesabruf oder sichere Idempotenz veroeffentlichen.
+
+Der direkte JUP-Aufrufer hat ausserhalb des hier geaenderten Preiswegs weiterhin
+ungepruefte Dateikopie-/Restorepfade. #53 und #55 decken nicht automatisch
+dieses weitere Skript ab. Vor Integration sind diese Pfade gesondert zu pruefen.
+
+## Ausgefuehrte Nachweise
+
+- `pytest -q tests/unit/test_current_backfill_partial.py`: 14 bestanden,
+  isolierte Datenbank, feste Uhr und Mock-Provider; eine Starlette-Warnung.
+- `ruff check src tests scripts`: bestanden.
+- `node tests/run-dashboard-tests.mjs`: 10 bestanden, bestehende SSR-Warnungen.
+- `npm run build`: bestanden, bestehende Bundle-Groessenwarnung.
+- `scripts/export_openapi_v2.py --check`: bestanden; Endpunktreferenz regeneriert.
+
+Diese Nachweise sind keine unabhaengige fachliche Abnahme und kein Nachweis
+eines interaktiven Browserablaufs oder produktiven Anbieterabrufs.

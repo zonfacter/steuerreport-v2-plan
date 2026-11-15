@@ -5,6 +5,7 @@ from steuerreport_v2.paths import configured_import_path
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -182,6 +183,7 @@ class CurrentPortfolioPriceBackfillRequest(BaseModel):
     timeout_seconds: int = 20
     confidence: Decimal = Decimal("0.95")
     dry_run: bool = True
+    request_id: UUID | None = Field(default=None, description="Eindeutige Kennung fuer einen bewusst neuen Apply; Wiederholungen derselben Kennung werden blockiert.")
 
 
 class CurrentPortfolioPriceBackfillJob(BaseModel):
@@ -207,6 +209,9 @@ class CurrentPortfolioPriceBackfillResult(BaseModel):
     priced_at: datetime
     jobs: list[CurrentPortfolioPriceBackfillJob]
     pipeline: PipelineResult | None = None
+    stored_price_ids: list[str] = Field(default_factory=list, description="Bei Rueckkehr des Speicheraufrufs bestaetigte IDs; kein spaeterer Bestandsnachweis")
+    pipeline_status: Literal["not_started", "completed", "failed"] = "not_started"
+    pipeline_effects: Literal["not_started", "completed", "unknown_or_partial"] = "not_started"
 
 
 class AsOfPriceGateCandidate(BaseModel):

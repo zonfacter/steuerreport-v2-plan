@@ -1618,6 +1618,29 @@ Diese Pruefung belegt nicht den genauen Provider-Kurszeitpunkt oder die
 Originalantwort; auch der gemeinsame Preis-Ledger-/Pipeline-Pfad bleibt zu
 pruefen.
 
+Fuer `dry_run=false` wird vor Anbieter- und Preisschreibzugriff dauerhaft eine
+Auftragskennung reserviert. `request_id` ist eine optionale UUID: dieselbe UUID
+wird auch nach Neustart und bei anderen Parametern mit HTTP 409 blockiert. Alte
+Aufrufer ohne UUID verwenden einen stabilen Hash ihrer Anfrageparameter und
+werden bei identischer Wiederholung ebenfalls blockiert. Eine bewusst neue UUID
+erlaubt einen neuen Lauf und ist kein Nachweis, dass eine Wiederholung richtig
+ist. Reservierungen bleiben auch bei Abbruch oder verlorenem Ergebnis bestehen;
+es gibt kein automatisches Aufraeumen und keine Wiederherstellung des Ergebnisses.
+Vor einem neuen Auftrag muessen Preisbestand, Pipelinefolgen und Providerkosten
+geprueft werden. Andere geaenderte Parameter bei Aufrufen ohne UUID sind eine
+neue Kennung; Wiederholungen ueber andere Wege werden nicht verhindert.
+
+Providerfehler liefern feste Warnungen und koennen unabhaengige erfolgreiche
+Preise erhalten. Abbruch und Deadline stoppen vor dem Preisschreiben. Nach
+bestaetigter Speicherung nennt `stored_price_ids` die zurueckgegebenen IDs;
+`pipeline_status=failed` und `pipeline_effects=unknown_or_partial` zeigen eine
+fehlgeschlagene Pipeline an und erfordern eine Zustandspruefung. Ein Fehler im
+Speicheraufruf liefert HTTP 500 mit unbekanntem Speicherzustand und ohne IDs;
+HTTP 409 bedeutet nur, dass der Auftrag bereits reserviert ist, nicht ob er
+geschrieben hat. Ein Fehler bei der Reservierung oder ein frueher Abbruch
+liefert HTTP 503; fuer diesen Aufruf hat das Preisschreiben nicht begonnen.
+Keine dieser Aussagen belegt Rollback, spaeteren Bestand oder Steuerfreigabe.
+
 `GET /api/v1/prices`
 
 Listet Preis-Ledger-Eintraege absteigend nach Bewertungszeitpunkt. Diese
