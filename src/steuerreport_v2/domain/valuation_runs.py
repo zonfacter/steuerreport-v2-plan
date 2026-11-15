@@ -32,6 +32,7 @@ from steuerreport_v2.domain.divorce_inheritance import (
     DivorceInheritanceOriginService,
 )
 from steuerreport_v2.domain.moonpay_receipts import MoonpayReceiptService
+from steuerreport_v2.domain.price_time import POLICY_ID, POLICY_VERSION
 from steuerreport_v2.domain.source_registry import SourceRegistryService
 from steuerreport_v2.domain.solana_staking_position import (
     SolanaStakingPositionReconciliationService,
@@ -282,7 +283,9 @@ class DivorceValuationRunService:
             methodology=(
                 "Versionierter read-only Stichtagslauf. Mengen und Marktwerte werden fuer den "
                 "Trennungs- und Endvermoegensstichtag aus Canonical Events, Balance-Ledger und dem letzten "
-                "Preis am oder vor dem jeweiligen Stichtag rekonstruiert. Preisalter und Tokenrisiken "
+                "Preis am oder vor dem jeweiligen Stichtag rekonstruiert. Ein gespeicherter Zeitwert "
+                "ist kein Kurs-/FX-Zeitbeleg; die versionierte Zeitbelegpruefung bleibt getrennt. "
+                "Preisalter und Tokenrisiken "
                 "werden durch ein Materialitaets-Gate geprueft. Ein separates Vermoegensfluss-Gate "
                 "trennt externe Einzahlungen und Auszahlungen von internen Transfers, "
                 "Produktumbuchungen und technischen Gebuehren. Zwei separate Wallet-/Depot-FIFO-"
@@ -302,12 +305,25 @@ class DivorceValuationRunService:
         self._atomic_write(latest_path, content)
         return report
 
-    def latest(self) -> DivorceValuationRunReport | None:
+    @staticmethod
+    def has_current_price_time_policy(report: DivorceValuationRunReport) -> bool:
+        return all(
+            gate.price_time_policy_id == POLICY_ID and gate.price_time_policy_version == POLICY_VERSION
+            for gate in (report.cutoff_price_gate, report.valuation_price_gate,
+                         report.summary.cutoff_price_gate, report.summary.valuation_price_gate)
+        )
+
+    def latest(self, *, require_current_policy: bool = True) -> DivorceValuationRunReport | None:
         path = self.artifact_root / "latest_valuation_gate.json"
         try:
-            return DivorceValuationRunReport.model_validate_json(
+            report = DivorceValuationRunReport.model_validate_json(
                 path.read_text(encoding="utf-8")
             )
+            # Archived bytes remain unchanged and accessible by ID; a legacy
+            # positive result is not a current temporal-evidence assessment.
+            if require_current_policy and not self.has_current_price_time_policy(report):
+                return None
+            return report
         except (OSError, ValueError):
             return None
 
@@ -808,11 +824,21 @@ class DivorceValuationRunService:
         source_registry: SourceRegistryRunReport,
     ) -> list[str]:
         actions: list[str] = []
-        if not summary.cutoff_price_gate.strict_ready:
+        if getattr(summary.cutoff_price_gate, "unverified_price_time_count", 0):
+            actions.append(
+                "Kurs-/FX-Zeitbelege und Bewertungsmethode fuer den Trennungsstichtag klaeren; "
+                "ein weiterer Tagesreferenzabruf allein erteilt keine Freigabe."
+            )
+        elif not summary.cutoff_price_gate.strict_ready:
             actions.append(
                 "Fehlende oder veraltete materielle Preise am Trennungsstichtag belegen."
             )
-        if not summary.valuation_price_gate.strict_ready:
+        if getattr(summary.valuation_price_gate, "unverified_price_time_count", 0):
+            actions.append(
+                "Kurs-/FX-Zeitbelege und Bewertungsmethode fuer den Endvermoegensstichtag klaeren; "
+                "ein weiterer Tagesreferenzabruf allein erteilt keine Freigabe."
+            )
+        elif not summary.valuation_price_gate.strict_ready:
             actions.append(
                 "Fehlende oder veraltete materielle Preise am Endvermoegensstichtag belegen."
             )

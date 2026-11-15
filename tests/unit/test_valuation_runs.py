@@ -19,6 +19,46 @@ from steuerreport_v2.domain.valuation_runs import DivorceValuationRunService
 from steuerreport_v2.ledger.balance import BalanceLedgerBuilder
 
 
+def test_legacy_archive_query_is_explicit_read_only_and_warned(tmp_path):
+    from steuerreport_v2.contracts.valuation_runs import DivorceValuationRunReport
+    from steuerreport_v2.domain.divorce import DivorceEqualizationService
+
+    store = DuckDbStore(tmp_path / "synthetic-archive.duckdb")
+    summary = DivorceEqualizationService(store).summary()
+    service = DivorceValuationRunService(store)
+    run_id = "valuation-synthetic-legacy"
+    archive_path = service.artifact_root / run_id / "valuation_run.json"
+    latest_path = service.artifact_root / "latest_valuation_gate.json"
+    report = DivorceValuationRunReport(
+        run_id=run_id, generated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        status="strict_ready", strict_ready=True, cutoff_at=summary.cutoff_at,
+        valuation_at=summary.valuation_at, materiality_threshold_eur=Decimal("1"),
+        material_delta_threshold_eur=Decimal("0.01"), cutoff_price_gate=summary.cutoff_price_gate,
+        valuation_price_gate=summary.valuation_price_gate, semantic_sha256="a" * 64,
+        artifact_path=str(archive_path), latest_artifact_path=str(latest_path),
+        methodology="synthetischer historischer Lauf", summary=summary,
+    ).model_dump(mode="json")
+    for container in (report, report["summary"]):
+        for key in ("cutoff_price_gate", "valuation_price_gate"):
+            container[key].pop("price_time_policy_id")
+            container[key].pop("price_time_policy_version")
+    original = json.dumps(report, sort_keys=True).encode()
+    archive_path.parent.mkdir(parents=True)
+    archive_path.write_bytes(original)
+    latest_path.write_bytes(original)
+    client = TestClient(create_app(store))
+    current = client.get("/api/v1/divorce/valuation-runs/latest").json()
+    explicit = client.get("/api/v1/divorce/valuation-runs/latest?include_archived=true").json()
+    archive = client.get(f"/api/v1/divorce/valuation-runs/{run_id}").json()
+    assert current["data"] is None and current["status"] == "warning"
+    assert explicit["status"] == archive["status"] == "warning"
+    assert explicit["data"]["run_id"] == archive["data"]["run_id"] == run_id
+    assert explicit["data"]["strict_ready"] is True  # Nur archivierter Status, keine Neufreigabe.
+    assert explicit["data"]["cutoff_price_gate"]["price_time_policy_id"] is None
+    assert explicit["warnings"][0]["code"] == "valuation_price_time_policy_stale"
+    assert archive_path.read_bytes() == latest_path.read_bytes() == original
+
+
 def _store(tmp_path):
     store = DuckDbStore(tmp_path / "steuerreport_v2.duckdb")
     store.add_canonical_events(
@@ -111,8 +151,10 @@ def test_divorce_valuation_run_versions_two_exact_fifo_checkpoints_and_evidence(
     assert any("Gerichts-/Zustellungsbeleg" in item for item in report.next_actions)
     assert report.cutoff_value_eur == Decimal("110.000000000000000000")
     assert report.valuation_value_eur == Decimal("130.000000000000000000")
-    assert report.cutoff_price_gate.strict_ready is True
-    assert report.valuation_price_gate.strict_ready is True
+    assert report.cutoff_price_gate.strict_ready is False
+    assert report.valuation_price_gate.strict_ready is False
+    assert report.cutoff_price_gate.unverified_price_time_count == 1
+    assert report.valuation_price_gate.unverified_price_time_count == 1
     assert report.source_registry_status == "blocked"
     assert report.source_registry_strict_ready is False
     assert report.source_provider_coverage_gap_count >= 0

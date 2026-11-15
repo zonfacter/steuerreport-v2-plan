@@ -121,7 +121,9 @@ def test_diagnostic_eur_identity_and_current_primary_remain_separate(tmp_path):
     report = AsOfPriceGateService(store).report(as_of=AT)
     assert report.candidates[0].current_price_status == "same_day"
     assert report.candidates[0].value_eur == Decimal("7")
-    assert report.strict_ready
+    assert not report.strict_ready
+    assert report.time_review_count == 1
+    assert report.candidates[0].price_time.strict_eligible is False
 
 
 def test_current_diagnostic_never_fills_an_unpriced_snapshot_or_opens_gate(tmp_path):

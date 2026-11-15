@@ -197,6 +197,8 @@ class DivorceEqualizationAccountRow(BaseModel):
 
 class DivorceValuationGate(BaseModel):
     valuation_at: datetime
+    price_time_policy_id: str | None = None
+    price_time_policy_version: int | None = None
     materiality_threshold_eur: Decimal = Decimal("1")
     positions_count: int = 0
     material_positions_count: int = 0
@@ -204,6 +206,7 @@ class DivorceValuationGate(BaseModel):
     prior_day_price_count: int = 0
     stale_price_count: int = 0
     missing_price_count: int = 0
+    unverified_price_time_count: int = 0
     review_asset_count: int = 0
     accepted_review_asset_count: int = 0
     strict_ready: bool = False

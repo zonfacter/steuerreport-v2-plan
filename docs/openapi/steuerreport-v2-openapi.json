@@ -16611,6 +16611,9 @@
             ],
             "title": "Current Priced At"
           },
+          "price_time": {
+            "$ref": "#/components/schemas/PriceTimeAssessment"
+          },
           "provider_id": {
             "anyOf": [
               {
@@ -16711,6 +16714,7 @@
         "required": [
           "asset",
           "current_price_status",
+          "price_time",
           "status",
           "reason"
         ],
@@ -16781,6 +16785,11 @@
             "default": false,
             "title": "Strict Ready",
             "type": "boolean"
+          },
+          "time_review_count": {
+            "default": 0,
+            "title": "Time Review Count",
+            "type": "integer"
           }
         },
         "required": [
@@ -33104,6 +33113,28 @@
             "title": "Positions Count",
             "type": "integer"
           },
+          "price_time_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Time Policy Id"
+          },
+          "price_time_policy_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Time Policy Version"
+          },
           "prior_day_price_count": {
             "default": 0,
             "title": "Prior Day Price Count",
@@ -33140,6 +33171,11 @@
             },
             "title": "Token Review Evidence Refs",
             "type": "array"
+          },
+          "unverified_price_time_count": {
+            "default": 0,
+            "title": "Unverified Price Time Count",
+            "type": "integer"
           },
           "valuation_at": {
             "format": "date-time",
@@ -49476,6 +49512,188 @@
           "requirements"
         ],
         "title": "PriceRequirementReport",
+        "type": "object"
+      },
+      "PriceTimeAssessment": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "title": "Asset",
+            "type": "string"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "fx_evidence_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Evidence Ref"
+          },
+          "fx_published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fx Published At"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "policy_id": {
+            "const": "stichtag-temporal-evidence",
+            "default": "stichtag-temporal-evidence",
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "price_evidence_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Evidence Ref"
+          },
+          "price_published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Published At"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "reference_kind": {
+            "default": "unknown",
+            "enum": [
+              "fixed_identity",
+              "daily_reference_candidate",
+              "derived_reference_candidate",
+              "unknown"
+            ],
+            "title": "Reference Kind",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "fixed_eur_identity",
+              "unverified_time",
+              "missing",
+              "future_reference",
+              "non_positive"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stored_reference_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stored Reference At"
+          },
+          "strict_eligible": {
+            "default": false,
+            "title": "Strict Eligible",
+            "type": "boolean"
+          },
+          "valuation_method_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Method Id"
+          },
+          "valuation_method_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Method Version"
+          }
+        },
+        "required": [
+          "asset",
+          "status",
+          "explanation"
+        ],
+        "title": "PriceTimeAssessment",
         "type": "object"
       },
       "PriceWriteResult": {
@@ -90623,6 +90841,18 @@
       "get": {
         "description": "Divorce valuation run latest. Der Aufruf liest ausschliesslich gespeicherte oder berechnete Daten. JSON-Antworten verwenden das versionierte ApiResponse-Envelope mit trace_id, status, data, errors und warnings.",
         "operationId": "divorce_valuation_run_latest_api_v1_divorce_valuation_runs_latest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -90633,6 +90863,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Divorce Valuation Run Latest",

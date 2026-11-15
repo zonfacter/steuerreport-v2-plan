@@ -127,7 +127,8 @@ def test_as_of_price_gate_backfill_adds_same_day_price_without_pipeline_rebuild(
     assert result.jobs[0].price_eur == Decimal("90.0")
     assert "Quelltag" in result.methodology and "Originalbeleg" in result.methodology
     assert result.gate_before.strict_ready is False
-    assert result.gate_after.strict_ready is True
+    assert result.gate_after.strict_ready is False
+    assert result.gate_after.time_review_count == 1
     assert result.gate_after.candidates[0].current_price_status == "same_day"
     assert TaxService(store).list_tax_lines() == []
 
@@ -188,7 +189,8 @@ def test_as_of_price_gate_backfill_supports_defillama_only_asset(tmp_path, monke
 
     assert result.imported_prices == 1
     assert result.gate_before.candidates[0].provider_id == "solana:jlwsol-mint"
-    assert result.gate_after.strict_ready is True
+    assert result.gate_after.strict_ready is False
+    assert result.gate_after.time_review_count == 1
     assert calls[0]["coingecko_id"] is None
     assert calls[0]["defillama_id"] == "solana:jlwsol-mint"
 
@@ -350,8 +352,9 @@ def test_as_of_price_gate_keeps_risk_token_in_review_even_with_same_day_price(tm
     report = AsOfPriceGateService(store).report(as_of=AS_OF)
 
     assert report.strict_ready is False
-    assert report.review_only_count == 1
-    assert report.candidates[0].status == "review_only"
+    assert report.review_only_count == 0
+    assert report.time_review_count == 1
+    assert report.candidates[0].status == "time_review"
     assert report.candidates[0].token_review_status == "pending"
 
 
@@ -375,11 +378,12 @@ def test_as_of_price_gate_normalizes_verified_dollar_prefixed_symbol(tmp_path):
 
     report = AsOfPriceGateService(store).report(as_of=AS_OF)
 
-    assert report.strict_ready is True
+    assert report.strict_ready is False
+    assert report.time_review_count == 1
     assert report.review_only_count == 0
     assert report.candidates[0].token_mint.startswith("7atgF8")
     assert report.candidates[0].token_review_status == "not_required"
-    assert report.candidates[0].status == "satisfied"
+    assert report.candidates[0].status == "time_review"
 
 
 def test_as_of_price_gate_accepts_risk_token_only_with_same_day_price(tmp_path):
@@ -409,7 +413,8 @@ def test_as_of_price_gate_accepts_risk_token_only_with_same_day_price(tmp_path):
     repeated = service.accept_token_valuation(request)
 
     assert result.already_recorded is False
-    assert result.gate_after.strict_ready is True
+    assert result.gate_after.strict_ready is False
+    assert result.gate_after.time_review_count == 1
     assert result.gate_after.gate.accepted_review_asset_count == 1
     assert result.gate_after.candidates[0].token_review_status == "accepted"
     assert repeated.already_recorded is True
@@ -461,7 +466,8 @@ def test_as_of_price_gate_token_review_api_and_csv(tmp_path):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["gate_after"]["strict_ready"] is True
+    assert response.json()["data"]["gate_after"]["strict_ready"] is False
+    assert response.json()["data"]["gate_after"]["time_review_count"] == 1
     assert csv_response.status_code == 200
     assert csv_response.headers["content-type"].startswith("text/csv")
     assert response.json()["data"]["decision"]["decision_id"] in csv_response.text

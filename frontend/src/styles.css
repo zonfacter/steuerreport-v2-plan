@@ -2998,6 +2998,36 @@ p {
   padding: 14px;
 }
 
+.valuationWorkspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.valuationWorkspace .valuationGateBand {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.valuationWorkspace .valuationGateHeader {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.valuationWorkspace > *,
+.valuationControlPanel,
+.valuationControlGrid > * {
+  min-width: 0;
+}
+
+.valuationControlPanel > .panelToolbar {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.valuationControlPanel > .panelToolbar .statusPill {
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.3;
+}
+
 .valuationControlGrid button {
   align-items: center;
   display: inline-flex;

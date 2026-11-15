@@ -53,6 +53,11 @@ jobs:
           PYTHONPATH: src
           STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
         run: python -m pytest tests/unit/test_price_backfill_checkpoint_acceptance.py tests/unit/test_price_backfill_checkpoint_review.py -q --basetemp="${RUNNER_TEMP}/reference-checkpoint" --junitxml=reference-checkpoint.xml
+      - name: Immutable independent as-of time evidence probes
+        env:
+          PYTHONPATH: src
+          STEUERREPORT_TEST_PRUNE_PASSED_DBS: "1"
+        run: python -m pytest tests/unit/test_as_of_temporal_evidence_acceptance.py -q --basetemp="${RUNNER_TEMP}/reference-time-evidence" --junitxml=reference-time-evidence.xml
       - name: Unchanged public Bitget reproducer
         env:
           PYTHONPATH: src
@@ -292,6 +297,15 @@ jobs:
       - name: Price checkpoint status against isolated backend
         working-directory: .
         run: python scripts/check_price_checkpoint_backend_browser_v2.py --output var/price-checkpoint-backend-browser
+      - name: Price time evidence with controlled synthetic assessments
+        working-directory: .
+        run: python scripts/check_price_time_evidence_browser_v2.py --output var/price-time-evidence-browser
+      - name: Price time evidence against isolated backend
+        working-directory: .
+        run: python scripts/check_price_time_backend_browser_v2.py --output var/price-time-backend-browser
+      - name: Archived valuation workflow and mixed-policy guard in actual app
+        working-directory: .
+        run: python scripts/check_price_time_archive_browser_v2.py --output var/price-time-archive-browser
       - name: Filing aggregate comparison with controlled responses
         working-directory: .
         run: python scripts/check_filing_comparison_browser_v2.py --output "${RUNNER_TEMP}/filing-comparison-browser"
@@ -317,6 +331,9 @@ jobs:
             ${{ runner.temp }}/historical-prices-browser/
             var/current-price-status-browser/
             var/price-checkpoint-backend-browser/
+            var/price-time-evidence-browser/
+            var/price-time-backend-browser/
+            var/price-time-archive-browser/
             ${{ runner.temp }}/filing-comparison-browser/
             ${{ runner.temp }}/updates-browser/
             ${{ runner.temp }}/updates-backend-browser/

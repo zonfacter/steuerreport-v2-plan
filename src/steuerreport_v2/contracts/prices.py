@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from steuerreport_v2.contracts.divorce import DivorceValuationGate
+from steuerreport_v2.contracts.price_time import PriceTimeAssessment
 from steuerreport_v2.contracts.pipeline import PipelineResult
 from steuerreport_v2.contracts.review import ReviewDecision
 
@@ -306,6 +307,7 @@ class AsOfPriceGateCandidate(BaseModel):
     current_price_source: str | None = None
     current_price_age_days: int | None = None
     current_price_status: str
+    price_time: PriceTimeAssessment
     provider_id: str | None = None
     token_mint: str | None = None
     token_verified: bool | None = None
@@ -328,6 +330,7 @@ class AsOfPriceGateReport(BaseModel):
     requirements_count: int = 0
     fetchable_count: int = 0
     review_only_count: int = 0
+    time_review_count: int = 0
     not_configured_count: int = 0
     candidates: list[AsOfPriceGateCandidate] = Field(default_factory=list)
     methodology: str

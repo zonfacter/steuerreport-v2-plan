@@ -266,6 +266,10 @@ und [rc32](docs/RELEASE_0.2.0rc32.md).
 
 Unveroeffentlichte Weiterentwicklung fuer direkte Preisauftraege:
 [Speicherbeleg und Ausgang nach einem Abbruch pruefen](docs/ISSUE_49_AKTUELLE_PORTFOLIOPREISE.md).
+Ebenfalls unveroeffentlicht: [Stichtagsreferenz und Kurs-/FX-Zeitbeleg
+auseinanderhalten](docs/STICHTAG_ZEITBELEGE.md). Ein Tagesanker oder eine
+Tokenannahme ersetzt keinen Beobachtungs- oder Veroeffentlichungsnachweis;
+die positive Nicht-EUR-Belegzulassung ist noch nicht implementiert.
 Preiszeilen/Checkpoint werden gemeinsam gespeichert, die anschliessende
 Pipeline bleibt ein getrennter Schritt. Keine automatische Wiederholung und
 keine Jahresfreigabe; der moderne historische Vorschauablauf bleibt erhalten.
