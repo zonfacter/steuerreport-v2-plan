@@ -98,3 +98,60 @@ USD in beiden Richtungen mit identischem EUR-Ergebnis; FX-/Originalluecken
 und unbekannte Provenienz negativ. Naive Zeiten, Sommerzeitgrenzen und
 Boolean-/Float-/nicht endliche Werte gesondert pruefen. Legacy-43er-Proben
 und alle bestehenden unabhaengigen Referenzdateien unveraendert erhalten.
+
+## Abgestimmte reine Python-Schnittstelle
+
+Neue Dateien `contracts/price_evidence.py` und `domain/price_evidence.py`:
+
+```python
+price_evidence_binding(*, point: PricePoint, identity: PriceEvidenceIdentity,
+                       valuation_at: datetime, observation: PriceEvidenceObservation,
+                       method: PriceEvidenceMethod) -> str
+assess_price_evidence(*, point: PricePoint, identity: PriceEvidenceIdentity,
+                     valuation_at: datetime, observation: PriceEvidenceObservation,
+                     method: PriceEvidenceMethod, approval: PriceEvidenceApproval | None,
+                     originals: Mapping[str, bytes]) -> PriceEvidenceAdmission
+```
+
+Pydantic-Modelle, `extra=forbid`, keine Float-/Boolean-Werte fuer Decimal- und
+Versionsfelder. Ablehnung fehlerhafter Vertragsinputs per ValidationError;
+gueltig geformte, aber unpassende Belege ergeben eine negative Admission.
+Hashes binden kanonisch normalisierte UTC-Zeiten und Decimal-Zahlenwerte,
+nicht unterschiedliche Schreibweisen desselben Zahlen-/Zeitwerts.
+
+- `PriceEvidenceIdentity`: `asset`, `network`, `contract`, `decimals`.
+- `PriceEvidenceFx`: `base`, `quote`, `rate`, `reference_at`, `published_at`,
+  `captured_at`, `evidence_sha256`, `locator`, `source`. Genau USD/EUR oder
+  EUR/USD, niemals gleiche Waehrungen.
+- `PriceEvidenceObservation`: `identity`, `quote_currency` (EUR/USD), `value`,
+  `kind` (`observed_quote`/`daily_reference`), `observed_at`, `period_start`,
+  `period_end`, `published_at`, `captured_at`, `evidence_sha256`, `locator`,
+  `source`, `fx`. Optionale Zeitfelder und `fx` standardmaessig `None`.
+- `PriceEvidenceMethod`: `method_id`, `version`, `kind`, `daily_statistic`
+  (`daily_mean`/`daily_fixed_time`/`daily_close` oder `None`), `daily_time`
+  (lokale Uhrzeit nur fuer `daily_fixed_time`), `timezone`,
+  `availability_rule`, `fx_max_age_days` (explizit 0..7 bei USD),
+  `evidence_sha256`. Optionale Felder standardmaessig `None`.
+- `PriceEvidenceApproval`: `decision_id`,
+  `decision_type="stichtag_price_time_admission"`, `binding_sha256`, `actor`,
+  `rationale`, `approved_at`, `updated_at=None`,
+  `acknowledge_original_verified=True`, `acknowledge_scope_limited=True`.
+  Bestaetigungen muessen echte Booleans sein. Eine nachtraeglich veraenderte
+  Entscheidung wird nicht als unveraenderte Zustimmung verwendet.
+- `PriceEvidenceAdmission`: eigene Policy-ID/-Version, `status`,
+  `strict_eligible`, `binding_sha256`, `decision_id`, `reason_codes`,
+  `original_integrity_verified`, `evidence_origin` (`operator_confirmed`
+  nur bei Erfolg, sonst `unverified`). Keine Originalbytes in der Ausgabe.
+
+Positive Ausgabe: `status="human_approved"`. Fehlende Zustimmung:
+`status="not_approved"`. Andere negative Status und konstante Reasoncodes
+sind technische Diagnose; keine Originalinhalte in Fehlermeldungen loggen.
+Alle gelieferten Originale zusammen maximal 6 MiB und je Original maximal
+2 MiB; zusaetzliche unbenoetigte Originale ebenfalls validieren. Bindungs- und
+Assessmentfunktionen lesen/schreiben nichts ausserhalb ihrer Inputs.
+
+Fuer die reine Funktion werden Preis-DB-Zeiten vom kuenftigen Reader anhand
+der dokumentierten DB-UTC-Semantik normalisiert. Die Funktion selbst akzeptiert
+keine naiven Datetimes. Erfassungszeit ist nicht automatisch historische
+Verfuegbarkeit. Approval darf nach dem historischen Stichtag erfolgen, aber
+nicht vor Erfassung der von ihr bestaetigten Originale.
