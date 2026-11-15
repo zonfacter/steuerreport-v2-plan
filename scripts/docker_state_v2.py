@@ -9,6 +9,7 @@ resources.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import datetime as dt
 import decimal
 import gzip
@@ -18,6 +19,7 @@ import os
 from pathlib import Path, PurePosixPath
 import posixpath
 import re
+import selectors
 import stat
 import subprocess
 import sys
@@ -34,6 +36,9 @@ MAX_ARCHIVE_MEMBERS = 250_000
 RESTORE_CLEANUP_ATTEMPTS = 10
 RESTORE_CLEANUP_DELAY_SECONDS = 0.25
 RESOURCE_LABEL = "steuerreport.ops.restore"
+OWNER_LABEL = "steuerreport.ops.owner"
+OWNER_NONCE = uuid.uuid4().hex
+_CONFIRMED_RESOURCES: set[tuple[str, str, str]] = set()
 PATH_ENV_KEYS = (
     "STEUERREPORT_STATE_DIR",
     "STEUERREPORT_V2_DB",
@@ -266,6 +271,7 @@ def _helper_command(image: str, script: Path, mode: str, mounts: list[dict], pay
     args = [
         "run", "--rm", "--cidfile", str(cidfile), "--stop-timeout", "10",
         "--label", RESOURCE_LABEL + "=" + run_id,
+        "--label", OWNER_LABEL + "=" + OWNER_NONCE,
         "--pull=never", "--network", "none", "--read-only",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--user", "0:0",
         "--cpus", "1", "--memory", "1g", "--memory-swap", "1g", "--pids-limit", "128",
@@ -338,6 +344,7 @@ def _cleanup_helper_container(cidfile: Path, run_id: str, *, require_observed: b
             container_ids = _docker([
                 "ps", "--all", "--quiet", "--no-trunc",
                 "--filter", f"label={RESOURCE_LABEL}={run_id}",
+                "--filter", f"label={OWNER_LABEL}={OWNER_NONCE}",
             ]).split()
         except OpsError:
             return False
@@ -349,6 +356,8 @@ def _cleanup_helper_container(cidfile: Path, run_id: str, *, require_observed: b
         return False
     if require_observed and not container_ids:
         return False
+    for container_id in container_ids:
+        _CONFIRMED_RESOURCES.add(("container", container_id, run_id))
     return all(
         _cleanup_restore_resource("container", container_id, run_id) is None
         for container_id in container_ids
@@ -546,6 +555,11 @@ def _load_backup(
     if (sum(row["rows"] for row in tables.values()) != manifest["database_row_count"]
             or hashlib.sha256(_json_bytes(tables)).hexdigest() != manifest.get("database_semantic_sha256")):
         _fail("backup_database_manifest_invalid")
+    if "database_catalog_sha256" in manifest and (
+        not isinstance(manifest["database_catalog_sha256"], str)
+        or not re.fullmatch(r"[0-9a-f]{64}", manifest["database_catalog_sha256"])
+    ):
+        _fail("backup_database_catalog_manifest_invalid")
     runtime_paths = manifest.get("runtime_paths")
     if not isinstance(runtime_paths, dict) or not all(
         key in PATH_ENV_KEYS and isinstance(value, str) for key, value in runtime_paths.items()
@@ -567,6 +581,20 @@ def _load_backup(
     for parent in mount_targets:
         if any(child.startswith(parent.rstrip("/") + "/") for child in mount_targets if child != parent):
             _fail("backup_mount_manifest_invalid")
+    path_mounts = [{**row, "helper_root": "/manifest/" + row["id"]} for row in manifest["mounts"]]
+    required_path_keys = {
+        "STEUERREPORT_STATE_DIR", "STEUERREPORT_V2_DB", "STEUERREPORT_USERTRANSFER_ROOT",
+        "STEUERREPORT_PRIVATE_PROFILE", "STEUERREPORT_PRIVATE_CONFIG_DIR",
+        "STEUERREPORT_V2_SECRET_VAULT_KEY_FILE",
+    }
+    for key, value in runtime_paths.items():
+        if not value:
+            if key in required_path_keys:
+                _fail("backup_manifest_runtime_path_invalid")
+            continue
+        if value.startswith("//") or any(ord(char) < 32 for char in value):
+            _fail("backup_manifest_runtime_path_invalid")
+        _helper_mount_path(path_mounts, value)
     member_paths = []
     declared_uncompressed_size = 0
     for row in manifest["archive_members"]:
@@ -654,10 +682,14 @@ def backup(args: argparse.Namespace) -> dict:
     if not inventory.get("complete"):
         _fail("backup_scope_incomplete:" + str(inventory.get("reason") or "unknown"))
     semantic_snapshot = _runtime_snapshot(image_id, script, mounts, runtime_paths)
+    catalog = semantic_snapshot.get("database_catalog_sha256")
+    if not isinstance(catalog, str) or not re.fullmatch(r"[0-9a-f]{64}", catalog):
+        _fail("source_catalog_snapshot_unavailable")
     if (not semantic_snapshot["database_present"]
             or semantic_snapshot["schema_version"] != inventory["schema_version"]
             or semantic_snapshot["archive_members"] != inventory["archive_members"]
-            or semantic_snapshot["vault"] != inventory["vault"]):
+            or semantic_snapshot["vault"] != inventory["vault"]
+            or catalog != inventory.get("database_catalog_sha256")):
         _fail("source_changed_during_semantic_inspection")
     output_dir = Path(args.output_dir).expanduser().absolute()
     _ensure_new_private_dir(output_dir)
@@ -669,7 +701,7 @@ def backup(args: argparse.Namespace) -> dict:
         with tempfile.TemporaryDirectory(prefix="steuerreport-archive-") as temp_dir:
             cidfile = Path(temp_dir) / "container.id"
             helper_run_id = "helper-" + uuid.uuid4().hex
-            command = _helper_command(image_id, script, "archive", mounts, {"mounts": mounts},
+            command = _helper_command(image_id, script, "archive", mounts, {"mounts": mounts, "runtime_paths": runtime_paths},
                                       cidfile=cidfile, run_id=helper_run_id)
             with archive_path.open("xb") as target:
                 os.chmod(archive_path, 0o600)
@@ -716,6 +748,7 @@ def backup(args: argparse.Namespace) -> dict:
             "database_present": inventory["database_present"],
             "database_tables": semantic_snapshot["tables"],
             "database_semantic_sha256": semantic_snapshot["database_semantic_sha256"],
+            "database_catalog_sha256": catalog,
             "wal_files": inventory["wal_files"],
             "runtime_paths": runtime_paths,
             "mounts": [{key: item[key] for key in ("id", "kind", "target", "read_only", "archive_prefix")}
@@ -767,6 +800,8 @@ def verify(args: argparse.Namespace) -> dict:
         "file_count": sum(row["type"] == "file" for row in manifest["archive_members"]),
         "wal_file_count": len(manifest["wal_files"]),
         "archive_sha256": _sha256(archive),
+        "catalog_manifest_bound": "database_catalog_sha256" in manifest,
+        "source_pause_boundary_recorded": manifest.get("source_pause_boundary_checked") is True,
     }
 
 
@@ -793,7 +828,7 @@ def _new_restore_volumes(
     volumes = created_volumes if created_volumes is not None else []
     rows = []
     for index, mount in enumerate(mounts):
-        volume_name = f"sr-restore-{run_id}-{index:03d}"
+        volume_name = f"sr-restore-{run_id}-{index:03d}-" + uuid.uuid4().hex
         if _inspect_optional("volume", volume_name) is not None:
             _fail("restore_volume_already_exists")
         volumes.append(volume_name)
@@ -956,6 +991,11 @@ def restore(args: argparse.Namespace) -> dict:
             run_id=run_id,
         )
         snapshot = _restored_snapshot(image_id, mounts, volumes, manifest.get("runtime_paths", {}))
+        catalog = snapshot.get("database_catalog_sha256")
+        if not isinstance(catalog, str) or not re.fullmatch(r"[0-9a-f]{64}", catalog):
+            _fail("restored_catalog_unavailable")
+        if "database_catalog_sha256" in manifest and catalog != manifest["database_catalog_sha256"]:
+            _fail("restored_catalog_mismatch")
         if snapshot["archive_members"] != manifest["archive_members"]:
             _fail("restored_file_manifest_mismatch")
         if snapshot["schema_version"] != manifest["schema_version"]:
@@ -987,6 +1027,8 @@ def restore(args: argparse.Namespace) -> dict:
             "file_count": len(snapshot["archive_members"]),
             "wal_file_count": len(snapshot["wal_files"]),
             "vault_decryptable": snapshot["vault"]["decryptable"],
+            "catalog_verified": True,
+            "catalog_manifest_bound": "database_catalog_sha256" in manifest,
             "encrypted_secret_rows": snapshot["vault"]["encrypted_rows"],
             "volume_mounts": [
                 {"container_target": mount["target"], "volume": volumes[index]}
@@ -1019,9 +1061,12 @@ def restore(args: argparse.Namespace) -> dict:
 
 
 def _create_restore_volume(name: str, run_id: str) -> None:
-    created_name = _docker(["volume", "create", "--label", RESOURCE_LABEL + "=" + run_id, name]).strip()
+    _CONFIRMED_RESOURCES.discard(("volume", name, run_id))
+    created_name = _docker(["volume", "create", "--label", RESOURCE_LABEL + "=" + run_id,
+                           "--label", OWNER_LABEL + "=" + OWNER_NONCE, name]).strip()
     if created_name != name:
         _fail("restore_volume_create_response_mismatch")
+    _CONFIRMED_RESOURCES.add(("volume", name, run_id))
 
 
 def _inspect_optional(kind: str, name: str) -> dict | None:
@@ -1049,24 +1094,42 @@ def _resource_state(kind: str, name: str, run_id: str) -> str:
     obj = _inspect_optional(kind, name)
     if obj is None:
         return "missing"
+    return "owned" if _resource_owned(kind, obj, run_id) else "not_owned"
+
+
+def _resource_owned(kind: str, obj: dict, run_id: str) -> bool:
     labels = obj.get("Labels", {}) if kind == "volume" else (obj.get("Config", {}).get("Labels") or {})
-    return "owned" if (labels or {}).get(RESOURCE_LABEL) == run_id else "not_owned"
+    return ((labels or {}).get(RESOURCE_LABEL) == run_id
+            and (labels or {}).get(OWNER_LABEL) == OWNER_NONCE)
 
 
 def _cleanup_restore_resource(kind: str, name: str, run_id: str) -> str | None:
-    command = ["rm", "--force", name] if kind == "container" else ["volume", "rm", name]
+    reference = name
+    observed = (kind, name, run_id) in _CONFIRMED_RESOURCES
     for attempt in range(RESTORE_CLEANUP_ATTEMPTS):
         try:
-            state = _resource_state(kind, name, run_id)
+            obj = _inspect_optional(kind, reference)
         except OpsError as exc:
             if attempt + 1 < RESTORE_CLEANUP_ATTEMPTS:
                 time.sleep(RESTORE_CLEANUP_DELAY_SECONDS)
                 continue
             return f"{kind}_inspect_failed:{exc}"
-        if state == "missing":
-            return None
-        if state != "owned":
+        if obj is None:
+            if observed:
+                return None
+            if attempt + 1 < RESTORE_CLEANUP_ATTEMPTS:
+                time.sleep(RESTORE_CLEANUP_DELAY_SECONDS)
+                continue
+            return f"{kind}_create_state_unknown"
+        if not _resource_owned(kind, obj, run_id):
             return f"{kind}_ownership_unverified"
+        observed = True
+        if kind == "container":
+            container_id = obj.get("Id")
+            if not isinstance(container_id, str) or not re.fullmatch(r"[0-9a-f]{64}", container_id):
+                return "container_identity_unverified"
+            reference = container_id
+        command = ["rm", "--force", reference] if kind == "container" else ["volume", "rm", reference]
         try:
             _docker(command)
         except OpsError:
@@ -1074,23 +1137,23 @@ def _cleanup_restore_resource(kind: str, name: str, run_id: str) -> str | None:
                 time.sleep(RESTORE_CLEANUP_DELAY_SECONDS)
                 continue
             try:
-                if _resource_state(kind, name, run_id) == "missing":
+                if _inspect_optional(kind, reference) is None:
                     return None
             except OpsError:
                 pass
             return f"{kind}_remove_failed"
         try:
-            state = _resource_state(kind, name, run_id)
+            obj = _inspect_optional(kind, reference)
         except OpsError as exc:
             return f"{kind}_inspect_failed:{exc}"
-        if state == "missing":
+        if obj is None:
             return None
-        if state != "owned":
+        if not _resource_owned(kind, obj, run_id):
             return f"{kind}_ownership_unverified"
         if attempt + 1 < RESTORE_CLEANUP_ATTEMPTS:
             time.sleep(RESTORE_CLEANUP_DELAY_SECONDS)
     try:
-        if _resource_state(kind, name, run_id) == "missing":
+        if observed and _inspect_optional(kind, reference) is None:
             return None
     except OpsError:
         pass
@@ -1117,9 +1180,11 @@ def _runtime_snapshot(image_id: str, script: Path, mounts: list[dict], runtime_p
 
 
 def _summary_snapshot(snapshot: dict) -> dict:
+    catalog = snapshot.get("database_catalog_sha256")
     return {
         "database_present": snapshot["database_present"],
         "schema_version": snapshot["schema_version"],
+        "catalog_fingerprint_present": isinstance(catalog, str) and re.fullmatch(r"[0-9a-f]{64}", catalog) is not None,
         "table_count": len(snapshot["tables"]),
         "file_count": len(snapshot["archive_members"]),
         "wal_file_count": len(snapshot["wal_files"]),
@@ -1131,6 +1196,12 @@ def _summary_snapshot(snapshot: dict) -> dict:
 
 
 def _equal_after_start(before: dict, after: dict) -> bool:
+    before_catalog = before.get("database_catalog_sha256")
+    after_catalog = after.get("database_catalog_sha256")
+    if (not isinstance(before_catalog, str) or not re.fullmatch(r"[0-9a-f]{64}", before_catalog)
+            or not isinstance(after_catalog, str) or not re.fullmatch(r"[0-9a-f]{64}", after_catalog)
+            or before_catalog != after_catalog):
+        return False
     if before["tables"] != after["tables"]:
         return False
     db_files = set(before["database_archive_paths"])
@@ -1200,7 +1271,7 @@ def restore_check(args: argparse.Namespace) -> dict:
     operation_error = None
     try:
         for index, mount in enumerate(mounts):
-            volume_name = f"sr-restore-{run_id}-{index:03d}"
+            volume_name = f"sr-restore-{run_id}-{index:03d}-" + uuid.uuid4().hex
             if _inspect_optional("volume", volume_name) is not None:
                 _fail("restore_volume_already_exists")
             volumes.append(volume_name)
@@ -1237,6 +1308,11 @@ def restore_check(args: argparse.Namespace) -> dict:
                            for index, mount in enumerate(mounts)]
         runtime_paths = manifest.get("runtime_paths", {})
         before = _runtime_snapshot(image_id, Path(__file__).resolve(), restored_mounts, runtime_paths)
+        catalog = before.get("database_catalog_sha256")
+        if not isinstance(catalog, str) or not re.fullmatch(r"[0-9a-f]{64}", catalog):
+            _fail("restored_catalog_unavailable")
+        if "database_catalog_sha256" in manifest and catalog != manifest["database_catalog_sha256"]:
+            _fail("restored_catalog_mismatch")
         if not before["required_private_files_present"] or not before["vault"]["decryptable"]:
             _fail("restored_private_state_or_vault_check_failed")
         if (before["schema_version"] != manifest["schema_version"]
@@ -1252,6 +1328,7 @@ def restore_check(args: argparse.Namespace) -> dict:
         create = [
             "create", "--pull=never", "--name", container_name,
             "--label", RESOURCE_LABEL + "=" + run_id,
+            "--label", OWNER_LABEL + "=" + OWNER_NONCE,
             "--network", "none", "--read-only", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges:true", "--no-healthcheck",
             "--restart", "no", "--cpus", "1", "--memory", "1g",
@@ -1264,9 +1341,14 @@ def restore_check(args: argparse.Namespace) -> dict:
         create.extend(env_args)
         create.append(image_id)
         created_container = True
-        _docker(create, timeout=120)
-        inspected = _inspect("container", container_name)
-        if _resource_state("container", container_name, run_id) != "owned":
+        _CONFIRMED_RESOURCES.discard(("container", container_name, run_id))
+        container_id = _docker(create, timeout=120).strip()
+        if not re.fullmatch(r"[0-9a-f]{64}", container_id):
+            _fail("restore_container_create_response_invalid")
+        _CONFIRMED_RESOURCES.add(("container", container_id, run_id))
+        container_name = container_id
+        inspected = _inspect("container", container_id)
+        if inspected.get("Id") != container_id or not _resource_owned("container", inspected, run_id):
             _fail("restore_container_ownership_unverified")
         if inspected.get("HostConfig", {}).get("NetworkMode") != "none" or inspected.get("HostConfig", {}).get("PortBindings"):
             _fail("restore_container_isolation_failed")
@@ -1416,14 +1498,87 @@ def _db_semantics(path: Path) -> tuple[int, dict]:
         _fail("database_semantic_snapshot_failed")
 
 
+def _db_catalog_digest(path: Path) -> str:
+    # Explicit persistent metadata excludes transient OIDs, statistics and the file's catalog name.
+    queries = {
+        "schemas": "SELECT schema_name, sql, comment FROM system.main.duckdb_schemas()",
+        "tables": "SELECT schema_name, table_name, sql, comment FROM system.main.duckdb_tables()",
+        "columns": "SELECT schema_name, table_name, column_index, column_name, data_type, "
+                   "is_nullable, column_default, comment FROM system.main.duckdb_columns()",
+        "views": "SELECT schema_name, view_name, sql, comment FROM system.main.duckdb_views()",
+        "constraints": "SELECT schema_name, table_name, constraint_type, constraint_text, expression, "
+                       "constraint_column_indexes, constraint_column_names, constraint_name, "
+                       "referenced_table, referenced_column_names FROM system.main.duckdb_constraints()",
+        "indexes": "SELECT schema_name, table_name, index_name, is_unique, is_primary, expressions, sql, "
+                   "comment FROM system.main.duckdb_indexes()",
+        "macros": "SELECT schema_name, function_name, function_type, parameters, parameter_types, "
+                  "return_type, macro_definition, comment FROM system.main.duckdb_functions()",
+        "sequences": "SELECT schema_name, sequence_name, start_value, min_value, max_value, increment_by, "
+                     "cycle, last_value, sql, comment FROM system.main.duckdb_sequences()",
+        "types": "SELECT schema_name, type_name, logical_type, type_category, labels, comment "
+                 "FROM system.main.duckdb_types()",
+    }
+    try:
+        connection = _db_connection(path)
+        try:
+            connection.execute("BEGIN TRANSACTION")
+            sections = {}
+            for kind, query in queries.items():
+                query += " WHERE database_name = system.main.current_database()"
+                if kind in {"tables", "views"}:
+                    query += " AND NOT internal AND NOT temporary"
+                elif kind in {"columns", "types", "macros"}:
+                    query += " AND NOT internal"
+                elif kind == "sequences":
+                    query += " AND NOT temporary"
+                rows = connection.execute(query).fetchall()
+                if kind == "macros" and any(row[2] not in {"macro", "table_macro"} for row in rows):
+                    _fail("database_catalog_function_kind_unsupported")
+                # DuckDB 1.5.2 omits macro parameter defaults from metadata; do not claim their provenance.
+                if kind == "macros" and any(row[3] for row in rows):
+                    _fail("database_catalog_macro_parameters_unverifiable")
+                if kind == "types":
+                    typed_rows = []
+                    for row in rows:
+                        qualified = ".".join('"' + name.replace('"', '""') + '"' for name in row[:2])
+                        definition = connection.execute(
+                            "SELECT system.main.typeof(CAST(NULL AS " + qualified + "))"
+                        ).fetchone()[0]
+                        typed_rows.append((*row, definition))
+                    rows = typed_rows
+                sections[kind] = sorted(rows, key=_json_bytes)
+            connection.execute("COMMIT")
+            return hashlib.sha256(_json_bytes({"catalog_format_version": 1, "sections": sections})).hexdigest()
+        finally:
+            connection.close()
+    except OpsError:
+        raise
+    except Exception:
+        _fail("database_catalog_snapshot_failed")
+
+
 def _vault_summary(path: Path, key_path: Path) -> dict:
     try:
         import duckdb
         from steuerreport_v2.domain.secret_vault import (
+            ENVELOPE_TYPE,
+            ENVELOPE_VERSION,
             decode_secret_setting,
             is_encrypted_envelope,
             load_vault_key,
+            vault_key_id,
         )
+
+        def unique_object(pairs):
+            result = {}
+            for name, value in pairs:
+                if name in result:
+                    raise ValueError("duplicate_secret_json_key")
+                result[name] = value
+            return result
+
+        def invalid_constant(value):
+            raise ValueError("non_finite_secret_json")
         env_key = "STEUERREPORT_V2_SECRET_VAULT_KEY_FILE"
         previous_key_path = os.environ.get(env_key)
         os.environ[env_key] = str(key_path)
@@ -1439,11 +1594,20 @@ def _vault_summary(path: Path, key_path: Path) -> dict:
             unreadable = 0
             encrypted = 0
             for key_name, value in rows:
-                if is_encrypted_envelope(value):
-                    encrypted += 1
                 try:
+                    if not isinstance(value, str):
+                        raise ValueError("secret_json_must_be_string")
+                    parsed = json.loads(value, object_pairs_hook=unique_object, parse_constant=invalid_constant)
+                    if is_encrypted_envelope(value):
+                        encrypted += 1
+                    if isinstance(parsed, dict) and parsed.get("type") == ENVELOPE_TYPE:
+                        if (type(parsed.get("version")) is not int or parsed["version"] != ENVELOPE_VERSION
+                                or parsed.get("algorithm") != "AES-256-GCM"
+                                or not all(isinstance(parsed.get(field), str) for field in ("key_id", "nonce", "ciphertext"))
+                                or key is None or parsed["key_id"] != vault_key_id(key)):
+                            raise ValueError("secret_envelope_metadata_invalid")
                     decode_secret_setting(key_name, value)
-                except (RuntimeError, ValueError, UnicodeError):
+                except (RuntimeError, ValueError, UnicodeError, TypeError):
                     unreadable += 1
             return {
                 "key_readable": key is not None,
@@ -1487,6 +1651,17 @@ def _helper_inventory(payload: dict, *, semantic: bool) -> dict:
 def _helper_inventory_mapped(payload: dict, *, semantic: bool) -> dict:
     mounts = payload["mounts"]
     runtime_paths = payload.get("runtime_paths", {})
+    for key, value in runtime_paths.items():
+        if key not in PATH_ENV_KEYS or not isinstance(value, str):
+            _fail("backup_manifest_runtime_path_key_invalid")
+        if value:
+            if value.startswith("//") or any(ord(char) < 32 for char in value):
+                _fail("configured_path_invalid")
+            _helper_mount_path(mounts, value)
+
+    def walk_error(error: OSError) -> None:
+        _fail("persistent_mount_directory_unreadable")
+
     all_files = []
     database_paths = []
     wal_files = []
@@ -1494,7 +1669,7 @@ def _helper_inventory_mapped(payload: dict, *, semantic: bool) -> dict:
         root = Path(mount["helper_root"])
         if not root.is_dir() or root.is_symlink():
             _fail("persistent_mount_root_invalid")
-        for current, directories, filenames in os.walk(root, followlinks=False):
+        for current, directories, filenames in os.walk(root, followlinks=False, onerror=walk_error):
             current_path = Path(current)
             for name in list(directories):
                 child = current_path / name
@@ -1514,7 +1689,7 @@ def _helper_inventory_mapped(payload: dict, *, semantic: bool) -> dict:
                     wal_files.append(row["path"])
         all_files.append(_record(root, mount, "", is_directory=True))
     all_files.sort(key=lambda item: item["path"])
-    database = runtime_paths.get("STEUERREPORT_V2_DB", "/state/data/steuerreport_v2.duckdb")
+    database = posixpath.normpath(runtime_paths.get("STEUERREPORT_V2_DB", "/state/data/steuerreport_v2.duckdb"))
     db_host = _helper_mount_path(mounts, database)
     if db_host.exists():
         database_paths.append((database, db_host))
@@ -1524,6 +1699,7 @@ def _helper_inventory_mapped(payload: dict, *, semantic: bool) -> dict:
     schema_version = None
     tables = {}
     database_semantic_sha256 = None
+    database_catalog_sha256 = None
     vault = None
     db_archive_paths = []
     if database_present:
@@ -1541,6 +1717,7 @@ def _helper_inventory_mapped(payload: dict, *, semantic: bool) -> dict:
             database_semantic_sha256 = hashlib.sha256(_json_bytes(tables)).hexdigest()
         else:
             schema_version, tables = _db_schema_summary(db_host)
+        database_catalog_sha256 = _db_catalog_digest(db_host)
         vault_key_for_check = runtime_paths.get(
             "STEUERREPORT_V2_SECRET_VAULT_KEY_FILE",
             posixpath.join(runtime_paths.get("STEUERREPORT_STATE_DIR", "/state"), "keys/vault.key"),
@@ -1590,10 +1767,26 @@ def _helper_inventory_mapped(payload: dict, *, semantic: bool) -> dict:
             _helper_mount_path(mounts, connector_token)
         configured_path_count = 0
         path_key = re.compile(r"(?:path|file|root|dir)$", re.I)
+        relative_import_keys = {
+            "blockpit_reference_file", "solscan_export_file", "wallet_monthly_file", "jup_perps_file",
+            "bitget_support_root", "moonpay_history_file", "bank_camt_root", "bank_statement_root",
+            "trade_republic_root", "inheritance_root", "v1_fx_db_file",
+        }
+        import_root = profile_data.get("import_root") or runtime_paths.get("STEUERREPORT_USERTRANSFER_ROOT", "")
         for key, value in profile_data.items():
-            if path_key.search(key) and value.startswith("/") and "://" not in value:
-                _helper_mount_path(mounts, value)
-                configured_path_count += 1
+            if not path_key.search(key) or not value:
+                continue
+            # Helper HOME/cwd is not source-container provenance. Never expand against it.
+            if value.startswith("~") or "://" in value:
+                _fail("configured_profile_path_context_unavailable")
+            if not value.startswith("/"):
+                if key not in relative_import_keys or not import_root.startswith("/"):
+                    _fail("configured_profile_path_context_unavailable")
+                value = posixpath.join(import_root, value)
+            if value.startswith("//") or any(ord(char) < 32 for char in value):
+                _fail("configured_profile_path_invalid")
+            _helper_mount_path(mounts, value)
+            configured_path_count += 1
         if wal_files:
             # WALs are included in the archive and reported; DuckDB read-only
             # metadata below verifies whether this stopped snapshot is readable.
@@ -1609,6 +1802,7 @@ def _helper_inventory_mapped(payload: dict, *, semantic: bool) -> dict:
         "schema_version": schema_version,
         "tables": tables,
         "database_semantic_sha256": database_semantic_sha256,
+        "database_catalog_sha256": database_catalog_sha256,
         "vault": vault,
         "database_archive_paths": db_archive_paths,
         "wal_files": wal_files,
@@ -1634,13 +1828,17 @@ def _record(path: Path, mount: dict, relative: str, *, is_directory: bool = Fals
 
 def _helper_archive(payload: dict) -> None:
     mounts = payload["mounts"]
+
+    def walk_error(error: OSError) -> None:
+        _fail("persistent_mount_directory_unreadable")
+
     with tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz", format=tarfile.PAX_FORMAT) as archive:
         for mount in mounts:
             root = Path(mount["helper_root"])
             if not root.is_dir() or root.is_symlink():
                 _fail("persistent_mount_root_invalid")
             paths = [root]
-            for current, dirs, files in os.walk(root, followlinks=False):
+            for current, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
                 current_path = Path(current)
                 for name in sorted(dirs + files):
                     path = current_path / name
@@ -1737,16 +1935,66 @@ def _helper_extract(payload: dict) -> dict:
     return {"status": "extracted", "member_count": len(extracted)}
 
 
+def _database_guard_child(database: Path) -> None:
+    import duckdb
+    try:
+        with duckdb.connect(str(database), read_only=True,
+                            config={"enable_external_access": False, "threads": 1, "memory_limit": "128MB"}):
+            print("ready", flush=True)
+            sys.stdin.read(1)
+    except Exception:
+        raise SystemExit(2) from None
+
+
+@contextmanager
+def _guard_database_reads(payload: dict):
+    runtime = payload.get("runtime_paths", {})
+    database = _helper_mount_path(payload["mounts"], runtime.get("STEUERREPORT_V2_DB", "/state/data/steuerreport_v2.duckdb"))
+    process = None
+    ready = False
+    try:
+        # Separate process: tar/JSON readers may close descriptors on this file.
+        # Their closes must not release the guard's POSIX record lock.
+        process = subprocess.Popen(
+            [sys.executable, "-I", str(Path(__file__).resolve()), "_database_guard", str(database)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+        )
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            if not selector.select(timeout=30) or process.stdout.readline().strip() != "ready":
+                _fail("database_snapshot_guard_unavailable")
+        ready = True
+        yield
+        if process.poll() is not None:
+            _fail("database_snapshot_guard_lost")
+    except OSError:
+        _fail("database_snapshot_guard_unavailable")
+    finally:
+        if process is not None:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=10)
+            finally:
+                process.stdout.close()
+            if ready and process.returncode != 0:
+                _fail("database_snapshot_guard_lost")
+
+
 def _helper_main(mode: str, encoded: str) -> None:
     try:
         payload = json.loads(encoded)
-        if mode == "inventory":
-            result = _helper_inventory(payload, semantic=False)
-        elif mode == "snapshot":
-            result = _helper_inventory(payload, semantic=True)
-        elif mode == "archive":
-            _helper_archive(payload)
-            return
+        if mode in {"inventory", "snapshot", "archive"}:
+            with _guard_database_reads(payload):
+                if mode == "archive":
+                    _helper_archive(payload)
+                    return
+                result = _helper_inventory(payload, semantic=(mode == "snapshot"))
         elif mode == "extract":
             result = _helper_extract(payload)
         else:
@@ -1758,6 +2006,9 @@ def _helper_main(mode: str, encoded: str) -> None:
 
 
 def main() -> None:
+    if len(sys.argv) == 3 and sys.argv[1] == "_database_guard":
+        _database_guard_child(Path(sys.argv[2]))
+        return
     if len(sys.argv) >= 4 and sys.argv[1] == "_helper":
         _helper_main(sys.argv[2], sys.argv[3])
         return

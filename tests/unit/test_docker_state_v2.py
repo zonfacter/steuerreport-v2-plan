@@ -199,6 +199,7 @@ def test_archive_verifier_rejects_traversal_and_symlinks(tmp_path: Path) -> None
 
 def test_restore_comparison_includes_wal_and_non_database_files() -> None:
     before = {
+        "database_catalog_sha256": "c" * 64,
         "tables": {"main.events": {"rows": 1, "sha256": "a"}},
         "database_archive_paths": ["mounts/m000/data/steuerreport_v2.duckdb"],
         "schema_version": 1,
@@ -383,7 +384,7 @@ def test_restore_cleanup_failure_is_not_reported_as_success(monkeypatch: pytest.
     def inspect_failure(*_: object) -> str:
         raise ops.OpsError("docker_inspect_failed")
 
-    monkeypatch.setattr(ops, "_resource_state", inspect_failure)
+    monkeypatch.setattr(ops, "_inspect_optional", inspect_failure)
     monkeypatch.setattr(ops, "RESTORE_CLEANUP_ATTEMPTS", 1)
     failures = ops._cleanup_restore_resources("sr-restore-run-001", True, ["sr-restore-run-001-000"], "run-001")
 
@@ -396,22 +397,23 @@ def test_restore_cleanup_failure_is_not_reported_as_success(monkeypatch: pytest.
 def test_restore_cleanup_attempts_volumes_after_container_remove_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     removed = []
 
-    def state(kind: str, *_: object) -> str:
-        return "owned"
+    def state(kind: str, *_: object) -> dict:
+        labels = {ops.RESOURCE_LABEL: "run-001", ops.OWNER_LABEL: ops.OWNER_NONCE}
+        return {"Id": "a" * 64, "Config": {"Labels": labels}} if kind == "container" else {"Labels": labels}
 
     def docker(args: list[str], **_: object) -> str:
         removed.append(args)
         raise ops.OpsError("docker_command_failed")
 
-    monkeypatch.setattr(ops, "_resource_state", state)
+    monkeypatch.setattr(ops, "_inspect_optional", state)
     monkeypatch.setattr(ops, "_docker", docker)
     monkeypatch.setattr(ops, "RESTORE_CLEANUP_ATTEMPTS", 2)
     monkeypatch.setattr(ops.time, "sleep", lambda _: None)
     failures = ops._cleanup_restore_resources("sr-restore-run-001", True, ["sr-restore-run-001-000"], "run-001")
 
     assert removed == [
-        ["rm", "--force", "sr-restore-run-001"],
-        ["rm", "--force", "sr-restore-run-001"],
+        ["rm", "--force", "a" * 64],
+        ["rm", "--force", "a" * 64],
         ["volume", "rm", "sr-restore-run-001-000"],
         ["volume", "rm", "sr-restore-run-001-000"],
     ]
@@ -425,8 +427,11 @@ def test_restore_cleanup_retries_transient_remove_failure(
     state = {kind: "owned"}
     attempts = 0
 
-    def inspect(resource_kind: str, *_: object) -> str:
-        return state.get(resource_kind, "missing")
+    def inspect(resource_kind: str, *_: object) -> dict | None:
+        if state.get(resource_kind, "missing") == "missing":
+            return None
+        labels = {ops.RESOURCE_LABEL: "run-001", ops.OWNER_LABEL: ops.OWNER_NONCE}
+        return {"Id": "a" * 64, "Config": {"Labels": labels}} if resource_kind == "container" else {"Labels": labels}
 
     def docker(args: list[str], **_: object) -> str:
         nonlocal attempts
@@ -436,7 +441,7 @@ def test_restore_cleanup_retries_transient_remove_failure(
         state[kind] = "missing"
         return ""
 
-    monkeypatch.setattr(ops, "_resource_state", inspect)
+    monkeypatch.setattr(ops, "_inspect_optional", inspect)
     monkeypatch.setattr(ops, "_docker", docker)
     monkeypatch.setattr(ops, "RESTORE_CLEANUP_ATTEMPTS", 3)
     monkeypatch.setattr(ops.time, "sleep", lambda _: None)
@@ -447,7 +452,7 @@ def test_restore_cleanup_retries_transient_remove_failure(
 
 def test_restore_cleanup_never_removes_unowned_resource(monkeypatch: pytest.MonkeyPatch) -> None:
     removed = []
-    monkeypatch.setattr(ops, "_resource_state", lambda *_: "not_owned")
+    monkeypatch.setattr(ops, "_inspect_optional", lambda *_: {"Labels": {}})
     monkeypatch.setattr(ops, "_docker", lambda args, **_: removed.append(args))
 
     assert ops._cleanup_restore_resource("volume", "foreign-volume", "run-001") == "volume_ownership_unverified"
@@ -503,7 +508,7 @@ def test_created_volume_is_tracked_before_ownership_verification(monkeypatch: py
     created = []
     with pytest.raises(ops.OpsError, match="docker_inspect_failed"):
         ops._new_restore_volumes([{"id": "m000", "target": "/state"}], "run-001", created)
-    assert created == ["sr-restore-run-001-000"]
+    assert len(created) == 1 and created[0].startswith("sr-restore-run-001-000-")
 
 
 def test_helper_timeout_cleanup_requires_matching_ownership_label(
@@ -511,7 +516,7 @@ def test_helper_timeout_cleanup_requires_matching_ownership_label(
 ) -> None:
     cidfile = tmp_path / "container.id"
     cidfile.write_text("a" * 64, encoding="ascii")
-    monkeypatch.setattr(ops, "_resource_state", lambda *_: "not_owned")
+    monkeypatch.setattr(ops, "_inspect_optional", lambda *_: {"Id": "a" * 64, "Config": {"Labels": {}}})
 
     assert not ops._cleanup_helper_container(cidfile, "helper-run-001")
 
@@ -536,13 +541,19 @@ def test_helper_timeout_cleanup_finds_container_when_cidfile_is_missing(
         raise AssertionError(args)
 
     monkeypatch.setattr(ops, "_docker", docker)
-    monkeypatch.setattr(ops, "_resource_state", lambda _kind, name, _run: state.get(name, "missing"))
+    def inspect(_kind, name):
+        if state.get(name, "missing") == "missing":
+            return None
+        return {"Id": container_id, "Config": {"Labels": {
+            ops.RESOURCE_LABEL: "helper-run-001", ops.OWNER_LABEL: ops.OWNER_NONCE}}}
+    monkeypatch.setattr(ops, "_inspect_optional", inspect)
     monkeypatch.setattr(ops, "RESTORE_CLEANUP_ATTEMPTS", 3)
     monkeypatch.setattr(ops.time, "sleep", lambda _: None)
 
     assert ops._cleanup_helper_container(cidfile, "helper-run-001") is True
     assert commands == [
-        ["ps", "--all", "--quiet", "--no-trunc", "--filter", "label=steuerreport.ops.restore=helper-run-001"],
+        ["ps", "--all", "--quiet", "--no-trunc", "--filter", "label=steuerreport.ops.restore=helper-run-001",
+         "--filter", "label=" + ops.OWNER_LABEL + "=" + ops.OWNER_NONCE],
         ["rm", "--force", container_id],
         ["rm", "--force", container_id],
     ]
@@ -555,7 +566,7 @@ def test_helper_timeout_cleanup_does_not_remove_unowned_container_without_cid(
     removals = []
     cidfile = tmp_path / "missing-container.id"
     monkeypatch.setattr(ops, "_docker", lambda args, **_: container_id if args[0] == "ps" else removals.append(args))
-    monkeypatch.setattr(ops, "_resource_state", lambda *_: "not_owned")
+    monkeypatch.setattr(ops, "_inspect_optional", lambda *_: {"Id": container_id, "Config": {"Labels": {}}})
 
     assert ops._cleanup_helper_container(cidfile, "helper-run-002") is False
     assert removals == []

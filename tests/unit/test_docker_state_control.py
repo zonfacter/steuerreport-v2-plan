@@ -31,6 +31,7 @@ def restore_case(ops, tmp_path, monkeypatch):
     snapshot = {"database_present": True, "required_private_files_present": True,
                 "vault": {"decryptable": True, "encrypted_rows": 1, "unreadable_rows": 0},
                 "schema_version": 3, "tables": {}, "database_semantic_sha256": "d" * 64,
+                "database_catalog_sha256": "e" * 64,
                 "archive_members": [], "wal_files": []}
     monkeypatch.setattr(ops, "_load_backup", lambda *a, **kw: (tmp_path / "synthetic.tar.gz", manifest))
     monkeypatch.setattr(ops, "_image_info", lambda *a: image)
@@ -47,12 +48,15 @@ def restore_case(ops, tmp_path, monkeypatch):
         commands.append(command)
         if command[:2] == ["volume", "create"]:
             name = command[-1]
-            resources["volume", name] = {"Labels": {ops.RESOURCE_LABEL: args.run_id}}
+            resources["volume", name] = {"Labels": {ops.RESOURCE_LABEL: args.run_id,
+                                                    ops.OWNER_LABEL: ops.OWNER_NONCE}}
             return name
         if command[:2] == ["volume", "rm"]:
             resources.pop(("volume", command[-1]), None)
         if command[:2] == ["rm", "--force"]:
-            resources.pop(("container", command[-1]), None)
+            for key, obj in list(resources.items()):
+                if key[0] == "container" and obj.get("Id") == command[-1]:
+                    resources.pop(key)
         return ""
     monkeypatch.setattr(ops, "_docker", docker)
     return args, resources, commands, docker
@@ -76,7 +80,8 @@ def test_container_created_before_timeout_is_tracked_and_removed(ops, restore_ca
     def uncertain_create(command, **kwargs):
         if command[0] == "create":
             name = command[command.index("--name") + 1]
-            resources["container", name] = {"Config": {"Labels": {ops.RESOURCE_LABEL: args.run_id}}}
+            resources["container", name] = {"Id": "a" * 64, "Config": {"Labels": {
+                ops.RESOURCE_LABEL: args.run_id, ops.OWNER_LABEL: ops.OWNER_NONCE}}}
             raise ops.OpsError("docker_command_timeout:create")
         return real_docker(command, **kwargs)
     monkeypatch.setattr(ops, "_docker", uncertain_create)
@@ -141,7 +146,8 @@ def backup_case(ops, tmp_path, monkeypatch):
     source = {"Id": "a" * 64, "Image": "sha256:" + "b" * 64, "Config": {"Env": []}, "Mounts": [],
               "State": {"Status": "exited", "ExitCode": 0, "StartedAt": "synthetic-start", "FinishedAt": "synthetic-stop"}}
     snapshot = {"database_present": True, "schema_version": 3, "archive_members": [],
-                "vault": {"decryptable": True}, "tables": {}, "database_semantic_sha256": "c" * 64}
+                "vault": {"decryptable": True}, "tables": {}, "database_semantic_sha256": "c" * 64,
+                "database_catalog_sha256": "e" * 64}
     inventory = {**snapshot, "complete": True, "wal_files": [], "configured_path_count_checked": 1}
     monkeypatch.setattr(ops, "_inspect", lambda *a: copy.deepcopy(source))
     monkeypatch.setattr(ops, "_mounts", lambda *a: [])
@@ -241,3 +247,31 @@ def test_image_defaults_and_explicitly_archived_runtime_paths_are_supported(ops,
     source = {"Config": {"Env": [default, "STEUERREPORT_V2_DB=/state/custom.duckdb"]}}
     monkeypatch.setattr(ops, "_inspect", lambda *a: {"Config": {"Env": [default]}})
     ops._check_runtime_environment(source, "synthetic")
+
+
+@pytest.mark.parametrize("value", [None, "invalid", "f" * 64])
+def test_source_catalog_missing_invalid_or_changed_cannot_create_backup(ops, backup_case, monkeypatch, value):
+    args, _ = backup_case
+    original_snapshot = ops._runtime_snapshot(None)
+    changed = {**original_snapshot, "database_catalog_sha256": value}
+    monkeypatch.setattr(ops, "_runtime_snapshot", lambda *a: changed)
+    with pytest.raises(ops.OpsError):
+        ops.backup(args)
+    assert not args.output_dir.exists()
+
+
+@pytest.mark.parametrize("action", ["restore", "restore_check"])
+@pytest.mark.parametrize("condition", ["missing", "invalid", "mismatch"])
+def test_restore_catalog_failure_prevents_activation_and_cleans_new_volumes(ops, restore_case, monkeypatch, action, condition):
+    args, resources, commands, _ = restore_case
+    _, manifest = ops._load_backup(None)
+    snapshot = ops._runtime_snapshot(None)
+    if condition == "mismatch":
+        manifest["database_catalog_sha256"] = "f" * 64
+    else:
+        snapshot = {**snapshot, "database_catalog_sha256": None if condition == "missing" else "invalid"}
+    monkeypatch.setattr(ops, "_runtime_snapshot", lambda *a: snapshot)
+    with pytest.raises(ops.OpsError, match="restored_catalog_"):
+        getattr(ops, action)(args)
+    assert resources == {}
+    assert not any(command[0] in ("create", "start") for command in commands)
