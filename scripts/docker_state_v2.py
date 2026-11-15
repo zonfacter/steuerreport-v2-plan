@@ -148,6 +148,26 @@ def _image_info(image: str) -> dict:
     }
 
 
+def _check_runtime_environment(source: dict, image_id: str) -> None:
+    def environment(config: dict) -> dict:
+        rows = config.get("Env") or []
+        if not isinstance(rows, list) or any(not isinstance(row, str) or "=" not in row for row in rows):
+            _fail("runtime_environment_binding_invalid")
+        result = dict(row.split("=", 1) for row in rows)
+        if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) for key in result):
+            _fail("runtime_environment_binding_invalid")
+        return result
+    actual = environment(source.get("Config") or {})
+    defaults = environment(_inspect("image", image_id).get("Config") or {})
+    overrides = sorted(key for key, value in actual.items()
+                       if key.startswith("STEUERREPORT_") and key not in PATH_ENV_KEYS
+                       and (key not in defaults or defaults[key] != value))
+    if overrides:
+        # Never silently drop runtime wallets, permissions or env-only secrets.
+        # Their values do not belong in a plaintext manifest.
+        _fail("application_environment_not_persisted:" + ",".join(overrides))
+
+
 def _mounts(container: dict) -> list[dict]:
     rows = []
     for index, item in enumerate(container.get("Mounts") or []):
@@ -282,11 +302,19 @@ def _run_helper_command(command: list[str], cidfile: Path, *, run_id: str, timeo
     except FileNotFoundError:
         _fail("docker_cli_not_found")
     except subprocess.TimeoutExpired:
-        if not _cleanup_helper_container(cidfile, run_id):
+        if not _cleanup_helper_container(cidfile, run_id, require_observed=True):
             _fail("operator_helper_timeout_cleanup_unconfirmed")
         _fail("operator_helper_timeout")
+    except (KeyboardInterrupt, SystemExit):
+        if not _cleanup_helper_container(cidfile, run_id, require_observed=True):
+            _fail("operator_helper_interrupted_cleanup_unconfirmed:" + run_id)
+        raise
     except OSError as exc:
+        if not _cleanup_helper_container(cidfile, run_id, require_observed=True):
+            _fail("operator_helper_cleanup_unconfirmed:" + run_id)
         _fail("docker_run_os_error:" + str(exc.errno or "unknown"))
+    if not _cleanup_helper_container(cidfile, run_id, require_observed=bool(completed.returncode)):
+        _fail("operator_helper_cleanup_unconfirmed:" + run_id)
     try:
         result = json.loads(completed.stdout)
     except json.JSONDecodeError:
@@ -301,7 +329,7 @@ def _run_helper_command(command: list[str], cidfile: Path, *, run_id: str, timeo
     return result
 
 
-def _cleanup_helper_container(cidfile: Path, run_id: str) -> bool:
+def _cleanup_helper_container(cidfile: Path, run_id: str, *, require_observed: bool = False) -> bool:
     try:
         container_id = cidfile.read_text(encoding="ascii").strip()
         container_ids = [container_id]
@@ -318,6 +346,8 @@ def _cleanup_helper_container(cidfile: Path, run_id: str) -> bool:
     except OSError:
         return False
     if not all(re.fullmatch(r"[0-9a-f]{64}", container_id) for container_id in container_ids):
+        return False
+    if require_observed and not container_ids:
         return False
     return all(
         _cleanup_restore_resource("container", container_id, run_id) is None
@@ -580,7 +610,25 @@ def _load_backup(
     return archive, manifest
 
 
+def _stop_archive_cli(process: subprocess.Popen) -> bool:
+    try:
+        try:
+            process.terminate()
+        except OSError:
+            process.kill()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return True
+
+
 def backup(args: argparse.Namespace) -> dict:
+    if args.confirm_source_stopped is not True:
+        _fail("confirm_source_stopped_required")
     source = _inspect("container", args.container)
     mounts = _mounts(source)
     _assert_no_running_consumers(source, mounts)
@@ -590,6 +638,7 @@ def backup(args: argparse.Namespace) -> dict:
     if not image_id:
         _fail("source_image_missing")
     image = _image_info(image_id)
+    _check_runtime_environment(source, image_id)
     image["container_reference"] = source.get("Config", {}).get("Image", "")
     env_rows = source.get("Config", {}).get("Env") or []
     env = dict(entry.split("=", 1) for entry in env_rows if "=" in entry)
@@ -615,6 +664,7 @@ def backup(args: argparse.Namespace) -> dict:
     archive_path = output_dir / "state.tar.gz"
     manifest_path = output_dir / "manifest.json"
     created_archive = False
+    preserve_partial = False
     try:
         with tempfile.TemporaryDirectory(prefix="steuerreport-archive-") as temp_dir:
             cidfile = Path(temp_dir) / "container.id"
@@ -630,27 +680,36 @@ def backup(args: argparse.Namespace) -> dict:
                     _fail("docker_cli_not_found")
                 try:
                     return_code = process.wait(timeout=3600)
-                except subprocess.TimeoutExpired:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait(timeout=10)
-                    if not _cleanup_helper_container(cidfile, helper_run_id):
-                        _fail("backup_archive_timeout_cleanup_unconfirmed")
-                    _fail("backup_archive_timeout")
+                except (subprocess.TimeoutExpired, KeyboardInterrupt, SystemExit) as exc:
+                    cli_stopped = _stop_archive_cli(process)
+                    helper_cleaned = _cleanup_helper_container(cidfile, helper_run_id, require_observed=True)
+                    if not cli_stopped or not helper_cleaned:
+                        preserve_partial = True
+                        _fail("backup_archive_cleanup_unconfirmed:" + helper_run_id)
+                    if isinstance(exc, subprocess.TimeoutExpired):
+                        _fail("backup_archive_timeout")
+                    raise
+                if not _cleanup_helper_container(cidfile, helper_run_id, require_observed=bool(return_code)):
+                    preserve_partial = True
+                    _fail("backup_archive_cleanup_unconfirmed:" + helper_run_id)
         if return_code:
             _fail("docker_command_failed:run:" + str(return_code))
         records = _safe_archive_records(archive_path, mounts)
         if records != inventory["archive_members"]:
             _fail("source_changed_during_backup_or_archive_mismatch")
+        after = _inspect("container", source["Id"])
+        _assert_no_running_consumers(after, mounts)
+        if (any(source.get(key) != after.get(key) for key in ("Id", "Image", "Config", "Mounts", "RestartCount"))
+                or any(source.get("State", {}).get(key) != after.get("State", {}).get(key)
+                       for key in ("StartedAt", "FinishedAt", "ExitCode"))):
+            _fail("source_changed_during_backup")
         manifest = {
             "format_version": FORMAT_VERSION,
             "created_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
             "application": "steuerreport-v2",
             "source_image": image,
             "source_container_stopped_confirmed": args.confirm_source_stopped,
+            "source_pause_boundary_checked": True,
             "schema_version": inventory["schema_version"],
             "database_table_count": len(semantic_snapshot["tables"]),
             "database_row_count": sum(row["rows"] for row in semantic_snapshot["tables"].values()),
@@ -670,8 +729,8 @@ def backup(args: argparse.Namespace) -> dict:
             "secret_values_in_manifest": False,
         }
         _write_private_json(manifest_path, manifest)
-    except Exception:
-        if created_archive:
+    except BaseException:
+        if created_archive and not preserve_partial:
             archive_path.unlink(missing_ok=True)
         try:
             output_dir.rmdir()
@@ -688,6 +747,7 @@ def backup(args: argparse.Namespace) -> dict:
         "file_count": sum(row["type"] == "file" for row in records),
         "wal_file_count": len(inventory["wal_files"]),
         "archive_sha256": manifest["archive_sha256"],
+        "source_pause_boundary_checked": True,
     }
 
 
@@ -736,8 +796,8 @@ def _new_restore_volumes(
         volume_name = f"sr-restore-{run_id}-{index:03d}"
         if _inspect_optional("volume", volume_name) is not None:
             _fail("restore_volume_already_exists")
-        _create_restore_volume(volume_name, run_id)
         volumes.append(volume_name)
+        _create_restore_volume(volume_name, run_id)
         if _resource_state("volume", volume_name, run_id) != "owned":
             _fail("restore_volume_ownership_unverified")
         rows.append({**mount, "kind": "volume", "source": volume_name,
@@ -801,13 +861,14 @@ def _extract_to_new_volumes(archive: Path, manifest: dict, image_id: str,
             "max_restore_bytes": max_restore_bytes,
             "max_expanded_archive_bytes": max_expanded_archive_bytes,
         }
+        helper_run_id = "helper-" + uuid.uuid4().hex
         command = _helper_command(
             image_id, Path(__file__).resolve(), "extract", target_mounts, payload,
-            cidfile=temp / "container.id", run_id=run_id,
+            cidfile=temp / "container.id", run_id=helper_run_id,
             writable_ids={row["id"] for row in target_mounts},
             extra_mounts=[(staged_archive, "/backup/state.tar.gz"), (manifest_copy, "/backup/manifest.json")],
         )
-        _run_helper_command(command, temp / "container.id", run_id=run_id, timeout=1800)
+        _run_helper_command(command, temp / "container.id", run_id=helper_run_id, timeout=1800)
 
 
 def _restored_snapshot(image_id: str, mounts: list[dict], volumes: list[str], runtime_paths: dict) -> dict:
@@ -1111,6 +1172,9 @@ def restore_check(args: argparse.Namespace) -> dict:
         max_expanded_archive_bytes=args.max_expanded_archive_bytes,
     )
     run_id = _validated_run_id(args.run_id)
+    container_name = "sr-restore-" + run_id
+    if _inspect_optional("container", container_name) is not None:
+        _fail("restore_container_already_exists")
     _validate_restore_size(manifest, args.max_restore_bytes)
     image_id = args.image or manifest["source_image"]["image_id"]
     image = _image_info(image_id)
@@ -1128,7 +1192,6 @@ def restore_check(args: argparse.Namespace) -> dict:
     mounts = manifest["mounts"]
     volumes = []
     names = []
-    container_name = "sr-restore-" + run_id
     created_container = False
     result = {"status": "failed", "run_id": run_id, "image_id": image_id,
               "revision": image["revision"], "version": image["version"],
@@ -1140,8 +1203,8 @@ def restore_check(args: argparse.Namespace) -> dict:
             volume_name = f"sr-restore-{run_id}-{index:03d}"
             if _inspect_optional("volume", volume_name) is not None:
                 _fail("restore_volume_already_exists")
-            _create_restore_volume(volume_name, run_id)
             volumes.append(volume_name)
+            _create_restore_volume(volume_name, run_id)
             if _resource_state("volume", volume_name, run_id) != "owned":
                 _fail("restore_volume_ownership_unverified")
             names.append({**mount, "source": volume_name,
@@ -1162,12 +1225,13 @@ def restore_check(args: argparse.Namespace) -> dict:
                 "max_restore_bytes": args.max_restore_bytes,
                 "max_expanded_archive_bytes": args.max_expanded_archive_bytes,
             }
+            helper_run_id = "helper-" + uuid.uuid4().hex
             command = _helper_command(image_id, Path(__file__).resolve(), "extract", helper_mounts,
-                                      payload, cidfile=temp / "container.id", run_id=run_id,
+                                      payload, cidfile=temp / "container.id", run_id=helper_run_id,
                                       writable_ids={row["id"] for row in helper_mounts},
                                       extra_mounts=[(staged_archive, "/backup/state.tar.gz"),
                                                     (manifest_copy, "/backup/manifest.json")])
-            _run_helper_command(command, temp / "container.id", run_id=run_id, timeout=1800)
+            _run_helper_command(command, temp / "container.id", run_id=helper_run_id, timeout=1800)
         restored_mounts = [{**mount, "kind": "volume", "source": volumes[index],
                             "helper_root": "/backup-input/" + mount["id"]}
                            for index, mount in enumerate(mounts)]
@@ -1199,8 +1263,8 @@ def restore_check(args: argparse.Namespace) -> dict:
             create.extend(["--mount", f"type=volume,src={volumes[index]},dst={row['target']}{readonly}"])
         create.extend(env_args)
         create.append(image_id)
-        _docker(create, timeout=120)
         created_container = True
+        _docker(create, timeout=120)
         inspected = _inspect("container", container_name)
         if _resource_state("container", container_name, run_id) != "owned":
             _fail("restore_container_ownership_unverified")
