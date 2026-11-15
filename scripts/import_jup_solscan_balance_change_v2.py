@@ -5,7 +5,6 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import sys
 import time
 import urllib.error
@@ -80,6 +79,12 @@ def main() -> int:
         "to_time": args.to_time,
         "target_changed": False,
     }
+    if not args.fetch_only:
+        result["blocked_reason"] = "unsafe_database_snapshot_and_restore_unavailable"
+        result["stage_attempted"] = False
+        result["restore_attempted"] = False
+        print(json.dumps(result, indent=2, default=str))
+        return 2
     try:
         fetched, fetch_meta = _fetch_balance_changes(
             wallet,
@@ -114,52 +119,8 @@ def main() -> int:
     result["fetch"] = fetch_meta
     result["fetched_balance_changes"] = len(fetched)
     result["import_rows"] = len(rows)
-    if args.fetch_only:
-        print(json.dumps(result, indent=2, default=str))
-        return 0 if fetched else 2
-    if not rows:
-        result["blocked_reason"] = "no_rows"
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-
-    stage_db = _snapshot_database(db_path, "jup_solscan_balance_change_stage")
-    result["stage_db"] = str(stage_db)
-    result["stage"] = _apply(stage_db, wallet=wallet, rows=rows, fx_db=Path(args.fx_db))
-    if not result["stage"]["review"]["allow_export"]:
-        result["blocked_reason"] = "stage_review_not_export_ready"
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-    if not _jup_reconciliation_export_ready(result["stage"]["reconciliation_rows"]):
-        result["blocked_reason"] = "stage_jup_reconciliation_not_ready"
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-    if not args.execute:
-        print(json.dumps(result, indent=2, default=str))
-        return 0
-
-    backup = _backup_database(db_path)
-    result["backup"] = str(backup)
-    try:
-        result["applied"] = _apply(db_path, wallet=wallet, rows=rows, fx_db=Path(args.fx_db))
-    except Exception as exc:
-        shutil.copy2(backup, db_path)
-        result["blocked_reason"] = "live_exception_restored_from_backup"
-        result["error"] = repr(exc)
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-    if not result["applied"]["review"]["allow_export"]:
-        shutil.copy2(backup, db_path)
-        result["blocked_reason"] = "live_review_not_export_ready_restored_from_backup"
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-    if not _jup_reconciliation_export_ready(result["applied"]["reconciliation_rows"]):
-        shutil.copy2(backup, db_path)
-        result["blocked_reason"] = "live_jup_reconciliation_not_ready_restored_from_backup"
-        print(json.dumps(result, indent=2, default=str))
-        return 2
-    result["target_changed"] = True
     print(json.dumps(result, indent=2, default=str))
-    return 0
+    return 0 if fetched else 2
 
 
 def _fetch_balance_changes(
@@ -450,22 +411,6 @@ def _store_solscan_event_prices(store: DuckDbStore, rows: list[dict[str, Any]], 
 
 def _jup_reconciliation_export_ready(rows: list[dict[str, Any]]) -> bool:
     return not any(row.get("severity") == "blocker" for row in rows)
-
-
-def _snapshot_database(db_path: Path, purpose: str) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = PROJECT_ROOT / "var" / f"{db_path.stem}_{purpose}_{stamp}{db_path.suffix}"
-    shutil.copy2(db_path, target)
-    return target
-
-
-def _backup_database(db_path: Path) -> Path:
-    backup_dir = db_path.parent / "backups"
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = backup_dir / f"{db_path.stem}_before_jup_solscan_balance_change_{stamp}{db_path.suffix}"
-    shutil.copy2(db_path, target)
-    return target
 
 
 def _signed_quantity(item: dict[str, Any]) -> Decimal:
