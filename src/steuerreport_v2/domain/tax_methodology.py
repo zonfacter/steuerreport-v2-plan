@@ -974,8 +974,13 @@ class TaxMethodologyService:
     def _confirmed_filing_snapshot_amounts(self) -> dict[int, dict[str, object]]:
         snapshots = TaxFilingSnapshotService(self.store).list().snapshots
         selected: dict[int, tuple[int, int, dict[str, object]]] = {}
+        invalid_years = {
+            snapshot.year for snapshot in snapshots
+            if (snapshot.state == "submitted" or snapshot.filing_usage_confirmed)
+            and (snapshot.integrity_status != "verified" or snapshot.values is None)
+        }
         for snapshot in snapshots:
-            if snapshot.integrity_status != "verified":
+            if snapshot.year in invalid_years or snapshot.values is None:
                 continue
             if snapshot.state != "submitted" and not snapshot.filing_usage_confirmed:
                 continue

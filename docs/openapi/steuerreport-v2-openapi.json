@@ -60393,7 +60393,15 @@
             "title": "Submitted At"
           },
           "values": {
-            "$ref": "#/components/schemas/TaxFilingValues"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingValues"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nur vollstaendige, endliche Werte aus der hashgebundenen Archiv-Summary; sonst null."
           },
           "year": {
             "title": "Year",
@@ -60560,13 +60568,36 @@
             "title": "Comparison Html Endpoint",
             "type": "string"
           },
+          "comparison_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingSnapshotComparisonScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "current_values": {
-            "$ref": "#/components/schemas/TaxFilingValues"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxFilingValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "declaration_change_detected": {
-            "default": false,
-            "title": "Declaration Change Detected",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declaration Change Detected"
           },
           "deltas": {
             "items": {
@@ -60576,9 +60607,15 @@
             "type": "array"
           },
           "exact_change_detected": {
-            "default": false,
-            "title": "Exact Change Detected",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exact Change Detected"
           },
           "generated_at": {
             "title": "Generated At",
@@ -60622,7 +60659,8 @@
               "submission_timestamp_required",
               "unchanged",
               "changed_review_required",
-              "integrity_blocked"
+              "integrity_blocked",
+              "comparison_unavailable"
             ],
             "title": "Status",
             "type": "string"
@@ -60675,6 +60713,96 @@
           "methodology"
         ],
         "title": "TaxFilingSnapshotComparison",
+        "type": "object"
+      },
+      "TaxFilingSnapshotComparisonScope": {
+        "properties": {
+          "aggregate_precision": {
+            "const": "exact",
+            "default": "exact",
+            "title": "Aggregate Precision",
+            "type": "string"
+          },
+          "aggregate_status": {
+            "description": "Exakter Vergleich der sechs archivgebundenen und transaktionsgebundenen gespeicherten Aggregate.",
+            "enum": [
+              "equal",
+              "different",
+              "not_compared"
+            ],
+            "title": "Aggregate Status",
+            "type": "string"
+          },
+          "current_aggregate_binding": {
+            "default": "not_verified",
+            "enum": [
+              "read_transaction",
+              "not_verified"
+            ],
+            "title": "Current Aggregate Binding",
+            "type": "string"
+          },
+          "current_detail_binding": {
+            "const": "not_verified",
+            "default": "not_verified",
+            "description": "Hashbindung der aktuellen Details nicht geprueft.",
+            "title": "Current Detail Binding",
+            "type": "string"
+          },
+          "detail_reconciliation": {
+            "const": "not_compared",
+            "default": "not_compared",
+            "description": "Einzeldeltas wurden nicht mit Aggregatdeltas abgestimmt.",
+            "title": "Detail Reconciliation",
+            "type": "string"
+          },
+          "events": {
+            "const": "not_compared",
+            "default": "not_compared",
+            "description": "Ereignisparitaet unbekannt.",
+            "title": "Events",
+            "type": "string"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "lots": {
+            "const": "not_compared",
+            "default": "not_compared",
+            "description": "Lotparitaet unbekannt.",
+            "title": "Lots",
+            "type": "string"
+          },
+          "reference_aggregate_binding": {
+            "default": "not_verified",
+            "enum": [
+              "verified_archive",
+              "not_verified"
+            ],
+            "title": "Reference Aggregate Binding",
+            "type": "string"
+          },
+          "reference_detail_binding": {
+            "const": "not_verified",
+            "default": "not_verified",
+            "description": "Hashbindung der Referenzdetails nicht geprueft.",
+            "title": "Reference Detail Binding",
+            "type": "string"
+          },
+          "tax_lines": {
+            "const": "not_compared",
+            "default": "not_compared",
+            "description": "Tax-Line-Paritaet unbekannt.",
+            "title": "Tax Lines",
+            "type": "string"
+          }
+        },
+        "required": [
+          "aggregate_status",
+          "explanation"
+        ],
+        "title": "TaxFilingSnapshotComparisonScope",
         "type": "object"
       },
       "TaxFilingSnapshotDelta": {
@@ -60731,6 +60859,19 @@
           "requires_review": {
             "title": "Requires Review",
             "type": "boolean"
+          },
+          "rounded_amount_delta_eur": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Differenz der separat auf Cent gerundeten Werte; nicht das gerundete exakte Delta.",
+            "title": "Rounded Amount Delta Eur"
           }
         },
         "required": [
@@ -60900,13 +61041,11 @@
       "TaxFilingValues": {
         "properties": {
           "acquisition_cost_eur": {
-            "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Acquisition Cost Eur",
             "type": "string"
           },
           "derivative_pnl_eur": {
-            "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Derivative Pnl Eur",
             "type": "string"
@@ -60920,30 +61059,26 @@
             "type": "string"
           },
           "rewards_mining_staking_income_eur": {
-            "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Rewards Mining Staking Income Eur",
             "type": "string"
           },
           "tax_free_lines_count": {
-            "default": 0,
+            "minimum": 0.0,
             "title": "Tax Free Lines Count",
             "type": "integer"
           },
           "tax_free_private_disposals_eur": {
-            "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Free Private Disposals Eur",
             "type": "string"
           },
           "taxable_disposal_proceeds_eur": {
-            "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Taxable Disposal Proceeds Eur",
             "type": "string"
           },
           "taxable_private_disposals_eur": {
-            "default": "0",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Taxable Private Disposals Eur",
             "type": "string"
@@ -60951,7 +61086,14 @@
         },
         "required": [
           "generated_at",
-          "export_ready"
+          "export_ready",
+          "taxable_private_disposals_eur",
+          "taxable_disposal_proceeds_eur",
+          "acquisition_cost_eur",
+          "rewards_mining_staking_income_eur",
+          "derivative_pnl_eur",
+          "tax_free_private_disposals_eur",
+          "tax_free_lines_count"
         ],
         "title": "TaxFilingValues",
         "type": "object"
