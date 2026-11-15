@@ -662,11 +662,7 @@ class ExternalPriceBackfillService:
         key = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         reserved = None
         try:
-            with self.store.connect() as con:
-                con.execute("create table if not exists current_price_backfill_requests (request_hash varchar primary key, reserved_at timestamp not null)")
-                reserved = con.execute(
-                    "insert into current_price_backfill_requests values (?, current_timestamp) on conflict do nothing returning request_hash", [key],
-                ).fetchone() is not None
+            reserved = self.store.reserve_current_price_backfill(key)
         except Exception:
             logger.error("Current portfolio price backfill reservation failed")
         if reserved is None:

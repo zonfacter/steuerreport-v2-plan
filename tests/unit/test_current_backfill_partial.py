@@ -187,3 +187,42 @@ def test_concurrent_duplicate_request_has_only_one_price_write(current):
         results = list(pool.map(lambda _: client.post("/api/v1/prices/backfill/current-portfolio", json=payload), range(2)))
     assert sorted(r.status_code for r in results) == [200, 409]
     assert calls == ["coin", "defi"] and len(store.list_price_points()) == 2
+
+
+def test_schema_open_adds_reservation_table_without_price_operation(current):
+    store, payload, calls = current
+    response = TestClient(create_app(store)).post("/api/v1/prices/backfill/current-portfolio", json=payload)
+    assert response.status_code == 200 and len(store.list_price_points()) == 2
+    calls.clear()
+    # Model the previous schema-3 database without the additive table.
+    with store.connect() as con:
+        con.execute("drop table current_price_backfill_requests")
+        before = con.execute("select * from price_ledger").fetchall()
+    upgraded = DuckDbStore(store.path)
+    with upgraded.connect() as con:
+        assert con.execute("select * from current_price_backfill_requests").fetchall() == []
+        assert con.execute("select * from price_ledger").fetchall() == before
+    assert calls == []
+
+
+def test_schema_open_preserves_existing_reservation_bytes(current):
+    store, _, _ = current
+    assert store.reserve_current_price_backfill("synthetic-existing-request")
+    with store.connect() as con:
+        before = con.execute("select * from current_price_backfill_requests").fetchall()
+    reopened = DuckDbStore(store.path)
+    assert not reopened.reserve_current_price_backfill("synthetic-existing-request")
+    with reopened.connect() as con:
+        assert con.execute("select * from current_price_backfill_requests").fetchall() == before
+
+
+def test_malformed_reservation_table_stops_before_provider(current, caplog):
+    store, payload, calls = current
+    with store.connect() as con:
+        con.execute("drop table current_price_backfill_requests")
+        con.execute("create table current_price_backfill_requests (broken varchar)")
+    response = TestClient(create_app(DuckDbStore(store.path))).post(
+        "/api/v1/prices/backfill/current-portfolio", json=payload,
+    )
+    assert response.status_code == 503 and not calls
+    assert not store.list_price_points()

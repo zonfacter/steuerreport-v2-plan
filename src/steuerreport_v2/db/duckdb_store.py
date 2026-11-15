@@ -327,6 +327,12 @@ class DuckDbStore:
             )
             """
         )
+        con.execute("""
+            create table if not exists current_price_backfill_requests (
+                request_hash varchar primary key,
+                reserved_at timestamp not null
+            )
+        """)
         con.execute(
             """
             create table if not exists flow_ledger (
@@ -1235,6 +1241,14 @@ class DuckDbStore:
 
     def add_price_point(self, payload: PricePointCreate) -> PricePoint:
         return self.add_price_points([payload])[0]
+
+    def reserve_current_price_backfill(self, request_hash: str) -> bool:
+        with self.connect() as con:
+            return con.execute(
+                "insert into current_price_backfill_requests values (?, current_timestamp) "
+                "on conflict do nothing returning request_hash",
+                [request_hash],
+            ).fetchone() is not None
 
     def add_price_points(self, payloads: list[PricePointCreate]) -> list[PricePoint]:
         if not payloads:

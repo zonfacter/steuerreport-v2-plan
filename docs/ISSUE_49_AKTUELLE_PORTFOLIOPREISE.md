@@ -38,9 +38,12 @@ verfuegbaren `randomUUID`, damit bestehende LAN-HTTP-Installationen funktioniere
 Der Kennungsgenerator wird ohne `randomUUID` getestet; das ersetzt keinen
 interaktiven Browsernachweis des gesamten Formulars.
 
-Die Reservierungstabelle wird derzeit vom Dienst bei Bedarf angelegt. Eine
-zentrale Schema-/Migrationsintegration und ein Aufbewahrungs-/Recoveryvertrag
-fehlen. Ohne explizite Kennung ist die gleiche Anfrage dauerhaft gesperrt;
+Die additive Reservierungstabelle wird zentral von `DuckDbStore.ensure_schema`
+angelegt; vorhandene Reservierungen bleiben unveraendert. Der Dienst fuehrt
+keine DDL mehr aus. Die bestehende Schemahauptversion 3 bleibt bestehen:
+alte Software kann die neue Tabelle ignorieren und deren Wiederholschutz
+umgehen. Ein Downgrade ist damit nicht als sicher freigegeben. Ein
+Aufbewahrungs-/Recoveryvertrag fehlt. Ohne explizite Kennung ist die gleiche Anfrage dauerhaft gesperrt;
 dies ist eine Verhaltensaenderung fuer Altclients. Eine neue Kennung umgeht
 die Sperre bewusst, sie belegt keinen geprueften Vorzustand. Nicht unveraendert
 als fertig migrierten Tagesabruf oder sichere Idempotenz veroeffentlichen.
@@ -57,6 +60,9 @@ dieses weitere Skript ab. Vor Integration sind diese Pfade gesondert zu pruefen.
 - `node tests/run-dashboard-tests.mjs`: 10 bestanden, bestehende SSR-Warnungen.
 - `npm run build`: bestanden, bestehende Bundle-Groessenwarnung.
 - `scripts/export_openapi_v2.py --check`: bestanden; Endpunktreferenz regeneriert.
+- Schema-Nacharbeit: 37 Tests einschliesslich zentraler Schema-Anlage,
+  Reservierungserhalt, defekter Tabelle, Importbatches, Health und Runtimepfaden
+  bestanden. Ruff fuer `src tests scripts` bestanden.
 
 Diese Nachweise sind keine unabhaengige fachliche Abnahme und kein Nachweis
 eines interaktiven Browserablaufs oder produktiven Anbieterabrufs.
